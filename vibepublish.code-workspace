@@ -1,0 +1,12 @@
+{
+  "folders": [
+    {
+      "name": "vibepublish",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder:vibepublish}/.venv/bin/python"
+  }
+}
+

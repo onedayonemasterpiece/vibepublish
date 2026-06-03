@@ -1,0 +1,44 @@
+version: 1
+
+entrypoints:
+  root_readme: README.md
+  docs_index: docs/README.md
+  agent_routes: AGENTS.md
+  changelog: CHANGELOG.md
+
+sections:
+  architecture:
+    overview: docs/architecture/overview.md
+  operations:
+    requirements_governance: docs/operations/requirements-governance.md
+    repository_workflow: docs/operations/repository-workflow.md
+    llm_limits_setup: docs/operations/llm-limits-setup.md
+  llm:
+    index: docs/llm/README.md
+  reference:
+    index: docs/reference/README.md
+  backlog:
+    index: docs/backlog/README.md
+  reports:
+    index: docs/reports/README.md
+    incidents: docs/reports/incidents/README.md
+    incident_template: docs/reports/incidents/TEMPLATE.md
+  tools:
+    index: docs/tools/README.md
+
+features:
+  llm_gateway:
+    status: implemented
+    docs: docs/features/llm-gateway/README.md
+    entrypoints:
+      - google_ai/client.py
+      - google_ai/exceptions.py
+      - google_ai/secrets.py
+      - migrations/001_google_ai.sql
+      - migrations/002_google_ai_rpc_rollout.sql
+      - migrations/003_google_ai_sweep_stale.sql
+      - migrations/004_google_ai_gemma4_limits.sql
+      - migrations/005_gemini_flash_lite_limits.sql
+      - scripts/inspect/probe_supabase_rpc.py
+      - scripts/inspect/sweep_google_ai_stale.py
+
