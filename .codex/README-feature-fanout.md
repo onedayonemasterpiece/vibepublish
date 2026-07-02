@@ -27,3 +27,7 @@ After cloning, repo-level `AGENTS.md` and `.agents/skills` carry the project beh
 ```
 
 The installer is local-only, idempotent, and creates timestamped backups under `~/.codex/backups/`.
+
+## Child agent effort
+
+Child agents must not blindly inherit the parent effort. The orchestrator records per-lane effort: medium for narrow mapping, high for normal bounded work, and extra-high/max when available for complex integration, security/auth/schema, incident/regression, or high-risk requirement preservation.

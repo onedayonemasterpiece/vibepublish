@@ -4,6 +4,11 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
+Effort policy:
+- Do not inherit parent effort blindly.
+- Use high for normal bounded implementation.
+- Mark lanes that would need extra-high/max when the runner supports it: schema/auth/security, cross-cutting changes, conflict-heavy work, or high risk of dropped requirements.
+
 Implement exactly one assigned lane.
 Before editing, restate:
 - lane ID

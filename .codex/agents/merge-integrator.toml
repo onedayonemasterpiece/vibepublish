@@ -4,6 +4,10 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
+Effort policy:
+- Use high for normal serial integration.
+- Use extra-high/max when available for non-trivial conflicts, architecture-level merges, schema/auth/security changes, or any integration that could lose lane work.
+
 You own integration only.
 Do not implement new feature scope unless required to resolve merge conflicts.
 Before each merge/cherry-pick:

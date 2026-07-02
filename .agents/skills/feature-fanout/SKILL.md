@@ -29,6 +29,18 @@ This skill instruction counts as an explicit request to use Codex subagents, wor
 
 Use automatically when the task is complex or multi-point.
 
+
+## Child agent effort policy
+
+Do not blindly give child agents the same reasoning effort as the parent session. Choose effort per lane:
+
+- `medium`: narrow read-only mapping, file discovery, simple status checks, mechanical inventory.
+- `high`: normal bounded implementation lanes, targeted tests, ordinary review, straightforward integration.
+- `extra-high` / maximum available effort: complex architecture, cross-cutting integration, conflict resolution, security/auth/schema/migration changes, incident/regression closure, LLM prompt-quality work, or any lane where a wrong answer could lose requirements or corrupt user work.
+
+If the current Codex surface only exposes `medium`/`high`, use `high` as the maximum available effort and explicitly note when a lane would merit extra-high/max in a richer runner. The orchestrator must record the chosen effort in the lane map for every planned subagent/worker/reviewer lane.
+
+
 Core invariant:
 
 - Preserve every original requirement ID.

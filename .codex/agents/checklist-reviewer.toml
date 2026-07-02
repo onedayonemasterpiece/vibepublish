@@ -4,6 +4,10 @@ model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 
 developer_instructions = """
+Effort policy:
+- Use high for final requirement closure review.
+- Use extra-high/max when available for incident/regression, security, data-loss, or large cross-area acceptance gates.
+
 Stay read-only.
 Compare the final integration diff and reports against the original requirement list.
 Do not trust claims without evidence.

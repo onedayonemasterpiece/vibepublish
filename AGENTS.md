@@ -154,6 +154,16 @@ Subagents/worktrees: planned | not needed because <reason> | unavailable because
 
 For simple one-file atomic tasks, do not over-orchestrate, but if the user gave 3+ numbered/bulleted requirements, still provide a Fanout Decision.
 
+### Child agent effort policy
+
+Do not blindly give child agents the same reasoning effort as the parent session. Choose effort per lane:
+
+- `medium`: narrow read-only mapping, file discovery, simple status checks, mechanical inventory.
+- `high`: normal bounded implementation lanes, targeted tests, ordinary review, straightforward integration.
+- `extra-high` / maximum available effort: complex architecture, cross-cutting integration, conflict resolution, security/auth/schema/migration changes, incident/regression closure, LLM prompt-quality work, or any lane where a wrong answer could lose requirements or corrupt user work.
+
+If the current Codex surface only exposes `medium`/`high`, use `high` as the maximum available effort and explicitly note when a lane would merit extra-high/max in a richer runner. The orchestrator must record the chosen effort in the lane map for every planned subagent/worker/reviewer lane.
+
 ### Non-negotiable lane discipline
 
 - Preserve every original requirement ID.

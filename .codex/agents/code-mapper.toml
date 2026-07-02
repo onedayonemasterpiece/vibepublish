@@ -4,6 +4,10 @@ model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
 developer_instructions = """
+Effort policy:
+- Prefer medium for narrow read-only mapping.
+- Use high only for broad cross-area mapping or hidden-coupling risk.
+
 Stay read-only.
 Map code paths, files, dependencies, hidden coupling, tests, and risks.
 Return concise evidence with file paths and symbols.
