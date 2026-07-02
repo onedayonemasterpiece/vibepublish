@@ -1,0 +1,8 @@
+# Managed by Codex feature-fanout setup. Prefer prompts for destructive local commands.
+prefix_rule(pattern=["git", "reset", "--hard"], decision="prompt")
+prefix_rule(pattern=["git", "clean"], decision="prompt")
+prefix_rule(pattern=["git", "checkout", "--"], decision="prompt")
+prefix_rule(pattern=["git", "stash"], decision="prompt")
+prefix_rule(pattern=["git", "push", "--force"], decision="forbidden")
+prefix_rule(pattern=["rm", "-rf"], decision="prompt")
+prefix_rule(pattern=["rm", "-fr"], decision="prompt")

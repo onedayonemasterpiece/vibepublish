@@ -92,3 +92,79 @@ Purpose: keep `vibepublish` work requirement-led, easy to route, and safe to ext
 - Never commit secrets, local env files, cache files, build output, or `artifacts/`.
 - Keep durable project changes reasonably synced to the remote once the repository has an origin.
 
+<!-- codex-feature-fanout:start -->
+## Automatic complex multi-point work
+
+The user is not expected to type `$feature-fanout`, "use subagents", "use worktrees", or any special process instruction. Detect the workflow from the shape of the task.
+
+This instruction counts as an explicit request to use Codex subagents, worker lanes, branches, and worktrees when the trigger conditions below are met.
+
+### Trigger levels
+
+Use these trigger levels:
+
+1. `fanout-decision`
+   Trigger when the user gives:
+   - any numbered/bulleted list with 3+ distinct code/product requirements;
+   - several unrelated fixes;
+   - a broad task that may touch multiple files.
+
+   Required behavior:
+   - start with a short Fanout Decision;
+   - preserve every requirement as a stable ID;
+   - state whether full fanout is needed.
+
+2. `fanout-required`
+   Trigger when the user gives:
+   - 5+ distinct requirements;
+   - a feature touching multiple areas such as UI/API/tests/config/data/schema;
+   - work where requirements may be lost if implemented linearly;
+   - a request mentioning many fixes/dorabotki/доработки;
+   - a task likely to need parallel discovery/review.
+
+   Required behavior before editing:
+   - create an execution matrix;
+   - create a dependency graph;
+   - create a lane map;
+   - decide which lanes are read-only parallel, writable worktree workers, serial integrator work, and final reviewer work.
+
+3. `subagent-required`
+   Trigger when:
+   - `fanout-required` is true and there are independent discovery/review areas;
+   - there are 5+ requirements;
+   - there are independent UI/backend/test/documentation areas;
+   - a long task risks context pollution or dropped requirements.
+
+   Required behavior:
+   - use read-only subagents for exploration/review when available;
+   - use writable worker agents only through branch/worktree isolation;
+   - if subagents are unavailable or not used, explicitly say why and still use the execution matrix/lane map/checklist discipline.
+
+### Required first response shape when triggered
+
+For triggered tasks, begin with:
+
+```text
+Fanout Decision: enabled | not needed
+Trigger: <why>
+Requirements preserved: R01...Rxx
+Execution mode: read-only parallel | serial | mixed | worktree workers
+Subagents/worktrees: planned | not needed because <reason> | unavailable because <reason>
+```
+
+For simple one-file atomic tasks, do not over-orchestrate, but if the user gave 3+ numbered/bulleted requirements, still provide a Fanout Decision.
+
+### Non-negotiable lane discipline
+
+- Preserve every original requirement ID.
+- Do not implement large multi-point work linearly in one long pass.
+- Parallelize discovery aggressively.
+- Parallelize writes only through disjoint ownership or separate branch/worktree lanes.
+- One writable worker lane = one branch + one worktree + one owner.
+- Final integration is serial and owned by one integrator.
+- Every worker lane must end as committed, merged, rejected, blocked-with-patch, or superseded.
+- No lane may disappear from the final report.
+- No worker may leave abandoned dirty worktrees.
+- Dirty current worktree is not an excuse to do nothing. Preserve it, avoid dirty files, and continue in isolated worktrees when safe.
+- Final response must include Done / Partial / Missing / Blocked / Superseded for every original requirement.
+<!-- codex-feature-fanout:end -->
