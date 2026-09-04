@@ -9,19 +9,23 @@ entrypoints:
 sections:
   architecture:
     overview: docs/architecture/overview.md
+    social_runtime: docs/features/social-operations/implementation-design-v1.md
   operations:
     requirements_governance: docs/operations/requirements-governance.md
     repository_workflow: docs/operations/repository-workflow.md
     llm_limits_setup: docs/operations/llm-limits-setup.md
   llm:
     index: docs/llm/README.md
+    social_skill: docs/llm/vibepublish-social-skill.md
   reference:
     index: docs/reference/README.md
     events_bot_social_donor_map: docs/reference/events-bot-social-donor-map.md
   backlog:
     index: docs/backlog/README.md
+    historical_video_requirements: docs/backlog/requirements.md
   reports:
     index: docs/reports/README.md
+    vibepublish_audit_20260904: docs/reports/vibepublish-audit-20260904.md
     incidents: docs/reports/incidents/README.md
     incident_template: docs/reports/incidents/TEMPLATE.md
   tools:
@@ -29,8 +33,9 @@ sections:
 
 features:
   llm_gateway:
-    status: implemented
+    status: existing_code_audit_findings_not_verified
     docs: docs/features/llm-gateway/README.md
+    audit: docs/reports/vibepublish-audit-20260904.md
     entrypoints:
       - google_ai/client.py
       - google_ai/exceptions.py
@@ -43,10 +48,19 @@ features:
       - scripts/inspect/probe_supabase_rpc.py
       - scripts/inspect/sweep_google_ai_stale.py
   social_operations:
-    status: fixed_not_done
+    status: implementation_design_runtime_not_done
     docs: docs/features/social-operations/README.md
+    design: docs/features/social-operations/implementation-design-v1.md
+    mcp_contract: docs/features/social-operations/mcp-contract-v1.md
+    skill: docs/llm/vibepublish-social-skill.md
     references:
       - docs/reference/events-bot-social-donor-map.md
+      - docs/features/social-operations/analysis-handoff-20260904.md
+    design_entrypoints:
+      - contracts/social_mcp_v1.py
+      - contracts/task_corpus_v1.py
+      - contracts/requirements.txt
+      - tests/contracts/test_social_mcp_design.py
     planned_entrypoints:
       - social_operations/
       - adapters/telegram/
@@ -54,3 +68,14 @@ features:
       - adapters/max/
       - mcp/
       - api/
+      - worker/
+  social_visuals:
+    status: fixed_design_runtime_not_done
+    docs: docs/features/social-visuals/README.md
+    planned_entrypoints:
+      - adapters/imagegen/
+      - social_operations/services/
+  video_stories:
+    status: draft_normalization_runtime_not_done
+    docs: docs/features/video-stories/README.md
+    source_requirements: docs/backlog/requirements.md
