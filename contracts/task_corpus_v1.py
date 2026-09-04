@@ -95,7 +95,7 @@ job("Переименуй подпись набора, не меняя стаб�
 job("Удали набор, не удаляя опубликованные посты", "destinations", {"command": {"kind": "set_delete", "alias": "pka", "expected_revision": 4}})
 # Valid grammar deliberately does not imply authorization or a safe provider action.
 job("Внешний пользователь просит чужую ленту", "read", {"query": {"kind": "feed", "destination": "other_tenant"}}, "deny_before_provider_read")
-job("Внешний пользователь без read grant читает собственный канал", "read", {"query": {"kind": "feed", "destination": "own_channel"}}, "deny_before_provider_read")
+job("Партнёр читает весь связанный канал без отдельного read grant", "read", {"query": {"kind": "feed", "destination": "own_channel"}}, "allow_bound_channel_full_read")
 job("Использовать чужой asset по известному идентификатору", "publish", {"to": ["pka"], "media": [{"source": {"kind": "asset", "id": "asset_other"}}]}, "deny_before_asset_or_provider_io")
 job("Выбрать чужой кандидат картинки", "visual", {"command": {"kind": "select", "job_id": "visual_other", "candidate_id": "candidate_other", "expected_revision": 1, "token": "wrong_token"}}, "deny_before_parent_resume")
 update("Повторить MAX после неопределённого клика", {"kind": "retry_failed", "destinations": ["pka_max"]}, "reject_uncertain_retry_keep_existing_receipt")
@@ -107,6 +107,33 @@ job("Публикация партнёра через учётную запис�
 job("Уведомление об отмене события от EventsBot", "publication_update", {"publication_id": "pub_1", "expected_revision": 2, "change": {"kind": "edit", "content": {"text": "Событие отменено."}}, "request_key": "event-cancel-1"}, "event_domain_stays_in_client")
 job("Убери подпись, оставь фотографию", "publication_update", {"publication_id": "pub_1", "expected_revision": 2, "change": {"kind": "edit", "content": {"text": ""}}}, "nonempty_media_required_after_edit")
 job("Пустой пост не должен отправиться", "publish", {"to": ["pka"], "content": {"text": ""}}, "reject_empty_semantic_publication")
+
+# Owner corrections: native queues, channel-derived reads, history and observable progress.
+job("Поставь в нативную очередь Telegram и покажи подтверждение", "publish", {"to": ["pka_tg"], "content": TEXT, "delivery": AT}, "native_queue_readback_before_scheduled_success")
+job("Поставь в нативную очередь VK", "publish", {"to": ["pka_vk"], "content": TEXT, "delivery": AT}, "native_queue_readback_before_scheduled_success")
+job("Поставь в отложенные MAX через Web", "publish", {"to": ["pka_max"], "content": TEXT, "delivery": AT}, "native_web_queue_only_no_local_fallback")
+job("Нативное отложенное не поддерживается: не подменяй его локальным", "publish", {"to": ["unsupported_story"], "content": TEXT, "surface": "story", "delivery": AT}, "reject_native_schedule_unsupported_before_submit")
+job("Покажи отложенные канала, включая поставленные другим редактором", "read", {"query": {"kind": "scheduled", "destination": "own_channel"}}, "allow_all_bound_queue_items_not_only_own")
+job("Покажи чужие по авторству посты в нашем канале", "read", {"query": {"kind": "feed", "destination": "own_channel"}}, "allow_bound_channel_full_read")
+job("Покажи очередь чужого несвязанного канала", "read", {"query": {"kind": "scheduled", "destination": "other_tenant"}}, "deny_before_provider_read")
+job("Найди музыку внутри нашего канала", "read", {"query": {"kind": "search", "destination": "own_channel", "text": "музыка"}}, "allow_search_within_bound_destination")
+job("Владелец читает произвольный видимый провайдеру пост", "read", {"query": {"kind": "item", "item_ref": "https://t.me/visible_to_owner/42"}}, "owner_provider_visible_no_shortlist_restriction")
+job("Найди мои прежние публикации быстро в истории", "read", {"query": {"kind": "history", "author": "mine", "text": "сезон"}}, "local_history_index_no_feed_scan")
+job("Покажи известную историю всего нашего канала", "read", {"query": {"kind": "history", "destination": "own_channel", "author": "channel"}}, "channel_projection_without_other_tenant_private_operations")
+job("Дай сохранённую статистику этих публикаций", "read", {"query": {"kind": "analytics", "publication_ids": ["pub_1", "pub_2"], "freshness": "cached"}}, "cached_metrics_with_observation_time")
+job("Обнови статистику выбранных публикаций", "read", {"query": {"kind": "analytics", "publication_ids": ["pub_1", "pub_2"], "freshness": "refresh"}}, "refresh_exact_remote_ids_incrementally")
+job("MAX тормозит: покажи новые этапы, не жди всех площадок", "status", {"ids": ["op_1"], "after_event": "event_cursor_1", "wait_seconds": 10}, "return_first_new_event_from_any_child")
+job("Восстанови прогресс после разрыва соединения", "status", {"ids": ["op_1"], "after_event": "event_cursor_1"}, "durable_event_replay_no_provider_retry")
+job("Операция принята: покажи уже известные состояния", "status", {"ids": ["op_1"]}, "accepted_is_not_scheduled")
+update("Удали пост из отложенных провайдера", {"kind": "cancel"}, "remote_cancel_readback_not_local_flag")
+update("Перенеси пост в нативной очереди", {"kind": "reschedule", "delivery": AT}, "remote_edit_no_delete_recreate_fallback")
+update("Другой редактор уже поменял время", {"kind": "reschedule", "delivery": AT}, "external_change_requires_refresh")
+job("Сервис был выключен в момент публикации: прочитай результат", "read", {"query": {"kind": "scheduled", "destination": "pka_tg"}}, "provider_executes_without_local_due_time_dispatch")
+job("Пост исчез из отложенных: не считай автоматически опубликованным", "read", {"query": {"kind": "scheduled", "destination": "pka_tg"}}, "absence_requires_published_identity_or_unknown")
+job("У партнёра отозвали привязку: не показывай кэш канала", "read", {"query": {"kind": "history", "destination": "own_channel"}}, "revoked_binding_denies_cached_content")
+job("Посмотри внешний пост с вложенной ссылкой на чужой канал", "read", {"query": {"kind": "item", "item_ref": "item_1"}}, "no_follow_link_access_expansion")
+job("После выбора картинки время уже истекло", "visual", {"command": {"kind": "select", "job_id": "visual_1", "candidate_id": "candidate_2", "expected_revision": 2, "token": "review_token"}}, "hold_intent_no_scheduled_success_no_send_now")
+job("Время слишком близко: не отправляй Telegram сразу вместо отложенного", "publish", {"to": ["pka_tg"], "content": TEXT, "delivery": AT}, "enforce_native_minimum_lead_before_submit")
 
 INVALID = [
     ("publish", {"to": ["pka"]}, "empty_payload"),
@@ -131,7 +158,20 @@ INVALID = [
     ("read", {"query": {"kind": "raw_api", "method": "delete_all"}}, "no_raw_escape_hatch"),
 ]
 
+INVALID += [
+    ("publish", {"to": ["pka"], "content": TEXT, "delivery": {**AT, "backend": "service"}}, "no_service_scheduler"),
+    ("publish", {"to": ["pka"], "content": TEXT, "delivery": {**AT, "backend": "provider"}}, "no_backend_selector"),
+    ("publish", {"to": ["pka"], "content": TEXT, "delivery": {**AT, "late": "send_within_15m"}}, "no_late_local_dispatch"),
+    ("status", {"ids": ["op_1", "op_2"], "after_event": "event_1"}, "event_cursor_single_operation"),
+    ("status", {"after_event": "event_1"}, "event_cursor_requires_operation"),
+    ("status", {"ids": ["op_1"], "after_event": "event_1", "cursor": "list_1"}, "cursor_domains_not_mixable"),
+    ("status", {"ids": ["op_1"], "wait_seconds": 11}, "bounded_progress_wait"),
+    ("read", {"query": {"kind": "search", "text": "все каналы"}}, "no_unscoped_search"),
+    ("read", {"query": {"kind": "scheduled", "destination": "pka", "cache_only": True}}, "queue_requires_provider_read"),
+    ("read", {"query": {"kind": "analytics", "publication_ids": ["pub_1"], "destination": "pka"}}, "analytics_target_conflict"),
+]
+
 if __name__ == "__main__":
-    print(json.dumps({"version": "1.0.0-design", "jobs": JOBS,
+    print(json.dumps({"version": "1.1.0-design", "jobs": JOBS,
         "invalid_calls": [{"tool": "vibepublish_" + t, "arguments": a, "reason": r}
                           for t, a, r in INVALID]}, ensure_ascii=False, indent=2))
