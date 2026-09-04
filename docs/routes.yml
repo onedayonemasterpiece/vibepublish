@@ -26,6 +26,7 @@ sections:
   reports:
     index: docs/reports/README.md
     vibepublish_audit_20260904: docs/reports/vibepublish-audit-20260904.md
+    audit_precedence: historical_before_native_only_owner_correction
     incidents: docs/reports/incidents/README.md
     incident_template: docs/reports/incidents/TEMPLATE.md
   tools:
@@ -49,13 +50,21 @@ features:
       - scripts/inspect/sweep_google_ai_stale.py
   social_operations:
     status: implementation_design_runtime_not_done
+    contract_version: 1.1.0-design
+    scheduling: provider_native_only
+    local_publication_scheduler: forbidden
+    partner_reads: active_publishing_destinations_full_content_and_queue
+    progress: durable_per_stage_events_with_early_receipts
+    history: indexed_publication_facts_and_metric_observations
     docs: docs/features/social-operations/README.md
     design: docs/features/social-operations/implementation-design-v1.md
     mcp_contract: docs/features/social-operations/mcp-contract-v1.md
     skill: docs/llm/vibepublish-social-skill.md
     references:
       - docs/reference/events-bot-social-donor-map.md
+    historical_references:
       - docs/features/social-operations/analysis-handoff-20260904.md
+      - docs/reports/vibepublish-audit-20260904.md
     design_entrypoints:
       - contracts/social_mcp_v1.py
       - contracts/task_corpus_v1.py
