@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Development handoff — 2026-09-04, contract 1.2.0-design
+
+- Added canonical native Telegram/VK forwarding by exact post URL or authorized
+  item reference, with attribution readback, grouped-media handling, private-source
+  authorization and no rewrite/copy fallback. VK scheduled repost remains an
+  unproved capability, not a local-scheduler substitute.
+- Extended the existing engage command schema; no new forward synonym tool.
+- Added personal primary/secondary destination profiles with purpose, audience,
+  topics, exclusions, notes, explicit/agent selection policy and CAS revision.
+  Profiles do not change provider identities or grants. Added routing_revision.
+- Extended get_started sections with forwarding, destinations and all; retained
+  the single bootstrap/skill method and resource/prompt compatibility design.
+- Added narrow forward and destination.profile catalog projections without
+  granting unrelated engagement or destination administration operations.
+- Added automated acceptance matrix with actual versus planned test boundaries,
+  core/MAX ownership, live native-queue shutdown and native-forward canaries.
+- Added ready-to-use files for a new ChatGPT core implementation window and a
+  separate bounded Codex MAX Web implementation task. Neither task was launched.
+- Reran the existing 14 contract methods, then all 22 methods successfully after
+  changes: 16 schemas, 125 golden calls and 44 negative calls. New cases are in
+  tests/contracts/test_forwarding_profiles_design.py; runtime-oracle labels are
+  not counted as executed runtime checks.
+- Canonical skill text update was blocked by the connector and did not commit.
+  The skill file remains v1.1; its v1.2 synchronization is an explicit core-batch
+  prerequisite recorded in docs/README.md/routes and the latest requirement
+  extension. The new schema/test and handoff files were saved successfully.
+
 ### Owner correction — 2026-09-04, contract 1.1.0-design
 
 - Replaced the rejected local publication scheduler/default/fallback with native
@@ -47,8 +74,8 @@
 
 ### Verification boundary
 
-- This batch changes requirements and executable design/tests, not social
-  runtime, provider adapters, database migrations or deployment.
+- This work changes requirements and executable design/tests, not social runtime,
+  provider adapters, database migrations or deployment.
 - No Codex task, live provider operation or image generation ran. Native queues,
   actual MCP incremental delivery, MAX Web, imagegen, runtime permissions,
   database concurrency and infrastructure-independence canaries remain unrun.
