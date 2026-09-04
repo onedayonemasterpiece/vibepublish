@@ -97,6 +97,14 @@ DEFS = {
         "height": {"type": "integer", "minimum": 1}}, ("id", "asset_ref", "sha256", "width", "height")),
     "error": obj({"code": string(80), "message": string(1000), "field": string(200)}, ("code", "message")),
 }
+# Exact typography is data, not text inferred from a generation prompt.
+DEFS["visual_copy"] = obj({"title": string(160), "subtitle": string(240),
+    "body": string(1200), "date_line": string(160), "location_line": string(240),
+    "source_line": string(300)})
+for visual_arm in DEFS["visual_spec"]["oneOf"]:
+    visual_arm["properties"]["copy"] = ref("visual_copy")
+    visual_arm["properties"]["formats"] = {**array(enum("post_4_5", "story_9_16"), 1, 2),
+                                           "uniqueItems": True}
 DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
     "action": string(80), "state": STATE, "message": string(1500),
     "next_action": NEXT, "retry_safe": {"type": "boolean"}, "receipt_ref": ID,
