@@ -5,6 +5,8 @@ entrypoints:
   docs_index: docs/README.md
   agent_routes: AGENTS.md
   changelog: CHANGELOG.md
+  implementation_start: docs/handoffs/implementation-start-20260904.md
+  max_web_task: docs/handoffs/max-web-codex-20260904.md
 
 sections:
   architecture:
@@ -50,7 +52,8 @@ features:
       - scripts/inspect/sweep_google_ai_stale.py
   social_operations:
     status: implementation_design_runtime_not_done
-    contract_version: 1.1.0-design
+    contract_version: 1.2.0-design
+    base_design_version: 1.1.0-design
     scheduling: provider_native_only
     local_publication_scheduler: forbidden
     partner_reads: active_publishing_destinations_full_content_and_queue
@@ -59,7 +62,10 @@ features:
     docs: docs/features/social-operations/README.md
     design: docs/features/social-operations/implementation-design-v1.md
     mcp_contract: docs/features/social-operations/mcp-contract-v1.md
+    latest_extension: docs/features/social-operations/forwarding-and-editorial-profiles-v1.md
+    acceptance_tests: docs/features/social-operations/acceptance-tests-v1.md
     skill: docs/llm/vibepublish-social-skill.md
+    skill_update_status: v1_1_text_requires_v1_2_forwarding_and_profiles_sync_before_runtime_release
     references:
       - docs/reference/events-bot-social-donor-map.md
     historical_references:
@@ -70,6 +76,7 @@ features:
       - contracts/task_corpus_v1.py
       - contracts/requirements.txt
       - tests/contracts/test_social_mcp_design.py
+      - tests/contracts/test_forwarding_profiles_design.py
     planned_entrypoints:
       - social_operations/
       - adapters/telegram/
