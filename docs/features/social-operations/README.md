@@ -1,85 +1,70 @@
 # VibePublish Social Operations
 
-Owner requirements: `Fixed`, 2026-09-04.
-
-Engineering design: `Not confirmed by user`; selected implementation baseline, not a claim of owner sign-off or empirical model optimality.
-
+Owner requirements: `Fixed`, including the follow-up correction of 2026-09-04.
+Engineering realization: selected design `1.1.0-design`, `Not confirmed by user`.
 Runtime implementation: `Not done`.
 
-## Read in this order
+## Current source of truth
 
-1. [Independent audit and source evidence](../../reports/vibepublish-audit-20260904.md).
-2. [Implementation design: architecture, data, reliability, MAX, security and delivery gates](implementation-design-v1.md).
-3. [MCP contract, taxonomy, exact arguments and measured offline checks](mcp-contract-v1.md).
-4. [Social visuals / imagegen](../social-visuals/README.md).
-5. [EventsBot donor map](../../reference/events-bot-social-donor-map.md).
+Read [implementation design](implementation-design-v1.md), [MCP contract](mcp-contract-v1.md), the executable `contracts/social_mcp_v1.py` and the [agent skill](../../llm/vibepublish-social-skill.md).
 
-The [2026-09-04 handoff](analysis-handoff-20260904.md) remains historical source evidence and preserves the owner's corrections. Its candidate method list and unresolved engineering alternatives are superseded by the implementation design and MCP contract. The old nine-method list is no longer a competing canonical API.
+The [original audit](../../reports/vibepublish-audit-20260904.md) and [handoff](analysis-handoff-20260904.md) are historical evidence, not competing current instructions. In particular, the audit's service-scheduler decision and separate default-deny read-grant decision were rejected by the owner and are superseded here. Imagegen and MAX Web requirements remain binding.
 
-## Goal and ownership
+## Owner correction: real provider queues, no local publication scheduler
 
-VibePublish is an independent social-network operations service on DevCoveer. ChatGPT, LADENO, EventsBot and other clients access the same application services through MCP or HTTP. VibePublish owns provider adapters, credentials/session references, principals and tenant grants, destination aliases/sets, semantic content/renderings, immutable assets, scheduling, durable operations, verification, receipts and audit.
+`Fixed` A scheduled publication is submitted immediately to the native queue of Telegram, VK or MAX. The provider owns execution at the requested time. VibePublish must not maintain a timer, cron job, delayed-send worker or fallback that publishes at that time. This is not merely a change of default backend: local scheduled delivery is excluded.
 
-EventsBot donates implementation and regression behavior; it is not a runtime dependency. Event-domain rules and editorial choices remain in EventsBot. After verified migration it calls VibePublish rather than retaining a second independent social execution backend.
+`Fixed` The person scheduling can inspect the actual queued post at the provider, including its content, media and scheduled time. Success requires readback from that queue, not a local database row, composer screenshot or acceptance toast. The receipt contains an authorized queue/item reference and an actual provider link when available; otherwise it provides exact navigation instructions and protected observed preview evidence. Do not invent a permalink or promise provider-UI login access to a partner who only has VibePublish access.
 
-One logical publication may fan out to Telegram, VK and MAX, with a separate persistent result for each destination. Transport success is not publication proof. Provider differences remain explicit rather than reduced to the weakest shared format.
+`Fixed` Cancel, edit and reschedule operate on the existing provider item and verify the change there. A local flag alone is not cancellation. Native queue reads include all items visible in the authorized destination, including those created outside VibePublish.
 
-## Binding provider decisions
+A connection/surface whose native scheduling has not been proved is reported unsupported, needs authentication or needs review. Never substitute immediate sending or a local queue. MAX continues through its Web UI, not an API. Proving MAX native scheduling/readback/edit/cancel is an implementation gate, not an availability claim made by this design.
 
-### Telegram
+The worker may process accepted commands, imports, uploads and observations now. Its short-lived execution backlog is not a publication calendar. On-time provider submission, expired requests and uncertainty are explicit; no accepted command may later become a hidden local scheduled send.
 
-Use independent VibePublish connections and the proven Telethon owner-session path. The canonical owner session namespace is `VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE`. No fallback to EventsBot/E2E/unrelated sessions is permitted. Bot API/business connections may be supported separately where their actual capabilities are proven.
+## Owner correction: progressive visibility
 
-Preserve rich text/entities, named links, registered custom emoji, media and albums, messages/Saved Messages, stories, scheduling, edits/deletes and allowed reads/analytics. Actual rights and capability evidence apply per connection/destination/surface.
+`Fixed` The agent must receive accepted state and successive atomic stages without waiting for all providers to finish. Every meaningful operation transition and per-destination result is durably recorded and exposed immediately through incremental status results. Telegram completion must be observable while VK is uploading and MAX is still checking the channel.
 
-### VK
+The portable contract is a prompt initial receipt plus resumable event cursors through `vibepublish_status`. MCP progress notifications are an optional additional projection during an active request, never the sole visibility mechanism. No promise is made that every client displays or passes notifications to its model. Stage events survive disconnect/restart and never imply permission to retry an uncertain mutation.
 
-Use VibePublish-owned role-scoped connections and credentials in a VibePublish namespace. Preserve reader/messenger/publisher/media/story role separation where required; one physical credential may satisfy multiple roles if verified. Port proven transport, upload/save, provider readback and error classification without importing EventsBot runtime state.
+An operation that successfully placed all requested items in provider queues is complete as a scheduling command. It does not remain running until publication time. Actual later publication is a separate provider observation.
 
-### MAX
+## Owner correction: reading follows publishing destinations
 
-**MAX remains Web/Playwright. There is no MAX API requirement or API approval dependency for the current release.** Use an isolated persistent account profile and deterministic specialized driver with guarded submit and provider-visible readback. A general-purpose browser agent is not the production publisher.
+`Fixed` A partner with active publication access to a bound channel can read all provider-visible content in that channel, including its entire scheduled queue, regardless of which editor or client created the posts. A separate social-read grant is not required for that channel.
 
-The implementation design defines exact target/account verification, one profile execution lane, durable dispatch checkpoint, recovery limits and ambiguous-outcome handling. Optional model-assisted locator recovery is deferred until deterministic paths work and cannot submit, delete, choose targets, alter content/time or solve authentication challenges.
+The partner can read/search only such destinations, not arbitrary public channels, the operator's unrelated chats, dialogs or account-wide search. Exact links, IDs, cross-post links, media handles, cache entries and pagination cursors cannot expand this boundary. Comments/replies tied to an authorized post can be read where supported; this does not grant the whole linked discussion chat. Provider limitations still apply and are shown honestly.
 
-## Access and administration
+`Fixed` The system owner may request any chat, channel, dialog or item actually visible to the connected provider account, without a predeclared publishing shortlist. This is bounded by real provider access, not an invented ability to read inaccessible resources.
 
-Owner reads may reach anything actually visible to the connected account, not just a predeclared shortlist. Writes still require actual provider rights and all identity/reliability checks.
+Read access to shared channel content does not expose another tenant's private drafts, source assets, prompts, credentials, operation logs or generation candidates. The channel-visible projection is distinct from those private records. Revoking a binding invalidates access to cached channel content too.
 
-External principals have **no social reading by default**, including on their own connection, until explicit destination/operation read grants are issued. They may inspect their own operational receipts and assets. Internal verification of a write must not expose surrounding private feed content.
+## Owner correction: searchable publication history
 
-Both onboarding models are mandatory:
+`Fixed` Keep durable facts and references for operations and publications in the database: authorship/provenance, destination, provider item/queue identities, content/media fingerprints, requested and observed time, state and observations. This is an index/history and audit trail, not an execution scheduler.
 
-- Tenant-owned credentials/sessions: isolated, encrypted at rest, securely provisioned and independently revocable.
-- Operator-shared credentials: an owner-created exact destination binding plus real provider publisher/admin rights. Supplying a channel URL, name or native ID never grants access.
+The agent can find its earlier publications quickly using local history, then request cached statistics or refresh statistics for those exact provider items. Return observation time, provenance and freshness. A native queue read always contacts the provider; local history must not masquerade as its current contents. Missing remote items and queue-to-published ID changes are reconciled rather than guessed.
 
-Tenant boundaries, quotas, credential separation, policy epochs and revocation belong to the first core implementation, not a final retrofit. A full admin UI can wait; initial owner-only CLI/secure onboarding is sufficient. External users must never send provider secrets in normal model-visible arguments.
+## Product and provider ownership
 
-## Destinations and content
+VibePublish is one independent service on DevCoveer with MCP and HTTP interfaces over the same application services. It owns adapters, connection references, tenant/principal bindings, aliases/sets, semantic rendering, assets, immediate command execution, native queue management, observations, history and audit.
 
-Keep connection, destination and destination_set separate. Aliases are stable and tenant-scoped. Accept one or more explicit aliases or sets, freeze the concrete target snapshot, and recheck authorization before actual dispatch. Add/remove/rename/list sets without changing queued jobs' targets.
+Telegram uses independent VibePublish sessions, including the canonical `VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE`; never fall back to EventsBot/E2E sessions. Bot API/business connections remain separate capability families. VK uses independent role-scoped VibePublish credentials and reusable donor transport/upload/readback behavior. MAX uses an isolated persistent profile and specialized Playwright driver; no general-purpose model agent selects targets or clicks submit.
 
-The canonical content model supports paragraphs, emphasis, links, mentions, hashtags, emoji and captions/alt text, ordered media and explicit provider renderings. Normal calls use plain text or a bounded Markdown subset; SDK entity offsets are internal. Telegram named links, VK visible URLs and MAX's proven formatting are rendered separately. No silent loss of media, links or text and no unapproved splitting into several posts.
+Tenant-owned credentials and operator-shared credentials are both supported. Operator-shared access requires an owner-created exact destination binding and actual provider publishing rights. Supplying a URL never creates a binding. Multi-tenant isolation, secure onboarding, quotas and revocation belong to the first core batch; the initial administration surface may be owner-only CLI.
 
-Default adaptation is deterministic. Optional model editing produces a new reviewable revision before dispatch; it cannot change business intent during provider execution.
+EventsBot is a source/test donor and later an API client, never a required runtime dependency or parallel evolving social writer. Domain/editorial event rules remain there. The [donor map](../../reference/events-bot-social-donor-map.md) is inventory, not proof of live VibePublish capabilities.
 
-## Capability baseline that must be preserved
+## Content and full capability baseline
 
-Do not interpret the first working slice as permission to discard broader verified donor behavior. The full product baseline includes, wherever the bound provider connection supports it:
+Preserve plain/semantic/rich content, ordered image/video/audio/animation/document media, explicit provider renderings, mentions/emoji, captions and alt text. No silent loss, splitting or lowest-common-denominator downgrade. Optional model adaptation creates a reviewable revision before dispatch; facts, targets and time are never rewritten during execution.
 
-| Family | Required coverage |
-|---|---|
-| Discovery/read | Exact target/item resolution, target and dialog search/listing, feed/history/search, exact posts/messages/comments/stories with usable media references |
-| Observation | Comments/replies, reactions, stories/statistics, scheduled queue, notifications/mentions, audience/post/story/community analytics, editorial sampling and provider recommendations |
-| Publication | Direct and Saved Messages, channel/group/community/wall posts, rich formatting, single and ordered multiple media/albums, image/video/audio/animation/document |
-| Lifecycle | Immediate, durable service and proven native scheduling; scheduled listing/reschedule/cancel; edit/media replacement/delete; forwarding/reposting |
-| Engagement/stories | Comments/replies, add/remove reactions, photo/video stories and typed native options |
+Preserve all verified donor-compatible capabilities: destination/item discovery, feeds/history/search, comments/reactions, stories/statistics, scheduled queues, notifications, audience/community analytics, editorial sampling, recommendations, direct/Saved Messages, posts, albums/video/stories, edits/media replacement/deletes and forwards/reposts. Expose native-specific options through typed fields and tests, never a raw SDK escape hatch. Capabilities are per connection/destination/surface with evidence and observation time.
 
-Capabilities use supported/unsupported/needs_auth/needs_review/temporarily_unavailable plus observation time/evidence. Do not hide working functionality with an unrelated global product flag. Do not advertise a donor capability as live before independent VibePublish adapter verification. Typed native extensions are added with exact schemas and tests before activation; raw provider passthrough is prohibited.
+## MCP surface
 
-## MCP and service API
-
-The selected task taxonomy has eight methods:
+The eight task methods remain:
 
 ```text
 vibepublish_get_started
@@ -92,32 +77,16 @@ vibepublish_engage
 vibepublish_destinations
 ```
 
-A publisher-only client sees five core methods. No separate story/schedule/video synonym tools and no model-visible prepare/commit sequence. One complete authorized publication requires one mutation call; a human visual choice needs the initial call and one selection/resume call. Status polling is observational.
+An active partner publisher normally receives six core methods, including `read` restricted to publishing destinations. Owner-only discovery is not exposed in that partner projection. No separate story/schedule synonym and no model-visible prepare/commit choreography. One publication mutation creates one operation; progress reads do not create extra publications.
 
-All exact names, tagged arguments, closed input/output schemas, errors, HTTP mapping, grant projection and skill/bootstrap semantics live in [MCP contract v1](mcp-contract-v1.md), not duplicated here. The versioned [skill](../../llm/vibepublish-social-skill.md) is served as resource/prompt and through the fallback get_started tool.
+## Reliability and related features
 
-## Reliability requirements
+Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. Preserve per-provider successes. Perform deterministic all-target preflight while publishing its stages; after dispatch, providers proceed independently. Record the dispatch boundary before side effects. Unknown outcomes are reconciled, never blindly retried. Media evidence distinguishes input hashes from provider-transcoded results.
 
-Each request owns a durable parent and per-destination children. Distinguish request identity from frozen execution-plan identity so generated assets and candidate selection do not break replay semantics. Exact replay returns the original receipt; conflicting reuse is rejected; uncertain side effects are never blindly repeated.
+[Social visuals](../social-visuals/README.md) preserves `$imagegen` through the requested `gpt-5.6-luna` route, candidate choice, deterministic exact typography and separate training consent. A pending visual is not yet a queued provider post; approval/selection after the native lead-time window blocks submission instead of sending immediately.
 
-Preflight all deterministic target/content/media errors before sending any child. Once external execution begins, preserve partial successes and do not promise atomic cross-platform rollback. Persist the dispatch boundary before the side effect. Expired leases and restarted workers do not justify repeating an uncertain send.
+[Video stories](../video-stories/README.md) preserves Telegram editorial control, Kaggle rendering, voice comments, geography/time filters, music, subtitles, safe enhancement and approval. Its output enters this same publishing service; it never adds a local social scheduler.
 
-Separate accepted, service queued, provider scheduled and observed published. Default scheduling is the service queue, with explicit timezone and late policy; native scheduling is optional and has one responsible backend per child. Cancel unsent work and delete published work are distinct. Revocation must address already-submitted native schedules and report residual remote risk honestly.
+## Delivery status
 
-Source hashes prove the uploaded input; transcoded provider media need object-binding and semantic/order/count evidence, not a fabricated identical remote SHA. Missing verification remains visible. Edits use revision checks and detect external manual changes.
-
-The implementation design is canonical for state transitions, receipts, retry/reconciliation, assets, quotas, security, backups/restore and scheduler migration.
-
-## Related media products
-
-[Social visuals](../social-visuals/README.md) implements generate/tune/compose/select through the required `$imagegen` route requested via `gpt-5.6-luna`, with actual route/artifacts proved later on DevCoveer. Google Imagen is not a substitute. Exact text uses deterministic composition; tenant training consent is separate.
-
-[Video stories](../video-stories/README.md) preserves the original Telegram-controlled Kaggle video generator, voice comments, geo/time filtering, music, subtitles, safe enhancement and mandatory approval. It supplies verified assets to the same social service, not another publisher or queue.
-
-## Delivery and acceptance status
-
-**Completed design work, not runtime:** audit, architecture/data/recovery/security decisions, selected MCP grammar, executable schemas, 80-task golden corpus, 20 negative cases and a versioned skill. Eight offline contract test methods passed. These are not weak-model, database, browser or live-provider tests.
-
-**Not done:** domain/storage/auth/worker runtime; independent Telegram/VK/MAX adapters; actual imagegen executor; real MCP/HTTP server; donor capability parity; external onboarding; live canaries; EventsBot cutover; video generator.
-
-Implementation batches A–F and V and their blocking tests are defined in implementation-design-v1.md. Initial implementation remains direct ChatGPT/GitHub work. Codex is reserved for later DevCoveer environment integration, real imagegen verification, MAX live-driver debugging and controlled canaries. No Codex task was invoked for this audit/design package.
+This is a design/contract correction, not provider implementation or deployment. New schemas, fixtures and tests describe the corrected contract. Native scheduling, MAX UI, progressive behavior in actual MCP clients, scoped runtime reads, database/history/statistics and imagegen still require the implementation/live gates in the design. No Codex task or live provider operation is authorized or performed by this correction batch.
