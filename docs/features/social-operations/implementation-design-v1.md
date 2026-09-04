@@ -1,267 +1,228 @@
-# VibePublish — implementation design v1
+# VibePublish — implementation design v1.1
 
-Date: 2026-09-04. Reviewed base: `a2a089f320049b6413cd2f635fd8e93ab7aee888`.
+Date: 2026-09-04. Correction base: `f285dace053f91e322b7015e28e38c14d405b3b9`.
+Owner corrections in [README](README.md): `Fixed`. Engineering details: selected for implementation, `Not confirmed by user`. Runtime: `Not done`.
 
-Owner requirements: `Fixed`. New engineering choices in this document: `Not confirmed by user`, selected for implementation rather than represented as owner-approved. Runtime: `Not done`.
+This revision replaces the earlier local-scheduler architecture and separate partner read-grant requirement. Historical audit/handoff text is not authoritative for those decisions. No Codex, provider mutation or deployment was run for this correction.
 
-This is the technical continuation of [the canonical feature](README.md). It supersedes the candidate taxonomy and unresolved engineering alternatives in [the historical handoff](analysis-handoff-20260904.md), not the owner's corrections. No Codex task, provider write, credential inspection or deployment was performed for this design.
+## 1. Requirement delta and product boundary
 
-## 1. Product and scope
-
-The product is a dependable social-operations service, not an autonomous social-media agent. The agent decides editorial intent; deterministic services enforce identity, permissions, media, timing and evidence. Success means the requested content reaches the requested destination with an honest, recoverable receipt.
-
-Two separate scope levels prevent a thin pilot being called the complete product:
-
-- **First usable publishing slice:** Telegram, VK and MAX Web; exact destinations and sets; text plus ordered images/video; service scheduling; supported edit/reschedule/cancel/delete; partial delivery; scoped external principals; receipts and recovery; generated/tuned images with choice.
-- **Full committed baseline:** all donor-compatible reading, stories, rich media, messaging, forwards, comments, reactions, analytics, native schedules and ownership-verified connections. Unsupported capabilities are explicit, not erased. The video-story generator is an additional feature, not a second social backend.
-
-Not every provider must support every surface. A function is advertised as working only for a proven connection/destination/surface combination. The public tool taxonomy can describe an operation before a connection supports it, but bootstrap must report the actual capability and rejection must precede provider mutation.
-
-### Requirement classification at audit
-
-| Already present | Needs clarification, now decided | Missing, now specified |
-|---|---|---|
-| Independent service; three providers; one publish call; opaque aliases; per-target receipts; unknown-outcome handling; imagegen correction; broad donor baseline | Tool taxonomy; external read defaults; native versus service scheduling; partial fan-out; media readback meaning; visual selection versus approval; single-owner versus tenant isolation | Request/plan digest split; immutable set snapshots; durable dispatch point; bounded MAX recovery; cancellation races; revocation of native schedules; security threat model; operational recovery; acceptance matrix; video feature routing |
-
-## 2. Chosen architecture
-
-One Python application, two supervised processes, one domain model:
-
-```text
-MCP / HTTP / Telegram editorial UI / EventsBot
-                 |
-             API + authorization
-                 |
-       application services + SQLite/WAL
-                 |
-           durable task worker
-      /          |           \
- Telegram       VK       MAX Web driver
-                 |
-       optional visual/video jobs
-```
-
-API responsibilities: authenticate, resolve identity, validate closed schemas, import bounded assets, persist intent, expose receipts and authorized artifacts. Worker responsibilities: scheduling, provider execution, reconciliation, visual jobs and notifications. Neither transport owns business state. Request disconnection does not cancel an accepted operation.
-
-Use Python 3.12 for the first deployment; lock the exact dependencies and browser binary during implementation. Use the maintained MCP SDK and an ordinary HTTP framework over the same handlers. Do not implement MCP wire framing or OAuth cryptography by hand. Support only protocol versions actually demonstrated with the selected SDK and target clients; current specification review used 2026-07-28. Keep durable operation IDs independent of MCP transport IDs, connections and protocol sessions.
-
-SQLite is local persistent storage, not a network-mounted shared database. Enable foreign keys, WAL, busy timeout and explicit short write transactions. Persist before external I/O; never hold a database transaction while waiting on a network or browser. A durable tasks table is the outbox; a second broker/Redis/PostgreSQL installation is unnecessary for this deployment. Optional existing Supabase Google quota accounting is not the social ledger and is not required for ordinary publishing.
-
-### Planned modules and ownership
-
-| Module | Owns | Must not own |
-|---|---|---|
-| `social_operations/domain/` | entities, transitions, digests, invariants | SDK, browser, transport auth |
-| `social_operations/services/` | authorization, publishing, lifecycle, reads, visuals, destinations | direct provider SDK calls |
-| `social_operations/storage/` | SQLite repositories, migrations, task claims, receipts | business exceptions hidden as success |
-| `adapters/telegram/`, `adapters/vk/`, `adapters/max/` | provider capability checks, execution, readback | tenant grants, model-driven business decisions |
-| `adapters/imagegen/` | bounded external executor contract | destination or publication decisions |
-| `mcp/`, `api/` | schema projections and authentication adapters | duplicate application logic |
-| `worker/` | claims, scheduling, reconciliation, notification delivery | another source of publication truth |
-
-## 3. Data model and transaction boundaries
-
-IDs are opaque random service IDs. Every externally addressable resource carries `tenant_id`. Repository methods require an authenticated principal context; neither an ID nor a content hash is authorization.
-
-| Entity | Mandatory data / constraints |
+| Classification | Result |
 |---|---|
-| tenant, principal, credential | status, policy epoch, hashed service credential, expiry; provider tokens are separate encrypted records |
-| connection | provider, account identity, owner tenant, encrypted secret/profile reference, status, authorization epoch, connection-wide cooldown |
-| destination + binding | immutable provider identity; tenant-scoped unique alias; exact connection binding; granted operations; provider-rights observation |
-| destination_set + members | tenant-scoped unique alias, revision, explicit destination IDs; nested sets prohibited in v1 |
-| publication + revision | author principal, request identity, semantic content, requested schedule, immutable normalized plan and plan digest |
-| delivery | publication revision, frozen destination/binding/surface, planned backend, desired state, observed state, current attempt; unique target per revision |
-| operation + attempt | command identity, CAS revision, actor, durable phase, provider request identity, dispatch-start timestamp, lease/fence, error class |
-| task | operation reference, due time, lease owner/expiry/fence, attempts, next eligible time; durable queue and notification outbox |
-| asset + derivative | tenant, digest, MIME/size/geometry/duration, immutable storage path, provenance, rights/retention metadata |
-| visual_job + candidate + decision | exact executor request, source/output digests, selected candidate, review binding, feedback and training permission |
-| approval | hashed single-use token, tenant/principal, publication revision, plan digest, expiry and policy epoch |
-| quota reservation | tenant + connection + operation dimensions, estimate, actual usage, terminal/unknown accounting |
-| evidence | operation/delivery binding, evidence kind, observation time, protected storage ref and retention class |
+| Already present | Independent service; Telegram/VK/MAX Web; own/shared credentials; exact aliases; imagegen; immutable plans; per-target receipts; no blind retries; media integrity |
+| Rejected and replaced | Service scheduling default/fallback -> native provider queues only; separate partner read grant -> full reads inside active publishing destinations; waiting for aggregate results -> incremental per-stage receipts |
+| Added | Indexed publication facts/statistics; actual provider queue previews; durable progress replay; queue-to-published identity mapping; native-queue offline-execution canary |
 
-Composite tenant-aware foreign keys or equivalent mandatory repository checks prevent cross-tenant linking, including assets, candidates, parent jobs and receipts. Append attempts and revisions rather than overwriting previous evidence.
+VibePublish accepts an editorial intent, executes a provider command now, records what happened and exposes facts. A scheduled publication is an instruction sent now to a provider that will perform the future publication. The system does not own that future execution.
 
-**Accept transaction:** resolve and authorize the entire target set, allocate operation identity, persist the initial immutable request and task. Before final dispatch, freeze imported asset hashes, rendered variants, selected visual and capabilities into an execution revision. A source that cannot be imported leaves a durable failed/blocked operation, not an unrecorded upload attempt.
+The first slice must cover native scheduled and immediate posts/media, full reads of partner-bound channels including their queues, lifecycle changes, progressive receipts and indexed history. Full donor-compatible stories, rich media, reads, engagement and analytics remain required when connection/surface capabilities support them. Unsupported native scheduling of a particular surface is explicit; a local timer is never the substitute.
 
-**Claim transaction:** one eligible task becomes claimed using compare-and-set; increment fencing token. Workers recheck the token and authorization immediately before dispatch. A fence prevents stale database updates but does not retract a remote network request. Consequently no worker may take over an already `dispatch_started` side effect merely because a lease expired.
-
-**Completion transaction:** store observation, evidence and per-target result, recalculate the parent projection, create notifications. Notification failure never changes a publication into a publishing failure.
-
-## 4. Publication semantics
-
-### Content and destinations
-
-Normal calls use registered aliases. Alias and set names occupy one tenant-scoped namespace. `to: ["pka"]` may resolve a set; its concrete members and versions are frozen when accepted. Later set edits cannot redirect an existing queued publication. Deduplicate overlapping sets by immutable destination identity and surface.
-
-The model may submit plain text or a documented bounded Markdown subset. The service compiles it to a semantic document and provider renderings. Do not require the agent to count UTF-16 offsets, construct Telethon entities or stage uploads. Explicit per-provider renderings remain possible. Unknown formatting and unsupported entities are rejected or explicitly degraded in preview, never silently removed during dispatch.
-
-Default adaptations are deterministic. Optional model rewriting produces a new reviewable revision and cannot alter facts, links, destinations, media or timing in the dispatch phase. Telegram named links/custom emoji and VK explicit URLs remain provider-specific. MAX named-link support is capability-gated by observed UI behavior. Platform length, entity-offset and caption/media-group constraints are validated by versioned provider rules; no global hard-coded minimum hides richer capabilities.
-
-Media order is binding. No silent truncation, image omission, unexpected multi-post splitting or replacement with a generated picture. If a provider requires splitting, preview lists every resulting item and approval binds that expansion. Normal v1 rejects a nontrivial split until explicitly authorized.
-
-### Fan-out policy
-
-Preflight **all** targets, permissions, capabilities, media constraints and renderings before the first send. Default: any deterministic validation error blocks the entire request. After dispatch begins, providers are independent: runtime failure of MAX must not erase successful Telegram/VK publication. Do not attempt cross-platform rollback or promise atomic delivery.
-
-Successes are immutable evidence. Retry only failed children proven not to have applied; never repeat verified or uncertain children. A revision edited after partial publication reports per-target revision; the UI must not imply all targets contain the latest revision.
-
-### Request identity versus execution identity
-
-Use two digests, not one self-contradictory hash:
-
-1. **Request digest:** authenticated identity, normalized caller arguments and stable source references. Explicit `request_key` is unique per tenant/principal/command; exact replay returns the original operation before re-fetching URLs or re-resolving sets. A conflicting payload under the same key is rejected.
-2. **Plan digest:** frozen destination identities/bindings, semantic and rendered content, ordered imported asset hashes, surface, UTC schedule/backend, preset version and accepted visual choice. Approvals and dispatch attempts bind this digest and revision.
-
-A generated image does not exist when the initial request arrives. Candidate selection therefore creates a new execution revision; it does not mutate the original idempotency record or cause an exact replay to generate again.
-
-HTTP deterministic clients must send an idempotency key. MCP may omit it: the server uses a normalized-intent duplicate window of 24 hours within the principal, excluding volatile request timestamps. Replays within this window return the previous receipt without a new send. Repeated identical content with a new key is still checked as a duplicate candidate. Intentional repetition requires an explicit `repeat_of` reference and a fresh request key. This is a product guard, not a claim of universal exactly-once delivery. Retain key tombstones for at least 90 days and longer than any pending/uncertain operation or scheduled job; expired identity history must never silently authorize a recovered unknown attempt.
-
-## 5. Scheduling, edits and cancellation
-
-**Default scheduler is the VibePublish durable queue**, for all three providers. This keeps rights revocation and late policy consistent. Provider-native scheduling is an optional explicit backend and is enabled only after its creation, discovery, reschedule, cancellation and post-due reconciliation canaries pass. Store one backend per child; never have two schedulers own the same send. Never fall back from a possibly accepted native schedule to a service schedule.
-
-Require an RFC3339 timestamp with offset for a scheduled call. Bootstrap returns the tenant's configured IANA zone and server time; it does not borrow the ChatGPT browser timezone. Resolve relative language before the mutation. An absent tenant timezone plus ambiguous local time requires clarification rather than a guessed offset. Display requested local time, normalized UTC, effective backend and observation time in the receipt. DST gaps/folds, nonexistent dates and past timestamps are validation errors.
-
-Late default: `hold`. An explicitly selected `send_within_15m` permits dispatch up to 15 minutes after due time, never after an event-specific expiry supplied by the client. Re-check at actual dispatch, including browser queue delays. Expired jobs are held and notified, not silently sent hours later. New auth or visual selection after due time does not reset the schedule to now.
-
-Edits, reschedules and deletions require the current publication revision. Re-read the provider item before mutating; compare the observed fingerprint/revision with stored evidence. Changes made manually outside VibePublish produce `external_change` rather than an overwrite. This is optimistic conflict detection, not a claim that every provider implements an atomic CAS.
-
-`cancel` means prevent unperformed delivery; `delete` means remove an already published item. Cancellation racing with dispatch becomes `cancel_requested` internally until observation establishes which state occurred. A published result must not be labelled cancelled. Native cancellation needs provider-backed evidence; local tombstones alone are insufficient. Post-publication deletion requires the relevant user authority and readback.
-
-Revocation stops undispatched jobs immediately. In-flight operations are reconciled, not retried. Previously submitted native schedules require cleanup using a narrowly scoped internal cancellation authority, audit and notification. If provider access has already disappeared, report `remote_schedule_may_remain`; do not promise that revocation erased a remote scheduled post.
-
-## 6. State machine and honest receipts
-
-Separate three concepts:
-
-- **Desired publication state:** what the user requested and at what revision/time.
-- **Operation phase:** validating, awaiting review/selection, queued, claimed, dispatch started, reconciling, terminal.
-- **Observed provider state:** not attempted, service queued, provider scheduled, published, edited, deleted, cancelled, absent or unknown.
-
-Public operation states: `queued`, `running`, `needs_approval`, `needs_selection`, `scheduled`, `verified`, `partial`, `failed`, `outcome_unknown`, `cancelled`, `held`.
-
-`verified` means the requested operation is verified, not automatically that a post is public. The receipt always states the action and each observed provider state. A verified native schedule is `provider_scheduled`; actual publication requires a later observation.
-
-Parent projection order: any uncertain side effect makes the parent `outcome_unknown`; otherwise incomplete tasks remain running/scheduled; otherwise mixed applied and failed results become `partial`; all requested target postconditions proven becomes `verified`. Include child counts so uncertainty cannot be hidden behind a friendly aggregate label.
-
-Every mutation response includes operation ID, publication/resource ID where applicable, revision, state, short explanation, per-target observations, evidence references, requested/effective schedule, `retry_safe`, and a finite next action. Reads and bootstrap also use closed output schemas. `next_action` is one of `none`, `check_status`, `approve`, `select_visual`, `fix_input`, `refresh`, `reauthorize`, `review_outcome`, `contact_owner`. Errors distinguish pre-dispatch rejection from an accepted uncertain operation.
-
-Persist `dispatch_started` **before** the side effect. Crash after that boundary is potentially applied even if no response was saved. Provider-specific stable idempotency IDs may be reused only where their semantics are proven. Missing readback is not proof of nonpublication. Search results or an old identical post alone do not prove success. Never repeat an uncertain browser click.
-
-### Media evidence
-
-Source asset SHA-256 proves what was supplied, not byte equality after provider recompression/transcoding. Track separately: source hash, uploaded-provider object identity when available, delivered item identity, count/order/type/dimensions/duration, rendered text/entities and provider observation. Label byte match, provider-object binding and visual/semantic correspondence as different evidence levels.
-
-Default media verification requires target identity, exact rendered text/links, correct media count/order and a supported asset-binding method. If a platform cannot prove part of this, receipt says `verification_incomplete` with the specific missing check; it must not invent a remote SHA or mark the stronger guarantee passed. Incomplete verification after possible publication prohibits an automatic repost.
-
-## 7. MAX Web: concrete driver contract
-
-MAX remains Web/Playwright. No API approval dependency and no MAX API client in this release. `my-browser-bridge` is a diagnostic tool, not a required production publishing backend.
-
-One persistent profile belongs to one provider connection. Use a dedicated encrypted-at-rest volume, restricted process user and permissions. Multiple tenants may receive narrowly bound publishing rights through the same operator connection, but no tenant sees its browser state, unrelated DOM, other dialogs or session export. One process holds the profile lock; one serial side-effect lane per profile/account. An expired database lease never permits simultaneous browsers against the same profile.
-
-Driver transitions:
+## 2. Architecture: command executor and ledger, not a calendar
 
 ```text
-CHECK_SESSION -> OPEN_EXACT_TARGET -> VERIFY_TARGET_ID
--> OPEN_COMPOSER -> FILL_TEXT -> UPLOAD_ORDERED_MEDIA
--> VERIFY_COMPOSER -> DURABLE_DISPATCH_STARTED -> SUBMIT_ONCE
--> REACQUIRE_TARGET -> LOCATE_RESULT -> VERIFY_RESULT -> RECEIPT
-                                      \-> RECONCILE / OUTCOME_UNKNOWN
+MCP / HTTP / EventsBot / editorial UI
+                  |
+      API + authorization + prompt receipt
+                  |
+      SQLite ledger / facts / progress events
+                  |
+           command executor NOW
+         /          |          \
+    Telegram       VK       MAX Web
+         |          |          |
+    native queues owned and executed by providers
 ```
 
-Before submit verify stable target identity, account identity, text/link representation, count/order of uploaded previews, readiness indicators and schedule/timezone if native UI scheduling is used. Display names are insufficient. Pin a known origin and verify navigation does not land in another account/channel. Never use an unchecked `nth()` match or click-by-coordinate as the primary targeting method.
+One Python application, API process and command-worker process; Python 3.12 with exact SDK/browser versions locked at implementation. SQLite/WAL on local persistent storage, foreign keys, short transactions and busy timeout. No network-mounted SQLite, additional broker, Redis or new PostgreSQL service without demonstrated need. Optional existing Supabase Google quota accounting is not the social ledger.
 
-Use role/label/text locators scoped to a uniquely identified dialog/container; re-acquire locators after DOM updates. Deterministic recovery may reload or reopen a composer **only before** the durable dispatch point and must reconstruct from the immutable plan. After that point all recovery is observation-first. Handle virtualized feeds, stale dialogs, target renaming, delayed media processing and identical recent posts explicitly.
+The worker executes imports, generation, uploads, immediate sends, native queue submissions, edits and bounded observations. It may have a durable ready-command backlog and short operation-bound rate-limit backoff. **There is no publication due-time queue, `send_at` timer, periodic due-post scan, cron sender or local scheduled-delivery fallback.** Requested publication time belongs to the immutable provider command/fact, not task eligibility.
 
-Readback must establish the new item identity/permalink where available and inspect the item in the target feed, not just the composer or success toast. Store a protected evidence bundle: target identity observation, sanitized pre-submit state, ordered-media evidence, post-submit item observation, timestamps and driver version. If no durable remote ID is exposed, use a bounded candidate search with exact content/media/time/author evidence; ambiguous or multiple matches remain unknown.
+Commands have bounded processing deadlines derived from deployment budgets and native submission constraints; they cannot remain pending until the future publication time. Restart may resume an unattempted command only while that deadline and its authorization remain valid. A command already submitted remotely is reconciled, not re-created. Failed submission becomes failed/blocked/unknown, never a promise of later local publication.
 
-Default bounds proposed for implementation: 90 seconds for an immediate MAX attempt, at most two pre-submit recoveries; reconcile after 5, 30 and 120 seconds, then passive checks up to 24 hours. These are configurable operator budgets, not guarantees. Per-profile fairness prevents one tenant monopolizing the lane. Stop on login expiry, QR/OTP/CAPTCHA, permission loss, changed target identity, duplicate candidates or exhausted budget. Authentication challenges require a human.
+Planned ownership:
 
-Model-assisted DOM recovery is **not in the critical path**. Enable later only for one sanitized, nonmutating locator proposal before dispatch, at most one proposal per transition. It may not execute JavaScript, read secrets, change target/content/time, click submit/delete or resolve unknown outcomes. Private DOM/screenshots must not be sent to a model without an explicit data policy. A disabled recovery model must not disable a healthy deterministic driver.
+| Module | Responsibility |
+|---|---|
+| `social_operations/domain/` | Entities, revisions, digests, state invariants |
+| `social_operations/services/` | Auth, publish/update, bounded reads, history/statistics, visuals |
+| `social_operations/storage/` | SQLite repositories, ready-command outbox, events and indexed facts |
+| `adapters/telegram/`, `adapters/vk/`, `adapters/max/` | Provider capabilities, exact native command and observation |
+| `adapters/imagegen/` | Bounded executor/artifact contract, no social credentials |
+| `mcp/`, `api/` | Exact schema projections and auth adapters over the same services |
+| `worker/` | Immediate command claims, short retries, recovery and observations; no publication scheduler |
 
-Offline browser fixtures are useful for crash/transition tests but do not prove MAX works live. Codex/DevCoveer integration later must capture real UI fixtures and run designated-channel canaries; no live test channels are assumed or invented here.
+Provider observations arrive through supported updates/webhooks or explicit queue/item/statistics reads. A due timestamp alone never marks a post published and never triggers a local send. No mandatory periodic reconciliation scheduler is introduced by this design.
 
-## 8. Authorization, assets and quotas
+## 3. Persistent data and atomicity
 
-Effective write authority = active principal AND explicit operation grant AND destination binding AND valid connection AND current provider permissions AND approval policy. Enforce it on MCP, HTTP, worker dispatch, status, asset downloads and candidate selection. Hiding a tool is usability, not security.
+| Entity | Required fields and boundaries |
+|---|---|
+| tenant/principal/credential | Status, hashed revocable service credentials, policy epoch; provider secrets are separate encrypted records |
+| connection | Provider account identity, secret/profile reference, authorization epoch, rights observation, connection-wide cooldown |
+| destination/binding | Immutable native target, tenant alias, authorized publishing principals and operation rights; exact connection mapping |
+| destination_set | Unique tenant alias, revision and concrete member IDs; no nested sets |
+| publication/revision | Initiator, request identity, semantic and provider-rendered content, frozen destinations/media/visual, requested provider time, immutable plan digest |
+| delivery | Destination, provider surface, latest observed state/revision, opaque scheduled and published item bindings, current attempt |
+| operation/attempt | Command, actor, CAS revision, dispatch boundary, stable provider request identity, deadline, lease and fence; no future send trigger |
+| ready_command | Operation reference, processing lease/fence, bounded retry metadata; never a publication calendar |
+| operation_event | `(operation_id, seq)` unique; destination optional; timestamp, stage, status, message, media ordinal/count, protected evidence reference |
+| publication_fact | Stable service publication ID; destination, provenance/initiator, origin, content/media fingerprints, remote IDs, observed timestamps/state and searchable excerpt |
+| statistic_observation | Publication/destination, metric name/unit/value, provider observation time, scope/availability and provenance |
+| asset/derivative | Tenant ownership, immutable bytes/hash, geometry/duration/MIME, provenance, rights and retention |
+| visual/candidate/decision | Job identity, sources/outputs, preset, exact selected hash, feedback and separate training permission |
+| approval/quota/evidence | Scoped single-use approval, conservative cost reservation, protected readback evidence |
 
-Owner reads may resolve any resource genuinely visible to the connected owner account. External principals have **no social reading by default**, including with their own connection, until explicit destination/operation read grants exist. They may inspect their own publications and narrowly scoped operational receipts. Internal readback for their writes must not expose surrounding feed/history.
+Private resources use tenant-aware foreign keys and mandatory authenticated repository context. Public-to-an-authorized-channel content is a separate projection; do not copy another tenant's private operation record into it.
 
-Own-credential onboarding and operator-shared credentials remain distinct. External users never submit secrets in model arguments. Owner CLI issues short-lived single-use onboarding links or accepts secret-store/stdin inputs. OAuth where available, supervised session provisioning otherwise. MAX QR/OTP login is performed by the authorized human in the isolated profile. Operator-shared destination bindings are created only by the owner after checking the provider account's publishing rights. Supplying a URL does not create a grant.
+Acceptance transaction: authenticate and validate bounded input, resolve local bindings, freeze aliases/set membership, reserve request identity, persist the operation and an `accepted` event plus ready command. Do not block the initial response on external fetches, uploads, generation or provider rights calls. Necessary remote preflight then runs visibly before any provider mutation. Unknown aliases or invalid local authorization fail before acceptance, without invented operation IDs.
 
-Service authentication and upstream provider authentication are separate. HTTP MCP validates issuer, audience, expiry and scopes using a proven OAuth implementation; service clients use scoped, hashed/revocable credentials. No token passthrough to providers; no tokens in URLs. Revocation increments a policy epoch checked by pending work. Cache bootstrap by principal, policy epoch, skill/schema version and capability observation time, not globally.
+Claim transaction: CAS claim, increment fence, recheck current rights before dispatch. Commit `dispatch_started` before the side effect. A lease/fence prevents stale local writes, not a remote API/browser action; an expired lease cannot authorize a second send after this boundary.
 
-Asset ingress supports owned service asset refs, approved HTTPS downloads and authenticated application uploads. A local ChatGPT path is not assumed reachable by DevCoveer. The host/application must import the attachment or provide a valid signed URL; otherwise return `media_unavailable` before any send. No model-visible stage/commit choreography is required, but bytes still need a real transport.
+Each transition transaction writes state and its event together, with a strictly increasing sequence within that operation. A completion stores facts/evidence and event atomically. There is no transaction held across external I/O and no event published before commit. Per-provider results persist immediately, not at a fan-out barrier.
 
-Ingress defense: resolve and pin allowed public addresses, recheck every redirect, block private/loopback/link-local/metadata networks and credentials in URLs, apply fetch deadlines and byte/decompressed-pixel/duration limits, sniff MIME, decode in a constrained process, sanitize filenames, remove unsafe metadata from outward derivatives and prohibit executable/raw SVG uploads as active content. Authenticated provider fetches use a separate allowlisted adapter path, not the generic URL downloader. Preserve immutable original media under access control; EXIF coordinates for the video feature are private metadata, never automatically published.
+## 4. Native scheduling and real preview
 
-Tenant-scoped asset handles and authorization checks precede cache/dedup lookups. A guessed SHA must not disclose another tenant's content or existence. Signed download/preview URLs are short-lived and bound to authorized resources; avoid public evidence URLs.
+Input `delivery` is either `{kind: now}` or `{kind: at, at: RFC3339-with-offset}`. There is no backend selector or local late-send policy. The service normalizes time in the configured tenant IANA zone, shows original/effective time and rejects ambiguous/nonexistent local time, past time and unsupported provider horizons.
 
-Quota dimensions: principal/tenant publication count, concurrent jobs, generated candidates, stored bytes, outbound bytes and connection-wide provider limits. Reserve before costly work, settle actual usage, retain an unknown-cost reservation after an ambiguous external generation. Retries consume attempt budgets, not a fresh user publication quota. Use weighted/round-robin tenant fairness within a shared connection lane. Never rotate accounts to evade a provider restriction.
+For scheduled work, perform the native queue submission during the command. Require an actual remote queue/item identity, observed scheduled time, rendered text/links, media count/order and supported asset-binding evidence. Only then report `observed: provider_scheduled`. The scheduling command is now complete and the provider can execute independently of VibePublish.
 
-All provider text, comments, captions and files are untrusted data. They cannot expand grants, modify the task, request tool calls or authorize a publication. Test prompt injection through comments, filenames, HTML, metadata and images.
+The provider preview is the actual queued item, not merely our simulated layout. Return an actual provider URL if supported, otherwise exact authorized navigation instructions plus a protected preview/evidence reference. No invented deep links. A partner without direct upstream login still sees the authorized queue representation through VibePublish; the server cannot grant a provider's UI login by returning a link.
 
-## 9. Operations and migration
+Capability checks are per connection/destination/surface: native creation, queue listing, exact queue item read, time/content edit, cancellation and identity reconciliation. These are required implementation goals, not an assertion that every MAX Web surface is already supported. If missing, return `native_schedule_unsupported`, `needs_auth` or `needs_review`. Deterministic all-target preflight blocks a mixed request with known unsupported targets before any submission; the user may then select supported destinations explicitly.
 
-Deployment config must include the dedicated `VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE`, namespaced VK secret references, encrypted MAX profile path, persistent DB/assets paths, encryption key references, tenant zone, retention policy and quota configuration. Fail startup on missing mandatory configuration for an enabled adapter. Report disabled/missing-auth connections explicitly rather than probing unrelated credentials.
+Near-time danger: some provider APIs can send immediately when the chosen time is too close. Enforce a provider-specific minimum lead time plus submission/clock-skew safety margin immediately before the guarded call. Telegram's documented behavior includes immediate delivery for schedule dates less than ten seconds ahead; do not treat any future timestamp as safe. If generation, approval, queue contention or network preparation closes the safe window, block with a new-time action. Do not round into immediate delivery or silently postpone. Ambiguity after the actual call remains unknown and is observed.
 
-Health endpoints separate process liveness, DB readiness, worker heartbeat, queued lateness and provider capability freshness. Metrics: accepted-to-verified latency by provider, oldest due job, unknown outcomes and age, duplicate prevention, media mismatch, auth/captcha events, queue fairness, recovery attempts and generation spend. Redact secrets, session IDs and private content from ordinary logs.
+A preview-only request or a request awaiting visual choice has not yet entered the provider queue. A selected/approved final plan must still pass the native lead-time and rights checks. `accepted` never means scheduled.
 
-Proposed retention defaults: protected DOM/screenshots 7 days; content/receipts 90 days; idempotency tombstones at least 90 days; referenced assets retained while queued/unknown or inside the tenant retention period. Operator policy may extend retention. Garbage collection requires zero live references and no legal/explicit preservation hold. Encryption keys have independent rotation and backup procedures.
+## 5. Cancellation, rescheduling and external changes
 
-Back up SQLite with a consistent backup API/checkpoint procedure and assets by immutable manifest; do not copy only the main DB file while WAL is live. Restore onto an isolated instance with outbound writes disabled. Reconcile every dispatch-started operation before enabling delivery. Test database loss, disk full, process kill, browser kill, clock shift and stale auth. Rollback may stop dispatch and revert code but must preserve forward-readable operation history.
+`publication_update` acts on the exact current publication revision and its bound provider items. Read live provider state before editing; compare it with stored fingerprints. Manual provider-client edits produce an updated observation and a revision conflict, not automatic overwrite. Where the provider has no atomic CAS, local conflict checking is explicitly best effort, followed by readback.
 
-EventsBot migration is per destination/capability, never an uncontrolled global swap:
+`reschedule` changes the existing scheduled item's time at the provider. `cancel` removes an existing native scheduled item and verifies the outcome there; for a never-dispatched intent only, cancelling locally is sufficient and is labelled as such. `delete` removes an already published item. These commands are not interchangeable.
 
-1. Pin donor source and regression tests; port without runtime imports/session fallbacks.
-2. Shadow **reads/rendering only**; compare outputs. Never shadow live writes.
-3. Freeze old scheduler for the migrated slice; reconcile/import outstanding scheduled items and unknown attempts, including their remote IDs and identity history.
-4. Hand one durable execution-ownership marker to VibePublish, route new requests there, verify no second scheduler can send.
-5. Reconcile backlog before rollback. Do not reactivate the old writer against uncertain VibePublish operations.
+No silent delete-and-recreate rescheduling. A driver without in-place support returns an unsupported/review result; a future explicit replacement workflow would require separate authorization and proof against duplicates. Queue discovery may create a local fact/reference for a post authored outside VibePublish; its `publication_id`/revision is returned so the same lifecycle tool can manage it if the actor has the necessary mutation rights.
 
-Donor `main` observed in this audit: `2334917ca30f803babad0f593fbffd8ad39fb709`. The donor map is a source inventory, not proof that those features already work in VibePublish.
+A cancel/send race may find that the item has already published. Report that observation; do not label it cancelled or automatically delete it. Queue absence alone proves neither cancellation nor publication. Native deletion evidence, provider identity mapping or exact post readback must establish the result; otherwise keep unknown. Albums/multi-item outputs retain individual remote identities and partial changes.
 
-## 10. Implementation batches and release gates
+Revocation blocks new local actions and pending unsubmitted commands and invalidates cached channel access. It does **not** retroactively erase accepted native schedules. Revocation and remote cancellation are separate authorized actions. Owner administration must show which provider-queued items may remain and offer exact explicit cancellation while access exists; no hidden cleanup authority is inferred from revocation. In-flight outcomes are observed under internal audit authority without leaking content to a revoked partner. If provider access disappeared, residual remote work is reported honestly.
 
-Every batch includes code, regression tests, docs and a remote readback. The present change is a design package, not completion of these batches.
+## 6. Incremental operation visibility
 
-| Batch | Deliverable | Blocking acceptance |
+Portable behavior is mandatory, independent of UI support for MCP notifications:
+
+1. Return a durable initial receipt promptly, with `operation_id`, `operation_complete: false`, known child states, initial events and an event cursor. Implementation target: within two seconds under a healthy local store; do not wait for external providers. This is an acceptance budget, not a measured performance claim. Local admission failure returns an error rather than fake acceptance.
+2. Record and expose atomic stages per provider as they commit: validation, asset import/rendering, waiting for connection lane, uploading each media item, submitting, reading back, verifying and completion/block/unknown.
+3. `status` with one operation ID, `after_event` and bounded `wait_seconds` returns on the **first** available event from any child, completion/blocked transition, or a maximum ten-second wait. It does not wait for all providers or for a page to fill. Return the latest per-target snapshot plus ordered event deltas.
+4. Reconnect/restart reuses the durable cursor. A cursor is opaque and bound to principal, policy epoch and operation. Advance only to the last emitted event; expose `has_more` when bounded output leaves events unread. At-least-once replay is deduplicated by `(operation_id, seq)`, never by repeating provider work.
+
+No preflight or upload `gather` may hold events until all awaited calls finish. All-target preflight remains a **mutation safety** barrier, not a reporting barrier. After it passes, connections proceed independently. A MAX profile serializes its own interactions, not Telegram/VK responses. Event sequence reflects committed observations, not a fictional cross-provider execution order.
+
+When there is no new event, return the last real stage/time; do not invent percentages or progress. Worker heartbeat and operation deadline diagnostics must distinguish waiting for the connection, waiting for the provider and a stalled worker. A stalled command has a visible error/blocked state; it is not silently represented as ordinary progress forever.
+
+MCP `notifications/progress` may mirror events when a client supplies an active request progress token. They stop when that tool call completes; the server must not continue using a completed request token for a durable job. Notifications do not guarantee that an LLM sees intermediate state. Structured status calls are the required fallback, including during clients without notifications. An optional application HTTP event stream can replay the same authorized event log; it is not required to complete the MCP workflow.
+
+Long provider reads/statistics refreshes use the same early receipt/event mechanism, with returned items attached to the read operation's receipt. Local history/status/bootstrap reads are bounded and need not wait on a remote provider. No new progress tool, provider-specific status tool or client prepare/commit sequence is added.
+
+Cancellation of a transport wait stops that wait, not an already accepted business operation or native scheduled post. Explicit domain cancellation uses `publication_update`. Protocol-version behavior must be verified against the actual SDK and client, not guessed.
+
+## 7. States, partial delivery and idempotency
+
+Separate desired intent, operation phase and observed provider state. Public states are `accepted`, `running`, `needs_approval`, `needs_selection`, `scheduled`, `verified`, `partial`, `failed`, `outcome_unknown`, `cancelled`, `blocked`. There is no `service_queued` provider observation.
+
+`operation_complete` means the command's automatic work has ended, not that a future scheduled post has already published. All destinations confirmed in native queues -> `scheduled`, complete, next action none. Later actual publication is a new observation of the publication fact, not a reason to reopen the original scheduling command. Provider-side video processing is distinct from time scheduling.
+
+During fan-out retain each child's state/stage. Any uncertain attempted child makes aggregate uncertainty visible; otherwise unfinished work remains running; ended mixed success/failure is partial. A success on one provider is never erased by another's failure. No automatic rollback across providers and no retry of verified/unknown children.
+
+Keep two digests: request digest over stable caller intent/principal and normalized arguments; plan digest over exact targets/bindings, renderings, ordered hashes, surface, native time and selected visual/preset revision. Selection cannot retroactively alter request identity. Freeze concrete set members; later changes cannot redirect existing work.
+
+Deterministic HTTP callers supply an idempotency key. MCP optional keys retain the 24-hour principal-scoped normalized-intent duplicate guard. Exact replay returns the original receipt before URL fetching/set resolution; conflicting key reuse is rejected. Explicit repeats require user authority, a fresh key and `repeat_of`. Preserve key tombstones for at least 90 days and longer for native queued/unknown operations. Idempotency history does not turn the DB into a scheduler.
+
+Persist the side-effect boundary before provider I/O. Crash/timeouts after it are possibly applied even with no saved response. Provider-specific stable request IDs are reused only when proven safe. An identical old post or missing search result cannot resolve uncertainty. A retry is allowed only for a child proven not applied and within native timing/rights constraints.
+
+Source SHA-256 proves input bytes, not equality after recompression/transcoding. Readback separates source digest, provider object identity, rendered content/links, count/order and semantic media properties. Incomplete verification is explicit, never a fabricated remote hash or a reason to repost.
+
+## 8. MAX Web native queue driver
+
+MAX remains a dedicated Playwright adapter. No API approval prerequisite and no MAX API implementation in this release. One persistent profile belongs to a provider connection; encrypted-at-rest dedicated storage, restricted OS user and permissions, one profile lock and one serial side-effect lane. Shared operator connections expose only the authorized destination projection, never cookies, unrelated dialogs or full DOM.
+
+```text
+CHECK_SESSION -> OPEN_EXACT_TARGET -> VERIFY_ACCOUNT_AND_TARGET
+-> COMPOSE -> FILL_TEXT -> UPLOAD_ORDERED_MEDIA
+-> SET_NATIVE_TIME (scheduled commands only)
+-> VERIFY_COMPOSER_AND_TIME -> DURABLE_DISPATCH_STARTED
+-> SUBMIT_ONCE -> OPEN_NATIVE_QUEUE / OPEN_FEED
+-> LOCATE_EXACT_ITEM -> VERIFY_CONTENT_MEDIA_TIME -> EVENT + RECEIPT
+```
+
+Scheduled readback opens the actual provider queue. Edit/reschedule/cancel open the exact queued item; ordinary publication readback opens the feed. Verify account, immutable target identity and unique item binding, not display name alone. Prefer scoped role/label locators and re-acquire after DOM changes. Never use unchecked nth-match/coordinates as primary identity selection.
+
+Before dispatch deterministic recovery may reopen/reconstruct the composer from the immutable plan. After dispatch, recovery is observation-only until the outcome is resolved. Handle virtualized lists, duplicate-looking posts, target renames, delayed uploads, timezone ambiguity and session expiry. If no stable remote ID is exposed, retain a protected exact locator/evidence binding; nonunique candidates remain unknown.
+
+Proposed bounded execution: up to two pre-submit recoveries within a 90-second MAX attempt budget; no recovery may cross the native minimum-lead window. Bounded follow-up observation does not schedule a future send. QR/OTP/CAPTCHA, changed identity, lost rights and exhausted budgets require a visible action, not autonomous authentication bypass.
+
+Model-assisted locator recovery is deferred and optional: at most one sanitized nonmutating proposal for an unknown pre-submit transition, under an explicit data policy. It cannot publish/delete, select a different target, change payload/time, inspect secrets, execute arbitrary JavaScript or resolve an ambiguous submit by repeating it.
+
+Offline fixtures test state transitions only. The live gate includes real native queue creation/read/preview/reschedule/cancel and a canary where the VibePublish API/worker/browser are stopped after confirmed scheduling and the provider later executes. If MAX Web cannot support that native capability, report the gap without building a local workaround.
+
+## 9. Read authorization and searchable history
+
+Effective publication authority is active principal + exact binding + allowed action + active connection + actual provider rights + approval policy. The **same active publishing destination boundary implies social-read access** for partners; it does not require a separate read grant. Own and operator-shared connections follow the same destination rule.
+
+A partner may read the entire permitted channel, its native queue, its posts from other editors and authorized post threads/media/statistics. No creator filter is applied to provider queue/feed reads. Searches are constrained to those destinations before any external request; unauthorized exact refs, renamed aliases or links fail with a nonenumerating access denial. Account-wide dialogs/search/notifications/analytics cannot leak into partner responses. Resource-bound notifications/statistics are allowed only when the adapter can constrain them safely.
+
+The owner can resolve/read anything actually visible to the provider account without registering it for publication first. Owner resolution may produce an owner-scoped ephemeral handle; resolving a handle does not create a partner binding or a write grant. Unavailable private chats remain unavailable.
+
+Channel-visible objects are not the same as tenant-private objects: a partner may see a scheduled image another editor attached to that channel, but cannot use its identity to retrieve the editor's original draft, prompts, feedback, other assets or operation history. Use authorized provider/media projections or explicit channel-visible asset bindings, not guessed global SHA access. Private status/visual/approval records stay principal/tenant scoped.
+
+History design:
+
+- Index by authenticated initiator, destination and observed time; FTS over normalized searchable text, filtered by current authorized destinations before counting/pagination. No external feed scan for ordinary history lookup.
+- `history` defaults to `author: mine` within the current allowed destination set. `author: channel` exposes known channel-visible facts, not other tenants' private records. Return origin and observed freshness; the local index is not a claim of complete provider history.
+- Use exact stored remote identities for statistics. Cached statistics return observation time and unavailable metrics explicitly; unknown is not zero. Refresh fetches only requested items, persists observations and exposes per-item progress/errors. Preserve provider-specific metric semantics instead of summing incompatible counts.
+- Native scheduled reads always contact the provider. A provider error is not an empty queue; local records may be shown only as labelled historical evidence. Snapshot pagination must not mark items missing until the relevant provider scope was successfully enumerated.
+- Keep scheduled-ID and published-ID namespaces separate under one stable service publication ID. Use provider update mappings when available; otherwise exact bounded readback. Time passing or queue disappearance alone never proves publication. Telegram explicitly distinguishes queued and sent message identities.
+- Manual provider edits/reschedules/cancellations are recorded as external observations, not overwritten by the local desired plan. Discovery returns a safe publication reference/revision for subsequent authorized edits.
+
+Revocation invalidates bootstrap, event cursors, history filters and asset URLs. Recheck before serving cached content and before every next page/wait response, not just when issuing a cursor. Sharing one physical operator connection never permits cross-destination cache leakage.
+
+## 10. Assets, security, quotas and operations
+
+Secure onboarding separates service tokens from provider secrets. Owner-created short-lived setup links/CLI secret input provision tenant connections; no credentials in model arguments, source files, URLs, prompts or ordinary logs. Use proven auth implementations, validate issuer/audience/expiry/scopes, and never pass the caller's service token to a provider. MAX login is supervised by the authorized human.
+
+Media ingress supports owned refs, constrained HTTPS downloads and real host upload tickets. A ChatGPT local path is not a server file. Block private/loopback/link-local/metadata networks, revalidate redirects/DNS, limit bytes/decoded pixels/duration and time, sniff/decode MIME in constrained processes, sanitize names and prohibit active raw SVG. Authenticated provider downloads use separate allowlisted adapter paths. Preserve original assets privately; do not publish EXIF location by default.
+
+Source content, comments, filenames, metadata and DOM are untrusted data. They cannot request new actions, expand access, select a target or authorize publishing. Test injection and cross-tenant guessed-ID/cache attacks. Tenant training use is separately consented; imagegen receives only its source manifest and constrained workspace, never social credentials.
+
+Quota reservations cover tenant/principal commands, candidates, storage/bandwidth, concurrency and shared provider limits. Reserve before costly work, settle actuals, keep conservative unknown-cost reservations. Fairness applies per connection lane; retries count against budgets and cannot rotate accounts to evade restrictions. Existing Google limiter audit findings remain unresolved and must not silently weaken these controls.
+
+Observability separates process liveness, store readiness, worker heartbeat, age of active commands, missing readback, auth failures, event lag and statistics freshness. Do not add a due-post scheduler metric as a hidden execution feature. Content/evidence logging is redacted and access controlled.
+
+Retention proposals remain protected screenshots/DOM seven days, content/receipts ninety days, identity tombstones at least ninety days and longer while remote-queued/unknown or otherwise referenced. Tenant policy governs longer storage; GC requires no live references/holds. Back up SQLite consistently with WAL and immutable asset manifests; keys have independent backup/rotation.
+
+Restore with outbound writes disabled. Reconcile attempted operations against remote queues/items before allowing new commands; never replay a publication because its timestamp passed during downtime. Test disk-full, DB/browser/process loss, clock skew, stale authorization and readback failures.
+
+EventsBot migration: pin donors and compare read/render behavior; stop its local sender for migrated destinations; inventory all local and native pending work. Existing native schedules are adopted as facts without republishing. Any old locally scheduled intent requires explicit migration into the provider queue now while timing/rights permit. Record exact identities and retire the old sender before new ownership. Shadow reads only, never shadow writes. Rollback reconciles uncertain operations and never restarts a duplicate local scheduler.
+
+## 11. Implementation and acceptance gates
+
+| Batch | Deliverable | Blocking evidence |
 |---|---|---|
-| A | Package/lockfile, schema projection, auth context, SQLite entities, outbox, quota and asset boundaries, fake providers | Contract fixtures; cross-tenant denial; CAS races; crash at every phase; no external sends |
-| B | Independent Telegram + VK adapters, publication/lifecycle, exact receipts | Donor parity matrix; ordered media; scheduling backend exclusivity; uncertain-outcome reconciliation; no EventsBot imports |
-| C | MAX deterministic driver + fixture tests | Wrong target/account and stale-profile denial; pre/post-click crashes; one profile lane; no duplicate click; partial fan-out |
-| D | Visual service, fake executor, deterministic compositor, selection/approval and training-consent lineage | Selected hash preserved; selection authorization; budget/restart tests; exact typography and crops |
-| E | MCP + HTTP over the same services, versioned skill, full read/engagement/analytics capability projection | Real weak-agent benchmark; auth-filtered catalog; transport compatibility; API/MCP parity; bootstrap token budget |
-| F | DevCoveer integration and live canaries, then controlled EventsBot migration | Real MAX Web; independent credentials; actual `$imagegen` artifacts; scheduled-to-published transition; edit/delete and recovery evidence |
-| V | Video-story editorial pipeline | See [video stories](../video-stories/README.md); Kaggle render, rights and approval, then existing publication service |
+| A | Exact schemas, auth/bindings, SQLite ledger/ready commands/events, history/metrics indexes, assets and fake adapters | No timed publication dispatcher; atomic event persistence; cross-destination denials including cache; restart/CAS/identity tests |
+| B | Independent Telegram/VK native queue/read/edit/cancel adapters | Exact queue readback, provider preview, safe minimum lead time, queue-to-published mapping, full bound-channel reads |
+| C | MAX persistent-profile Web driver | Native queue workflow, one profile lane, per-step progress, wrong-target/auth denial, ambiguous click and restart tests |
+| D | Visuals and deterministic compositor | Real selected hash/revision lineage, consent, budget, expiry before native submission; no fake live imagegen success |
+| E | MCP/HTTP, skill, history/statistics and incremental status | Real client with/without progress tokens; prompt initial receipt; first available child event; bounded waits and cursor replay; weak-agent corpus |
+| F | DevCoveer canaries and controlled migration | Schedule then stop all VibePublish processes; provider still posts; remote preview/edit/cancel; revoked binding denial; no duplicate sender |
+| V | Original video-story feature | Its own render/rights/approval gates; resulting assets use this same native-only social contract |
 
-First implementation work remains direct ChatGPT/GitHub work unless the owner changes that instruction. Codex is reserved for the later environment integration/live-driver and imagegen verification stage; this audit did not invoke it.
+Required adversarial cases include: successful Telegram native scheduling while MAX hangs; all-target preflight with visible intermediate stages; disconnect during upload; crash before/after dispatch; duplicate and conflicting keys; same channel via two sets; selection closes native timing window; queue full/unsupported surface; missing queue item not equated with sent; manual reschedule; cancellation races; grant revocation and stale cache/cursor; full bound queue including external editors; forbidden unrelated/public channel; owner arbitrary provider-visible chat; leaked cross-link; cached metrics labelled with age; partial refresh; scheduled/published ID changes; restart with no due-time dispatcher.
 
-### Required tests (not claimed executed by this document)
+The design's offline schema/fixture tests are not runtime, provider, browser, latency or weak-model evidence. Live capabilities remain unproved until the corresponding gates run. No Codex is used in the current design correction; later environment/MAX/imagegen integration retains the existing delivery split.
 
-- Concurrent identical request, conflicting key, new key with same content, intended repeat, key retention and mutable source URL.
-- Set membership/alias/binding change between queue and dispatch; same target through two sets.
-- Connection/grant revocation at acceptance, after visual generation, while queued, immediately pre-dispatch and after native scheduling.
-- Cross-tenant operation, asset, candidate, approval, search, pagination, evidence and cache access.
-- Provider timeout before sending versus after sending; crash before/after durable dispatch; stale worker fence; observation arriving after timeout.
-- Telegram success + VK failure + MAX unknown: no repost of Telegram and parent uncertainty visible.
-- Native schedule readback versus actual post; DST ambiguity; late browser lane; expired event; cancel/send race; external manual edits.
-- Media count/order/entity offsets, provider transcoding, caption overflow, malicious URLs, redirects and decompression bombs.
-- MAX identical recent posts, virtualization, failed upload, wrong account, auth challenge, selector drift and browser restart.
-- Visual selection replay, stale approval, wrong-tenant candidate, generation timeout, selected derivative substitution and missing training consent.
-- Backup/restore with writes disabled; cutover with old queue drained; rollback without duplicate execution.
+## Official references checked 2026-09-04
 
-Offline fixtures and schemas prove determinism and contract consistency only. Live provider behavior, real weak-agent accuracy and `$imagegen` availability are separate evidence gates. No provider capability, performance percentile, model benchmark or production readiness is asserted without its actual run.
+- Telegram native queues, edits/deletion and distinct scheduled/sent IDs: https://core.telegram.org/api/scheduled-messages
+- MCP progress tokens, optional notifications and active-request lifetime: https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress
+- MCP transport/version compatibility: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports
 
-## References
-
-Repository evidence is pinned in the [audit](../../reports/vibepublish-audit-20260904.md). Official documents checked on 2026-09-04:
-
-- MCP tools and JSON Schema: https://modelcontextprotocol.io/specification/2026-07-28/server/tools
-- MCP authorization: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
-- MCP security: https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices
-- Playwright locators/actionability/auth: https://playwright.dev/docs/locators ; https://playwright.dev/docs/actionability ; https://playwright.dev/docs/auth
-- Telegram scheduling: https://core.telegram.org/api/scheduled-messages
-- SQLite WAL: https://www.sqlite.org/wal.html
-- PostgreSQL locking (existing optional limiter): https://www.postgresql.org/docs/current/explicit-locking.html
+These references support protocol semantics, not a claim that the VibePublish adapters or target MCP client have been tested live.
