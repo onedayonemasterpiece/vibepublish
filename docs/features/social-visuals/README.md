@@ -1,0 +1,67 @@
+# Social visuals
+
+Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: `Not done`.
+
+Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the handoff](../social-operations/analysis-handoff-20260904.md). Publication/runtime/security rules live in [implementation design](../social-operations/implementation-design-v1.md).
+
+## Product
+
+Generate a new illustration, improve a rough/PIL-like card, or compose several sources into a publishable visual. Allow several candidates, automatic selection when explicitly authorized, human selection, reusable versioned presets and a clean preference corpus. Standalone creation and inline publication call the same VisualService.
+
+Tuning means image-to-image improvement, not training the model. Real fine-tuning is future scope. Existing drafts are negative/rough inputs, not automatically positive training samples.
+
+## Required executor
+
+```text
+VisualService -> ImagegenExecutor -> verified $imagegen route
+requested route: gpt-5.6-luna
+-> actual artifact import -> deterministic compositor -> validated candidates
+```
+
+Do not substitute Google Imagen/Gemini image APIs or assume the existing GoogleAIClient performs this job. The owner's earlier successful `$imagegen` experiment is a requirement/source fact, not a live test performed in this audit. Exact DevCoveer invocation, credentials, route availability and artifact return must be fresh-read during integration; no guessed CLI command is canonical.
+
+The adapter contract is typed and independent of a general coding-agent workflow:
+
+- `submit(job_key, mode, brief, source_manifest, preset_version, requested_route, candidate_budget, deadline)` returns a durable execution reference or a classified pre-dispatch error.
+- `inspect(execution_ref)` returns queued/running/succeeded/failed/unknown, actual executor/model identity if supplied, bounded usage and artifact manifests.
+- `cancel(execution_ref)` is best effort, with actual outcome recorded; cancelling never claims already generated artifacts disappeared.
+- Artifact manifests contain allowed-root file/object references, SHA-256, MIME, dimensions and size. The importer verifies actual bytes and ownership, not a model's textual assertion of success.
+
+No shell fragments, arbitrary repository paths or raw model-selected commands come from the caller. Run the executor in a constrained workspace with only the job's source assets and output directory. A model cannot access social credentials or select publication targets. An uncertain submit is inspected using its durable identity, not submitted again automatically.
+
+## Visual recipe and exact text
+
+The art layer carries atmosphere/background/illustration. Exact Russian text, dates, venue names, addresses, logos and branded safe areas are composed deterministically from structured editorial fields using SVG/HTML/CSS or an equivalent layout engine. Presets own fonts, text overflow rules, safe zones, crops and allowed art treatments.
+
+`4:5` and `9:16` are required output families. Text is reflowed for each family rather than cropped away. Source originals remain immutable. Resize/masks/metadata can use PIL; it is not the entire design system.
+
+If a draft contains baked-in text, do not blindly draw new text over old generated lettering. Separate or reconstruct the art layer and validate the complete composite. Editorial facts must come from explicit structured inputs or confirmed source extraction, not unchecked OCR. Facts ambiguous in a source produce a review blocker. Automated checks can establish dimensions, overflow, font/layout and supplied text; they cannot universally prove absence of accidental lettering or artistic quality. Human visual review remains necessary for the initial presets and any uncertain candidate.
+
+## Candidate and approval semantics
+
+Each job freezes mode, brief, sources, preset version and cost budget. Default 2 candidates, maximum 4. Default selection is human; automatic selection requires explicit request or a previously granted tenant policy and uses deterministic eligibility checks before any ranking. Selection cannot substitute a different asset after approval.
+
+For inline publishing, the selected final derivative becomes the **first** media item. Explicit `media` entries follow in their declared order. Visual source images are never published just because they were generation inputs. Story/media-count constraints are checked before any send. The preview enumerates exactly what will be attached.
+
+Selection tokens bind tenant, job, parent publication, candidate hash, plan revision, surface, destinations, schedule and policy epoch. Replayed selection returns the existing result; stale/different selection fails CAS. Selection resumes the original publication only if its mode and original user authority permit execution. A preview-only publication remains awaiting approval. Schedule expiry, changed rights or changed editorial text blocks automatic resume.
+
+Standalone selection produces an asset only; it cannot publish. Feedback changes the preference record, never an already published image. Re-generation creates another job/revision with a bounded new cost reservation.
+
+## Provenance and permissions
+
+Persist requested and actual executor identifiers separately, execution reference, prompt/preset version, source/output hashes, derivative recipe, candidate choice, feedback/rejection reason, editorial category and rights evidence. Missing actual executor metadata is recorded as unavailable, never fabricated from the requested route.
+
+Tenant assets and feedback are excluded from shared training by default. Training permission is a separate owner/tenant-controlled policy, not an incidental MCP flag an agent can enable. Store consent scope, timestamp and version; support withdrawal for future dataset exports and delete eligible retained copies. Shared model training is not an automatic consequence of using the service.
+
+Music/logos/photos supplied as sources need their own usage provenance; a model's approval does not establish rights.
+
+## Initial acceptance fixtures
+
+- https://t.me/kenigevents/4923
+- https://t.me/lovekenig/12660
+
+At implementation time fetch the authorized original media, not a screenshot of a guessed equivalent. Record source identity, exact extracted/confirmed editorial fields, multiple candidates and selected output. This audit did not download or generate these images.
+
+Offline acceptance: fake executor success/failure/unknown/restart; path/MIME/hash checks; no cross-tenant candidate or preview access; exact source and selected lineage; no post on generation failure; single resume after replay; schedule expiry; text overflow; 4:5/9:16 safe regions; budget enforcement; consent defaults.
+
+Live acceptance: actual `$imagegen` route on DevCoveer returns real verified artifacts through the required requested route; requested/actual identifiers are reported honestly; both fixtures have rendered human review; selected derivative is the one delivered; provider readback uses the evidence levels in the social design.
