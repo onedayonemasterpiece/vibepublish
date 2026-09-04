@@ -7,7 +7,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.1.0-design"
+VERSION = "1.2.0-design"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -49,7 +49,7 @@ NEXT = enum("none", "check_status", "approve", "select_visual", "fix_input",
 STATE = enum("accepted", "running", "needs_approval", "needs_selection", "scheduled",
              "verified", "partial", "failed", "outcome_unknown", "cancelled", "blocked")
 STAGE = enum("accepted", "validating", "importing_media", "rendering", "awaiting_approval",
-             "awaiting_selection", "waiting_connection", "uploading", "submitting",
+             "awaiting_selection", "waiting_connection", "resolving_source", "checking_forward_rights", "uploading", "submitting",
              "reading_back", "verifying", "finished", "blocked", "outcome_unknown")
 
 DEFS = {
@@ -100,6 +100,19 @@ DEFS = {
         "height": {"type": "integer", "minimum": 1}}, ("id", "asset_ref", "sha256", "width", "height")),
     "error": obj({"code": string(80), "message": string(1000), "field": string(200)}, ("code", "message")),
 }
+# Editorial profiles are local per-principal metadata, never grants or provider edits.
+DEFS["destination_profile"] = obj({
+    "usage": enum("primary", "secondary"), "purpose": string(800),
+    "audience": string(400), "topics": array(string(80), 0, 20),
+    "avoid_topics": array(string(80), 0, 20), "notes": {**string(1600), "minLength": 0},
+    "selection": enum("explicit_only", "agent_may_choose")})
+DEFS["destination"]["properties"].update({"profile": ref("destination_profile"), "profile_revision": REV})
+DEFS["forward_origin"] = obj({"source_ref": ID, "provider": enum("telegram", "vk", "max"),
+    "original_url": URL, "mode": {"const": "native"},
+    "origin_check": enum("matched", "pending", "incomplete")},
+    ("source_ref", "provider", "mode", "origin_check"))
+DEFS["delivery_result"]["properties"]["forward_origin"] = ref("forward_origin")
+
 # Exact typography is data, not text inferred from a generation prompt.
 DEFS["visual_copy"] = obj({"title": string(160), "subtitle": string(240),
     "body": string(1200), "date_line": string(160), "location_line": string(240),
@@ -118,6 +131,7 @@ DEFS["progress"] = obj({"events": array(ref("event"), 0, 50),
     "cursor": string(512), "has_more": {"type": "boolean"}}, ("events", "cursor", "has_more"))
 DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url": URL,
     "publication_id": ID, "revision": REV, "destination": ALIAS,
+    "publication_kind": enum("original", "forward"), "forward_origin": ref("forward_origin"),
     "scheduled_at": DATE, "published_at": DATE, "observed_at": DATE,
     "source": enum("provider", "local_history"), "freshness": enum("current", "cached", "unknown"),
     "origin": enum("vibepublish", "provider_client", "imported"),
@@ -149,10 +163,10 @@ def tool(name, description, inputs, outputs, scope, read_only=False):
 
 
 tool("get_started", "Get the versioned skill, allowed aliases and current capabilities. Never grants access.",
-    obj({"section": enum("core", "examples", "visuals", "reading"), "if_version": string(80), "cursor": string(512)}),
+    obj({"section": enum("core", "examples", "visuals", "reading", "forwarding", "destinations", "all"), "if_version": string(80), "cursor": string(512)}),
     obj({"version": string(80), "schema_version": string(80), "skill_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
         "skill": string(30000), "estimated_tokens": {"type": "integer", "minimum": 0},
-        "timezone": string(100), "server_time": DATE, "policy_epoch": REV,
+        "timezone": string(100), "server_time": DATE, "policy_epoch": REV, "routing_revision": REV,
         "scheduling": {"const": "provider_native_only"},
         "read_policy": enum("bound_publish_destinations", "provider_visible_owner", "none"),
         "destinations": array(ref("destination"), 0, 100), "capabilities": array(ref("capability"), 0, 500),
@@ -165,7 +179,7 @@ tool("publish", "Create one publication now or in native provider queues; return
         "surface": enum("post", "story", "message", "album", "video", "short_video"),
         "delivery": ref("delivery"), "mode": enum("execute", "preview"),
         "renderings": ref("renderings"), "visual": ref("visual_spec"),
-        "request_key": KEY, "repeat_of": ID}, ("to",)), ref("receipt"), "publish")
+        "request_key": KEY, "repeat_of": ID, "routing_revision": REV}, ("to",)), ref("receipt"), "publish")
 
 TOOLS[-1]["inputSchema"]["anyOf"] = [
     {"required": ["content"]}, {"required": ["visual"]},
@@ -210,7 +224,8 @@ for k in ("thread", "reactions"):
 queries += [arm("search", {"destination": ALIAS, "text": string(1000)}, ("destination", "text")),
     arm("history", {"destination": ALIAS, "author": enum("mine", "channel"),
         "text": string(1000), "from": DATE, "to": DATE,
-        "state": enum("provider_scheduled", "published", "cancelled", "deleted", "unknown")}),
+        "state": enum("provider_scheduled", "published", "cancelled", "deleted", "unknown"),
+        "publication_kind": enum("original", "forward")}),
     arm("analytics", {"destination": ALIAS, "from": DATE, "to": DATE,
         "publication_ids": array(ID, 1, 20), "freshness": enum("cached", "refresh")})]
 queries[-1]["oneOf"] = [
@@ -220,15 +235,19 @@ tool("read", "Read bound publishing channels in full, including native queues, o
     obj({"query": {"oneOf": queries}, "limit": LIMIT, "cursor": string(512)}, ("query",)),
     ref("receipt"), "social.read", True)
 
-tool("engage", "Reply, react or forward/repost an existing item. Requires explicit authority; not a generic SDK escape hatch.",
+tool("engage", "Natively forward/repost an exact item or Telegram/VK post URL; preserve origin, never rewrite/copy. Reply/reaction are separate commands. Native scheduling only; return progress.",
     obj({"command": {"oneOf": [
         arm("reply", {"item_ref": ID, "content": ref("content")}, ("item_ref", "content")),
         arm("react", {"item_ref": ID, "reaction": string(100), "mode": enum("add", "remove")}, ("item_ref", "reaction", "mode")),
-        arm("forward", {"item_ref": ID, "to": array(ALIAS, 1, 20)}, ("item_ref", "to"))]},
-        "request_key": KEY}, ("command",)), ref("receipt"), "engage")
+        arm("forward", {"item_ref": {"oneOf": [ID, URL]}, "to": array(ALIAS, 1, 20),
+            "selection": enum("post", "message"), "delivery": ref("delivery"),
+            "mode": enum("execute", "preview")}, ("item_ref", "to"))]},
+        "request_key": KEY, "repeat_of": ID, "routing_revision": REV}, ("command",)), ref("receipt"), "engage")
 
-tool("destinations", "List allowed aliases, resolve a target, or manage destination sets. Resolving or adding a URL never creates a grant.",
+tool("destinations", "List allowed aliases, update personal purpose/notes/primary-channel profiles, or manage granted destination sets. Profiles and URLs never grant access.",
     obj({"command": {"oneOf": [arm("list"),
+        arm("profile_update", {"alias": ALIAS, "expected_revision": {"type": "integer", "minimum": 0},
+            "profile": {**DEFS["destination_profile"], "minProperties": 1}}, ("alias", "expected_revision", "profile")),
         arm("resolve", {"provider": PROVIDER, "url": URL}, ("provider", "url")),
         arm("search", {"provider": PROVIDER, "text": string(500)}, ("provider", "text")),
         arm("set_put", {"alias": ALIAS, "label": string(200), "expected_revision": {"type": "integer", "minimum": 0},
@@ -302,6 +321,12 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
     effective.discard("social.read")  # Legacy read scope cannot bypass destination binding.
     if owner or ("publish" in effective and publish_destinations):
         effective.add("social.read")
+    # Narrow task scopes expose only their own command variants.
+    if publish_destinations and "publish" in effective:
+        if "forward" in effective:
+            effective.add("engage")
+        if "destination.profile" in effective:
+            effective.add("destinations")
     result = []
     for item in catalog()["tools"]:
         if item["required_scope"] not in effective:
@@ -311,6 +336,14 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
             variants = item["inputSchema"]["properties"]["query"]["oneOf"]
             item["inputSchema"]["properties"]["query"]["oneOf"] = [
                 v for v in variants if v["properties"]["kind"]["const"] != "dialogs"]
+        if item["name"] == "vibepublish_engage" and "engage" not in scopes and not owner:
+            variants = item["inputSchema"]["properties"]["command"]["oneOf"]
+            item["inputSchema"]["properties"]["command"]["oneOf"] = [
+                v for v in variants if v["properties"]["kind"]["const"] == "forward"]
+        if item["name"] == "vibepublish_destinations" and "destinations" not in scopes and not owner:
+            variants = item["inputSchema"]["properties"]["command"]["oneOf"]
+            item["inputSchema"]["properties"]["command"]["oneOf"] = [
+                v for v in variants if v["properties"]["kind"]["const"] in {"list", "profile_update"}]
         result.append(item)
     return result
 
