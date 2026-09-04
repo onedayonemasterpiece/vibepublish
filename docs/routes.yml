@@ -17,6 +17,7 @@ sections:
     index: docs/llm/README.md
   reference:
     index: docs/reference/README.md
+    events_bot_social_donor_map: docs/reference/events-bot-social-donor-map.md
   backlog:
     index: docs/backlog/README.md
   reports:
@@ -41,4 +42,15 @@ features:
       - migrations/005_gemini_flash_lite_limits.sql
       - scripts/inspect/probe_supabase_rpc.py
       - scripts/inspect/sweep_google_ai_stale.py
-
+  social_operations:
+    status: fixed_not_done
+    docs: docs/features/social-operations/README.md
+    references:
+      - docs/reference/events-bot-social-donor-map.md
+    planned_entrypoints:
+      - social_operations/
+      - adapters/telegram/
+      - adapters/vk/
+      - adapters/max/
+      - mcp/
+      - api/
