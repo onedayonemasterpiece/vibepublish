@@ -1,132 +1,135 @@
-# MCP contract v1 — selected implementation design
+# MCP contract v1.1 — native queues and incremental receipts
 
-Version: `1.0.0-design`. Status: `Not confirmed by user`. Runtime: `Not done`.
+Version: `1.1.0-design`. Owner corrections: `Fixed`. Engineering design: `Not confirmed by user`. Runtime: `Not done`.
 
-Canonical schemas: [`contracts/social_mcp_v1.py`](../../../contracts/social_mcp_v1.py). Golden tasks: [`contracts/task_corpus_v1.py`](../../../contracts/task_corpus_v1.py). These are executable design artifacts, not a running MCP server. The [implementation design](implementation-design-v1.md) owns runtime semantics; this document owns model-facing grammar.
+Canonical schemas: [`contracts/social_mcp_v1.py`](../../../contracts/social_mcp_v1.py). Tasks: [`contracts/task_corpus_v1.py`](../../../contracts/task_corpus_v1.py). Runtime semantics: [implementation design](implementation-design-v1.md). Skill: [vibepublish-social-skill.md](../../llm/vibepublish-social-skill.md).
 
-## 1. Taxonomy decision
+## 1. One task taxonomy
 
-The optimization target is correct task completion with few calls and little irrelevant context, not the smallest possible tool count.
+Eight methods remain: `get_started`, `publish`, `publication_update`, `visual`, `status`, `read`, `engage`, `destinations`, all prefixed `vibepublish_`. No new schedule/progress/history synonym tools. History and statistics are read queries; progress is an operation observation.
 
-| Candidate | Structural result on the task inventory | Decision |
-|---|---|---|
-| Six generic methods (`get_started/publish/publication/visual/read/operation`) | Engagement and destination management have no distinct home unless read becomes mutating or operation becomes a generic command router; short names hide complex discriminators | Rejected as the canonical starting point |
-| Eight task-oriented methods below | Separates new content, existing publication, visual production, observation, provider reading, engagement and destination configuration; primary publisher sees only five | Selected for implementation |
-| Twelve or more split/convenience methods | Separate tools for schedule/story/video/analytics/selection offer multiple routes to the same job and duplicate schemas | Rejected until a measured usability benefit justifies a split |
+The original six/eight/split comparison remains a structural design choice, not an empirical weak-model A/B result. Active partner publishers now receive **six** core tools: bootstrap, publish, publication_update, visual, status and read. Read derives from active verified publishing bindings; it is not separately enabled by a legacy social.read scope. Without an active binding a partner has no social reads. Engagement and destination configuration require their corresponding rights. The owner may use all relevant tools within actual provider access.
 
-This is an explicit design comparison, **not an A/B model benchmark**. No invalid-call percentages or optimality claims are inferred from hand-authored golden calls. Real weak-agent evaluation remains a release gate.
+`project_catalog(scopes, publish_destinations=..., owner=...)` consumes trusted server-auth context, not tool arguments. It removes owner-only dialog enumeration from partner read schemas. Exact item/destination authorization is still enforced in every handler; a hidden tool or schema-valid alias is not an access-control system.
 
-| Method | Owns | Does not own |
-|---|---|---|
-| `vibepublish_get_started` | Versioned skill, allowed aliases/sets, capabilities and tenant time context | Grant creation, secrets or provider login |
-| `vibepublish_publish` | One new publication, optional inline visual, immediate/scheduled/preview | Editing an existing post, raw SDK operations |
-| `vibepublish_publication_update` | Approve, edit, reschedule, cancel, delete, safe failed-child retry | New publication, blind retry or implicit delete on cancel |
-| `vibepublish_visual` | Standalone generate/tune/compose, select, feedback | Independent publication after standalone generation |
-| `vibepublish_status` | Local owned operation/publication/visual receipts and recent operations | Provider feed reads, retries or forced send |
-| `vibepublish_read` | Exact items, dialogs, feeds/search, comments/reactions, stories, scheduled queue, notifications, editorial samples and analytics | Social mutation |
-| `vibepublish_engage` | Reply, react/remove reaction, forward/repost | Provider credential administration |
-| `vibepublish_destinations` | List/resolve/search, create/update/delete sets, rename display labels | Ownership verification by URL alone, granting access or changing stable native identity |
+## 2. Exact changed grammar
 
-The five-tool publisher projection is get_started, publish, publication_update, visual, status. The other tools require corresponding grants. Owner-only connection/principal administration is initially CLI, not a hidden arbitrary MCP command. `required_scope` in the design generator is internal metadata; `project_catalog` removes it from wire tool definitions. Actual handlers still enforce operation-level scopes and resource bindings even when a client directly invokes a hidden tool.
+All object schemas remain closed and self-contained with reachable `$defs`. Native provider IDs, credentials and browser commands are not model-facing arguments. Use IDs/revisions/aliases/tokens returned by the server.
 
-## 2. Common grammar
+### Publish and lifecycle
 
-All schemas have an object root, explicit properties and closed objects. Tagged commands use `kind`. Every tool's `$defs` is self-contained and includes only reachable definitions. Do not send Python helper metadata or unresolved references across the MCP wire.
+```json
+{
+  "to": ["pka"],
+  "content": {"text": "Открытие сезона — 6 сентября в 12:00."},
+  "media": [{"source": {"kind": "asset", "id": "asset_1"}}],
+  "delivery": {"kind": "at", "at": "2026-09-06T12:00:00+02:00"}
+}
+```
 
-Service IDs and aliases are opaque strings, not native Telegram/VK/MAX IDs. The server supplies existing IDs, revisions and tokens; the model never invents them. Normal publication uses `to` aliases only. New/ambiguous destinations go through authorized resolution or owner onboarding before publishing.
+Scheduled delivery has exactly `kind` and `at`. `backend`, `late`, service fallback and local due-time execution are excluded, not merely deprecated defaults. `now` remains the default when delivery is omitted. `at` means submit to the real provider queue during this command and verify it there. Provider-specific minimum lead time and maximum horizon are semantic checks. Expired or too-close times are blocked, not converted to immediate sending.
 
-Defaults selected for implementation:
+`mode: preview` never submits to a provider. Approval/visual selection do not imply that a pending preview was already scheduled. Recheck timing and rights before its native submission. Default surface remains post; supported story/message/album/video/short_video map to actual capabilities. Native scheduling unavailable for a surface means explicit rejection/review, not local emulation.
 
-| Field | Default / semantics |
-|---|---|
-| `surface` | `post`; channel/wall distinction follows the destination; `message` covers a bound direct or Saved Messages target |
-| `mode` | `execute` only within the authenticated user's authority and application approval policy; preview never sends |
-| `delivery` | `{kind: now}`; scheduled input requires a timestamp with UTC offset |
-| scheduled `backend`, `late` | `service`, `hold`; native scheduling requires an explicitly proven capability |
-| `content.format` | `plain`; optional bounded Markdown subset, not provider-native escaping |
-| `media.role` | `auto`, derived from verified MIME/geometry; incompatible requested role is rejected |
-| visual `candidates`, `selection` | 2, human; automatic selection must be explicitly requested/authorized |
-| visual `formats` | post_4_5 and story_9_16; the publication surface chooses the corresponding accepted derivative |
-| visual `copy` | No overlaid editorial text when absent. Exact title/subtitle/body/date/location/source strings are supplied separately from the art brief |
-| `limit` | 20, maximum 50; cursors are opaque and bound to principal, query and policy epoch |
+`publication_update` still requires publication_id and expected_revision. Its change kinds are approve/edit/reschedule/cancel/delete/retry_failed. Reschedule modifies the existing provider queue item; cancel removes that item and verifies removal; delete acts on a published item. A never-dispatched intent can be cancelled locally, clearly distinguished from a native queue cancellation. No silent delete/re-create or automatic deletion after a cancel/publication race.
 
-Preset names must come from configured tenant presets. An absent preset resolves to the tenant's versioned default; unavailable defaults fail explicitly. Brand/logo/font choices belong to that preset, not to a model-provided filesystem path. Inline visual output is the first attachment, then explicit media in order; generation sources are not automatically attachments.
+### Reads, queue, history and statistics
 
-Empty text is permitted structurally because editing a caption to empty is legitimate. Runtime validation must reject a resulting publication with no meaningful text and no deliverable media. Whitespace-only text, media capacity, calendar validity, expiry, URL safety, grant intersection and unsupported capabilities are semantic checks, not purported guarantees of JSON Schema alone.
+`vibepublish_read` supports item, dialogs (owner only), feed, stories, scheduled, notifications, audience, editorial_sample, thread, reactions, search, history and analytics.
 
-`expected_revision` is required for publication edits and set updates. `set_put` is explicit full replacement: revision 0 creates a previously nonexistent set, otherwise exact current revision is required. Members must be concrete already-authorized destinations; no nested sets. `rename_label` changes the display name, not the stable alias. Mutating an alias's meaning to redirect already accepted work is forbidden.
+`scheduled` always reads the provider's actual queue for the destination, not the local ledger. It includes entries created by other editors/clients where provider-visible. A provider error is not an empty queue. Each item can return publication_id/revision, queue_ref, observed scheduled time, actual URL or navigation hint, and protected preview_ref.
 
-The current grammar covers the first working publishing slice and the principal donor operation families. Exotic provider-native options, polls or every historical formatting construct are **not silently claimed implemented**. Before exposing such a donor capability, add its exact typed fields, input/output fixtures and adapter tests under the existing task method. No `options: any`, raw provider method, new synonym tool or global lowest-common-denominator switch is allowed.
+`history` searches the local publication-fact index. Fields: optional destination, author (mine/channel), text, from/to and state. Default author is mine; omitted destination means the current authorized destination set, not arbitrary channels. Channel mode returns known channel-visible facts, not other tenants' private drafts or operations. The index's coverage/freshness must not be represented as complete provider history.
 
-## 3. Responses, timeouts and transport
+`analytics` has one of two mutually exclusive target shapes: destination + from + to, or publication_ids. Freshness is cached (default) or refresh. Cached results disclose observation time and missing metrics. Refresh addresses stored provider identities and records progress and individual failures. Unknown metrics are not zero.
 
-Successful mutations return a durable receipt with `operation_id`, `action`, `state`, `next_action`, `retry_safe`, `receipt_ref` and `deliveries`. `resource_id` is the publication or visual resource as appropriate. For updates, use the returned current revision. Visual candidates include owned asset references and output hashes. Review tokens are short-lived, single-use and scope-bound; do not put them in URLs or ordinary logs.
+```json
+{"query":{"kind":"history","author":"mine","text":"сезон"}}
+```
 
-Before acceptance, a closed error response contains `error.code/message/field`, `message`, one `next_action` and `retry_safe: false`, **without fabricating an operation ID**. After acceptance, failures/uncertainty remain on the original receipt. The MCP adapter uses `isError` for tool execution errors and emits structured content conforming to the error branch; syntactically malformed RPCs use protocol errors. One-call success means one mutation request, not a promise that every provider finishes before the tool timeout.
+```json
+{"query":{"kind":"analytics","publication_ids":["pub_1","pub_2"],"freshness":"refresh"}}
+```
 
-Persist first, return within the request budget, and let the worker continue. Status polling respects `poll_after_seconds`; status itself never retries or mutates the provider. Application status is independent of any MCP experimental task mechanism or client connection lifetime.
+The read response now uses the same durable receipt as other potentially long operations, with `items`, `truncated` and optional `next_cursor`. Fast local reads can return complete immediately; remote reads/refreshes can return accepted and then expose items through status. An accepted read with no items is not an empty final result. Every returned read item carries source, freshness and observed_at; statistics add metrics_observed_at and per-item error where necessary.
 
-| Condition | Error/state | Next action |
-|---|---|---|
-| Invalid fields/time/media | invalid_input, media_unavailable | fix_input |
-| Alias unknown or bootstrap stale | destination_unknown, stale_context | refresh |
-| Grant denied | access_denied | contact_owner |
-| Expired connection | needs_auth | reauthorize |
-| Revision or outside edit conflict | revision_conflict, external_change | refresh |
-| Existing key with different request | idempotency_conflict | fix_input; never create a replacement send automatically |
-| Waiting for human | needs_approval / needs_selection | approve / select_visual |
-| Accepted work still running | queued / running | check_status |
-| Possible remote effect without proof | outcome_unknown | review_outcome; retry_safe=false |
-| Partial fan-out | partial | inspect child receipts; retry only server-proven failed children |
+## 3. Progress: no wait-for-all barrier
 
-A rejected unchanged request is not made safe by retrying it. `fix_input` authorizes correction of arguments, not publication to a different destination. Capabilities are runtime observations, not permissions.
+Every accepted operation receipt requires:
 
-HTTP projection: POST `/v1/publications`, POST `/v1/publications/{id}/commands`, POST `/v1/visuals/commands`, POST `/v1/engagement/commands`, POST `/v1/destinations/commands`, POST `/v1/reads`, GET `/v1/operations/{id}` and GET `/v1/bootstrap`. These endpoints call the same services and schemas, with path IDs mapped deterministically. Mutating service clients supply an Idempotency-Key. HTTP 202 means accepted, not published; 409 covers conflicts; 422 invalid input; 403 denied; 429 quota. Accepted provider uncertainty is returned as a receipt, not a generic retriable 500.
+- operation_id, action, state, message, operation_complete;
+- per-destination deliveries with state, current stage and observed provider state;
+- progress.events, progress.cursor and progress.has_more;
+- next_action, retry_safe and receipt_ref.
 
-## 4. Bootstrap and skill
+The initial receipt is returned after durable local acceptance, before waiting on uploads or remote providers. Healthy-local-store acceptance target is two seconds, a release budget rather than a measured claim. Events are committed alongside state changes. Stage values include accepted, validating, importing_media, rendering, awaiting_approval/selection, waiting_connection, uploading, submitting, reading_back, verifying, finished, blocked and outcome_unknown.
 
-Canonical text: [`docs/llm/vibepublish-social-skill.md`](../../llm/vibepublish-social-skill.md). Serve it as a versioned MCP resource/prompt and through get_started. Proposed resource URI: `vibepublish://skills/social/1.0.0-design`. Keep the fallback tool; do not assume every client supports resources/prompts.
+Each event has an operation-local sequence number, operation ID, timestamp, stage, status and brief message, plus destination/media ordinal/evidence where applicable. Atomic means a committed meaningful transition, not every browser mouse movement. Do not fabricate percentage-complete estimates.
 
-Compute SHA-256 from canonical UTF-8 skill bytes. `if_version` is a cache hint, never an authorization shortcut. Responses still contain current granted context. First page should contain the primary task-relevant aliases, a compact capability summary and examples, not every channel or conversation. Proposed core skill budget <=1500 tokens before destination context, measured with the target client's tokenizer at integration. `estimated_tokens` is explicitly an estimate, not billed usage. This audit measured JSON bytes, not model token counts.
+Example status request using a returned cursor:
 
-Cache key: authenticated principal + policy epoch + skill/schema version; capability entries include observation time. Revocation invalidates stale authorization even if the model retained the old skill. A model can still call with old context; the server remains authoritative.
+```json
+{
+  "ids": ["op_1"],
+  "after_event": "event_cursor_3",
+  "wait_seconds": 10
+}
+```
 
-## 5. Executed offline checks
+It returns on the first new event from any child of op_1, an automatic-work termination/block, or the bounded timeout; it never waits for every provider. The response contains receipts with updated child snapshots and only the next event page. `wait_seconds` defaults to zero and is capped at ten. With after_event or wait_seconds, exactly one ID is required and it must resolve to one operation. The list-pagination cursor cannot be combined with an event cursor.
 
-Command run in the local analysis environment on 2026-09-04:
+Event cursors are scoped to principal, policy epoch and operation, replayable after disconnect/restart. Use the returned cursor, not a guessed sequence. `has_more` means fetch remaining events without waiting. Cursor expiration or revocation returns a typed refresh/denial, never silently loses the gap or widens access. Snapshot state may be newer than the last returned event when paging; advance the cursor only over emitted events. Repeated event pages are deduplicated by operation ID and sequence.
+
+Snapshots obtained without after_event give current states and a bounded recent-event window; detailed recovery uses the supplied durable cursor. `worker_seen_at`, last event time and explicit blocked/error state distinguish a waiting provider from a stopped worker. No new event means no invented progress.
+
+MCP progress notifications mirror events only if the client supplied a valid active request token. They stop when that request ends, even if the durable job continues. Some clients may not display notifications or pass them to the agent; structured status is mandatory for all clients. In a polling client the agent reports useful partial outcomes to the user as they appear instead of staying silent until MAX finishes. Reconnection never invokes publish again.
+
+All-target deterministic preflight still blocks unsafe mutations but emits its progress before all checks finish. After preflight, independent providers execute independently. A successful Telegram result is already in the receipt while VK uploads and MAX waits for its browser lane. A single MAX lock does not serialize the other providers.
+
+## 4. Scheduling command completion and observations
+
+`accepted` is not scheduled. `scheduled` means the requested items were read back in native provider queues. The scheduling command then returns operation_complete=true and next_action=none; it does not remain running until publication time. Per-delivery fields include scheduling_owner=provider, queue_ref/item_ref, actual scheduled time, evidence and preview/navigation information.
+
+Actual later publication requires an observed published item or a proven provider identity mapping. The database keeps both queued and published identities. Queue disappearance, elapsed time or local uptime is not publication evidence. Provider-side video processing is represented separately as provider_processing.
+
+Parent uncertainty cannot be hidden by partial success. Verified/scheduled children remain intact; an uncertain attempted child is never resent. `retry_failed` applies only to explicitly named, proven safe failures and rechecks native timing. Transport disconnect/cancellation stops the response wait, not accepted business work or a native scheduled post; use explicit domain cancellation.
+
+## 5. Access and bootstrap
+
+get_started returns scheduling=provider_native_only and read_policy of bound_publish_destinations, provider_visible_owner or none. It returns allowed aliases/sets and observed capabilities, configured timezone, server time, skill version/hash and policy epoch. Examples and approximate token counts remain versioned. Cache by principal + epoch + skill/schema version; current rights remain authoritative even with stale model context.
+
+Partners may read every visible post, relevant comment thread and scheduled item in active publishing destinations, regardless of author. They cannot use a permalink, media reference, cross-post or query cursor to read another channel, the whole linked discussion chat or account-wide dialogs. The owner is not limited to publishing aliases for reads: provider-visible resource resolution can return owner-scoped handles without creating write grants.
+
+Private source assets, prompts, candidates, credentials and operation histories remain private even if their resulting post is visible in a shared channel. Every cache/statistics/event/download path must enforce the same current destination/private-record boundary.
+
+## 6. Unchanged content, visual and safety rules
+
+Plain text by default; optional bounded Markdown or semantic paragraphs/links/mentions/emoji. Explicit provider renderings preserve differences. Ordered media come from owned refs, real HTTPS imports or host upload tickets; no invented paths or omitted attachments. Empty captions can be edited to empty, but runtime rejects an entirely empty resulting publication.
+
+Visual generate/tune/compose use the same service for standalone/inline jobs; default two candidates and human selection. Exact typography uses copy fields; formats are post_4_5/story_9_16, tenant preset supplies branding. Selected output is first, explicit media follow; generation sources are not automatically attached. Selection binds the parent/revision/asset and cannot bypass approval or current native scheduling constraints. No model-visible training-consent flag.
+
+Request replay/conflicting keys, immutable set snapshot, plan digest, external edits and unknown-outcome rules remain in the implementation design. Owner-only connection administration stays CLI initially. No raw SDK/provider command or generic options object is introduced.
+
+## 7. Errors and HTTP projection
+
+Before acceptance, return a closed error with code/message/field, next_action and retry_safe=false, without inventing an operation ID. After acceptance, errors/unknown outcomes remain on the durable receipt with progress. MCP transport errors and tool errors remain distinct.
+
+Important repairs: invalid input/time -> fix_input; native scheduling unavailable -> contact_owner with the unsupported destination/capability; expired connection -> reauthorize; stale aliases/revisions/cursors -> refresh; access denied -> contact_owner; awaiting choice/approval -> select_visual/approve; automatic work running -> check_status; ambiguous provider effect -> review_outcome, never blind retry.
+
+HTTP uses the same services: POST /v1/publications, /v1/publications/{id}/commands, /v1/visuals/commands, /v1/engagement/commands, /v1/destinations/commands, /v1/reads; GET /v1/operations/{id} and /v1/bootstrap. Operation GET supports the same after_event/bounded-wait semantics. HTTP 202 is only durable acceptance. Mutation clients supply Idempotency-Key. Optional application event streaming is a projection of the same authorized journal, not a second state mechanism.
+
+## 8. Executed design checks and unexecuted runtime gates
+
+Command run locally on 2026-09-04 with jsonschema 4.26.0:
 
 ```bash
-python -m pip install -r contracts/requirements.txt
 python tests/contracts/test_social_mcp_design.py
-python contracts/social_mcp_v1.py > social-mcp.v1.generated.json
-python contracts/task_corpus_v1.py > task-corpus.v1.generated.json
 ```
 
-The validator dependency was already available locally (`jsonschema` 4.26.0); installation is shown for reproduction, not claimed executed here.
+Result: **14 test methods passed**, **16 input/output schemas**, **105 golden calls**, **30 negative calls**. Added checks cover rejected backend/local-late fields; required progress receipts; mixed Telegram-complete/VK-uploading/MAX-waiting snapshots; scheduled-command completion distinct from publication; event cursor argument boundaries; inherited partner read projection and hidden owner dialog enumeration; history and exact-item statistics grammar.
 
-Result: **8 test methods passed**, validating **16 schemas**, **80 golden calls** across all eight tools and **20 negative calls**. Checks also cover closed object shapes, success/error response examples, finite next_action, deterministic generation and the five-tool grant projection. Deliberately forbidden but syntactically valid jobs carry runtime-oracle labels; this run does not pretend that an absent server enforced those labels.
+These tests validate schema/projection design and corpus coverage. Runtime-oracle labels for permissions, event timing, provider behavior and crash recovery are requirements, not simulated passes. No live weak model, database concurrency test, MCP-client notification test, provider/native-queue canary or MAX browser run occurred here. The input schemas and corpus can be rendered with their Python entrypoints; generated JSON is not another source of truth.
 
-Compact input schema byte counts after explicit visual-copy fields:
+Required integration tests additionally prove: prompt acceptance during a stalled provider; first-child events while others run; no progress-token use after response; operation replay after disconnect; full queue reads of other editors' posts inside the allowed channel; denial outside it including cache; and provider execution after all VibePublish processes are stopped. Real weak-agent comparison remains required before releasing the server; no model accuracy percentage is claimed.
 
-```text
-get_started             324
-publish                6284
-publication_update     4538
-visual                 4332
-status                  379
-read                   3136
-engage                 2644
-destinations           1959
-```
-
-Total: 23,596 UTF-8 bytes of compact input schemas. The five-tool publisher input schema total is 15,857 bytes. Descriptions, output schemas and runtime skill/context are additional; these figures are not total context size or measured token cost. Generated JSON is a build artifact; the Python schema definition remains canonical.
-
-Not run: a live weak model, real MCP client compatibility, provider/browser flows, database concurrency or the existing Google gateway suite. This audit uses no external model executor.
-
-## 6. Required weak-agent benchmark
-
-Before publishing the MCP server, run the same task corpus through a genuinely weak available model with exact model/build/prompt/tokenizer recorded. Add paraphrases, missing information, stale receipts, malicious provider text and tool/schema distractors. Execute calls only against a deterministic fake server with explicit authority fixtures, not real channels.
-
-Compare six/eight/split variants with the same source tasks and budgets; count correct method, schema-valid arguments, exact destination/media/schedule, unauthorized attempts, improper unknown-outcome retries, mutation-call count and token cost separately. Publish the real confusion matrix and saved calls. A hand-authored expected-tool matrix is not a measured confusion matrix.
-
-Proposed acceptance: >=98% schema-valid first calls, >=95% correct benign tasks without repair, 100% correct final target/media/schedule after at most one permitted repair, zero executed unauthorized effects and zero duplicate effects under adversarial/restart tests. Unsafe attempted calls are reported even if the server blocks them. Thresholds are release criteria, not achieved results. Failures change descriptions/arguments first; method count is not protected from evidence-based correction.
+Official progress semantics checked: https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress . Provider-native queue reference: https://core.telegram.org/api/scheduled-messages .
