@@ -6,6 +6,10 @@ Canonical feature documents live here.
 
 - `llm-gateway` -> `docs/features/llm-gateway/README.md`
 
+## Fixed, not implemented
+
+- `social-operations` -> `docs/features/social-operations/README.md`
+
 ## New Feature Template
 
 Use this shape for `docs/features/<feature>/README.md`:
@@ -27,4 +31,3 @@ Status: `Draft`
 
 ## Verification
 ```
-
