@@ -159,6 +159,12 @@ async def recovery_setup(replay, *, messages=None, extra=''):
 async def test_exact_recovery_two_fresh_reads_preserve_original_fuse(replay,order):
     d,page=await recovery_setup(replay,extra='window.REPLAY_ORDER='+json.dumps(order))
     fuse=d.lane.marker.read_bytes()
+    # Reorder the chat list from EACH awaited account callback as well as
+    # starting in every permutation. Native item selection must be unaffected.
+    async def account():
+        await page.evaluate('provider.order.reverse();sidebar()')
+        return True
+    d.account_check=account
     result=await d.reconcile(recovery_state())
     assert result['item']['id']=='new-item' and result['item']['text']==RECOVERY_TEXT
     assert len(result['observations'])==2
@@ -166,7 +172,7 @@ async def test_exact_recovery_two_fresh_reads_preserve_original_fuse(replay,orde
     assert result['attribution']=='requires_core_historical_evidence_validation'
     assert result['history_complete'] is False
     assert d.lane.marker.read_bytes()==fuse
-    assert await page.evaluate('provider.order')==list(order)
+    assert await page.evaluate('provider.order')==list(reversed(order))
 
 @pytest.mark.parametrize('fault', ['old_ref','same_text_wrong_id','duplicate','foreign','changed_text','media','wrong_target','stale_clipboard'])
 async def test_recovery_rejects_nonexact_candidates(replay,fault):

@@ -447,3 +447,7 @@ concurrent readers and a real reader-process crash/restart. They do not implemen
 original-operation core resolution, compensation or the future writer lifecycle.
 The earlier standalone run passed 112 cases with two absent-core module skips;
 two subsequently added cases are included in the 138 and in final remote CI.
+
+The six positive recovery permutations also reverse the chat list inside every
+awaited account callback. The same original native item must survive both the
+initial order and mid-observation reordering; no row index participates in binding.
