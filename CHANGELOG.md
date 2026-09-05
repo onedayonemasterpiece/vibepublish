@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added — MAX canonical bridge and local core integration, 2026-09-05
+
+- Verified the supplied 103-source core ZIP/bundle/patch and moved it to local
+  artifacts; added a reproducible local-only MAX overlay assembler, no core upload.
+- Added MAX bridge importing the actual ProviderAdapter port/native helpers:
+  typed observations, scoped reads/cursors, proven input-media bindings and
+  recoverable attempt/plan checkpoints. Translates driver progress vocabulary to
+  core statuses without changing core dispatch/auth/ledger or the common port.
+- Added real MCP ClientSession/worker/SQLite + Chromium fixture integration for
+  early TG/VK progress, durable marker before effect, SIGKILL/restart without
+  duplicate sends, scoped external queue reads and preserved partial successes.
+  Original 37 tests and loopback guard remain; absent-core CI skips are explicit.
+- Live MAX factory/selectors, text-only attribution, cancel/delete evidence and
+  media-preserving reschedule remain unverified; no live actions or deployment.
+
 ### Added — MAX-only offline checkpoint, 2026-09-05
 
 - Added a fixture-only deterministic MAX UI driver, process-exclusive profile

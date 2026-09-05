@@ -15,7 +15,9 @@ FixtureDriver = importlib.import_module('adapters.max.driver').FixtureDriver
 
 @pytest.fixture
 def server():
-    state = {'items': [], 'effects': 0, 'config': {}}
+    class FixtureState(dict):
+        before_effect = None
+    state = FixtureState(items=[], effects=0, config={})
     lock = threading.Lock()
     html = Path(__file__).with_name('fixtures').joinpath('index.html').read_bytes()
 
@@ -45,6 +47,12 @@ def server():
                 self.send_error(404)
                 return
             request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            if state.before_effect is not None:
+                try:
+                    state.before_effect(request)
+                except Exception:
+                    self.send_error(500, 'fixture dispatch assertion failed')
+                    return
             with lock:
                 state['effects'] += 1
                 if request['action'] == 'publish':

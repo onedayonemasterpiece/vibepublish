@@ -29,7 +29,7 @@ jobs:
           python tests/contracts/test_social_mcp_design.py
           python tests/contracts/test_forwarding_profiles_design.py
       - name: MAX offline driver and real Chromium regression
-        run: python -m pytest tests/adapters/max tests/browser/max -q
+        run: python -m pytest tests/adapters/max tests/browser/max -q -ra
       - name: Passive imagegen inventory regression
         if: ${{ hashFiles('tests/inspection/test_imagegen_inventory.py') != '' }}
         run: python -m pytest tests/inspection -q
