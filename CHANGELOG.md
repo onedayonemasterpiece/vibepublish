@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Task prepared — owner-authorized MAX live completion, 2026-09-05
+
+- Added docs/handoffs/max-web-live-completion-20260905.md for continuing PR #2
+  through real MAX implementation, live debugging and same-driver GitHub replay.
+- Recorded the owner's explicit scope: all social-operation scenarios in
+  «Тестовая группа»; feed/queue reads and task-owned scheduled probes only in
+  «Ух ты, Калининград!» and «Полюбить Калининград». Existing editorial content
+  remains read-only. Exact target binding, safe timing and cleanup are required.
+- Reuse the already authenticated MAX session; no login debugging now. Future
+  QR onboarding is documented separately, not implemented by this package.
+- Added L01–L16 acceptance cases, positive functional outcomes, all six target
+  permutations and mid-action reordering, DOM/media failures, protected replay
+  fixtures, no live MAX network/credentials in CI, and exact-SHA reproduction.
+- Updated the task route and MAX runbook so historical live prohibitions do not
+  contradict the new limited authorization. Prior offline evidence is retained
+  by pinned reference. No runtime code changed, no agent/live tests were launched.
+
 ### Added — MAX canonical bridge and local core integration, 2026-09-05
 
 - Verified the supplied 103-source core ZIP/bundle/patch and moved it to local
@@ -37,7 +54,6 @@
 - Extended the existing engage command schema; no new forward synonym tool.
 - Added personal primary/secondary destination profiles with purpose, audience,
   topics, exclusions, notes, explicit/agent selection policy and CAS revision.
-  Profiles do not change provider identities or grants. Added routing_revision.
 - Extended get_started sections with forwarding, destinations and all; retained
   the single bootstrap/skill method and resource/prompt compatibility design.
 - Added narrow forward and destination.profile catalog projections without
@@ -98,7 +114,7 @@
 - Standalone scaffold, feature documentation routing, existing Google AI /
   Supabase limiter code/migrations and EventsBot donor map.
 
-### Verification boundary
+### Verification boundary of the earlier design checkpoint
 
 - This work changes requirements and executable design/tests, not social runtime,
   provider adapters, database migrations or deployment.
