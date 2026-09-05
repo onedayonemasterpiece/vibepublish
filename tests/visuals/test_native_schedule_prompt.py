@@ -162,9 +162,11 @@ async def test_execute_auto_rechecks_authority_after_generation_before_selection
     first = await call(app, actor, 'publish', {'to': ['announcements'],
         'visual': {'kind': 'generate', 'prompt': PROMPT, 'candidates': 1},
         'delivery': scheduled(clock) if delivery_kind == 'at' else {'kind': 'now'}})
+    with store.connection() as db:
+        deadline = db.execute('SELECT deadline FROM visual_jobs WHERE operation_id=?', (first['operation_id'],)).fetchone()[0]
     def change():
         if mutation == 'expiry':
-            clock[0] += 3570 if delivery_kind == 'at' else 121
+            clock[0] = clock[0] + 3570 if delivery_kind == 'at' else deadline + 1
         elif mutation == 'revocation':
             store.revoke_binding(actor, binding)
         else:
@@ -300,3 +302,77 @@ async def test_explicit_native_visual_execute_defaults_to_now_once(native, kind,
     replay = await call(app, actor, 'publish', {**args, 'delivery': {'kind': 'now'}})
     assert replay['operation_id'] == first['operation_id']
     assert not await worker.run_once() and provider.effects == 1 and len(executor.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('delivery_kind', ['now', 'at'])
+async def test_visual_generation_window_exceeds_generic_command_and_never_refreshes(native, delivery_kind):
+    store, actor, app, worker, executor, provider, clock, *_ = native
+    args = {'to': ['announcements'], 'visual': {'kind': 'generate', 'prompt': PROMPT},
+            'delivery': scheduled(clock) if delivery_kind == 'at' else {'kind': 'now'},
+            'request_key': 'finite-visual-window'}
+    first = await call(app, actor, 'publish', args)
+    with store.connection() as db:
+        job = db.execute('SELECT created,deadline FROM visual_jobs').fetchone()
+        frozen_deadline = job['deadline']
+        assert frozen_deadline - job['created'] == 600
+        assert db.execute('SELECT deadline FROM operations WHERE id=?', (first['operation_id'],)).fetchone()[0] == frozen_deadline
+    # Replaying later does not allocate a fresh 600-second budget.
+    clock[0] += 30
+    assert (await call(app, actor, 'publish', args))['operation_id'] == first['operation_id']
+    def slow_completion():
+        clock[0] += 150  # Two native-shaped image calls can exceed the old 120s window.
+    executor.on_submit = slow_completion
+    assert await worker.run_once()
+    selected = store.receipt(actor, first['operation_id'])
+    assert selected['state'] == 'accepted' and selected['selected_sha256']
+    assert executor.calls[0].deadline == frozen_deadline and executor.calls[0].candidate_budget == 2
+    with store.connection() as db:
+        assert db.execute('SELECT deadline FROM visual_jobs').fetchone()[0] == frozen_deadline
+        # Provider dispatch gets its existing bounded window, not a new generation budget.
+        assert db.execute('SELECT deadline FROM operations WHERE id=?', (first['operation_id'],)).fetchone()[0] == clock[0]+120
+    assert await worker.run_once()
+    assert store.receipt(actor, first['operation_id'])['state'] == ('scheduled' if delivery_kind == 'at' else 'verified')
+    assert not await worker.run_once() and len(executor.calls) == 1 and provider.effects == 1
+    assert (await call(app, actor, 'publish', args))['operation_id'] == first['operation_id']
+    with store.connection() as db:
+        assert db.execute('SELECT deadline FROM visual_jobs').fetchone()[0] == frozen_deadline
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('delivery_kind', ['now', 'at'])
+async def test_generation_completing_beyond_frozen_window_cannot_publish(native, delivery_kind):
+    store, actor, app, worker, executor, provider, clock, *_ = native
+    args = {'to': ['announcements'], 'visual': {'kind': 'generate', 'prompt': PROMPT, 'candidates': 1},
+            'delivery': scheduled(clock) if delivery_kind == 'at' else {'kind': 'now'}, 'request_key': 'late-visual'}
+    first = await call(app, actor, 'publish', args)
+    with store.connection() as db:
+        deadline = db.execute('SELECT deadline FROM visual_jobs').fetchone()[0]
+    executor.on_submit = lambda: clock.__setitem__(0, deadline+1)
+    await worker.run_once()
+    done = store.receipt(actor, first['operation_id'])
+    assert done['state'] == 'blocked' and done['error']['code'] == 'command_expired'
+    assert (await call(app, actor, 'publish', args))['operation_id'] == first['operation_id']
+    assert not await worker.run_once() and len(executor.calls) == 1 and provider.effects == 0
+    with store.connection() as db:
+        assert db.execute('SELECT deadline FROM visual_jobs').fetchone()[0] == deadline
+        assert db.execute('SELECT count(*) FROM attempts').fetchone()[0] == 0
+        assert db.execute('SELECT count(*) FROM visual_candidates').fetchone()[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_native_due_time_expires_before_longer_generation_budget(native):
+    store, actor, app, worker, executor, provider, clock, *_ = native
+    first = await call(app, actor, 'publish', {'to': ['announcements'],
+        'visual': {'kind': 'generate', 'prompt': PROMPT, 'candidates': 1},
+        'delivery': {'kind': 'at', 'at': timestamp(clock[0]+200)}})
+    with store.connection() as db:
+        deadline = db.execute('SELECT deadline FROM visual_jobs').fetchone()[0]
+    executor.on_submit = lambda: clock.__setitem__(0, clock[0]+150)
+    await worker.run_once()
+    assert clock[0] < deadline
+    done = store.receipt(actor, first['operation_id'])
+    assert done['state'] == 'blocked' and done['error']['code'] == 'native_lead_time'
+    assert provider.effects == 0 and len(executor.calls) == 1
+    with store.connection() as db:
+        assert db.execute('SELECT count(*) FROM attempts').fetchone()[0] == 0

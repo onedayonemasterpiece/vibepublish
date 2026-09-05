@@ -17,6 +17,7 @@ from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, pars
 from .visual_artifacts import verified_artifact
 
 REQUESTED_ROUTE = 'gpt-5.6-luna'
+VISUAL_EXECUTION_SECONDS = 600
 
 
 class VisualService:
@@ -84,14 +85,17 @@ class VisualService:
         frozen_plans = list(plans)
         identity = digest([actor.tenant_id, actor.principal_id, actor.epoch, actor.routing_revision,
                            publication, revision, spec, sources, frozen_plans, REQUESTED_ROUTE])
-        deadline = db.execute('SELECT deadline FROM operations WHERE id=?', (op,)).fetchone()[0]
+        created = self.store.clock()
+        deadline = created + VISUAL_EXECUTION_SECONDS
         db.execute('INSERT INTO visual_jobs(id,tenant_id,principal_id,actor_epoch,routing_revision,operation_id,parent_publication,parent_revision,spec,sources,plans,input_digest,created,deadline) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                    (job, actor.tenant_id, actor.principal_id, actor.epoch, actor.routing_revision, op, publication, revision,
-                    canonical(spec), canonical(sources), canonical(frozen_plans), identity, self.store.clock(), deadline))
+                    canonical(spec), canonical(sources), canonical(frozen_plans), identity, created, deadline))
         result = {'visual_job_id': job, 'visual_revision': 1}
         if not publication:
             result['resource_id'] = job
-        db.execute('UPDATE operations SET result=? WHERE id=?', (canonical(result), op))
+        # This runs only at admission, before any dispatch or replay. The job's
+        # immutable deadline is not renewed when the parent later resumes.
+        db.execute('UPDATE operations SET result=?,deadline=? WHERE id=?', (canonical(result), deadline, op))
         return job
 
     def job(self, db, actor, ident):
@@ -282,7 +286,7 @@ class VisualService:
             async def inspect(ref=None):
                 async with asyncio.timeout(15):
                     return await executor.inspect(ref) if ref else await executor.find(job['id'])
-            read_deadline = asyncio.get_running_loop().time()+max(.1, min(120, job['deadline']-self.store.clock()))
+            read_deadline = asyncio.get_running_loop().time()+max(.1, min(VISUAL_EXECUTION_SECONDS, job['deadline']-self.store.clock()))
             observation = await inspect(execution_ref)
             if observation is None:
                 raise OutcomeUnknown('imagegen_submit_outcome_unknown')
@@ -325,6 +329,8 @@ class VisualService:
                 self.store.fence(db, op['id'], worker.id, op['fence'])
                 row = self.job(db, actor, job['id'])
                 self._parent_authority(db, actor, row)
+                if self.store.clock() > job['deadline']:
+                    raise DomainError('command_expired')
                 if db.execute('SELECT 1 FROM visual_candidates WHERE job_id=?', (job['id'],)).fetchone():
                     raise DomainError('visual_candidates_already_committed', next_action='refresh')
                 candidates = []

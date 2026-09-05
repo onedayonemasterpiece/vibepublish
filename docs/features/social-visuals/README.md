@@ -224,3 +224,28 @@ does not grant provider capabilities: a deployment's VK postponed-only acceptanc
 wrapper still rejects immediate VK actions. No live calls or wrapper changes were
 made by this code lane. Live acceptance and timezone configuration are tracked by
 the integrator.
+
+### Bounded real generation window — 2026-09-05
+
+Owner-authorized correction: `Fixed`; implementation/offline verification
+`Not confirmed by user`; live acceptance `Not done` in this lane.
+New visual jobs receive a finite 600-second generation window at creation, rather
+than inheriting the generic 120-second provider-command window. The job deadline
+is frozen and is never refreshed by replay, recovery or another worker. Existing
+jobs keep their recorded deadlines. The operation shares that initial generation
+window; after successful selection its separate provider-dispatch window remains
+bounded by the existing 120-second rule. That dispatch window cannot revive an
+expired generation job or override a scheduled item's native lead-time guard.
+
+A native schedule must still be at least 60 seconds ahead at selection and provider
+dispatch, even if the generation window has not elapsed. Late generation results
+cannot publish. This is a finite task-processing budget, not a future-publication
+timer or permission to retry unknown generation/provider outcomes.
+
+
+Offline tests advance the native-shaped executor clock past 120 seconds but within
+600 for a default two-candidate request, confirm immutable deadlines across replay,
+reject late completion for immediate and scheduled parents, and independently
+reject an earlier native due-time window. The former hard-coded 121-second expiry
+test now derives the frozen job deadline. No original regression was disabled,
+and no live model/provider calls were used for this correction.
