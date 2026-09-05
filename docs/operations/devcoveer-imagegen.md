@@ -6,12 +6,12 @@
 > this new task. Actual host controls, permissions and budgets still apply.
 > This task update does not prove activation or resolve missing source.
 
-> **Current delivery is partial:** `adapters/codex_imagegen.py` received a
-> request-safety block and is absent from this branch. Its interface, integration
-> points and tests are delivered. The implementation description and process-test
-> evidence below refer to the complete archived module, not a runnable remote
-> executor. See [runtime status](social-runtime.md). Host activation stays disabled
-> until the required controls and working implementation are actually verified.
+> **New implementation checkpoint — 2026-09-05:** the owner-authorized
+> continuation develops a new `adapters/codex_imagegen.py` against the delivered
+> typed contracts and tests. No archived or previously blocked implementation
+> was fetched, copied or restored. Source delivery is no longer the local blocker;
+> installed image-only host controls and live acceptance remain unverified.
+> Integration/remote delivery are tracked separately in [runtime status](social-runtime.md).
 
 Status: bounded process implementation **Not confirmed by user**. Installed-host
 binding, image-only enforcement and real generation canary: **Not done**.
@@ -51,8 +51,10 @@ Duplicate files, foreign threads, traversal, symlinks, hardlinks, invalid/oversi
 images and excess/missing candidates are rejected. Original bytes are copied to
 flat per-job artifacts and verified again by the existing importer.
 
-The official inspected exec JSONL enum does not include a native image-generation
-item. Accordingly, the evidence is explicitly
+The delivered subprocess contract supplies no native image-generation item.
+This implementation accepts only thread/turn, reasoning and agent-message events;
+an unrecognized native event remains unknown, not silently accepted. Accordingly,
+the evidence is explicitly
 `structured_agent_report_not_native_image_tool_attestation`. This adapter does
 not invent such an event or treat the agent's model-name claim as telemetry.
 `requested_route`, actual process executor (`local-codex-exec`) and actual image
@@ -115,7 +117,7 @@ new task is distinct from the runtime generator's restricted tool permissions.
 
 ## Reproducible offline verification
 
-`python -m pytest tests/visuals/test_codex_imagegen.py -q`
+`python -m pytest tests/visuals/test_codex_imagegen.py tests/visuals/test_codex_imagegen_new.py -q`
 
 The executable double is `tests/visuals/scripted_codex_cli.py`, explicitly not a
 real Codex/model. Tests launch real processes, enforce exact source bytes/argv,
@@ -131,3 +133,49 @@ Primary contracts inspected (not installed-host verification):
   (observed blob `30df7f176a02c5283405a70fac2d5ef9acdcb66e`)
 - https://github.com/openai/codex/blob/218e8df92683fee5d052fdde3d8e502f951227d7/codex-rs/ext/image-generation/src/tool.rs
   (native saved_path support; not proof this revision is installed on DevCoveer)
+
+
+## Fresh CLI research and activation gap — 2026-09-05
+
+Read-only local inspection observed `codex-cli 0.153.0`, packaged in the VS Code
+extension `openai.chatgpt-26.5901.22334-linux-x64`. The local launcher currently
+uses its fallback because its older preferred extension path is absent. An
+operator configuration should bind the reviewed executable/version rather than
+assume this launcher always resolves the same package. `exec --help` exposes all
+transport flags used above. No generation, auth copying or host configuration
+write was performed in this lane. Model orchestration remains the exact requested
+`gpt-5.6-luna`; successful model access and actual image backend are not inferred
+from the [official Luna model description](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
+
+The [official CLI reference](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
+confirms JSONL, final structured response/file output, stdin, profile and model
+selection. Profiles in this version are separate `CODEX_HOME/<name>.config.toml`
+files. Sandbox read-only constrains model-generated commands; it is not an
+image-only tool allowlist.
+
+The [official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+documents `features.shell_tool`, `features.unified_exec`, app enablement,
+per-server MCP enablement/allowlists and `web_search="disabled"`. Its
+[configuration schema](https://developers.openai.com/codex/config-schema.json)
+also contains `features.image_generation`. Neither source establishes a global
+native-tool allowlist or a hard per-job image-call count. Code-mode namespace
+exclusions affect the nested surface, not all tool access.
+
+The installed `codex features list` reports image generation, shell, unified exec,
+apps, plugins, hooks, browser use and code-mode host enabled. It marks
+`apply_patch_freeform` **removed**, so disabling that legacy flag is not evidence
+that the patch tool is absent. These are passive observations of the current
+host, not an isolated profile attestation. The exact effective tool inventory,
+no-patch/no-other-tools enforcement and enforced image-call budget still need
+verified host controls. The adapter's process timeout, no-resubmit rule and
+artifact-count gate cannot enforce upstream billing. A fabricated SHA/boolean
+must not be used to unlock the real canary. If the installed CLI emits a new
+native image event, capture a sanitized schema through an authorized diagnostic
+and add a bounded regression before supporting it; do not weaken the event gate
+or substitute an API/OpenCode route.
+
+The initial 31 delivered Codex process tests passed against this new source.
+Ten additional offline tests cover nonfinite deadlines/boolean budgets,
+pre-dispatch invalid input, duplicate JSON, parent symlinks, fixture config
+rejection, intermediate commentary without retaining reasoning, and rejection of
+an unverified native-image event, and bounded unknown-failure diagnostics. These checks do not close live acceptance.
