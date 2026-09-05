@@ -92,3 +92,57 @@ async def test_real_port_scoped_live_queue_cursor_and_external_items(browser_dri
     state['items'][0]['text']='manual edit'
     with pytest.raises(DomainError,match='max cursor changed'):
         await a.read(replace(r,cursor=first.cursor),hooks())
+
+async def live_recovery_adapter(replay):
+    from adapters.max.bridge import RecoveryBinding
+    from adapters.native import saved_checkpoint
+    d,page,_=replay
+    d.timeout=10
+    text='Original probe 0123456789abcdef0123456789abcdef'
+    await page.context.grant_permissions(['clipboard-read','clipboard-write'],origin=d.origin)
+    await page.context.add_init_script('window.REPLAY_MESSAGES='+json.dumps([dict(id='original-item',text=text,outgoing=True)]))
+    d.lane.arm('attempt','digest')
+    r=request(account_type='max_web',secret_ref='VIBEPUBLISH_MAX_PROFILE',
+        native_target='-101',content_json=json.dumps({'text':text}),deadline=0)
+    binding=RecoveryBinding('attempt','digest','https://max.ru/c/-101/original-item',text.split()[-1])
+    adapter=MaxAdapter(d,connection_id='max',recovery=binding)
+    checkpoint=saved_checkpoint(r,driver=dict(target='-101',text=text,action='publish',kind='feed',
+        media=[],scheduled_at=None,existing_id=None,baseline=[],native_receipt=None))
+    return adapter,r,checkpoint
+
+async def test_real_driver_actual_port_positive_observation_not_resolution(replay):
+    adapter,r,checkpoint=await live_recovery_adapter(replay)
+    calls=[]
+    async def progress(*args): calls.append(args)
+    async def forbidden(*args): pytest.fail('read-only reconcile invoked persistence or effect hook')
+    h=Hooks(progress,forbidden,forbidden)
+    before=adapter.driver.lane.marker.read_bytes()
+    observed=await adapter.reconcile(r,checkpoint,h)
+    assert isinstance(observed,Observation) and observed.observed=='outcome_unknown'
+    assert observed.items[0].native_id=='original-item'
+    assert observed.items[0].native_target=='-101'
+    assert observed.items[0].url=='https://max.ru/c/-101/original-item'
+    assert 'core_historical_attribution_resolution' in observed.missing_checks
+    assert calls and adapter.driver.lane.marker.read_bytes()==before
+    # Positive provider observation must not accidentally grant write authority.
+    from adapters.port import Prepared,Capability
+    with pytest.raises(DomainError) as error:
+        await adapter.execute(Prepared(r,Capability('supported','forged')),h)
+    assert error.value.code=='max_recovery_only'
+    with pytest.raises(DomainError) as error:
+        await adapter.prepare(r,h)
+    assert error.value.code=='max_recovery_only'
+    assert (await adapter.inspect(r)).status!='supported'
+
+@pytest.mark.parametrize('fault',['attempt','plan','checkpoint','account','connection'])
+async def test_real_driver_actual_port_original_binding_is_required(replay,fault):
+    adapter,r,checkpoint=await live_recovery_adapter(replay)
+    before=adapter.driver.lane.marker.read_bytes()
+    if fault=='attempt': r=replace(r,attempt_id='other')
+    elif fault=='plan': r=replace(r,plan_digest='other')
+    elif fault=='checkpoint': checkpoint=checkpoint.replace('"digest"','"other"')
+    elif fault=='account': r=replace(r,account_type='fake')
+    else: r=replace(r,connection_id='other')
+    with pytest.raises((DomainError,OutcomeUnknown)):
+        await adapter.reconcile(r,checkpoint,hooks())
+    assert adapter.driver.lane.marker.read_bytes()==before

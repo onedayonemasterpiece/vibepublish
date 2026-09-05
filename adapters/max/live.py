@@ -200,7 +200,115 @@ class RealMaxDriver:
                      attempt_id, plan_digest, hooks, existing=None):
         await self.mutation_preflight(target, action, media=media, scheduled_at=scheduled_at)
 
+    async def _copy_native_reference(self, row, target):
+        """Observed message-menu recipe; never infer an ID from row position."""
+        import uuid
+        await self._scope(target)
+        await expect(row).to_have_count(1)
+        # A failed copy must not accidentally reuse a previous clipboard receipt.
+        sentinel = 'vibepublish-copy-' + uuid.uuid4().hex
+        await self.page.evaluate('(value)=>navigator.clipboard.writeText(value)', sentinel)
+        await row.click(button='right')
+        menu = self.page.get_by_role('menu')
+        await expect(menu).to_have_count(1)
+        await menu.get_by_role('menuitem', name='Скопировать ссылку на сообщение', exact=True).click()
+        value = await self.page.evaluate('navigator.clipboard.readText()')
+        match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', value)
+        if not match or match[1] != target:
+            raise MaxBlocked('native_reference_scope_mismatch')
+        await self._scope(target)
+        return value, match[2]
+
     async def reconcile(self, state):
-        # Historical unknown attempts without a causal receipt must remain
-        # quarantined. Do not promote a same-text row or reset the profile fuse.
-        raise MaxBlocked('causal_receipt_recipe_unverified')
+        """Observation only: no execute, checkpoint write, or fuse release.
+
+        Accept an exact reference supplied by the trusted recovery caller, not
+        text discovery as an attribution certificate. Core must independently
+        validate the historical chain and persist its resolution before release.
+        Missing historical receipt/evidence is NOT repaired by this method.
+        """
+        import json
+        import os
+        try:
+            target, text = state['target'], state['text']
+            reference, marker = state['recovery_reference'], state['task_marker']
+            attempt, plan = state['attempt_id'], state['plan_digest']
+            if (state['kind'] != 'feed' or state['action'] != 'publish'
+                    or state['media'] or state['scheduled_at'] is not None
+                    or not isinstance(text, str) or not text or len(text) > 4000
+                    or not isinstance(marker, str) or len(marker) < 16
+                    or text.count(marker) != 1 or not attempt or not plan):
+                raise ValueError()
+            match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', reference)
+            if not match or match[1] != target:
+                raise ValueError()
+        except (KeyError, TypeError, ValueError):
+            raise MaxBlocked('recovery_evidence_required') from None
+        self._enter(target)
+        try:
+            # Match, but NEVER clear, the original durable quarantine.
+            def check_fuse():
+                try:
+                    fd = os.open(self.lane.marker, os.O_RDONLY | os.O_NOFOLLOW)
+                    with os.fdopen(fd, 'rb') as stream:
+                        raw = stream.read(4097)
+                    if len(raw) > 4096:
+                        raise ValueError()
+                    saved = json.loads(raw)
+                except (OSError, ValueError):
+                    raise MaxBlocked('recovery_quarantine_required') from None
+                if saved != {'attempt_id': attempt, 'plan_digest': plan}:
+                    raise MaxBlocked('recovery_attempt_mismatch')
+            check_fuse()
+            observations = []
+            async with asyncio.timeout(self.timeout):
+                for _ in range(2):
+                    await self._account()
+                    await self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded')
+                    main = await self._scope(target)
+                    # Search ONLY the intended pane, not account-wide snippets.
+                    candidates = main.locator('.messageWrapper').filter(
+                        has=self.page.locator('.bubbleContent > .text').filter(has_text=marker))
+                    await expect(candidates).to_have_count(1, timeout=self.timeout*1000)
+                    row = candidates
+                    if 'messageWrapper--isOut' not in (await row.get_attribute('class') or '').split():
+                        raise MaxBlocked('recovery_not_outgoing')
+                    content = row.locator('.bubbleContent > .text')
+                    await expect(content).to_have_count(1)
+                    if await content.text_content() != text:
+                        raise MaxBlocked('recovery_content_changed')
+                    if await row.locator('.media, img, video, audio, .bubbleContent a').count():
+                        raise MaxBlocked('recovery_media_not_verified')
+                    value, native_id = await self._copy_native_reference(row, target)
+                    if value != reference:
+                        raise MaxBlocked('recovery_native_reference_mismatch')
+                    await self._account()
+                    await self._scope(target)
+                    # Re-acquire after the awaited account callback/re-render.
+                    await expect(candidates).to_have_count(1)
+                    if await candidates.locator('.bubbleContent > .text').text_content() != text:
+                        raise MaxBlocked('recovery_content_changed')
+                    if 'messageWrapper--isOut' not in (await candidates.get_attribute('class') or '').split():
+                        raise MaxBlocked('recovery_not_outgoing')
+                    if await candidates.locator('.media, img, video, audio, .bubbleContent a').count():
+                        raise MaxBlocked('recovery_media_not_verified')
+                    second, _ = await self._copy_native_reference(candidates, target)
+                    if second != reference:
+                        raise MaxBlocked('recovery_native_reference_mismatch')
+                    check_fuse()
+                    observations.append(dict(id=native_id, url=reference, target=target,
+                        namespace='feed', text=text, media=[], scheduled_at=None,
+                        observed_at=datetime.now(timezone.utc).isoformat()))
+                return dict(item=observations[-1], observations=observations,
+                    attempt_id=attempt, plan_digest=plan, observation_only=True,
+                    attribution='requires_core_historical_evidence_validation',
+                    candidate_scope='loaded_target_rows_only', history_complete=False,
+                    quarantine_released=False)
+        except MaxBlocked:
+            raise
+        except TimeoutError:
+            raise MaxBlocked('recovery_observation_deadline') from None
+        except Exception:
+            raise MaxBlocked('recovery_observation_unavailable') from None
+        finally:
+            self._busy = False

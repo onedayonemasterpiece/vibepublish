@@ -334,3 +334,107 @@ new positive live publishing/core replay. Detached remote checkout of the safety
 code ran the 25 observed navigation/receipt-guard tests successfully. Remote CI
 and final commit readback are recorded on PR #2 rather than equated with local
 archived-core integration.
+
+### 2026-09-05 recovery continuation — original object observed, NOT resolved
+
+Authoritative clarification: [5551577580](https://github.com/onedayonemasterpiece/vibepublish/pull/2#issuecomment-5551577580).
+
+1. **Original post remains**, unchanged in the test group. No edit/delete or new
+   Send. Zero channel writes.
+2. Original operation is still **outcome_unknown**. No direct SQL repair, new
+   connection/profile, worker replacement, deadline reset or fabricated success.
+3. The original attempt/digest quarantine remains **byte-identical**. Owned browser
+   sessions were closed normally without logout or credential copying.
+4. **Positive read-only recovery was exercised live**, first with RealMaxDriver,
+   then through MaxAdapter and the actual archived ProviderAdapter types/helpers.
+   Both paths reopen the bound target twice and re-copy/check the exact provider
+   reference, account, outgoing status, unique loaded task marker and full plain
+   content. No effect or core checkpoint hook is called. The original SQLite file
+   hash was unchanged before/after each run. This is not MCP terminal-resolution.
+
+The saved chain includes the original immutable core plan/digest/attempt, a
+128-bit task marker saved before dispatch (10:57:35.577 UTC), the separately read
+SQLite dispatched checkpoint (10:57:53.586), the core reading_back event after
+Send (10:57:55.120), the first native reference saved at 10:58:46.752, and its
+11:08:35 repeat. New independent driver reads completed at 12:08:55 and 12:09:08;
+a subsequent actual-port/bridge read also matched. The core terminal unknown
+occurred at 10:59:14; the saved core history, not the old controller's apparent
+waiting state, is authoritative. These observations are evidence for historical
+attribution validation, not a retroactive verified state. Loaded-row uniqueness
+is explicit: this implementation does **not** assert full history completeness.
+A network ACK is not required by the contract, and its absence is no longer
+presented as the mandatory missing evidence.
+
+#### MAX recovery API and core dependency
+
+`MaxAdapter(..., recovery=RecoveryBinding(attempt_id, plan_digest,
+native_reference, task_marker))` accepts an explicitly bound RealMaxDriver for
+**reconcile only**. Fixture/fake effects are unchanged. Live prepare/execute are
+rejected even for a forged supported capability. `reconcile(request, checkpoint,
+hooks)` validates the actual core checkpoint and immutable binding, then returns
+an actual `Observation('outcome_unknown', items=(RemoteItem(...),),
+missing_checks=('core_historical_attribution_resolution', 'history_completeness'))`.
+The item is positive existence evidence, not an adapter-issued resolution.
+No checkpoint/fuse release is performed by this live branch. The progress hook
+is core-owned; local probes used a nonpersistent collector and prohibited all
+persistence/effect hooks.
+
+Still missing: the authenticated, fenced **terminal-unknown observation/resolution
+entry point** requested in [core coordination 5551574373](https://github.com/onedayonemasterpiece/vibepublish/pull/1#issuecomment-5551574373),
+including append-only resolution persistence and attempt/digest-bound release
+acknowledgement. No such shipped endpoint/contract was supplied at core HEAD
+`f91f92cf6781c617719721a27f5b6c9015344c60`. MAX does not invent it. If attribution
+cannot be resolved, the separate exact-object compensating cleanup path is also
+missing. Until one exists, the original object is retained and live mutations
+remain blocked. This is a technical dependency, not missing user permission.
+
+Private recovery inputs/results/scripts: `artifacts/codex/max-recovery-20260905/`;
+original inputs remain in `artifacts/codex/max-publish-20260905/`. These contain
+exact private links and must not be pushed. New results are separate durable local
+artifacts, **not core observation/resolution events**.
+
+#### Replay scope
+
+Same RealMaxDriver code runs on the single stateful observed-UI replay. The
+native copy-link menu/clipboard recipe is transcribed from the original authorized
+object; no invented native-ID DOM attribute or MAX API endpoint. A clipboard
+sentinel prevents stale-link acceptance. Nonunique, old/wrong-ID, foreign,
+changed-content/media, wrong-account/target and changed-quarantine cases refuse.
+Both fresh opens and checks after awaited callbacks reacquire scoped locators.
+
+Six orders have positive exact-reference recovery tests. A real child-process
+SIGKILL between observations, followed by restart against the independent
+loopback provider state, proves repeated observation without Send, without a
+second object and without clearing the fuse. This is a **reader crash**, not a
+claim of post-submit writer crash recovery. The existing fixture writer crash/
+early TG/VK progress tests remain. New actual-core-port tests exercise the live
+reconcile code and immutable bindings, not only FixtureDriver. Full new-driver
+MCP/terminal-resolution and positive publish/edit/delete/media/scheduling replay
+remain unfinished; these counts must not be called L01–L16 completion.
+
+Verification invocation notes: do not overlap the standalone browser suite,
+archived-core browser suite and live browser on this constrained host. The first
+combined run had 132 passes and four failures (one first-event timeout and three
+bounded observation failures); all nine affected/adjacent cases passed unchanged
+when run serially. The new two-navigation/four-copy recovery tests now use the
+normal 10-second driver budget instead of inheriting the old single-navigation
+fixture's 2 seconds (one passing serial recovery took 1.85 seconds). A dedicated
+short-budget case still proves deadline refusal/quarantine retention. The core
+first-event deadline remains **5 seconds**, unchanged. Timeout diagnostics are
+sanitized; no retries or relaxed content/reference assertions were introduced.
+
+Reproduce this checkpoint (run browser suites serially):
+
+```sh
+PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright artifacts/max-venv/bin/python -m pytest tests/adapters/max tests/browser/max -q -ra
+python3 tests/adapters/max/assemble_core.py --archive artifacts/codex/max-core-integration-20260905/vibepublish-native-visual-20260905.zip --output artifacts/codex/max-recovery-20260905/fresh-core
+# From that NEW assembled directory, using the existing core virtualenv:
+PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright VIBEPUBLISH_MAX_CORE_REQUIRED=1 /home/dev/projects/vibepublish-max-web/artifacts/core-venv/bin/python -m pytest tests/adapters/max tests/browser/max --asyncio-mode=auto -q -ra
+```
+
+The assembly verifier checks all 103 original source hashes and cumulative patch
+hash against the retained 875577-byte ZIP. Only MAX-owned files are overlaid; the
+original port is still `4304a47116da01e267b0dd324b26e7fdae58a66c0bbd75617eb9cbb464015bf0`.
+No partial remote core, surrogate port, archived core payload push or alternate
+route around core protection was used. Final counts/SHA/completed CI and core
+coordination are recorded on PR #2.

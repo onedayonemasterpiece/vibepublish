@@ -28,7 +28,7 @@ jobs:
         run: |
           python tests/contracts/test_social_mcp_design.py
           python tests/contracts/test_forwarding_profiles_design.py
-      - name: MAX fixture safety and observed live-navigation Chromium replay
+      - name: MAX fixture safety and observed navigation/recovery Chromium replay
         run: |
           test -s tests/browser/max/observed/replay.html
           test -s tests/browser/max/observed/manifest.json

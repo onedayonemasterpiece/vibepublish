@@ -95,3 +95,56 @@ async def browser_driver(server, tmp_path):
                 yield driver, state, page
             finally:
                 await context.close()
+
+
+# The SAME observed UI replay is used by standalone and actual-port tests.
+from adapters.max.live import RealMaxDriver, Target
+from adapters.max.profile import MaxBlocked
+HTML=Path(__file__).with_name("observed").joinpath("replay.html").read_text()
+
+@pytest.fixture
+async def replay(tmp_path):
+    async with async_playwright() as pw:
+        browser=await pw.chromium.launch()
+        context=await browser.new_context(service_workers='block')
+        outbound=[]
+        events=[]
+        async def route(r):
+            if r.request.url=='http://127.0.0.1:18765/replay-event':
+                events.append(json.loads(r.request.post_data)); await r.fulfill(body='{}',content_type='application/json')
+            elif r.request.url.startswith('http://127.0.0.1:18765/'):
+                await r.fulfill(body=HTML,content_type='text/html')
+            else:
+                outbound.append(r.request.url); await r.abort()
+        await context.route('**/*',route)
+        page=await context.new_page()
+        account={'ok':True}
+        async def check(): return account['ok']
+        with ProfileLane(tmp_path/'profile') as lane:
+            d=RealMaxDriver(page,lane,origin='http://127.0.0.1:18765',account_check=check,
+                targets=tuple(Target(i,a,p) for i,a,p in [('-101','Test Group','test_group'),('-202','Channel A','scheduled_only'),('-303','Channel B','scheduled_only')]),timeout=2)
+            await page.goto(d.origin+'/-101')
+            yield d,page,account
+            assert await page.evaluate('provider.effects')==0
+            assert not outbound
+            assert not [e for e in events if e["kind"]=="effect"]
+        await browser.close()
+
+
+@pytest.fixture
+def recovery_server():
+    """Persist the original object/counters independently across reader crashes."""
+    state={'events':[], 'messages':[dict(id='new-item',text='Task-owned probe 0123456789abcdef0123456789abcdef',outgoing=True)]}
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self,*args): pass
+        def do_GET(self):
+            body=('<script>window.REPLAY_MESSAGES='+json.dumps(state['messages'])+'</script>'+HTML).encode()
+            self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers();self.wfile.write(body)
+        def do_POST(self):
+            if self.path!='/replay-event': self.send_error(404);return
+            state['events'].append(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
+            self.send_response(200);self.end_headers();self.wfile.write(b'{}')
+    httpd=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+    thread=threading.Thread(target=httpd.serve_forever,daemon=True);thread.start()
+    try: yield f'http://127.0.0.1:{httpd.server_port}',state
+    finally: httpd.shutdown();httpd.server_close();thread.join()

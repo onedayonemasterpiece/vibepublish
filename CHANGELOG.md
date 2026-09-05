@@ -13,6 +13,11 @@
   publishing/lifecycle acceptance (see the MAX runbook).
 
 ### Added
+- MAX exact-reference read-only recovery, explicitly bound to the original
+  attempt/digest through the actual core port. Repeated UI observation preserves
+  unknown state/quarantine; terminal resolution remains a core dependency.
+- Same-driver native-reference/order/drift replay and real reader-process
+  crash/restart coverage, with no Send or profile unlock.
 - MAX observed-UI read/navigation subset, explicit existing-session read-only factory,
   private structural export, and mandatory Chromium navigation/order-drift replay.
   Live reads cover the three clarified destinations; publication/queue identity/
