@@ -7,7 +7,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.2.0-design"
+VERSION = "1.5.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -97,7 +97,8 @@ DEFS = {
         ("destination", "provider", "state", "stage", "observed", "revision", "media_check", "retry_safe")),
     "candidate": obj({"id": ID, "asset_ref": ID, "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
         "preview_url": URL, "width": {"type": "integer", "minimum": 1},
-        "height": {"type": "integer", "minimum": 1}}, ("id", "asset_ref", "sha256", "width", "height")),
+        "height": {"type": "integer", "minimum": 1}, "format": enum("post_4_5", "story_9_16"),
+        "selection_token": string(512), "requires_review": {"type": "boolean"}}, ("id", "asset_ref", "sha256", "width", "height")),
     "error": obj({"code": string(80), "message": string(1000), "field": string(200)}, ("code", "message")),
 }
 # Editorial profiles are local per-principal metadata, never grants or provider edits.
@@ -145,6 +146,11 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
     "operation_complete": {"type": "boolean"}, "progress": ref("progress"),
     "items": array(ref("read_item"), 0, 50), "next_cursor": string(512), "worker_seen_at": DATE,
     "truncated": {"type": "boolean"},
+    "visual_job_id": ID, "visual_revision": REV, "selected_asset_ref": ID,
+    "selected_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+    "executor": obj({"requested_route": string(120), "actual_executor": {"type": ["string", "null"], "maxLength": 160},
+                     "actual_model": {"type": ["string", "null"], "maxLength": 160}, "fixture": {"type": "boolean"}},
+                    ("requested_route", "actual_executor", "actual_model", "fixture")),
     "next_action": NEXT, "retry_safe": {"type": "boolean"}, "receipt_ref": ID,
     "deliveries": array(ref("delivery_result"), 0, 100),
     "candidates": array(ref("candidate"), 0, 4), "destinations": array(ref("destination"), 0, 100),
@@ -193,8 +199,13 @@ change = {"oneOf": [
     arm("retry_failed", {"destinations": array(ALIAS, 1, 20)}, ("destinations",))]}
 change["oneOf"][1]["anyOf"] = [{"required": [p]} for p in ("content", "media", "renderings")]
 tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures.",
-    obj({"publication_id": ID, "expected_revision": REV, "change": change, "request_key": KEY},
-        ("publication_id", "expected_revision", "change")), ref("receipt"), "publication.manage")
+    obj({"publication_id": ID, "expected_revision": REV, "item_ref": ID, "change": change, "request_key": KEY},
+        ("change",)), ref("receipt"), "publication.manage")
+# Existing private publication CAS or one exact immutable observed native item.
+# An item ref is already a scoped snapshot CAS, not a mutable provider revision.
+TOOLS[-1]["inputSchema"]["oneOf"] = [
+    {"required": ["publication_id", "expected_revision"], "not": {"required": ["item_ref"]}},
+    {"required": ["item_ref"], "not": {"anyOf": [{"required": ["publication_id"]}, {"required": ["expected_revision"]}]}}]
 
 visual_cmd = {"oneOf": [ref("visual_spec"),
     arm("select", {"job_id": ID, "candidate_id": ID, "expected_revision": REV, "token": string(512)},
@@ -256,6 +267,67 @@ tool("destinations", "List allowed aliases, update personal purpose/notes/primar
         arm("rename_label", {"alias": ALIAS, "label": string(200), "expected_revision": REV},
             ("alias", "label", "expected_revision"))]}, "request_key": KEY}, ("command",)),
     ref("receipt"), "destinations")
+
+
+
+# Telegram palette extensions keep the canonical eight methods and closed grammar.
+DEFS["emoji_part"] = obj({"document_id": string(19, pattern=r"^[1-9][0-9]{0,18}$"),
+    "alt": string(128), "preview_sha256": string(64, pattern=r"^[a-f0-9]{64}$")},
+    ("document_id", "alt", "preview_sha256"))
+DEFS["emoji_alias"] = obj({"alias": ALIAS, "revision": REV, "catalog_ref": ID,
+    "catalog_revision": REV, "parts": array(ref("emoji_part"), 1, 16),
+    "cells": array({"type": "integer", "minimum": 1, "maximum": 200}, 1, 16),
+    "fallback": string(300)}, ("alias", "revision", "catalog_ref", "catalog_revision", "parts", "cells", "fallback"))
+DEFS["emoji_context"] = obj({"venue": string(128), "category": string(128)})
+DEFS["emoji_rule"] = obj({"name": ALIAS, "revision": REV, "match": string(100),
+    "alias": ALIAS, "enabled": {"type": "boolean"}, "context": ref("emoji_context")},
+    ("name", "revision", "match", "alias", "enabled", "context"))
+DEFS["emoji_entry"] = obj({**DEFS["emoji_part"]["properties"], "cell": REV,
+    "preview_ref": ID, "preview_kind": {"const": "static_thumbnail"}, "free": {"type": "boolean"}},
+    ("document_id", "alt", "preview_sha256", "cell", "preview_ref", "preview_kind", "free"))
+DEFS["emoji_sheet"] = obj({"first_cell": REV, "preview_ref": ID,
+    "preview_sha256": string(64, pattern=r"^[a-f0-9]{64}$")}, ("first_cell", "preview_ref", "preview_sha256"))
+DEFS["emoji_catalog"] = obj({"catalog_ref": ID, "revision": REV, "short_name": string(64),
+    "observed_at": DATE, "preview_kind": {"const": "static_thumbnail"},
+    "entries": array(ref("emoji_entry"), 0, 50), "sheets": array(ref("emoji_sheet"), 1, 2),
+    "selection_token": string(512), "total": {"type": "integer", "minimum": 1, "maximum": 200}},
+    ("catalog_ref", "revision", "short_name", "observed_at", "preview_kind", "entries", "sheets", "selection_token", "total"))
+_entity_base = {"offset": {"type": "integer", "minimum": 0}, "length": REV}
+DEFS["semantic_entity"] = {"oneOf": [
+    obj({"type": enum("bold", "italic", "code", "spoiler", "underline", "strikethrough", "url", "mention"), **_entity_base}, ("type", "offset", "length")),
+    obj({"type": {"const": "custom_emoji"}, **_entity_base, "document_id": string(19, pattern=r"^[1-9][0-9]{0,18}$")}, ("type", "offset", "length", "document_id")),
+    obj({"type": {"const": "text_link"}, **_entity_base, "url": string(4096)}, ("type", "offset", "length", "url")),
+    obj({"type": {"const": "pre"}, **_entity_base, "language": {**string(100), "minLength": 0}}, ("type", "offset", "length", "language"))]}
+DEFS["receipt"]["properties"].update({"emoji_catalog": ref("emoji_catalog"),
+    "emoji_alias": ref("emoji_alias"), "emoji_aliases": array(ref("emoji_alias"), 0, 100),
+    "emoji_rule": ref("emoji_rule"), "emoji_rules": array(ref("emoji_rule"), 0, 100), "content_previews": array(obj({"destination": ALIAS,
+        "provider": PROVIDER, "text": {**string(), "minLength": 0},
+        "entities": array(ref("semantic_entity"), 0, 1000)}, ("destination", "provider", "text", "entities")), 0, 100)})
+DEFS["read_item"]["properties"]["entities"] = array(ref("semantic_entity"), 0, 1000)
+for _tool in TOOLS:
+    _name = _tool["name"]
+    _props = _tool["inputSchema"]["properties"]
+    if _name == "vibepublish_get_started":
+        _props["section"]["enum"].append("emoji")
+    elif _name == "vibepublish_publish":
+        _props.update(emoji_fallback=enum("approved_text"), emoji_context=ref("emoji_context"))
+    elif _name == "vibepublish_publication_update":
+        for _arm in _props["change"]["oneOf"]:
+            if _arm["properties"]["kind"]["const"] == "edit":
+                _arm["properties"].update(emoji_fallback=enum("approved_text"), emoji_context=ref("emoji_context"))
+    elif _name == "vibepublish_read":
+        _props["query"]["oneOf"].extend([arm("emoji_catalog", {"catalog_ref": ID}, ("catalog_ref",)), arm("emoji_palette")])
+    elif _name == "vibepublish_destinations":
+        _props["command"]["oneOf"].extend([
+            arm("emoji_set_register", {"destination": ALIAS, "url": URL,
+                "expected_revision": {"type": "integer", "minimum": 0}}, ("destination", "url", "expected_revision")),
+            arm("emoji_alias_select", {"catalog_ref": ID, "catalog_revision": REV,
+                "selection_token": string(512), "cells": array({"type": "integer", "minimum": 1, "maximum": 200}, 1, 16),
+                "alias": ALIAS, "expected_revision": {"type": "integer", "minimum": 0}, "fallback": string(300)},
+                ("catalog_ref", "catalog_revision", "selection_token", "cells", "alias", "expected_revision", "fallback")),
+            arm("emoji_rule_put", {"name": ALIAS, "match": string(100), "alias": ALIAS,
+                "enabled": {"type": "boolean"}, "expected_revision": {"type": "integer", "minimum": 0}, "context": ref("emoji_context")},
+                ("name", "match", "alias", "enabled", "expected_revision"))])
 
 
 def schema_with_defs(node):
@@ -332,6 +404,9 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
         if item["required_scope"] not in effective:
             continue
         item.pop("required_scope")
+        if item["name"] == "vibepublish_publish" and "visual" not in scopes:
+            item["inputSchema"]["properties"].pop("visual", None)
+            item["inputSchema"]["anyOf"] = [v for v in item["inputSchema"]["anyOf"] if v.get("required") != ["visual"]]
         if item["name"] == "vibepublish_read" and not owner:
             variants = item["inputSchema"]["properties"]["query"]["oneOf"]
             item["inputSchema"]["properties"]["query"]["oneOf"] = [
@@ -343,7 +418,12 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
         if item["name"] == "vibepublish_destinations" and "destinations" not in scopes and not owner:
             variants = item["inputSchema"]["properties"]["command"]["oneOf"]
             item["inputSchema"]["properties"]["command"]["oneOf"] = [
-                v for v in variants if v["properties"]["kind"]["const"] in {"list", "profile_update"}]
+                v for v in variants if v["properties"]["kind"]["const"] in {"list", "profile_update", "emoji_set_register", "emoji_alias_select", "emoji_rule_put"}]
+        if "publish" not in scopes:
+            for _field in ("command", "query"):
+                _variants = item["inputSchema"].get("properties", {}).get(_field, {}).get("oneOf")
+                if _variants:
+                    item["inputSchema"]["properties"][_field]["oneOf"] = [v for v in _variants if not v["properties"]["kind"]["const"].startswith("emoji_")]
         result.append(item)
     return result
 
