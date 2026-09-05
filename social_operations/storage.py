@@ -264,6 +264,10 @@ class Store:
                           "stage": child["stage"], "observed": child["observed"], "revision": op["revision"],
                           "media_check": "not_applicable", "retry_safe": False}
                 result.update(json.loads(child["result"]))
+                # Legacy cancel receipts persisted an absent optional timestamp as
+                # null. Project it as absent without rewriting durable evidence.
+                if result.get("requested_at") is None:
+                    result.pop("requested_at", None)
                 deliveries.append(result)
             state = op["state"]
             next_action = ("review_outcome" if state == "outcome_unknown" else "approve" if state == "needs_approval"

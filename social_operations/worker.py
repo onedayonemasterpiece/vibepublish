@@ -250,8 +250,10 @@ class Worker:
             self.save_fact(db, plan['destination_id'], remote, actor.principal_id, op['publication_id'])
             result = {'item_ref': item['ref'], 'observed_at': remote.observed_at, 'media_check': remote.media_check}
             if remote.scheduled_at:
-                result.update(queue_ref=item['ref'], effective_at=remote.scheduled_at, requested_at=plan['scheduled_at'], scheduling_owner='provider',
+                result.update(queue_ref=item['ref'], effective_at=remote.scheduled_at, scheduling_owner='provider',
                               navigate_hint='Open the authorized channel native scheduled queue')
+                if plan['scheduled_at'] is not None:
+                    result['requested_at'] = plan['scheduled_at']
             if plan['source']:
                 result['forward_origin'] = {'source_ref': new_id('source'), 'provider': child['provider'], 'mode': 'native', 'origin_check': 'matched', 'original_url': remote.origin}
             state = 'scheduled' if observation.observed == 'provider_scheduled' else 'cancelled' if observation.observed == 'cancelled' else 'verified'
