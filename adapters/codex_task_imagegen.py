@@ -27,6 +27,7 @@ from social_operations.domain import DomainError, OutcomeUnknown, canonical
 MODEL = 'gpt-5.6-luna'
 VERSION = 'codex-cli 0.153.0'
 MAX_IMAGE = 20 * 1024 * 1024
+MAX_SKILL = 64 * 1024
 MAX_MESSAGE = 128 * 1024 * 1024
 
 
@@ -269,6 +270,28 @@ class CodexTaskImagegen:
             if (image.width, image.height) != (source.width, source.height):
                 raise DomainError('imagegen_source_integrity')
 
+    def _skill_context(self):
+        path = self.codex_home / 'skills' / '.system' / 'imagegen' / 'SKILL.md'
+        try:
+            data = _read(path, MAX_SKILL)
+            skill = data.decode('utf-8')
+        except (OSError, ValueError):
+            raise DomainError('codex_task_skill_unavailable', next_action='contact_owner') from None
+        metadata = {'path': str(path), 'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
+        instructions = ('The trusted installed imagegen SKILL.md is fully preloaded below. '
+            'It was read by the task executor, not supplied by the job caller.\n'
+            '<installed_imagegen_skill>\n' + skill + '\n</installed_imagegen_skill>\n'
+            'Task-specific execution context: the full skill above is already loaded. '
+            'Use built-in image_gen directly on the existing Codex quota. Do not read the '
+            'skill again or open supporting files. Attached localImage inputs are already '
+            'visible in the conversation; use those visible references for tune/compose. '
+            'No shell or filesystem commands are needed. Do not run shell reads or copies. '
+            'The executor imports and verifies native saved images after completion, so '
+            'leave outputs at their native generated_images paths. No CLI/API fallback, '
+            'external provider, placeholder or programmatic replacement is authorized. '
+            'Keep the existing sandbox unchanged. Follow the user brief and its quotations.')
+        return instructions, metadata
+
     async def submit(self, request: ImagegenRequest):
         self._validate(request)
         directory = self._directory(request.job_key)
@@ -278,6 +301,7 @@ class CodexTaskImagegen:
                 if old['input_digest'] != request.input_digest:
                     raise DomainError('imagegen_idempotency_conflict')
                 return request.job_key
+            developer_instructions, skill_snapshot = self._skill_context()
             work = directory / 'work'; _private(work)
             source_inputs = []
             for index, source in enumerate(request.sources):
@@ -288,6 +312,7 @@ class CodexTaskImagegen:
             record = {'job_key': request.job_key, 'input_digest': request.input_digest,
                 'candidate_budget': request.candidate_budget, 'state': 'unknown',
                 'budget_policy': 'prompt_and_accepted_output_not_hard_upstream_call_cap',
+                'skill_snapshot': skill_snapshot,
                 'deadline': min(request.deadline, time.time() + self.timeout),
                 'phase': 'thread_start_pending', 'thread_id': None, 'turn_id': None,
                 'task_model': None, 'actual_model': None, 'artifacts': []}
@@ -296,6 +321,7 @@ class CodexTaskImagegen:
                 started = await self.transport.request('thread/start', {
                     'cwd': str(work), 'approvalPolicy': 'never', 'sandbox': 'workspace-write',
                     'threadSource': 'appServer', 'model': MODEL,
+                    'developerInstructions': developer_instructions,
                     'config': {'forced_login_method': 'chatgpt', 'features.image_generation': True}})
                 record['thread_id'] = started['thread']['id']
                 if not isinstance(record['thread_id'], str) or not re.fullmatch(r'[a-f0-9-]{36}', record['thread_id']):

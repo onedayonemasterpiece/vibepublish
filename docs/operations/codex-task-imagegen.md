@@ -214,3 +214,29 @@ an actual execute-only ancestor, and inspection of root/ancestor/final-file open
 flags. All 26 focused tests and three subtests pass; compileall/diff checks pass.
 The exact systemd production read-only recheck belongs to the operator; this lane
 made no live calls or production writes for the fix.
+
+### Trusted skill preloading without shell commands
+
+Before a new native thread is dispatched, the executor reads only the fixed
+installed `CODEX_HOME/skills/.system/imagegen/SKILL.md` through the secure reader,
+with a 64 KiB bound and UTF-8 validation. The whole skill is injected using the
+installed 0.153.0 `thread/start.developerInstructions` field. The private job
+receipt stores `skill_snapshot` (fixed path, byte count and SHA-256), not another
+copy of the skill. Missing, oversized or symlinked skill files fail before any
+native request; existing dispatched jobs remain read-only recoverable and are
+not resubmitted if the installed skill later changes or disappears.
+
+The trusted context truthfully states that the full skill has already been
+loaded and attached `localImage` inputs are already visible in the conversation.
+The task should call built-in image_gen directly: no shell cat, supporting-file
+read, CLI/API fallback or filesystem copy is needed. The executor, not the model,
+imports native saved image bytes. Sandbox settings remain workspace-write;
+no legacy sandbox flag, AppArmor setting or systemd protection is changed.
+This avoids an unnecessary shell dependency but does not claim that model
+compliance or a future native generation has already been verified.
+
+Validation: 31 focused tests and three subtests passed, including fixed-path/full
+skill context, private hash, missing/oversized/symlink guards, unchanged sandbox,
+source input preservation and no replay when a skill disappears after dispatch.
+A local read-only preload smoke loaded the installed skill without a native
+request; no thread or image generation was started. Compileall/diff checks pass.

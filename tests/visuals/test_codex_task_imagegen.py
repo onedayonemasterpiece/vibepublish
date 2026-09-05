@@ -20,6 +20,7 @@ from social_operations.visual_artifacts import verified_artifact
 
 THREAD = '01a07234-66ed-77d3-b42d-9645fd167d18'
 TURN = '01a07234-7e26-79c1-ae63-4ea2e927786d'
+SKILL_FIXTURE = '# Installed imagegen fixture\nUse built-in image_gen for image requests.\n'
 
 
 def png():
@@ -31,6 +32,9 @@ def png():
 class NativeFixture:
     def __init__(self, home):
         self.home = home
+        skill = home / 'skills' / '.system' / 'imagegen' / 'SKILL.md'
+        skill.parent.mkdir(parents=True, exist_ok=True)
+        skill.write_text(SKILL_FIXTURE)
         self.calls = []
         self.status = 'completed'
         self.lose_start = False
@@ -261,6 +265,52 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('unknown', record['state'])
         self.assertEqual('CancelledError', record['last_observation_error']['class'])
         self.assertNotIn('PRIVATE_CANCELLATION_TEXT', json.dumps(record))
+
+    async def test_preloads_fixed_skill_into_developer_context_with_private_hash(self):
+        key = await self.adapter.submit(self.request)
+        params = next(p for m, p in self.native.calls if m == 'thread/start')
+        instructions = params['developerInstructions']
+        self.assertIn(SKILL_FIXTURE, instructions)
+        self.assertIn('already loaded', instructions)
+        self.assertIn('localImage inputs are already visible', instructions)
+        self.assertIn('No shell or filesystem commands are needed', instructions)
+        self.assertIn('No CLI/API fallback', instructions)
+        self.assertEqual('workspace-write', params['sandbox'])
+        self.assertNotIn('use_legacy_landlock', json.dumps(params))
+        record = self.adapter._load(self.adapter._directory(key))
+        snapshot = record['skill_snapshot']
+        self.assertEqual(hashlib.sha256(SKILL_FIXTURE.encode()).hexdigest(), snapshot['sha256'])
+        self.assertEqual(len(SKILL_FIXTURE.encode()), snapshot['size'])
+        self.assertEqual(str(self.home / 'skills/.system/imagegen/SKILL.md'), snapshot['path'])
+        self.assertNotIn(SKILL_FIXTURE, json.dumps(record))
+
+    async def test_missing_skill_blocks_before_any_native_dispatch(self):
+        (self.home / 'skills/.system/imagegen/SKILL.md').unlink()
+        with self.assertRaises(DomainError) as error:
+            await self.adapter.submit(self.request)
+        self.assertEqual('codex_task_skill_unavailable', error.exception.code)
+        self.assertEqual([], self.native.calls)
+
+    async def test_skill_symlink_is_not_trusted(self):
+        skill = self.home / 'skills/.system/imagegen/SKILL.md'
+        other = self.root / 'caller-skill'; other.write_text('caller content')
+        skill.unlink(); skill.symlink_to(other)
+        with self.assertRaises(DomainError): await self.adapter.submit(self.request)
+        self.assertEqual([], self.native.calls)
+
+    async def test_oversized_skill_blocks_before_any_native_dispatch(self):
+        from adapters.codex_task_imagegen import MAX_SKILL
+        (self.home / 'skills/.system/imagegen/SKILL.md').write_bytes(b'x' * (MAX_SKILL + 1))
+        with self.assertRaises(DomainError): await self.adapter.submit(self.request)
+        self.assertEqual([], self.native.calls)
+
+    async def test_existing_job_keeps_original_skill_identity_without_resubmit(self):
+        key = await self.adapter.submit(self.request)
+        (self.home / 'skills/.system/imagegen/SKILL.md').unlink()
+        self.assertEqual(key, await self.adapter.submit(self.request))
+        record = self.adapter._load(self.adapter._directory(key))
+        self.assertEqual(hashlib.sha256(SKILL_FIXTURE.encode()).hexdigest(), record['skill_snapshot']['sha256'])
+        self.assertEqual(1, sum(m == 'turn/start' for m, _ in self.native.calls))
 
     def test_environment_does_not_inherit_api_or_social_keys(self):
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'fixture', 'CODEX_API_KEY': 'fixture',
