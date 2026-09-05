@@ -230,3 +230,86 @@ This does not claim comprehensive certification of arbitrary future captures.
 
 Final documentation-only SHA and any later CI readback are recorded in PR #2;
 this code checkpoint remains distinct from those documentation updates.
+
+### 2026-09-05 publishing attempt — FAILED, quarantine retained
+
+Continuation of [owner clarification 5550746580](https://github.com/onedayonemasterpiece/vibepublish/pull/2#issuecomment-5550746580).
+This is **not** the requested first completed text lifecycle or L01–L16 acceptance.
+
+An experimental, locally overlaid RealMaxDriver writer submitted one marked text
+probe in the authorized test group through a genuine MCP ClientSession, original
+Application/worker and SQLite ledger. MCP acceptance took 0.176 seconds. An
+independent SQLite connection verified the exact dispatched attempt/checkpoint
+before the UI Send click. This proves dispatch ordering, **not successful native
+receipt attribution**.
+
+Implementation error: the writer allowed Send before its causal receipt recipe
+was implemented. Passive WebSocket recording captured no own-intent frames;
+retained browser HTTP requests contained no matching own send receipt either.
+The new marked outgoing row's provider-issued link was copied through its scoped
+UI menu and read back a second time with the same reference and text. This is
+positive item observation, but is not sufficient causal attribution. The worker
+therefore committed **outcome_unknown**, and the persistent profile quarantine
+was retained. No retry, ledger reset, fabricated receipt or manual mutation
+bypassing the quarantine was performed. The session was closed gracefully without
+logout or copying its credentials.
+
+**Remaining probes: one marked immediate text object in the test group; cleanup
+not performed. Zero new objects in either authorized channel.** Private exact
+reference, intent, original ledger, durable-before-effect evidence and prototype
+patch are retained under `artifacts/codex/max-publish-20260905/` (not in Git).
+Do not delete these recovery inputs or remove `.vibepublish-uncertain` to resume
+writes. Current core has no authorized terminal-unknown resolution path that can
+turn this incomplete receipt into verified attribution. Coordinate recovery with
+core rather than rewriting its ledger or borrowing another connection/profile.
+
+The unsafe experimental bridge/writer was preserved privately, not shipped. The
+existing fixture/fake guard remains unchanged. RealMaxDriver now explicitly
+rejects mutation *before* composer changes, callbacks or Send when the causal
+receipt recipe is unverified; arbitrary publishing flags cannot enable it.
+Read-only reconciliation does not clear an unknown attempt. Added same-driver
+browser regressions test these failures with independent zero-effect counters;
+they are **negative safety tests**, not positive publication or lifecycle replay.
+
+The first requested vertical remains FAILED: publish UNKNOWN; exact link/text
+read observed; core edit/delete NOT RUN. Media lifecycle, native scheduling,
+channel cleanup, native release, rich/video/forward, new-driver crash recovery
+and new-driver actual-core replay remain NOT DONE. The immediate write blocker
+is the unresolved attempt plus missing causal receipt recipe. Queue/native media
+identity and lifecycle selector recipes remain separate implementation gaps.
+
+Inputs used for this failed live run: complete archived core
+`870e2a4304c57ef5dd7152de63df1db6431a942b`; all 103 source hashes and patch hashes
+reverified by `tests/adapters/max/assemble_core.py`; port SHA unchanged
+`4304a47116da01e267b0dd324b26e7fdae58a66c0bbd75617eb9cbb464015bf0`.
+Fresh-read PR #1 was `76ad2c554fe5866ddd23f79154095d281e099154`; its partial runtime
+was not substituted for the complete archive. Compatibility with its newer
+optional entities field has not been tested in this checkpoint.
+
+Diagnostic reference: [Playwright WebSocket events](https://playwright.dev/python/docs/api/class-websocket)
+and [page WebSocket creation event](https://playwright.dev/python/docs/api/class-page#page-event-websocket).
+A listener attached after socket creation is not a retrospective receipt log;
+these docs do not establish the MAX transport or its receipt contract.
+
+Checkpoint verification commands (safety only; final counts/remote SHA/CI readback
+in PR #2):
+
+```sh
+PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright artifacts/max-venv/bin/python -m pytest tests/adapters/max tests/browser/max -q -ra
+python3 tests/adapters/max/assemble_core.py --archive artifacts/codex/max-core-integration-20260905/vibepublish-native-visual-20260905.zip --output artifacts/codex/max-publish-20260905/safety-tree
+# From the new safety-tree, using the existing core virtualenv:
+PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright VIBEPUBLISH_MAX_CORE_REQUIRED=1 /home/dev/projects/vibepublish-max-web/artifacts/core-venv/bin/python -m pytest tests/adapters/max tests/browser/max --asyncio-mode=auto -q -ra
+```
+
+Initial local test launches failed because the environment selected an absent
+browser cache, not because of selector behavior. The corrected commands select
+the already installed matching Playwright 1.58 Chromium build 1208 at
+`/opt/ms-playwright`; no profile or browser version was changed for these tests.
+The live experiment used the explicitly selected existing Chrome 151 binary
+(build 1234), separately from replay. Original fixture integration coverage is
+retained; it does not prove the failed live-driver lifecycle.
+
+The first assembled-tree invocation also omitted the documented
+`--asyncio-mode=auto` option: core pytest configuration does not enable MAX async
+tests automatically. That invalid invocation was interrupted; the corrected run
+uses the existing documented mode without changing core configuration.

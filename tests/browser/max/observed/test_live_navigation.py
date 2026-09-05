@@ -139,3 +139,28 @@ async def test_observed_title_whitespace_not_an_identity_change(replay):
     assert names[:3]==('Test Group','Channel A','Channel B')
     await d.open('-303')
     assert await page.evaluate('provider.target')=='-303'
+
+@pytest.mark.parametrize('action', ['publish', 'edit', 'delete', 'reschedule', 'cancel'])
+async def test_missing_causal_receipt_blocks_before_any_effect(replay, action):
+    d,page,_=replay
+    # A mutable ad-hoc connection flag must not enable an unfinished writer.
+    d.publishing_binding='example-connection'
+    await page.locator('[contenteditable]').fill('Pre-existing draft')
+    with pytest.raises(MaxBlocked, match='causal_receipt_recipe_unverified'):
+        await d.mutate(target='-101',text='Own marked probe',media=(),
+            scheduled_at=None,action=action,attempt_id='attempt',
+            plan_digest='plan',hooks=None)
+    assert await page.locator('[contenteditable]').inner_text()=='Pre-existing draft'
+    assert not d.lane.marker.exists()
+    assert await page.evaluate('provider.visits')==['-101']
+
+async def test_unknown_attempt_survives_read_only_reconcile(replay):
+    d,page,_=replay
+    d.lane.arm('unresolved-attempt','unresolved-plan')
+    before=d.lane.marker.read_bytes()
+    with pytest.raises(MaxBlocked, match='causal_receipt_recipe_unverified'):
+        await d.reconcile({'text':'Safe example','native_receipt':None})
+    assert d.lane.marker.read_bytes()==before
+    with pytest.raises(MaxBlocked, match='outcome_unknown'):
+        await d.mutation_preflight('-101','publish')
+    assert await page.evaluate('provider.visits')==['-101']

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- MAX rejects unfinished live mutations before touching the composer or dispatching;
+  missing causal receipts cannot be enabled by an ad-hoc publishing flag.
+  Preserves unknown-attempt quarantine during read-only reconciliation.
+  One experimental live text attempt remains unknown and uncleared; this is not
+  publishing/lifecycle acceptance (see the MAX runbook).
+
 ### Added
 - MAX observed-UI read/navigation subset, explicit existing-session read-only factory,
   private structural export, and mandatory Chromium navigation/order-drift replay.

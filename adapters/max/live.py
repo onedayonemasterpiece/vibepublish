@@ -184,3 +184,23 @@ class RealMaxDriver:
             raise MaxBlocked('discovery_unavailable') from None
         finally:
             self._busy = False
+
+    async def mutation_preflight(self, target, action, *, media=(), scheduled_at=None):
+        """No mutation capability until the causal receipt recipe is verified.
+
+        A matching outgoing row and copied native URL establish a readable item,
+        not its causal association with this attempt. Never discover a missing
+        receipt implementation AFTER clicking Send. There is intentionally no
+        runtime boolean/string that enables this unfinished path.
+        """
+        self.lane.assert_clear()
+        raise MaxBlocked('causal_receipt_recipe_unverified')
+
+    async def mutate(self, *, target, text, media, scheduled_at, action,
+                     attempt_id, plan_digest, hooks, existing=None):
+        await self.mutation_preflight(target, action, media=media, scheduled_at=scheduled_at)
+
+    async def reconcile(self, state):
+        # Historical unknown attempts without a causal receipt must remain
+        # quarantined. Do not promote a same-text row or reset the profile fuse.
+        raise MaxBlocked('causal_receipt_recipe_unverified')
