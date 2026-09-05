@@ -5,7 +5,7 @@
   "sanitization": [
     "All account/chat/item IDs invented",
     "All names/content/media replaced or omitted",
-    "No auth/storage/headers/URLs/avatars",
+    "No auth/storage/headers/private URLs/avatars; the native-link template has invented IDs and is clipboard text only",
     "CSS module hashes omitted; semantic class names retained",
     "Stateful provider functions independently authored, not MAX app code"
   ],

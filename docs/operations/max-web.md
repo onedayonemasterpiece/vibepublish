@@ -438,3 +438,12 @@ original port is still `4304a47116da01e267b0dd324b26e7fdae58a66c0bbd75617eb9cbb4
 No partial remote core, surrogate port, archived core payload push or alternate
 route around core protection was used. Final counts/SHA/completed CI and core
 coordination are recorded on PR #2.
+
+Final serial local archived-core run for the recovery code: **138 passed, zero
+skips** (296.69s). This preserves the previous 105 cases and adds 27 same-driver
+browser recovery cases plus six actual-port bridge cases. The 27 include positive
+six-order observation, exactness/binding/callback failures, deadline refusal,
+concurrent readers and a real reader-process crash/restart. They do not implement
+original-operation core resolution, compensation or the future writer lifecycle.
+The earlier standalone run passed 112 cases with two absent-core module skips;
+two subsequently added cases are included in the 138 and in final remote CI.
