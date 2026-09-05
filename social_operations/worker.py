@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -261,9 +262,57 @@ class Worker:
             if plan['source']:
                 result['forward_origin'] = {'source_ref': new_id('source'), 'provider': child['provider'], 'mode': 'native', 'origin_check': 'matched', 'original_url': remote.origin}
             state = 'scheduled' if observation.observed == 'provider_scheduled' else 'cancelled' if observation.observed == 'cancelled' else 'verified'
+            final_checkpoint = {'remote': asdict(remote)}
+            current_checkpoint = db.execute('SELECT checkpoint FROM attempts WHERE id=?', (child['id'],)).fetchone()[0]
+            evidence = self.vk_copy_evidence(child, plan, remote, current_checkpoint)
+            if evidence is not None:
+                final_checkpoint['provider_evidence'] = evidence
             db.execute('UPDATE attempts SET state=?,stage=\'finished\',observed=?,result=?,checkpoint=? WHERE id=?',
-                       (state, observation.observed, canonical(result), canonical({'remote': asdict(remote)}), child['id']))
+                       (state, observation.observed, canonical(result), canonical(final_checkpoint), child['id']))
             self.store.event(db, op['id'], 'finished', 'completed', 'Exact provider item observed: '+observation.observed, child['alias'])
+
+    @staticmethod
+    def vk_copy_evidence(child, plan, remote, checkpoint):
+        """Persist only validated scalar copy evidence, never adapter URLs/secrets."""
+        if plan['provider'] != 'vk':
+            return None
+        payload = json.loads(checkpoint)
+        if payload.get('transition') != 'vk_media_bound':
+            return None
+        try:
+            cp = payload['adapter']
+            if (cp['version'] != 1 or cp['attempt'] != child['id'] or cp['plan'] != child['plan_digest']
+                    or cp['target'] != plan['native_target'] or str(cp['id']) != remote.native_id):
+                raise ValueError()
+            rows, proofs, media = cp['media_bindings'], cp['photo_proofs'], cp['media']
+            count = len(plan['assets'])
+            if (not isinstance(rows, list) or not rows or len(rows) > count or count > 20
+                    or not isinstance(proofs, list) or len(proofs) != count
+                    or not isinstance(media, list) or len(media) != count or len(remote.provider_media) != count):
+                raise ValueError()
+            sanitized, seen = [], set()
+            for row in rows:
+                ordinal = row['ordinal']
+                if type(ordinal) is not int or not 0 <= ordinal < count or ordinal in seen:
+                    raise ValueError()
+                seen.add(ordinal)
+                old, new, sha = row['saved'], row['current'], row['provider_sha256']
+                proof = proofs[ordinal]
+                if (not isinstance(old, str) or not re.fullmatch(r'photo[1-9][0-9]*_[1-9][0-9]*', old)
+                        or not isinstance(new, str) or not re.fullmatch(r'photo' + re.escape(plan['native_target']) + r'_[1-9][0-9]*', new)
+                        or old != media[ordinal] or new != remote.provider_media[ordinal]
+                        or not isinstance(sha, str) or not re.fullmatch(r'[a-f0-9]{64}', sha)
+                        or proof['sha256'] != sha or proof['mime'] not in {'image/png', 'image/jpeg', 'image/webp'}
+                        or any(type(proof[k]) is not int or proof[k] <= 0 for k in ('size', 'width', 'height'))):
+                    raise ValueError()
+                sanitized.append({'ordinal': ordinal, 'saved': old, 'current': new,
+                                  'rendition': {k: proof[k] for k in ('sha256', 'size', 'mime', 'width', 'height')}})
+            if seen != {i for i in range(count) if media[i] != remote.provider_media[i]}:
+                raise ValueError()
+            return {'kind': 'vk_photo_copy', 'native_target': remote.native_target, 'native_id': remote.native_id,
+                    'attempt_id': child['id'], 'plan_digest': child['plan_digest'], 'mappings': sanitized}
+        except (KeyError, TypeError, ValueError):
+            raise OutcomeUnknown('vk_photo_evidence_invalid') from None
 
     def save_fact(self, db, destination, remote, actor=None, publication=None):
         db.execute('INSERT INTO facts VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(destination_id,native_id,namespace) DO UPDATE SET snapshot=excluded.snapshot,text=excluded.text,observed_at=excluded.observed_at',

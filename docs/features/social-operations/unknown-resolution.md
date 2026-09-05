@@ -47,3 +47,14 @@ authenticated owner epoch at admission and proof commit. Reauthentication after
 an epoch change does not authorize resolving an earlier-epoch uncertain effect.
 Regression: fresh authenticated owner after epoch bump is denied before reads or
 revision changes; original attempt and quarantine remain intact.
+
+## Final verified copy evidence
+
+When a VK adapter observes an exact user-photo → community-photo copy, final
+worker checkpoint persistence retains `remote` and a bounded `provider_evidence`
+record (`kind: vk_photo_copy`). Per-ordinal saved/current provider IDs and exact
+rendition SHA-256, byte size, MIME, width and height remain auditable after success.
+Attempt/plan/target/native-ID bindings and ordinal mappings are validated again.
+Arbitrary adapter keys and rendition URLs are not copied to this final proof.
+Non-VK final checkpoints remain unchanged. Three worker integration/scope tests
+cover successful persistence, malformed mapping rejection and non-VK isolation.
