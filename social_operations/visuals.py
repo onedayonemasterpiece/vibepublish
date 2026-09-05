@@ -32,27 +32,27 @@ class VisualService:
             spec['brief'] = spec.pop('prompt')
         return spec
 
-    def _native_queue_automatic(self, plans):
+    def _native_execute_authorized(self, plans):
         # This is authority for choosing an image, not a provider capability claim.
-        # Actual native-queue support is still checked before the provider effect.
+        # Actual destination/delivery support is still checked before the provider effect.
         return bool(plans) and all(
             p['action'] == 'publish' and p['mode'] == 'execute'
             and p['account_type'] != 'fake' and not p.get('admission_error')
-            and p['scheduled_at'] and parse_time(p['scheduled_at']) >= self.store.clock()+60
+            and (p['scheduled_at'] is None or parse_time(p['scheduled_at']) >= self.store.clock()+60)
             for p in plans)
 
     def _automatic_context(self, plans, fixture):
-        if self._native_queue_automatic(plans):
+        if self._native_execute_authorized(plans):
             return True
-        # Keep harmless fixture standalone/preview and scheduled-test semantics,
-        # but an automatic choice may never become an immediate execute send.
+        # Preserve existing fixture standalone/preview and scheduled-test semantics.
+        # Real execute authority comes from the frozen native plans above.
         return fixture and all(p['mode'] == 'preview' or p['scheduled_at'] for p in plans)
 
     def _spec(self, spec, plans):
         spec = self.normalize_spec(spec)
         spec.setdefault('preset', PRESET)
         spec.setdefault('candidates', 2)
-        spec.setdefault('selection', 'automatic' if self._native_queue_automatic(plans) else 'human')
+        spec.setdefault('selection', 'automatic' if self._native_execute_authorized(plans) else 'human')
         spec.setdefault('copy', {})
         surface = plans[0]['surface'] if plans else 'post'
         spec.setdefault('formats', ['story_9_16' if surface == 'story' else 'post_4_5'])
@@ -171,9 +171,11 @@ class VisualService:
             raise DomainError('visual_selection_token_invalid', next_action='refresh')
         self._parent_authority(db, actor, job)
         plans = json.loads(job['plans'])
+        if automatic and any(p['mode'] == 'execute' and p['scheduled_at'] is None for p in plans) and self.store.clock() > job['deadline']:
+            raise DomainError('command_expired')
         if automatic and not self._automatic_context(plans, bool(candidate['fixture'])):
             raise DomainError('visual_human_review_required', next_action='select_visual')
-        if automatic and candidate['requires_review'] and not self._native_queue_automatic(plans):
+        if automatic and candidate['requires_review'] and not self._native_execute_authorized(plans):
             raise DomainError('visual_human_review_required', next_action='select_visual')
         asset = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
                            (candidate['asset_ref'], actor.tenant_id, actor.principal_id)).fetchone()
@@ -341,7 +343,7 @@ class VisualService:
                     db.execute('INSERT INTO visual_asset_origins VALUES(?,?,?,?)', (asset_ref, job['id'], int(observation.fixture), 'final'))
                     sha = hashlib.sha256(final.data).hexdigest()
                     token, candidate_id = secrets.token_urlsafe(32), new_id('candidate')
-                    requires_review = not observation.fixture  # Quality is unverified even when native-queue selection is authorized.
+                    requires_review = not observation.fixture  # Quality is unverified even when explicit execute selection is authorized.
                     candidate_provenance = {**provenance, 'executor_artifact_sha256': manifest.sha256,
                                              'choice_binding': digest([job['input_digest'], candidate_id, sha, format, row['revision']]),
                                              'typography_evidence': 'explicit_copy_compositor_only' if spec['copy'] else 'prompt_text_unverified'}

@@ -119,16 +119,16 @@ async def test_future_native_queue_defaults_auto_with_sources_quotes_and_exact_o
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('context', ['immediate', 'preview', 'standalone', 'explicit_human'])
+@pytest.mark.parametrize('context', ['preview', 'standalone', 'explicit_human', 'explicit_human_now'])
 async def test_nonfixture_does_not_gain_other_automatic_authority(native, context):
     store, actor, app, worker, executor, provider, clock, *_ = native
-    spec = {'kind': 'generate', 'prompt': PROMPT, 'selection': 'human' if context == 'explicit_human' else 'automatic', 'candidates': 1}
+    spec = {'kind': 'generate', 'prompt': PROMPT, 'selection': 'human' if context.startswith('explicit_human') else 'automatic', 'candidates': 1}
     if context == 'standalone':
         first = await call(app, actor, 'visual', {'command': spec})
     else:
         first = await call(app, actor, 'publish', {'to': ['announcements'], 'visual': spec,
             'mode': 'preview' if context == 'preview' else 'execute',
-            'delivery': {'kind': 'now'} if context == 'immediate' else scheduled(clock)})
+            'delivery': {'kind': 'now'} if context == 'explicit_human_now' else scheduled(clock)})
     await worker.run_once()
     ready = store.receipt(actor, first['operation_id'])
     assert ready['state'] == 'needs_selection' and 'selected_asset_ref' not in ready
@@ -145,7 +145,7 @@ async def test_nonfixture_does_not_gain_other_automatic_authority(native, contex
 
 
 @pytest.mark.asyncio
-async def test_even_explicit_fixture_automatic_cannot_send_immediately(runtime):
+async def test_fixture_does_not_gain_native_execute_authority(runtime):
     store, actor, app, worker, executor, provider, *_ = runtime
     first = await call(app, actor, 'publish', {'to': ['announcements'],
         'visual': {'kind': 'generate', 'prompt': PROMPT, 'selection': 'automatic', 'candidates': 1}})
@@ -156,13 +156,15 @@ async def test_even_explicit_fixture_automatic_cannot_send_immediately(runtime):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mutation', ['expiry', 'routing', 'revision', 'revocation'])
-async def test_queue_auto_rechecks_authority_after_generation_before_selection(native, mutation):
+@pytest.mark.parametrize('delivery_kind', ['now', 'at'])
+async def test_execute_auto_rechecks_authority_after_generation_before_selection(native, mutation, delivery_kind):
     store, actor, app, worker, executor, provider, clock, binding, _ = native
     first = await call(app, actor, 'publish', {'to': ['announcements'],
-        'visual': {'kind': 'generate', 'prompt': PROMPT, 'candidates': 1}, 'delivery': scheduled(clock)})
+        'visual': {'kind': 'generate', 'prompt': PROMPT, 'candidates': 1},
+        'delivery': scheduled(clock) if delivery_kind == 'at' else {'kind': 'now'}})
     def change():
         if mutation == 'expiry':
-            clock[0] += 3570
+            clock[0] += 3570 if delivery_kind == 'at' else 121
         elif mutation == 'revocation':
             store.revoke_binding(actor, binding)
         else:
@@ -177,18 +179,19 @@ async def test_queue_auto_rechecks_authority_after_generation_before_selection(n
         op = db.execute('SELECT * FROM operations WHERE id=?', (first['operation_id'],)).fetchone()
         assert op['state'] == 'blocked'
         assert json.loads(op['error'])['error']['code'] == {
-            'expiry': 'native_lead_time', 'routing': 'routing_stale',
+            'expiry': 'native_lead_time' if delivery_kind == 'at' else 'command_expired', 'routing': 'routing_stale',
             'revision': 'visual_parent_revision_conflict', 'revocation': 'access_revoked'}[mutation]
         assert db.execute('SELECT count(*) FROM attempts').fetchone()[0] == 0
     assert provider.effects == 0 and len(executor.calls) == 1
 
 
 @pytest.mark.asyncio
-async def test_queue_unknown_generator_outcome_never_resubmits_or_publishes(native):
+@pytest.mark.parametrize('delivery_kind', ['now', 'at'])
+async def test_execute_unknown_generator_outcome_never_resubmits_or_publishes(native, delivery_kind):
     store, actor, app, worker, executor, provider, clock, *_ = native
     executor.unknown = True
     first = await call(app, actor, 'publish', {'to': ['announcements'],
-        'visual': {'kind': 'generate', 'prompt': PROMPT, 'candidates': 1}, 'delivery': scheduled(clock), 'request_key': 'unknown'})
+        'visual': {'kind': 'generate', 'prompt': PROMPT, 'candidates': 1}, 'delivery': scheduled(clock) if delivery_kind == 'at' else {'kind': 'now'}, 'request_key': 'unknown'})
     await worker.run_once()
     assert store.receipt(actor, first['operation_id'])['state'] == 'outcome_unknown'
     assert not await worker.run_once() and len(executor.calls) == 1 and provider.effects == 0
@@ -262,3 +265,38 @@ async def test_prompt_alias_validation_source_bounds_and_conflict_before_admissi
         missing.pop('source' if kind == 'tune' else 'sources')
         assert (await app.call(actor, 'vibepublish_visual', {'command': missing}))['error']['code'] == 'invalid_input'
     assert executor.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['generate', 'tune'])
+@pytest.mark.parametrize('explicit_now', [False, True])
+async def test_explicit_native_visual_execute_defaults_to_now_once(native, kind, explicit_now):
+    store, actor, app, worker, executor, provider, *_ = native
+    spec = {'kind': kind, 'prompt': PROMPT, 'candidates': 1}
+    if kind == 'tune':
+        source = import_image(store, actor, asset().data, 'image/png')
+        spec['source'] = media(source)
+    args = {'to': ['announcements'], 'visual': spec, 'mode': 'execute', 'request_key': 'now-once'}
+    if explicit_now:
+        args['delivery'] = {'kind': 'now'}
+    first = await call(app, actor, 'publish', args)
+    assert await worker.run_once()
+    selected = store.receipt(actor, first['operation_id'])
+    assert selected['state'] == 'accepted' and selected['selected_sha256']
+    assert provider.effects == 0 and len(executor.calls) == 1
+    with store.connection() as db:
+        spec_saved = json.loads(db.execute('SELECT spec FROM visual_jobs').fetchone()[0])
+        plan = json.loads(db.execute('SELECT plan FROM attempts').fetchone()[0])
+        assert spec_saved['selection'] == 'automatic'
+        assert plan['scheduled_at'] is None and plan['mode'] == 'execute'
+        assert plan['assets'][0]['ref'] == selected['selected_asset_ref']
+    assert await worker.run_once()
+    done = (await app.call(actor, 'vibepublish_status', {'ids': [first['operation_id']]}))['receipts'][0]
+    assert done['state'] == 'verified' and done['deliveries'][0]['observed'] == 'published'
+    assert provider.effects == 1 and len(provider.messages) == 1 and not provider.scheduled
+    sends = [r for name, r in provider.calls if name == 'SendMediaRequest']
+    assert len(sends) == 1 and sends[0].schedule_date is None
+    # Omitted time and explicit now are the same frozen intent, not a second send.
+    replay = await call(app, actor, 'publish', {**args, 'delivery': {'kind': 'now'}})
+    assert replay['operation_id'] == first['operation_id']
+    assert not await worker.run_once() and provider.effects == 1 and len(executor.calls) == 1

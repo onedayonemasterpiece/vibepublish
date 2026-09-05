@@ -50,21 +50,23 @@ The art layer carries atmosphere/background/illustration. When optional exact ed
 `4:5` and `9:16` are required output families. Text is reflowed for each family rather than cropped away. Source originals remain immutable. Resize/masks/metadata can use PIL; it is not the entire design system.
 
 If a draft contains baked-in text, do not blindly draw new text over old generated lettering. Separate or reconstruct the art layer and validate the complete composite. Editorial facts must come from explicit user inputs or confirmed source extraction, not unchecked OCR. Facts ambiguous in a source produce a review blocker. Automated checks can establish dimensions, overflow, font/layout and supplied text; they cannot universally prove absence of accidental lettering or artistic quality. Initial presets and uncertain candidates retain an honest quality-review flag.
-The owner's future-native-queue authorization below waives mandatory manual
+The owner's explicit execute-publication authorization below waives mandatory manual
 selection for that delivery context, not artistic quality or exact-typography
 verification.
 
 ## Candidate and approval semantics
 
 Each job freezes mode, prompt/legacy brief, sources, preset version and cost budget.
-Default 2 candidates, maximum 4. **Owner correction — 2026-09-05 (`Fixed`,
-implementation `Not confirmed by user`, live acceptance `Not done`):** an explicit inline visual request attached
-to an execute publication with a future native delivery time authorizes automatic
-selection of an eligible candidate into that native queue without mandatory human
-selection. This replaces the initial-preset mandatory-review gate only for that
-bounded context. Explicit `selection: human` remains honored. Immediate execute,
-preview and standalone requests do not gain that default or any new publication
-authority. Automatic selection must never trigger an immediate execute send.
+Default 2 candidates, maximum 4. **Latest owner correction — 2026-09-05
+(`Fixed`, implementation `Not confirmed by user`, live acceptance `Not done`):** an explicit
+inline visual request attached to an execute publication authorizes automatic
+selection of an eligible candidate without mandatory human selection. Omitted
+delivery means **now**; `delivery.kind: now` is equivalent. A supplied future
+`delivery.kind: at` means native scheduled publication, never a local timer or
+fallback send-now. This supersedes the earlier future-queue-only restriction.
+Explicit `selection: human` remains honored. Preview and standalone requests gain
+no automatic publication authority. Actual destination/provider capabilities and
+any separately imposed postponed-only acceptance boundary still apply.
 Selection cannot substitute a different asset after approval.
 
 For inline publishing, the selected final derivative becomes the **first** media item. Explicit `media` entries follow in their declared order. Visual source images are never published just because they were generation inputs. Story/media-count constraints are checked before any send. The preview enumerates exactly what will be attached.
@@ -93,7 +95,7 @@ model, API fallback or host activation is authorized by this input alias.
 For example, `visual: {"kind":"generate","prompt":"Афиша с надписью \"Кто я?\""}`
 needs no title/date/location extraction by the caller. Adding `sources` supplies
 references, not publication attachments. Attach that visual to an execute
-publication with a future `delivery.kind: at` for the bounded native-queue default;
+publication for immediate delivery, or add future `delivery.kind: at` for a native queue;
 set `selection: human` to request manual choice instead.
 
 ## Provenance and permissions
@@ -156,7 +158,7 @@ cannot be published via native connections; CLI rejects --native plus --fake-ima
 Real imagegen integration, verified originals of the two acceptance links above,
 baked-in lettering/art quality, owner review of the initial preset, multiple
 versioned brand presets and native-media canaries are not verified. Automatic
-selection follows the owner-authorized future-native-queue exception above;
+selection follows the owner-authorized explicit execute-publication exception above;
 other real initial-preset contexts remain manual. This policy change is not proof
 of artistic quality, exact prompt typography or live acceptance. Public asset ingress, policy-controlled training consent/withdrawal,
 retention/export deletion and real feedback-dataset consumption remain Not done.
@@ -184,16 +186,17 @@ changed by this implementation lane.
 
 `prompt` is normalized to `brief` before standalone/publication idempotency,
 including equal dual aliases; differing aliases fail before admission. Native
-future-queue defaults are derived only from frozen execute publication plans.
+execute defaults are derived only from frozen native publication plans; omitted time is immediate.
 All initial real candidates keep `requires_review=true` as an honest unverified
-quality indicator; owner-authorized future-queue selection may proceed despite
+quality indicator; owner-authorized execute selection may proceed despite
 that indicator. It does not certify artwork or lettering. Candidate provenance
 separates `prompt_text_unverified` from `explicit_copy_compositor_only`.
 
 The existing selection transaction still verifies authority, source/output hashes,
 format, schedule lead time, revision/token CAS, native fixture prohibition and
-single parent continuation. Immediate automatic execute is manual-gated even for
-fixtures. Existing explicit fixture standalone/preview selection remains harmless:
+single parent continuation. Automatic immediate publication cannot extend an
+expired command. Native account authority is checked separately from fixture
+behavior. Existing explicit fixture standalone/preview selection remains harmless:
 standalone creates no publication and preview still requires publication approval.
 Ordinary media without visual bypasses VisualService and never calls Imagegen.
 
@@ -202,3 +205,22 @@ generation references, prompt/copy compatibility, exact selected-first media,
 idempotency/CAS, explicit human preference, no authority elevation, expiry,
 revocation, routing/revision changes, unknown generation and fixture fencing.
 These simulated artifacts and provider updates are not live acceptance evidence.
+
+
+### Immediate execute correction — 2026-09-05
+
+The latest owner decision explicitly supersedes this document's former
+future-schedule-only automatic-selection restriction. An authorized native
+execute publication with explicit visual input may select and publish immediately
+when delivery is omitted or `now`. Future `at` remains a native queue request.
+The policy uses the same frozen parent plans, current rights checks, candidate
+hash/token/revision CAS and exact-once continuation. An automatically selected
+immediate result cannot renew an already expired original command deadline.
+
+Offline regressions now cover immediate generation and tuning, omitted-time versus
+explicit-now replay, immediate unknown outcomes and revocation/routing/revision/
+expiry guards, alongside scheduled and human/preview/standalone cases. This change
+does not grant provider capabilities: a deployment's VK postponed-only acceptance
+wrapper still rejects immediate VK actions. No live calls or wrapper changes were
+made by this code lane. Live acceptance and timezone configuration are tracked by
+the integrator.

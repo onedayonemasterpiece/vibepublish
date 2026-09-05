@@ -185,7 +185,7 @@ tool("get_started", "Get the versioned skill, allowed aliases and current capabi
         ("version", "schema_version", "skill_sha256", "skill", "estimated_tokens", "server_time", "policy_epoch", "scheduling", "read_policy", "destinations", "capabilities")),
     "bootstrap", True)
 
-tool("publish", "Create one publication now or in native provider queues; return accepted progress without waiting for providers. No local scheduler. Preview does not send. An explicit visual with future native delivery defaults to eligible automatic selection; immediate visual execution does not.",
+tool("publish", "Create one publication now or in native provider queues; return accepted progress without waiting for providers. No local scheduler. Preview does not send. An explicit execute publication with a visual defaults to eligible automatic selection: omitted delivery means now; delivery at uses a native queue. Preview and explicit human selection remain gated.",
     obj({"to": array(ALIAS, 1, 20), "content": ref("content"), "media": array(ref("media"), 0, 20),
         "surface": enum("post", "story", "message", "album", "video", "short_video"),
         "delivery": ref("delivery"), "mode": enum("execute", "preview"),
