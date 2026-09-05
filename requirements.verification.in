@@ -1,0 +1,9 @@
+# Qualification-only dependencies. No credentials, model or social-network calls.
+-r requirements.in
+CairoSVG==2.8.2
+fonttools==4.63.0
+Telethon==1.44.0
+aiohttp==3.13.3
+playwright==1.57.0
+setuptools==82.0.1
+wheel==0.45.1

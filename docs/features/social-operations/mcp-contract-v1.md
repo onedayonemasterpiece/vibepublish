@@ -1,6 +1,11 @@
-# MCP contract v1.1 — native queues and incremental receipts
+# MCP contract v1.5 — native queues, incremental receipts and visual choice
 
-Version: `1.1.0-design`. Owner corrections: `Fixed`. Engineering design: `Not confirmed by user`. Runtime: `Not done`.
+> Current remote delivery: **partial, not a runnable release**. The implemented
+> behavior and historical test counts below describe the complete archived source.
+> Three production modules remain undelivered; current evidence and exact boundaries
+> are in [runtime status](../../operations/social-runtime.md).
+
+Version: `1.5.0-runtime` (base design `1.1.0-design`). Owner corrections: `Fixed`. Offline implementation: `Not confirmed by user`; retained/live gates: `Not done`.
 
 Canonical schemas: [`contracts/social_mcp_v1.py`](../../../contracts/social_mcp_v1.py). Tasks: [`contracts/task_corpus_v1.py`](../../../contracts/task_corpus_v1.py). Runtime semantics: [implementation design](implementation-design-v1.md). Skill: [vibepublish-social-skill.md](../../llm/vibepublish-social-skill.md).
 
@@ -8,7 +13,7 @@ Canonical schemas: [`contracts/social_mcp_v1.py`](../../../contracts/social_mcp_
 
 Eight methods remain: `get_started`, `publish`, `publication_update`, `visual`, `status`, `read`, `engage`, `destinations`, all prefixed `vibepublish_`. No new schedule/progress/history synonym tools. History and statistics are read queries; progress is an operation observation.
 
-The original six/eight/split comparison remains a structural design choice, not an empirical weak-model A/B result. Active partner publishers now receive **six** core tools: bootstrap, publish, publication_update, visual, status and read. Read derives from active verified publishing bindings; it is not separately enabled by a legacy social.read scope. Without an active binding a partner has no social reads. Engagement and destination configuration require their corresponding rights. The owner may use all relevant tools within actual provider access.
+The original six/eight/split comparison remains a structural design choice, not an empirical weak-model A/B result. The default full publishing policy projects **six** core tools: bootstrap, publish, publication_update, visual, status and read. Read derives from active verified publishing bindings; it is not separately enabled by a legacy social.read scope. Without an active binding a partner has no social reads. Narrower policy can remove visual and its inline branch. Engagement and destination configuration require their corresponding rights. The owner may use all relevant tools within actual provider access.
 
 `project_catalog(scopes, publish_destinations=..., owner=...)` consumes trusted server-auth context, not tool arguments. It removes owner-only dialog enumeration from partner read schemas. Exact item/destination authorization is still enforced in every handler; a hidden tool or schema-valid alias is not an access-control system.
 
@@ -128,8 +133,58 @@ python tests/contracts/test_social_mcp_design.py
 
 Result: **14 test methods passed**, **16 input/output schemas**, **105 golden calls**, **30 negative calls**. Added checks cover rejected backend/local-late fields; required progress receipts; mixed Telegram-complete/VK-uploading/MAX-waiting snapshots; scheduled-command completion distinct from publication; event cursor argument boundaries; inherited partner read projection and hidden owner dialog enumeration; history and exact-item statistics grammar.
 
-These tests validate schema/projection design and corpus coverage. Runtime-oracle labels for permissions, event timing, provider behavior and crash recovery are requirements, not simulated passes. No live weak model, database concurrency test, MCP-client notification test, provider/native-queue canary or MAX browser run occurred here. The input schemas and corpus can be rendered with their Python entrypoints; generated JSON is not another source of truth.
+These tests validate schema/projection design and corpus coverage. Runtime-oracle labels for permissions, event timing, provider behavior and crash recovery are requirements, not simulated passes. The historical design-only validation did not execute runtime tests. The current runtime runbook separately records actual database/process and MCP ClientSession tests. Live weak-model comparisons, provider/native-queue canaries and MAX browser runs remain unverified. The input schemas and corpus can be rendered with their Python entrypoints; generated JSON is not another source of truth.
 
 Required integration tests additionally prove: prompt acceptance during a stalled provider; first-child events while others run; no progress-token use after response; operation replay after disconnect; full queue reads of other editors' posts inside the allowed channel; denial outside it including cache; and provider execution after all VibePublish processes are stopped. Real weak-agent comparison remains required before releasing the server; no model accuracy percentage is claimed.
 
 Official progress semantics checked: https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress . Provider-native queue reference: https://core.telegram.org/api/scheduled-messages .
+
+## Runtime extension 1.3: existing native items
+
+`publication_update` selects exactly one identity: `publication_id` with
+`expected_revision`, or `item_ref` from an authorized provider read. The read ref
+binds native target, namespace, content/media fingerprint and principal epoch.
+It is the CAS for an externally created item. No synthetic provider revision is
+required and no other author's private publication is exposed. HTTP equivalent:
+POST `/v1/items/{item_ref}/commands`; the canonical tool count remains eight.
+
+
+## Runtime extension 1.4: shared visual jobs and private assets
+
+The eight names are unchanged. Standalone visual generate/tune/compose and inline
+publish.visual enter one VisualService. Admission freezes parent plans, budget,
+sources, policy/routing revision and requested route. No parent provider attempt
+exists until an eligible candidate is selected. Job IDs work in status as well as
+operation IDs. Receipts include visual_job_id, visual_revision, candidates with
+format/selection_token/requires_review, separate requested/actual executor data,
+and selected_asset_ref/selected_sha256 after selection.
+
+Select is a job-revision/candidate-token CAS. It resumes the original operation
+once with a new immutable publication revision and selected media first. Preview
+mode is preserved. Changed rights, editorial revision, routing or native schedule
+window blocks continuation. Other candidates, sources and private operations are
+not exposed across principals. Feedback is append-only and not shared training.
+
+Authorized GET /v1/assets/{id} and MCP resource template
+vibepublish://assets/{asset_id} return verified private bytes; no-store and current
+scope/origin checks apply. These are resources, not extra mutation tools. Direct
+inline visual arguments are denied when visual scope is absent, not merely hidden
+from list_tools. The initial real-preset automatic-choice and live executor gates
+are explicit in the canonical visuals document.
+
+
+## 1.5 runtime delta: Telegram palettes and semantic entities
+
+Three new closed `destinations.command` alternatives: `emoji_set_register`,
+`emoji_alias_select`, `emoji_rule_put`. Two `read.query` alternatives:
+`emoji_catalog` and `emoji_palette`. `get_started.section` accepts `emoji`.
+All are removed from scoped catalogs without publishing permission. Eight tools
+remain eight. The [emoji workflow](telegram-custom-emoji-v1.md) contains the
+implemented flow, bounds and explicit live/SDK/animation gates.
+
+Publish/edit may carry `emoji_context` and `emoji_fallback: approved_text`.
+No raw native entities are accepted from callers. Read/preview receipts expose
+closed semantic entity records including decimal-string custom document IDs.
+Read-only content evidence is not a provider invocation API. Render-only missing
+fallback gates can block an execute child independently, while the original
+all-target preflight rule remains for rights, CAS, deadlines and unsafe effects.

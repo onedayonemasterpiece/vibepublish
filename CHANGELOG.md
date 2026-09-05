@@ -2,6 +2,106 @@
 
 ## [Unreleased]
 
+### Owner correction: full Codex rollout includes real Imagegen — 2026-09-05
+
+- Replaced the rejected Telegram/VK-only handoff with a single-link task for local
+  Codex on DevCoveer: implementation, real generate/tune/compose, visible candidates,
+  selection, compositor, image/emoji publication/readback and persistent deployment.
+- Updated active continuation, docs routing and the imagegen runbook so historical
+  ChatGPT-stage no-generation/no-deployment limits do not silently shrink the new
+  owner-authorized task. Actual platform/access/budget controls remain required.
+- Preserved the existing core, tests and separate MAX PR #2. This is documentation
+  only: no missing source payload, model call, deployment or new test pass claimed.
+
+### Restore Telegram rich text and VK source — 2026-09-05
+
+- Commit `ae73b259` delivers both exact archived modules through normal GitHub
+  writes; 132 of 133 archive paths are present. Only the Codex executor is absent
+  after a new request-safety response; no alternate upload was attempted.
+- Real core/Telethon gate now passes all 14 requests. Diagnostic execution:
+  296 tests and 199 subtests pass, but one Codex import error remains (exit 1).
+  Strict full CI stays mandatory; no runtime or test behavior was weakened.
+- Updated current status, routing and continuation. Main/MAX and live operations
+  were not changed; actual DevCoveer image-only activation remains unverified.
+
+### Recover delivered commits and accepted documentation — 2026-09-05
+
+- Corrected the prior response's false "no new commits" claim: five source
+  commits through `18152e5d` added 30 unchanged archive files. Their source/tests
+  tree was independently verified from the real CI artifact.
+- Read back and attached existing accepted tree `1f36d725` as `76ad2c55`, restoring
+  ten documentation changes. No denied source payload was uploaded through it.
+- Preserved the remaining historical handoffs and full visual feature description;
+  updated current runtime status and continuation rather than creating another plan.
+- Re-ran 69 independent tests + 199 subtests in an empty hash-installed venv.
+  Full collection still has ten errors; the core SDK gate still fails. Only VK,
+  rich-text and Codex executor modules remain absent. No green full-runtime claim.
+- No runtime byte changes, weakened tests, MAX changes, model/provider calls,
+  alternate-route blocked writes, merge or deployment.
+
+### Actual core source delivery and current access boundary — 2026-09-05
+
+- Read the existing access retrospectives and corrected an overbroad permanent
+  write-ban assumption. Standard authorized GitHub source writes succeeded.
+- Saved 26 original source/configuration paths in commits `938f303d` and
+  `348233a0`; independently matched the complete accepted partial tree hash.
+- Later VK adapter and rich-text source requests received explicit request-safety
+  evaluation blocks. Their payloads and 46 other pending paths are not delivered;
+  this partial checkout is not a runnable or deployable full application.
+- Preserved the mandatory full-runtime CI instead of claiming seed-only green
+  checks prove delivery. Updated canonical status and concise delivery proof rule.
+- No blocked payload retry via another route, agent delegation, MAX change,
+  provider/model call, merge or deployment.
+
+### Locked environment and real core SDK regression — 2026-09-05
+
+- Pinned the independently qualified 70-package graph for Linux Python 3.12/3.13;
+  normal hosted CI installs the committed lock. Added six input/include regression
+  tests. Qualification CI 33953694373 succeeded on both versions.
+- Full LOCAL core passed 327 tests + 199 subtests in a clean hashed-wheel environment.
+  Added 19 real SDK/core tests; fixed the old >8-byte SDK gate (valid config is 8).
+- Direct runtime pins unchanged; explicitly qualified transitive SVG updates:
+  cssselect2 0.10.1 and webencodings 0.6.1, plus optional SDK/browser/build pins.
+- Full core/source and its mandatory runtime CI remain local. No protected upload,
+  MAX change, delegated task, real generation or deployment.
+
+### Dependency and native SDK qualification — 2026-09-05
+
+- Added an independent real Telethon 1.44 wire-roundtrip gate (14 request kinds,
+  exact custom emoji IDs and UTF-16 spans), without credentials or provider RPCs.
+- Added dependency graph/wheelhouse validation and 10 regression cases; extended
+  the same hosted CI to empty Python 3.12/3.13 environments and exact hashed,
+  offline reinstallation. Both jobs succeeded in run 33953694373; source artifact bytes were read back.
+- Corrected the local pip diagnosis: DNS failure is not package nonexistence.
+- No protected core payload, MAX implementation, agent or model call is included.
+
+### Telegram custom emoji workflow and continuation — 2026-09-05
+
+- Recorded required emoji-set links, private numbered previews, exact single or
+  ordered-chain selection, personal aliases/rules, frozen semantic entities and
+  pre-publication compilation; detailed workflow is Draft, runtime Not done.
+- Read actual EventsBot transformer/tests and composite-ID/medallion incidents;
+  reuse deterministic behavior, not hard-coded two-unit spans or delayed editing.
+- Corrected imagegen execution target to local Codex on DevCoveer, not the owner's
+  desktop/OpenCode candidate; generator invocation is not coding delegation.
+- Verified the original transfer archive again and recorded MAX PR #2's actual
+  fixture-only scope, missing-archive integration blocker and continuation.
+- Added one ChatGPT continuation handoff; no runtime code, emoji/live test,
+  generation, MAX task, deployment or previously blocked core write performed.
+
+### MAX handoff and imagegen plugin identification — 2026-09-05
+
+- Published the separate MAX Web task against the actual archived shared port,
+  with independent MAX commits and explicit offline/browser/live boundaries.
+- Verified official Codex imagegen sources and the separately identified
+  OpenCode candidate; do not infer the owner installation or requested route.
+- Added passive bounded installation inventory and 21 tests. No auth reads,
+  plugin imports, agent delegation, generation or deployment.
+- Extended the existing GitHub-hosted CI with inventory tests. This does not
+  deliver or validate the separately archived full runtime.
+- Documented actual GitHub write permissions versus the previous per-call
+  OpenAI safety-check block; the new MAX document write/readback succeeded.
+
 ### Development handoff — 2026-09-04, contract 1.2.0-design
 
 - Added canonical native Telegram/VK forwarding by exact post URL or authorized
