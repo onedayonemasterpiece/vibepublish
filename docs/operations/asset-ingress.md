@@ -24,3 +24,9 @@ for different content conflicts; keys remain principal-scoped and share the
 existing command key registry. Inserts and key admission commit atomically.
 Malformed requests return 422, conflicts 409, unauthorized tokens 401, missing
 scope 403, body limit 413, deadline 408. No URL fetching or upload tickets exist.
+
+Decode runs off the HTTP event loop, limited to two concurrent decodes per
+application process; busy uploads return429. This does not bound total concurrent
+receive buffers beyond the per-request body limit and upstream connection limits.
+On DevCoveer the dedicated VibePublish virtual host allows20MiB; existing hosts
+retain their limits. Uploads above1MiB have been read back through public HTTPS.

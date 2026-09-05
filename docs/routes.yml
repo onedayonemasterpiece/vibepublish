@@ -22,6 +22,7 @@ sections:
     requirements_governance: docs/operations/requirements-governance.md
     repository_workflow: docs/operations/repository-workflow.md
     social_runtime_checkpoint: docs/operations/social-runtime.md
+    asset_ingress: docs/operations/asset-ingress.md
     llm_limits_setup: docs/operations/llm-limits-setup.md
   llm:
     index: docs/llm/README.md

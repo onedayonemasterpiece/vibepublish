@@ -13,11 +13,14 @@ from dotenv import dotenv_values
 from telethon import TelegramClient, functions, utils
 from telethon.sessions import StringSession
 from adapters.wiring import native_adapters
-from social_operations.domain import DomainError
+from adapters.vk import VKAdapter
+from social_operations.domain import DomainError, parse_time
 from social_operations.storage import Store
 from social_operations.worker import Worker
 
 TG_REFERENCE = 'VIBEPUBLISH_ACCEPTANCE_TG'
+VK_REFERENCE = 'VIBEPUBLISH_ACCEPTANCE_VK'
+VK_TARGET = '-241261191'  # Exact groups.getById(lovekenig), owner-approved URL.
 TARGETS = {'lovekenig': -1002079710441, 'f4SHQsDVmjEyNTky': -5283030741}
 
 
@@ -57,10 +60,50 @@ def telegram_factory(creds, **kwargs):
     return ExactTargetClient(StringSession(creds['session']), creds['api_id'], creds['api_hash'], **kwargs)
 
 
-async def run(db: Path, env_file: Path, once=False):
+def vk_credentials(path: Path):
+    token = dotenv_values(path).get('VK_ACCESS_TOKEN4')
+    if not token:
+        raise DomainError('approved_vk_user_token_missing')
+    return {'roles': {role: {'token': token, 'kind': 'user'}
+                      for role in ('reader', 'editor', 'media')}}
+
+
+class PostponedOnlyVK(VKAdapter):
+    """Acceptance-only owner boundary, rechecked before provider execution."""
+    def _connection(self, request):
+        super()._connection(request)
+        if request.native_target != VK_TARGET:
+            raise DomainError('vk_acceptance_target_not_allowed')
+
+    def _mutation_allowed(self, request):
+        self._connection(request)
+        action = getattr(request, 'action', None)
+        if action is None:  # Native readback, not a mutation.
+            return
+        if action == 'cancel' and request.existing and request.existing.namespace == 'scheduled':
+            return
+        if action not in {'publish', 'edit', 'reschedule'} or not request.scheduled_at:
+            raise DomainError('vk_acceptance_postponed_only')
+        if parse_time(request.scheduled_at) < self.clock() + 86400:
+            raise DomainError('vk_acceptance_minimum_24h')
+        if request.existing and request.existing.namespace != 'scheduled':
+            raise DomainError('vk_acceptance_postponed_only')
+
+    async def _rights(self, request):
+        self._mutation_allowed(request)
+        return await super()._rights(request)
+
+
+async def run(db: Path, env_file: Path, once=False, vk_env_file: Path | None = None):
     store = Store(db)
     bundles = {TG_REFERENCE: json.dumps(credentials(env_file))}
+    if vk_env_file is not None:
+        bundles[VK_REFERENCE] = json.dumps(vk_credentials(vk_env_file))
     async with native_adapters(store, env=bundles, telegram_factory=telegram_factory) as wiring:
+        for key, adapter in list(wiring.items()):
+            if isinstance(adapter, VKAdapter):
+                wiring[key] = PostponedOnlyVK(adapter.transport, connection_id=key,
+                                             account_type=adapter.account_type, clock=store.clock)
         worker = Worker(store, wiring)
         while True:
             worked = await worker.run_once()
@@ -73,9 +116,10 @@ def main():
     p.add_argument('--db', required=True, type=Path)
     p.add_argument('--telegram-env-file', required=True, type=Path)
     p.add_argument('--once', action='store_true')
+    p.add_argument('--vk-env-file', type=Path)
     args = p.parse_args()
     try:
-        asyncio.run(run(args.db, args.telegram_env_file, args.once))
+        asyncio.run(run(args.db, args.telegram_env_file, args.once, args.vk_env_file))
     except Exception as exc:
         # Never include provider messages, dotenv content, session or credential data.
         print(json.dumps({'error_type': type(exc).__name__, 'code': exc.code if isinstance(exc, DomainError) else 'native_worker_failed'}))

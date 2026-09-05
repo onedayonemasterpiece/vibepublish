@@ -86,10 +86,12 @@ actual native CLI event-contract evidence are still missing. It stays disabled;
 real integrated generate/tune/compose remains unaccepted.
 
 Existing authorized VK user auth was checked read-only (user868977531).
-**Missing: owner-approved VK community URL**. Resolve ID automatically from URL;
-no VK writes or destination guessing before this input.
+Owner subsequently approved https://vk.ru/lovekenig, postponed only. Exact
+resolution: group241261191, admin_level3. Dedicated wrapper rejects other groups,
+immediate sends, forward/delete and schedules less than24h ahead; reads remain
+possible after expiry. See new live evidence below.
 
-Final local full pytest: **375 passed, 199 subtests passed**, 77.62s; compileall
+Prior local full pytest: **375 passed, 199 subtests passed**, 77.62s; compileall
 passed. No skips/exclusions; this is not full hosted CI. Initial missing-package,
 Chromium and missing-module failures were real earlier results, now superseded
 for this acceptance checkout by the final run. Edge renderer has16 passing tests.
@@ -99,6 +101,61 @@ public-mcp-final.json, channel-cancel.json, native-final-readback.json, all step
 receipts, real image/downloads, picker screenshots, and pre/post ingress configs.
 Some private receipts contain review tokens: do not publish artifacts wholesale.
 
-Remaining: VK destination/lifecycle; automatic image executor activation and full
+Remaining: VK media-identity reconciliation/lifecycle; automatic image executor activation and full
 visual workflow; durable shared renderer deployment; TLS renewal verification;
 live uncertain-effect restart acceptance. User confirmation remains required.
+
+
+## Prompt-first + original ingress continuation
+
+Owner explicitly permits skipping intermediate image selection when an explicit
+visual request accompanies execute-to-future-native-queue. Implemented prompt
+alias for all three modes, optional generate references, unchanged originals via
+media without visual, and safe automatic scheduled continuation. Preview,
+standalone and immediate requests cannot gain publication authority. Legacy
+brief/copy remains supported; prompt-only typography is unverified model output.
+
+Added authenticated binary `POST /v1/assets`,20MiB image-only ingress, dedicated
+idempotent operation namespace, current principal scopes/quota, and original plus
+sanitized derivative. JSON/MCP limits remain512KiB. Two concurrent decode tasks
+run off the event loop; the receive buffer is bounded per request, not globally
+by this decode semaphore. Exact VibePublish nginx host alone now allows20MiB.
+Pure-MCP chat attachment bridging and URL import are not implemented.
+
+Live public upload1455945bytes returned200; replay returned the same
+**asset_1f61f1e0a0234d728547ca1913cd3647**. Authenticated GET hash matched;
+original source hash matched; no-auth401; zero generator calls. Actual public
+MCP tool schema includes prompt for all modes and sources for generate.
+
+### VK live evidence, not a successful media acceptance
+
+Preview **op_3061d4b05f4345f1a31e4bb87a19faf8** reached needs_approval.
+Approve **op_1044c3589743450c97a096155ae04db5** created native postponed
+**-241261191_8**, but readback failed media_identity_or_order_mismatch:
+uploaded **photo868977531_457260392,photo868977531_457260393** became
+**photo-241261191_457239024,photo-241261191_457239025** in the provider queue.
+Exact readback had one matching test caption. Downloaded photos were visually
+verified blue TEST01 then orange TEST02. This is visual correspondence, not
+verified provider-ID mapping. Original uploaded photo lookup returned API200
+access error, so correspondence was not promoted to an automatic binding.
+
+No publication resubmission or history rewrite. The independently identified
+test8 was cancelled once via an explicitly guarded native cleanup (not the MCP
+lifecycle) and absence in postponed queue confirmed. Original app operation stays
+outcome_unknown; edit/reschedule lifecycle for this image post is not accepted.
+Do not retry it or silently weaken media checks.
+
+Final integrated local suite: **417 passed,199 subtests**, two dependency
+TestClient deprecation warnings,74.66s. Compileall passed; edge21 tests passed.
+This is not a hosted full-CI claim. Evidence:
+`artifacts/acceptance/prompt-postponed/` (private/ignored), including
+http-original-upload.json, live-contract.json, final-pytest.xml, native8 readback,
+media downloads and vk-test8-cleanup.json.
+
+Automatic built-in generation remains disabled: exact installed CLI0.153.0
+research did not establish native image-only allowlisting or pre-dispatch hard
+upstream call budgets. Required controls are in
+[the executor activation contract](devcoveer-imagegen.md#activation-is-deliberately-not-claimed).
+This is a concrete integration blocker, not a reason to claim prompt support or
+scripted tests prove real generate/tune/compose acceptance. Original upload and
+native original-media publishing do not require that executor.

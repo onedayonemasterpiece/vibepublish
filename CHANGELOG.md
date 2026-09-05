@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Prompt-first postponed visuals and original uploads — 2026-09-05
+
+- Add prompt-only generate/tune/compose inputs with optional references and
+  backward-compatible brief/copy; permit automatic selection only for authorized
+  future native queue execution, without elevating preview/standalone/immediate.
+- Add authenticated idempotent binary original upload with private sanitized
+  assets, no AI, route-specific20MiB limit and bounded background decoding.
+- Wire owner-approved VK lovekenig postponed-only; record actual copied-photo-ID
+  readback blocker and verified one-off test cleanup without resubmission.
+- Record417 passing local tests and199 subtests, actual HTTPS upload/schema
+  readback, and unresolved automatic executor/attachment-bridge acceptance.
+
 ### Isolated DevCoveer implementation and live checks — 2026-09-05
 
 - Add dedicated exact-host server and approved-session Telegram worker launchers;

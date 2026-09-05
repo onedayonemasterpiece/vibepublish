@@ -188,11 +188,18 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'))
                 return JSONResponse(exc.output(), status_code=422)
         return run
 
+    upload_slots = asyncio.Semaphore(2)
+
     async def upload_endpoint(request):
         try:
-            result = upload_image(service, request.scope['vibepublish.actor'],
-                                  await request.body(), request.headers.get('content-type', ''),
-                                  request.headers.get('idempotency-key'))
+            if upload_slots.locked():
+                return JSONResponse(DomainError('asset_ingress_busy').output(), status_code=429)
+            async with upload_slots:
+                # Bound parallel decode memory and keep MCP/status responsive.
+                from starlette.concurrency import run_in_threadpool
+                result = await run_in_threadpool(upload_image, service, request.scope['vibepublish.actor'],
+                                                 await request.body(), request.headers.get('content-type', ''),
+                                                 request.headers.get('idempotency-key'))
             return JSONResponse(result, headers={'Cache-Control': 'no-store'})
         except DomainError as exc:
             status = 409 if exc.code == 'idempotency_conflict' else 403 if exc.code in {'access_denied', 'access_revoked'} else 422

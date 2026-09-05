@@ -179,3 +179,21 @@ Ten additional offline tests cover nonfinite deadlines/boolean budgets,
 pre-dispatch invalid input, duplicate JSON, parent symlinks, fixture config
 rejection, intermediate commentary without retaining reasoning, and rejection of
 an unverified native-image event, and bounded unknown-failure diagnostics. These checks do not close live acceptance.
+
+
+## Prompt-first continuation and exact host research
+
+Prompt-only tasks now permit lettering explicitly requested in the prompt; no
+facts or extra copy may be invented. Legacy structured-copy jobs request an
+art-only layer upstream and retain deterministic text rendering separately.
+
+Installed Codex 0.153.0 app-server schema has imageGeneration completed events,
+but this does not establish `codex exec --json` equivalence. App-server dynamic
+item/tool/call handles client-defined tools, not built-in image interception.
+Official hooks coverage excludes hosted paths; no version-pinned pre-dispatch
+image gate was established. A prompt budget or abort after an event is not a hard
+upstream budget. The existing documented activation requirements therefore remain
+unmet; no attestation flag was fabricated and no API fallback was enabled.
+See official [app-server](https://learn.chatgpt.com/docs/app-server#dynamic-tool-calls-experimental),
+[configuration](https://learn.chatgpt.com/docs/config-file/config-reference), and
+[hook coverage](https://learn.chatgpt.com/docs/hooks#tool-coverage).

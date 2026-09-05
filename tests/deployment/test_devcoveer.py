@@ -49,3 +49,42 @@ def test_explicit_bundle_is_decoded_without_old_session_fallback(tmp_path):
     supplied = base64.urlsafe_b64encode(json.dumps({'session': '1explicit-test-only'}).encode()).decode()
     env.write_text(f'VIBE_PUBLISH_TG_SESSION={supplied}\nTELEGRAM_SESSION=old\nTG_API_ID=123\nTG_API_HASH=abc\n')
     assert native.credentials(env) == {'api_id': 123, 'api_hash': 'abc', 'session': '1explicit-test-only'}
+
+
+def test_vk_requires_explicit_approved_key(tmp_path):
+    env = tmp_path / 'vk.env'
+    env.write_text('VK_USER_TOKEN=not-approved-fallback\n')
+    with pytest.raises(Exception, match='approved vk user token missing'):
+        native.vk_credentials(env)
+
+
+@pytest.mark.parametrize('action,at,namespace,target,allowed', [
+    ('publish', None, None, native.VK_TARGET, False),
+    ('publish', 90000, None, native.VK_TARGET, True),
+    ('publish', 100, None, native.VK_TARGET, False),
+    ('edit', 90000, 'published', native.VK_TARGET, False),
+    ('edit', 90000, 'scheduled', native.VK_TARGET, True),
+    ('cancel', None, 'scheduled', native.VK_TARGET, True),
+    ('cancel', None, 'published', native.VK_TARGET, False),
+    ('delete', None, 'scheduled', native.VK_TARGET, False),
+    ('forward', 90000, None, native.VK_TARGET, False),
+    ('publish', 90000, None, '-1', False),
+])
+def test_vk_postponed_owner_boundary(action, at, namespace, target, allowed):
+    from types import SimpleNamespace
+    from social_operations.domain import DomainError, timestamp
+    adapter = native.PostponedOnlyVK(SimpleNamespace(), connection_id='test', clock=lambda: 0)
+    request = SimpleNamespace(connection_id='test', native_target=target, action=action,
+        scheduled_at=timestamp(at) if at else None,
+        existing=SimpleNamespace(namespace=namespace) if namespace else None)
+    if allowed:
+        adapter._mutation_allowed(request)
+    else:
+        with pytest.raises(DomainError): adapter._mutation_allowed(request)
+
+
+def test_vk_expired_request_remains_read_reconcilable():
+    from types import SimpleNamespace
+    adapter = native.PostponedOnlyVK(SimpleNamespace(), connection_id='test', clock=lambda: 100000)
+    adapter._connection(SimpleNamespace(connection_id='test', native_target=native.VK_TARGET,
+                                        action='publish', scheduled_at=None))
