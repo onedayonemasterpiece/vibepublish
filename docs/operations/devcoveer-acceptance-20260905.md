@@ -1,99 +1,104 @@
-# DevCoveer isolated acceptance — 2026-09-05
+# DevCoveer acceptance — 2026-09-05
 
-Status: **Not confirmed by user / partial; live acceptance blocked**.
+Status: **Not confirmed by user / partial live acceptance**. Not full CI or release acceptance.
 
-## Source and boundaries
+## Source and deployed scope
 
-PR #1 branch HEAD was read from origin and GitHub as
-`24c33d9e74efa6a28fa48ecb70287c60bca7ef5c` (unchanged at final origin recheck).
-Only three documentation commits follow owner checkpoint
-`f91f92cf6781c617719721a27f5b6c9015344c60`.
-Isolated checkout: `/home/dev/projects/vibepublish-acceptance-20260905`.
-No core, adapters, tests, CI, MAX/PR #2, main or production edits.
-`adapters/codex_imagegen.py` remains absent; no archive or replacement was used.
+Origin core HEAD checked as `24c33d9e74efa6a28fa48ecb70287c60bca7ef5c`,
+three documentation commits after checkpoint `f91f92cf6781c617719721a27f5b6c9015344c60`.
+Acceptance branch: `work/vibepublish-devcoveer-acceptance-20260905`, checkout
+`/home/dev/projects/vibepublish-acceptance-20260905`.
+New independently developed image adapter (not archive restoration), narrow
+creator-owned basic Telegram group immediate-publish permission, and absent/null
+cancel receipt timestamp correction are integrated. MAX/PR #2, main and original
+working checkout remain untouched; existing tests/CI were not disabled.
 
-## Running service and connection
+## Connection
 
-Host: `DevCoveer`, non-root user `dev`. Dedicated user-systemd services:
+MCP: **https://mcp-vibepublish.kenigevents.ru/mcp/** (also exact `/mcp`).
+Streamable HTTP, `Authorization: Bearer <service_token>`.
+Token and current endpoint were delivered/read back in owner's Saved Messages,
+message **35826**. Never copy token into Git/chat logs.
+Authenticated bootstrap 200, unauthenticated 401, real SDK initialization and
+all eight tools verified again after final route repair. Protocol 2025-11-25.
 
-- `vibepublish-acceptance-20260905-server.service`
-- `vibepublish-acceptance-20260905-worker.service`
+User systemd units `vibepublish-acceptance-20260905-server.service` and
+`vibepublish-acceptance-20260905-worker.service` are enabled/active, with linger,
+private state `/home/dev/.local/state/vibepublish-acceptance-20260905` (0700),
+SQLite WAL schema 3 and restricted filesystem writes. Server binds loopback18765.
+Worker reads dedicated `VIBE_PUBLISH_TG_SESSION` from approved my-data-hub `.env`,
+never falls back to EventsBot Telegram credentials. Automatic image executor disabled.
 
-Both enabled and active; user linger is enabled. Server listens only on
-`127.0.0.1:18765`; worker has no native, fake or image executor configured.
-Separate venv and SQLite/WAL ledger, schema version 3. No production data reused.
-State: `/home/dev/.local/state/vibepublish-acceptance-20260905` (0700).
-Unit files: `/home/dev/.config/systemd/user/` (0600), with no-new-privileges,
-private tmp, read-only home/system and write access limited to the state directory.
+**Ingress durability gap:** a concurrent shared nginx regeneration removed the
+new route during this run. Restored only exact VibePublish SNI/server block on top
+of the new current config, preserving all other routes, with candidate/live
+`nginx -t` and HUP, then actual public MCP readback. No network container restarted
+by this task. Durable renderer patch `ec9012c47fd7925f2c0cfc9ee336f13139ebfba3`
+is saved in separate vpn-server integration checkout, not installed into running
+control bot. Owner permission to update/restart that shared controller is pending.
+Another regeneration can still remove this route. Dedicated TLS expires 2026-12-04;
+automated renewal has not been independently verified.
 
-MCP Streamable HTTP endpoint: `http://127.0.0.1:18765/mcp/`.
-Connect on DevCoveer, or forward remote port 18765 through the existing IDE/SSH
-connection. Supply HTTP `Authorization: Bearer <service_token>`; the operator
-can obtain the value locally from `owner-token.json` in the private state directory
-(0600). Do not paste the token into chat or Git. No public HTTPS/OAuth endpoint
-was created; remote cloud clients cannot directly reach this loopback endpoint.
+## Real Telegram acceptance
 
-Real SDK ClientSession initialize/list_tools/get_started succeeded: protocol
-`2025-11-25`, eight tools, skill hash
-`d5044f0a018dc5bfca566944230e52655f201378927cce75bdf28099490fdade`.
-Authenticated HTTP bootstrap returned 200; unauthenticated returned 401.
-Server and worker were restarted only within this authorized isolated stand;
-new PIDs were observed and the same token/MCP readback survived restart.
-This verifies service restart, not recovery of an in-flight live publication.
+Authorized links resolved using dedicated session, not guessed IDs:
+basic test group **-5283030741**, lovekenig **-1002079710441**.
 
-## Executed checks
+| Step | Operation | Native/result |
+|---|---|---|
+| Group preview | op_c4021597f62c4753867f0734fa56dd03 | needs_approval |
+| Group approve | op_e711658c16b5425ba42f564423ea492b | verified; messages **35832,35833** |
+| Channel preview | op_0b7a1c1978d3479482f98f3fec24f0b1 | needs_approval |
+| Native schedule | op_741b765f0c7442da918ced0f9060fab3 | scheduled **8472**, 2026-09-07T14:03:17Z |
+| Edit | op_246d20576d5f465b9f59a18e3a1dc3dd | same object8472, scheduled |
+| Reschedule | op_f041b6cd59c94824a59114146ca1e031 | 2026-09-08T14:07:00Z |
+| Cancel | op_a7e32a699427499ebb722865cf28e4f6 | cancelled, revision5;8472 absent from native queue |
 
-- Fresh venv from committed requirements.lock; installed application without
-  dependency resolution. Dependency-input verification and package check passed.
-- Compileall for social_operations, adapters, tests and scripts/verify passed.
-- Targeted runtime/providers/emoji/contracts/sdk/inspection/verification run:
-  254 passed, 3 failed, 199 subtests passed. Failures were missing project package
-  installation for a subprocess and absent Chromium build 1200 (two viewports).
-- After installing the project and pinned Playwright Chromium, the affected
-  emoji transport and SDK files were rerun: **11 passed**. No tests changed.
-- Real Telethon 1.44.0 compiler/wire verification passed, including three native
-  entities. No Telegram RPC was used.
-- Browser fixture screenshots inspected at 1440x900 and 390x844: selected chain
-  2 -> 3 -> 2, no horizontal overflow or page errors. These are synthetic fixture
-  images, not real Telegram custom-emoji media/animation acceptance.
-- Strict complete pytest invocation: **collection error** for missing
-  adapters.codex_imagegen. Full suite/CI is NOT green.
-- Additional visuals-only diagnostic with --continue-on-collection-errors:
-  **38 passed, 1 collection error**, nonzero exit. The flag was diagnostic only;
-  existing tests and mandatory CI remain unchanged.
+Cancellation initially succeeded natively but failed strict MCP status projection
+because requested_at was null. Fixed omission for future receipts and legacy
+read projection only, without history/DB rewrite; final **read-only status**
+confirmed cancelled. Cancellation was never resubmitted.
 
-Evidence is local and ignored by Git in `artifacts/acceptance/`: logs, JUnit XML,
-SDK/dependency receipts, MCP before/after restart readback, systemd snapshots,
-ledger counts and inspected browser screenshots. Installation is not live acceptance.
+Custom emoji catalog operation `op_55806e4aaa984c86ab7eb459eead5893` fetched
+200 real entries from lovekenigofficial. Selection [1,2,1] resulted in native
+entities **5388964340386780923 → 5433637661032078632 → 5388964340386780923**,
+verified in published Telegram readback. Real picker rendered at desktop/mobile;
+animated native-client rendering remains unverified.
 
-## Live outcome and exact blockers
+Album native grouped_id **14308936062568610**; photo IDs
+**5251393239821001175,5251393239821001176**. Downloaded photos visually verified:
+blue TEST01 then orange TEST02. Telegram transcoding is not source-byte equality.
+Recent30 history had exactly one matching caption/two album members. Replaying
+same original approve idempotency key returned original operation, no new send.
+Server/worker restarted after schedule completion; existing objects/token/readback
+survived and scheduled object could be edited/rescheduled/cancelled. No live crash
+inside an uncertain external-effect window was induced; offline crash tests are
+not that live acceptance.
 
-Read-only ledger inspection observed zero connections, bindings, operations,
-attempts and publications. **No live writes; no native operation/object IDs.**
-Neither requested live lifecycle was executed:
-preview -> publish -> readback; native schedule -> edit -> reschedule -> cancel.
-Live custom emoji/media order/no duplicates/in-flight restart remain unverified.
+## Images, VK, tests and remaining work
 
-Required inputs before live actions:
+Two actual built-in `image_gen.imagegen` calls were executed by **gpt-5.6-luna**
+agent, imported through asset importer, published and read back. Image backend
+model is not exposed. This is standalone generation, **not automatic worker
+integration**. Newly developed adapter has local process/isolation/failure tests,
+but verified image-only tool confinement, hard upstream image-call budget and
+actual native CLI event-contract evidence are still missing. It stays disabled;
+real integrated generate/tune/compose remains unaccepted.
 
-1. Owner-approved VibePublish Telegram credentials bundle: api_id, api_hash,
-   StringSession session, placed in a private file/env, plus its authorized path
-   or VIBEPUBLISH_* reference. No matching environment variables were present.
-   EventsBot/other sessions were neither searched for nor used.
-2. Exact numeric Telegram test-group ID for the supplied invite and channel ID
-   for @lovekenig. The links are recorded authorization context, not guessed IDs.
-   Channel schedule testing must remain at least 24 hours ahead; only newly
-   created test objects should be edited/rescheduled/cancelled.
-3. Exact VK community owner_id/group_id and approved role token bundle
-   (editor, and reader/media as needed). No particular VK community was supplied.
-4. Real Imagegen integration remains blocked by the missing process module and
-   the owner's explicit prohibition on restoring/replacing it. Existing runbook
-   also requires verified image-only isolation and bounded image-call budgets
-   before activation; this run did not fabricate those attestations.
-   Local Codex version: 0.153.0; model cache contains gpt-5.6-luna; imagegen skill
-   exists. Cache/file presence is not a generation canary. No model generation
-   was invoked, no fallback chosen, and actual image model remains unknown.
-5. For direct remote/cloud MCP use, an authorized public TLS/auth ingress remains
-   unconfigured. Loopback/IDE forwarding is the verified connection path.
+Existing authorized VK user auth was checked read-only (user868977531).
+**Missing: owner-approved VK community URL**. Resolve ID automatically from URL;
+no VK writes or destination guessing before this input.
 
-On any uncertain provider outcome, do not resend; inspect/reconcile only.
+Final local full pytest: **375 passed, 199 subtests passed**, 77.62s; compileall
+passed. No skips/exclusions; this is not full hosted CI. Initial missing-package,
+Chromium and missing-module failures were real earlier results, now superseded
+for this acceptance checkout by the final run. Edge renderer has16 passing tests.
+
+Ignored evidence: `artifacts/acceptance/continuation/`, including final-pytest.xml,
+public-mcp-final.json, channel-cancel.json, native-final-readback.json, all step
+receipts, real image/downloads, picker screenshots, and pre/post ingress configs.
+Some private receipts contain review tokens: do not publish artifacts wholesale.
+
+Remaining: VK destination/lifecycle; automatic image executor activation and full
+visual workflow; durable shared renderer deployment; TLS renewal verification;
+live uncertain-effect restart acceptance. User confirmation remains required.

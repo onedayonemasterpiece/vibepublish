@@ -1,15 +1,16 @@
 # VibePublish runtime and delivery status — 2026-09-05
 
-Status: **Not confirmed by user / one source module still missing**. Keep PR #1
-DRAFT; the complete release and full CI are not accepted. Main and MAX PR #2
-are unchanged by this delivery.
+Status: **Not confirmed by user / partial acceptance**. Keep release/full CI unaccepted.
 
-## Isolated DevCoveer observation — 2026-09-05
+## Current isolated acceptance
 
-A separate [acceptance stand](devcoveer-acceptance-20260905.md) now runs the
-unchanged core server/worker without native or Codex executors. Real MCP and
-restart readback passed; live provider acceptance and Imagegen remain blocked.
-This does not supersede the incomplete-source/full-CI gate below.
+The [canonical DevCoveer report](devcoveer-acceptance-20260905.md) records the
+new adapter, dedicated Telegram worker, actual native lifecycle/readback, public
+MCP, 375 passing local tests and remaining VK/imagegen/ingress durability gaps.
+This acceptance branch supersedes missing-module and no-live-call statements
+below; those describe the earlier remote core delivery only. Main/MAX unchanged.
+
+## Historical remote-core delivery (not current acceptance state)
 
 ## Current source
 

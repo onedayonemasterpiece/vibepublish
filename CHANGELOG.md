@@ -2,12 +2,16 @@
 
 ## [Unreleased]
 
-### Isolated DevCoveer acceptance observation — 2026-09-05
+### Isolated DevCoveer implementation and live checks — 2026-09-05
 
-- Document running loopback MCP/server and worker, private state, verified MCP
-  readback/restart and exact provider/Imagegen blockers. No core/test/CI changes.
-- Record initial environment failures and successful focused rechecks separately
-  from the unchanged full-suite collection failure; no live acceptance claimed.
+- Add dedicated exact-host server and approved-session Telegram worker launchers;
+  develop opt-in Codex image adapter without restoring archive payloads.
+- Permit narrow creator-owned basic-group immediate publication; correct null
+  cancellation timestamp projection without changing native history or schemas.
+- Record real Telegram album/custom emoji and native scheduled lifecycle,
+  HTTPS MCP/token delivery, 375 passing local tests and199 subtests (not full CI).
+- Record unresolved automatic imagegen, VK destination and shared-ingress
+  regeneration durability rather than claiming complete acceptance.
 
 ### Owner correction: full Codex rollout includes real Imagegen — 2026-09-05
 
