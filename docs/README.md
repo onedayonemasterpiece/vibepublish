@@ -28,7 +28,10 @@ The new task does not ask another agent to proxy that denied payload.
   sets, private numbered media, singles/chains, aliases/rules and frozen entities.
 - [Shared visuals](features/social-visuals/README.md) and
   [DevCoveer image executor](operations/devcoveer-imagegen.md): local Codex **on
-  DevCoveer**, not the owner's desktop. Installed host activation is unverified.
+  DevCoveer**, not the owner's desktop. See the
+  [ordinary task route](operations/codex-task-imagegen.md) and
+  [current stand acceptance](operations/devcoveer-acceptance-20260905.md) for
+  actual activation, verified effects and remaining gaps.
 - [Native adapter provenance](reference/native-adapter-provenance.md),
   [acceptance matrix](features/social-operations/acceptance-tests-v1.md) and
   [dependency/SDK verification](operations/dependency-sdk-verification.md).

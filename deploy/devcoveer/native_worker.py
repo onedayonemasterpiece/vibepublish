@@ -94,7 +94,8 @@ class PostponedOnlyVK(VKAdapter):
         return await super()._rights(request)
 
 
-async def run(db: Path, env_file: Path, once=False, vk_env_file: Path | None = None):
+async def run(db: Path, env_file: Path, once=False, vk_env_file: Path | None = None,
+              codex_task_artifacts: Path | None = None):
     store = Store(db)
     bundles = {TG_REFERENCE: json.dumps(credentials(env_file))}
     if vk_env_file is not None:
@@ -104,11 +105,19 @@ async def run(db: Path, env_file: Path, once=False, vk_env_file: Path | None = N
             if isinstance(adapter, VKAdapter):
                 wiring[key] = PostponedOnlyVK(adapter.transport, connection_id=key,
                                              account_type=adapter.account_type, clock=store.clock)
-        worker = Worker(store, wiring)
-        while True:
-            worked = await worker.run_once()
-            if once: return
-            if not worked: await asyncio.sleep(.25)
+        imagegen = None
+        if codex_task_artifacts is not None:
+            from adapters.codex_task_imagegen import CodexTaskImagegen
+            imagegen = CodexTaskImagegen(codex_task_artifacts, codex_home=Path('/home/dev/.codex'))
+        worker = Worker(store, wiring, imagegen=imagegen)
+        try:
+            while True:
+                worked = await worker.run_once()
+                if once: return
+                if not worked: await asyncio.sleep(.25)
+        finally:
+            if imagegen is not None:
+                await imagegen.close()
 
 
 def main():
@@ -117,9 +126,10 @@ def main():
     p.add_argument('--telegram-env-file', required=True, type=Path)
     p.add_argument('--once', action='store_true')
     p.add_argument('--vk-env-file', type=Path)
+    p.add_argument('--codex-task-artifacts', type=Path)
     args = p.parse_args()
     try:
-        asyncio.run(run(args.db, args.telegram_env_file, args.once, args.vk_env_file))
+        asyncio.run(run(args.db, args.telegram_env_file, args.once, args.vk_env_file, args.codex_task_artifacts))
     except Exception as exc:
         # Never include provider messages, dotenv content, session or credential data.
         print(json.dumps({'error_type': type(exc).__name__, 'code': exc.code if isinstance(exc, DomainError) else 'native_worker_failed'}))

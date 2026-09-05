@@ -27,13 +27,14 @@ User systemd units `vibepublish-acceptance-20260905-server.service` and
 private state `/home/dev/.local/state/vibepublish-acceptance-20260905` (0700),
 SQLite WAL schema 3 and restricted filesystem writes. Server binds loopback18765.
 Worker reads dedicated `VIBE_PUBLISH_TG_SESSION` from approved my-data-hub `.env`,
-never falls back to EventsBot Telegram credentials. Automatic image executor disabled.
+never falls back to EventsBot Telegram credentials. Ordinary Codex-task executor
+is wired; see the current continuation below for actual successes and failures.
 
 **Ingress durability gap:** a concurrent shared nginx regeneration removed the
 new route during this run. Restored only exact VibePublish SNI/server block on top
 of the new current config, preserving all other routes, with candidate/live
 `nginx -t` and HUP, then actual public MCP readback. No network container restarted
-by this task. Durable renderer patch `ec9012c47fd7925f2c0cfc9ee336f13139ebfba3`
+by this task. Durable renderer patch `15fa5292362733ad2438261a491ebe561c60c573`
 is saved in separate vpn-server integration checkout, not installed into running
 control bot. Owner permission to update/restart that shared controller is pending.
 Another regeneration can still remove this route. Dedicated TLS expires 2026-12-04;
@@ -152,10 +153,196 @@ This is not a hosted full-CI claim. Evidence:
 http-original-upload.json, live-contract.json, final-pytest.xml, native8 readback,
 media downloads and vk-test8-cleanup.json.
 
-Automatic built-in generation remains disabled: exact installed CLI0.153.0
-research did not establish native image-only allowlisting or pre-dispatch hard
-upstream call budgets. Required controls are in
-[the executor activation contract](devcoveer-imagegen.md#activation-is-deliberately-not-claimed).
-This is a concrete integration blocker, not a reason to claim prompt support or
-scripted tests prove real generate/tune/compose acceptance. Original upload and
-native original-media publishing do not require that executor.
+That checkpoint left automatic generation disabled behind inferred image-only
+and hard billed-call gates. The owner subsequently rejected those gates for
+ordinary Codex tasks. The continuation below supersedes that activation decision;
+it does not falsely attest the legacy adapter or turn old tests into live proof.
+
+
+## Current owner correction: ordinary tasks, MCP files and Kaliningrad
+
+Explicit native execute publications automatically continue after visual work,
+including NOW when no delivery time is supplied. Supplied date/time resolves in
+Europe/Kaliningrad; the stand tenant timezone was changed and read back. Preview,
+standalone and explicit human selection remain separate. VK acceptance remains
+postponed-only regardless of the general NOW default.
+
+The new `CodexTaskImagegen` uses native app-server tasks, pinned orchestration
+model **gpt-5.6-luna**, owner Codex login/quota, and no API fallback. Native image
+model ID is not reported and stays null. This is an ordinary task, not an
+absolute image-only sandbox or a hard upstream billed-call guarantee.
+
+Actual direct task **01a07234-66ed-77d3-b42d-9645fd167d18**, turn
+**01a07234-7e26-79c1-ae63-4ea2e927786d**, produced a visually inspected Baltic
+sea card “К морю” in 75 seconds. Native saved PNG exactly matched the native
+imageGeneration base64 result, SHA256
+`b03be1b7b0242035f7c19d5e0594e1501182ed35801d4be7dffc3a15a3626610`.
+
+Live MCP file import **op_317a97d3ab004cf689a82c0fa25c7493** verified asset
+**asset_f952576deea047148ea71ef7bd191c95**. Same-key replay returned the same
+operation/asset. Actual tools/list exposes `openai/fileParams=["file"]` and the
+server downloads/imports the file; no manual user HTTP upload is required.
+The test used a real VK readback image URL and native photo identity, not an
+invented ChatGPT attachment. Actual attachment handoff from this chat's UI has
+not been demonstrated; server-side MCP import has.
+
+### Failed first tasks and diagnosed causes (never resent)
+
+- Generate **op_8d064e9986064cebb28e10013977bbab** /
+  **visual_adf9d3049ad244a8871c7c0234d7457b** became core `outcome_unknown` /
+  `imagegen_processing_unresolved` before any social attempt. Its native thread
+  **01a07247-6ab5-71c2-aa26-3f516667d33f**, turn
+  **01a07247-74ba-7543-86a5-5af8bfdff04f**, completed generation. Read-only recovery
+  verified the same image, separately imported as original asset
+  **asset_fabde2017a7b4cd3be1b01bffb14812e**; this did not repair or retry the old op.
+- Distinct tune **op_5c06a3b0620e4ce3b2e085a49e48bb04** /
+  **visual_d4c7f76a521b42a0b461dca587c661bf** likewise stopped before any social
+  attempt. Native thread **01a0725c-b4cd-7422-8019-075b488fbaef**, turn
+  **01a0725c-befe-70f1-a0f3-f42256f32262**, completed with zero native image items:
+  its skill-reading shell command failed with bubblewrap namespace denial.
+  No generated result is claimed and the tune was not repeated.
+
+The early generic failure was reproduced without generation under the exact
+systemd filesystem restrictions: `_read` opened `/` with O_RDONLY, but the
+protected mount namespace permits traversal and not directory listing. Root and
+ancestor descriptors now use O_PATH|O_DIRECTORY|O_NOFOLLOW; final file reads and
+all path/ownership/hash checks remain intact. The same protected read probe now
+returns succeeded for the original completed generation. No protection was lifted.
+
+Separate confirmed adapter defects were fixed with regressions: numeric-only
+VisualService usage metadata, and closing/resetting an incompletely initialized
+owned app-server. Private diagnostics store exception class and frame locations,
+not exception messages, locals, credentials or reasoning. These separate defects
+are not falsely presented as the cause of the four-second live failure.
+
+Sandbox investigation consulted official Codex sandbox/app-server documentation
+and installed CLI0.153.0. Host AppArmor restricts user namespaces. A non-generating
+legacy Landlock compatibility probe also rejected the managed permission policy.
+No global sysctl, AppArmor profile or sandbox-disable setting was changed.
+
+### Verified two-source composition → native queue
+
+After the protected-path fix, the executor preloads the installed trusted
+Imagegen skill in native developerInstructions. Sources are already visible as
+localImage inputs; no shell skill read or shell output-copy is needed. Runtime
+imports the native result itself. Sandbox protections remain unchanged.
+
+**op_4f41b64cf9b845609abdda08bb11902d** /
+**visual_579ffe5a6d3e43a3b5e254467bc2ee07** completed the actual public MCP →
+worker → Codex task → built-in image_gen → automatic candidate selection →
+Telegram native queue chain, with two existing owned source assets and one
+prompt. Native thread **01a0726e-6b56-72d1-877f-a363f97a5a83**, turn
+**01a0726e-7310-7170-89c4-3b09e4cec02d**, contains exactly one native image result.
+Selected asset: **asset_9506059e3d054351b463b919442aa12f**.
+Publication resource: **pub_55b0cc77e5704831b04ede0b4834406b**, revision2.
+
+In `lovekenig` **-1002079710441**, scheduled message **8473** has photo
+**5251650379513013697**, queued for **2026-09-07 18:37:11 Europe/Kaliningrad**.
+Native queue readback found exactly one matching test caption. Downloaded image
+was visually inspected: blue cup from the source, sea background, warm sunset,
+exact readable “Чашка моря”, no clipped lettering. This is native provider binding
+plus visual correspondence, not source/provider JPEG byte identity. Readback SHA
+`ac5ac506b64effa64dcbb6ac3a3bbd41e6670c28bd824467455c40740710ef1f`.
+
+Both own services were restarted after completion. Readback retained the same
+scheduled ID, photo, date and downloaded bytes, still exactly one matching post.
+Same-key MCP publish replay returned the same operation, visual job and asset.
+No second generation or post was created. **8473 is deliberately left in the
+native queue for owner review; it will publish at that time unless cancelled.**
+Previous lifecycle cancellation8472 remains verified; no other queue objects
+were modified by this new composition test.
+
+### Additional NOW tuning test: native image, unresolved application operation
+
+A distinct request edited the newly composed cup/sea image to a cool morning
+palette and omitted delivery, targeting only the approved test group:
+**op_c98747d028c440759032fba3ee8bd75e** /
+**visual_f7ac2b87d64842adbe1c12d6f5fa937c**. It stopped with
+`imagegen_submit_outcome_unknown`, no social attempts. Private diagnostics show a
+thread/read transport RuntimeError, not the fixed root-directory failure.
+Later read-only native lookup of **01a07271-bba8-7f23-a687-926c4f9161df**, turn
+**01a07271-c158-71d2-b5ef-1b190c1e310d**, succeeded and showed one completed native
+image. The original operation was not reset or resent. This test is not evidence
+of an immediate generated publication. The discarded RPC payload does not prove
+the exact transient server error; do not invent one.
+
+Read-only executor recovery subsequently imported the same NOW-tune native PNG,
+SHA256 `2b717819a6f1bf652fd69e7fc46c7ceee7e6514ca9ab6b0e56ec118e17ac393a`.
+Visual inspection confirmed the cup, layout and “Чашка моря” lettering were
+preserved while the sunset palette changed to cool morning. This proves actual
+single-source image editing, not successful publication of that operation.
+
+
+Transient native thread observation now retries only that saved thread/read,
+at most three attempts of three seconds with 0.25/0.5-second backoff. This fits
+inside the core's 15-second inspection bound. No thread/start or turn/start is
+retried; response identity and artifact validation remain outside the retry.
+Exhaustion remains unknown. Offline actual-service regressions cover recovery
+and exhaustion with exactly one generation submit; this change does not reopen
+any previously terminal operation.
+
+
+### Verified generate → NOW with omitted delivery
+
+A distinct new-art request with **no delivery field** completed the live public
+MCP → worker → Luna task → built-in image_gen → automatic selection → immediate
+Telegram test-group publication chain:
+
+- Operation **op_856b0ca489af4815b2f1baf3deca97db**: verified/published.
+- Visual **visual_1cc94ba7eb6a43d1939b2cd0d860398f**; selected asset
+  **asset_f5a7ffe9410249a9a373246007d2157c**.
+- Native task **01a0727e-737f-73c0-933d-bae4daf433a3**, turn
+  **01a0727e-7ac9-7420-aad0-0ac3aad4e5f7**, one native image item.
+- Approved basic group **-5283030741**, message **35834**, photo
+  **5251393239821001509**, published **2026-09-05T16:55:30Z**.
+- Native readback found exactly one matching caption in the recent40 messages;
+  downloaded JPEG visually confirms emerald sea/sand and exact “Сегодня к морю”.
+  SHA256 `bd8d5f313b7055ce69179f5879ef08780e7aaddf9ab603e620acac81f55b6ec5`.
+
+After the final service restart, native readback retained the same message,
+photo and downloaded bytes, still exactly one matching caption.
+
+This is not a repeat of an uncertain command: different new-art intent, no source
+image, new operation; prior unknown generation/tune operations were not reset.
+
+## Final engineering verification and remaining gaps
+
+- **504 local tests and205 subtests passed**, two existing dependency-deprecation
+  warnings,92.82s; compileall and diff checks passed. No existing tests disabled.
+  This is **not** a successful hosted/full-CI claim or complete product acceptance.
+- Actual public endpoint/auth/bootstrap and all eight MCP tools verified. Both
+  own user-systemd services enabled/active. Runtime uses ordinary Luna image
+  tasks; the obsolete inferred hard image-only/billed-call gate is not active.
+- Telegram original media, custom emoji, ordering and native lifecycle are
+  verified above. Generated NOW and composed scheduled publication are verified.
+  Single-source tuning produced a verified native edited image, but its specific
+  application publication stopped on a transient read failure and remains unknown.
+
+Remaining obstacles, not missing destination names/IDs:
+
+1. VK copied-photo owner/ID mapping is not automatically proven. Its original
+   postponed post8 was removed and absence checked; the operation stays unknown.
+   Do not resend or weaken media ordering/identity checks. VK full media lifecycle
+   acceptance remains blocked.
+2. Three historical visual operations remain terminal unknown. Read-only native
+   recovery does not reopen core operations; no automatic reconciliation interface
+   was added and no original ledger history was rewritten.
+3. The actual current chat UI's attachment-to-MCP handoff and both original named
+   business fixtures have not been end-to-end accepted. Server file-object import,
+   original no-AI ingress and generated/tuned/composed native images are tested.
+4. Restart after completed publications is tested. A real forced crash during an
+   uncertain live publication and recovery of unfinished work is **not** tested;
+   offline recovery tests do not substitute for that live gate.
+5. Shared nginx renderer persistence patch (integration15fa529) is not activated
+   in the shared controller; its update/restart permission remains unanswered.
+   Another regeneration can remove the working route. Automated TLS renewal is
+   also not independently verified.
+6. Owner artistic/product acceptance remains pending. Scheduled test8473 remains
+   live in the native queue for review and will publish at its stated time unless
+   cancelled. No unrelated scheduled posts were changed.
+
+Private/ignored evidence is under `artifacts/acceptance/codex-task-canary/`:
+public-final.json, mcp-file-import.json, final-tests.log, compose-worker-live.json,
+compose-replay.json, composed-native-readback*.json, downloaded readback images,
+generate-now-worker-live.json and generated-now-native-readback*.json. Model
+reasoning, social credentials and signed download URLs are not committed.

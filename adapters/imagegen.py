@@ -1,7 +1,7 @@
-"""Typed image-only executor boundary. No coding-agent, shell or social credentials.
+"""Typed image-job executor boundary; no social credentials in image requests.
 
-The default real route remains unwired until the DevCoveer host contract is verified.
-The optional local-process adapter is in codex_imagegen.py. The fake is a durable,
+Default wiring is unavailable. The owner-authorized ordinary Codex-task route is
+in codex_task_imagegen.py; the legacy opt-in transport is in codex_imagegen.py. The fake is a durable,
 explicit offline fixture, not a claim of model generation. Its remote job files
 simulate an external executor, never a second publication/business ledger.
 """

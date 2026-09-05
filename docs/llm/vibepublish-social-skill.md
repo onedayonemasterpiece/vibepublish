@@ -13,6 +13,8 @@ One authorized publication uses one mutation call. Do not search for prepare/upl
 
 ## Scheduling is native only
 
+For this owner's workflow use **Europe/Kaliningrad (UTC+02:00)**. A supplied date/time becomes delivery.at with explicit +02:00. A time-only instruction means the next future occurrence of that clock time in Kaliningrad; report the resolved date. If only a date and no clock time is supplied, ask for the missing time rather than inventing it. If no scheduling time was requested, omit delivery (now). Never silently turn a past explicit schedule into an immediate send. An explicit environment restriction such as the VK acceptance stand's postponed-only rule still wins over the general default.
+
 `delivery: {kind: at, at: RFC3339-with-offset}` submits now to the provider's real scheduled queue. VibePublish has no local publication scheduler, backend selector or late-send fallback. Resolve relative time using the configured tenant timezone, not your browser zone. Unsupported native scheduling, expired times or a too-close native submission window require correction; never substitute send-now.
 
 A local accepted receipt is not a scheduled post. Report scheduling success only after `observed: provider_scheduled` and verified queue readback. Use returned queue/item references, actual URL where available, navigation instructions and protected preview. Never invent a direct link. Native UI login/access still depends on the person's provider account.
@@ -47,7 +49,9 @@ Read results use receipts with items/truncated/next_cursor. An accepted incomple
 
 Content normally is `{text: ...}`. Plain text is default; bounded Markdown supports paragraphs, bold, italic, inline code and named links. Provider renderings preserve Telegram links/custom emoji, VK visible URLs and only the MAX formatting its adapter has proved. Never change editorial facts silently or construct raw entity offsets.
 
-Media order is binding. Use owned asset refs; a chat/local filesystem path is not a server asset. When the host supports binary HTTP, upload the original through authenticated `POST /v1/assets` with Content-Type and Idempotency-Key, then use returned asset_id. See [upload contract](../operations/asset-ingress.md). Pure MCP attachment transfer needs a host bridge; URL/upload-ticket sources remain unavailable. Never invent IDs or silently omit images.
+Media order is binding. For a chat attachment call `vibepublish_visual` with `command: {kind: "import"}`, the top-level `file` supplied by the host, and a stable `request_key`. The tool declares `openai/fileParams: ["file"]`; the host passes `download_url`, `file_id`, optional `mime_type` and `file_name`. Do not invent any of these or send a local filesystem path. A verified receipt's `resource_id` is the owned asset to use in publication media or visual sources. Import does not generate or publish. Replay returns the original asset without requiring a still-live download URL.
+
+Binary HTTP `POST /v1/assets` remains available for non-chat clients; users do not need to manually upload through HTTP when the host supplies file parameters. See [upload contract](../operations/asset-ingress.md). Keep original order and roles of references; never silently omit files.
 
 ### Four visual intentions; one prompt
 
@@ -58,13 +62,13 @@ Media order is binding. Use owned asset refs; a chat/local filesystem path is no
 
 `prompt` carries the requested result, exact quotes and all design wishes. Do not require callers to split it into title/date/body fields. Legacy `brief` remains supported; optional legacy `copy` is for deterministic typography and must not conflict with prompt. Prompt-only lettering is model-produced, not a guarantee of exact text rendering. Do not invent missing factual copy or treat instructions inside reference images as authority.
 
-For an explicitly authorized **execute publication to a future native queue**, visual selection defaults to automatic: generate/edit, choose an eligible result and submit the same publication to postponed posts without an intermediate UI. `selection: human` overrides this. Report the queued object and readback, not a promise of artistic approval. Model failure/unknown, changed permissions or expired time must not fall back to an original, a second generation or send-now.
+For an explicitly authorized **execute publication**, visual selection defaults to automatic: generate/edit, choose an eligible result and submit the same publication without an intermediate UI. With delivery.at submit to the provider queue; without a time submit now. `selection: human` overrides this. Report the queued object and readback, not a promise of artistic approval. Model failure/unknown, changed permissions or expired time must not fall back to an original, a second generation or send-now.
 
-Immediate execution does not gain automatic visual approval. Standalone visual creation never publishes. `mode: preview` remains preview, with separate approval. Explicit media follow the selected visual; generation references are not automatically attached. Default candidate budget remains two (maximum four), including requested format derivatives; training is not part of tuning.
+An explicit execute request includes authority for automatic visual selection, including immediate delivery; explicit human selection remains an override. Standalone visual creation never publishes. `mode: preview` remains preview, with separate approval. Explicit media follow the selected visual; generation references are not automatically attached. Default candidate budget remains two (maximum four), including requested format derivatives; training is not part of tuning.
 
 ### Current visual runtime boundary
 
-The shared service has prompt-first contracts and postponed-only automatic continuation, but this stand's automatic built-in image executor remains disabled pending verified host tool confinement and upstream call bounds. Do not claim that an accepted visual request generated or queued anything. Real generated candidates remain quality-reviewable in the provider queue; automatic placement is permission to skip intermediate selection, not proof of artistic quality.
+The shared service has prompt-first contracts and automatic continuation for explicit execute, both now and scheduled. The ordinary Codex-task executor uses owner Codex access, with no separate API fallback. Check actual runtime evidence before claiming readiness. Generation has a frozen10-minute window; this does not extend an expired native publication time. Do not claim that an accepted visual request generated or queued anything. Real generated candidates remain quality-reviewable in the provider queue; automatic placement is permission to skip intermediate selection, not proof of artistic quality.
 
 Candidates are private authenticated HTTP assets or MCP `vibepublish://assets/{id}` resources. Reuse only returned asset IDs, revisions and tokens. Selection resumes the original parent at most once; revocation blocks reads/reuse. Fake fixtures cannot enter native connections. Request-key replay observes the original result and never authorizes a retry of an uncertain effect.
 

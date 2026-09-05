@@ -5,7 +5,7 @@
 
 # Social visuals
 
-Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: offline shared service `Not confirmed by user`; live executor and acceptance `Not done`.
+Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: shared service and partial live executor acceptance `Not confirmed by user`; complete acceptance `Not done`.
 
 Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the handoff](../social-operations/analysis-handoff-20260904.md). Publication/runtime/security rules live in [implementation design](../social-operations/implementation-design-v1.md).
 
@@ -23,7 +23,9 @@ See [verified plugin sources and passive host inventory](../../reference/imagege
 Codex built-in, explicit API-key fallback and an OpenCode package are distinct
 execution paths. The researched OpenCode candidate is not yet identified as
 the owner installation and hard-codes a different routing model; do not select
-it silently. The actual VibePublish plugin-host binding remains **Not done**.
+it silently. The ordinary-task binding is now implemented separately from the legacy
+image-only opt-in adapter; see [actual stand evidence](../../operations/devcoveer-acceptance-20260905.md).
+Implementation alone does not establish end-to-end acceptance.
 
 ```text
 VisualService -> ImagegenExecutor -> verified $imagegen route
@@ -33,7 +35,10 @@ requested route: gpt-5.6-luna
 
 Do not substitute Google Imagen/Gemini image APIs or assume the existing GoogleAIClient performs this job. The owner's earlier successful `$imagegen` experiment is a requirement/source fact, not a live test performed in this audit. Exact DevCoveer invocation, credentials, route availability and artifact return must be fresh-read during integration; no guessed CLI command is canonical.
 
-The adapter contract is typed and independent of a general coding-agent workflow:
+The adapter boundary remains typed. The owner-authorized implementation may run
+an ordinary Codex task with built-in image_gen, existing Codex login/quota and
+no separate API fallback. Absolute tool allowlisting and hard billed-call
+attestation are not prerequisites for that route. Its contract is:
 
 - `submit(job_key, mode, brief, source_manifest, preset_version, requested_route, candidate_budget, deadline)` returns a durable execution reference or a classified pre-dispatch error.
 - `inspect(execution_ref)` returns queued/running/succeeded/failed/unknown, actual executor/model identity if supplied, bounded usage and artifact manifests.
@@ -41,7 +46,7 @@ The adapter contract is typed and independent of a general coding-agent workflow
 - `cancel(execution_ref)` is best effort, with actual outcome recorded; cancelling never claims already generated artifacts disappeared.
 - Artifact manifests contain allowed-root file/object references, SHA-256, MIME, dimensions and size. The importer verifies actual bytes and ownership, not a model's textual assertion of success.
 
-No shell fragments, arbitrary repository paths or raw model-selected commands come from the caller. Run the executor in a constrained workspace with only the job's source assets and output directory. A model cannot access social credentials or select publication targets. An uncertain submit is inspected using its durable identity, not submitted again automatically.
+No shell fragments, arbitrary repository paths or raw model-selected commands come from the caller. Run the executor in a constrained workspace with only the job's source assets and output directory. Social credentials and publication targets are not passed in task inputs or inherited environment. The ordinary task is not an absolute image-only read sandbox: existing Codex-home/config access remains, so do not claim full host-secret isolation. The task has no authority to publish. An uncertain submit is inspected using its durable identity, not submitted again automatically.
 
 ## Visual recipe and exact text
 
@@ -118,7 +123,7 @@ Offline acceptance: fake executor success/failure/unknown/restart; path/MIME/has
 Live acceptance: actual `$imagegen` route on DevCoveer returns real verified artifacts through the required requested route; requested/actual identifiers are reported honestly; both fixtures have rendered human review; selected derivative is the one delivered; provider readback uses the evidence levels in the social design.
 
 
-## Implemented checkpoint — 2026-09-05
+## Initial offline checkpoint — 2026-09-05 (historical)
 
 `social_operations/visuals.py` is the sole service; `adapters/imagegen.py` defines
 immutable typed requests/observations and an explicitly offline FakeImagegen.

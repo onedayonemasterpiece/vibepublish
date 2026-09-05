@@ -1,3 +1,15 @@
+> **Owner correction, current:** ordinary Codex task execution with built-in
+> image_gen using existing owner Codex access/quota is explicitly authorized.
+> Absolute image-only tool allowlisting and a hard upstream billed-call limit
+> were inferred engineering gates, not required for this ordinary-task route.
+> They remain truthful properties of the legacy opt-in adapter only; do not
+> fabricate its attestation. New task route must retain bounded jobs, no secret
+> forwarding, no API fallback, verified artifacts, and no uncertain retries.
+> See [ordinary task executor](codex-task-imagegen.md), now integrated. Actual Luna task canary
+> 01a07234-66ed-77d3-b42d-9645fd167d18 generated a real image in 75 seconds. Current deployment/readback is in
+> [stand acceptance](devcoveer-acceptance-20260905.md). The remaining sections
+> describe the **legacy opt-in adapter**, not prerequisites for the ordinary task route.
+
 # Local Codex image executor on DevCoveer
 
 > **Active task:** the owner now requires [Codex implementation, real Imagegen,

@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Ordinary Codex tasks, chat files and immediate/default execution — 2026-09-05
+
+- Honor explicit visual execute now when no time is supplied, or native scheduling
+  in Kaliningrad; keep preview/standalone/human selection and VK stand restrictions.
+- Add ordinary Codex app-server image tasks using owner login/quota, Luna, native
+  artifact verification and read-only recovery without uncertain resubmission.
+- Add native MCP file inputs/import-only publish scope; verify real HTTPS import
+  and durable replay without making users upload manually to an HTTP endpoint.
+- Fix numeric usage, failed initialization cleanup and protected-root traversal;
+  preload trusted skill instructions without changing sandbox protections and
+  bound transient read-only observation retries without generation resubmission.
+- Verify actual two-source composition through MCP into Telegram native queue8473,
+  and immediate generated group message35834, with visual readback, same-key
+  replay and restart persistence; retain failed
+  operation history and outstanding acceptance gaps rather than declaring full CI.
+
+
 ### Prompt-first postponed visuals and original uploads — 2026-09-05
 
 - Add prompt-only generate/tune/compose inputs with optional references and
