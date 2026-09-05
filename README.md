@@ -39,9 +39,9 @@ image generation, social canary or deployment was performed. MAX is already a
 separate PR #2; no second driver was created.
 
 **The remote checkout is still incomplete, not a runnable release.** Source,
-tests, skill and contract have been transferred, but `adapters/vk.py`,
-`social_operations/rich_text.py` and `adapters/codex_imagegen.py` received explicit
-request-safety blocks and are absent. The installation/test commands below are
+tests, skill and contract have been transferred. The rich-text compiler and VK
+adapter are now saved in `ae73b259`; only `adapters/codex_imagegen.py` remains
+absent after a new request-safety response. The installation/test commands below are
 acceptance gates, not evidence that this partial checkout passes. The full
 implementation remains preserved in the verified source archive; do not rebuild
 it from the incomplete tree. [Runtime status](docs/operations/social-runtime.md)

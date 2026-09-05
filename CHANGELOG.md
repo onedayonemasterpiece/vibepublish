@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Restore Telegram rich text and VK source — 2026-09-05
+
+- Commit `ae73b259` delivers both exact archived modules through normal GitHub
+  writes; 132 of 133 archive paths are present. Only the Codex executor is absent
+  after a new request-safety response; no alternate upload was attempted.
+- Real core/Telethon gate now passes all 14 requests. Diagnostic execution:
+  296 tests and 199 subtests pass, but one Codex import error remains (exit 1).
+  Strict full CI stays mandatory; no runtime or test behavior was weakened.
+- Updated current status, routing and continuation. Main/MAX and live operations
+  were not changed; actual DevCoveer image-only activation remains unverified.
+
 ### Recover delivered commits and accepted documentation — 2026-09-05
 
 - Corrected the prior response's false "no new commits" claim: five source

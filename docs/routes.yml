@@ -71,7 +71,7 @@ features:
     design: docs/features/social-operations/implementation-design-v1.md
     mcp_contract: docs/features/social-operations/mcp-contract-v1.md
     telegram_custom_emoji: docs/features/social-operations/telegram-custom-emoji-v1.md
-    telegram_custom_emoji_status: archived_verified_runtime_remote_compiler_missing
+    telegram_custom_emoji_status: remote_source_and_offline_core_tests_verified_live_unverified
     latest_extension: docs/features/social-operations/forwarding-and-editorial-profiles-v1.md
     acceptance_tests: docs/features/social-operations/acceptance-tests-v1.md
     skill: docs/llm/vibepublish-social-skill.md
@@ -109,7 +109,6 @@ features:
       - adapters/telegram_emoji.py
       - tests/emoji/
       - scripts/verify/telegram_sdk.py
-    undelivered_entrypoints:
       - adapters/vk.py
       - social_operations/rich_text.py
     planned_entrypoints:

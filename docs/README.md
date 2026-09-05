@@ -3,8 +3,9 @@
 **PR #1 is a partial source checkout, not a runnable release.** Begin with
 [current runtime delivery and evidence](operations/social-runtime.md). The core,
 emoji palette/selector, VisualService, contract/skill 1.5 and all archived tests
-are transferred. Three required production modules remain absent after explicit
-request-safety responses. Historical full-source test counts are not remote CI.
+are transferred. The rich-text compiler and VK adapter are now delivered; only
+`adapters/codex_imagegen.py` remains absent after a new request-safety response.
+Historical full-source test counts are not remote CI.
 
 ## Current implementation
 
