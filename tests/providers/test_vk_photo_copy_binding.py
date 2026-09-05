@@ -211,3 +211,31 @@ async def test_cdn_reader_bounds_and_credential_isolation(monkeypatch, failure):
     assert seen['headers'] == {'Accept-Encoding': 'identity'}
     assert isinstance(seen['cookie_jar'], aiohttp.DummyCookieJar)
     assert seen['timeout'].total == 10
+
+
+@pytest.mark.asyncio
+async def test_copied_photo_lifecycle_explicitly_preserves_ordered_attachments():
+    from social_operations.domain import canonical
+    a, t, j, r = setup_copy()
+    current, = (await a.execute(await a.prepare(r, j.hooks), j.hooks)).items
+    for action, at in [('edit', r.scheduled_at), ('reschedule', timestamp(NOW+7200))]:
+        updated = request('vk', action=action, existing=current, assets=r.assets,
+                          scheduled_at=at, content_json=canonical({'text': 'Edited'}))
+        current, = (await a.execute(await a.prepare(updated, j.hooks), j.hooks)).items
+        call = [c for c in t.calls if c[0] == 'wall.edit'][-1]
+        assert call[2]['attachments'] == ','.join(current.provider_media)
+        assert current.provider_media == ('photo-101_11001', 'photo-101_11002')
+        assert len(t.uploads) == 2
+    cancel = request('vk', action='cancel', existing=current)
+    result = await a.execute(await a.prepare(cancel, j.hooks), j.hooks)
+    assert result.observed == 'cancelled' and not t.posts
+
+
+@pytest.mark.asyncio
+async def test_vk_second_precision_schedule_is_rejected_before_effect():
+    a, t, j, r = setup_copy()
+    r = request('vk', scheduled_at=timestamp(NOW+3601))
+    with pytest.raises(DomainError) as error:
+        await a.prepare(r, j.hooks)
+    assert error.value.code == 'vk_schedule_minute_precision'
+    assert not t.uploads and not t.effects

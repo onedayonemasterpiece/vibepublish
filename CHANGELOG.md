@@ -8,6 +8,8 @@
   rendition fingerprints captured before dispatch; reject missing/changed proof.
 - Add bounded unauthenticated CDN reads and retain source hashes separately from
   provider bytes; existing stable-ID verification stays unchanged.
+- Preserve verified attachments explicitly on VK wall.edit/reschedule; reject
+  non-whole-minute VK schedules rather than silently accepting provider rounding.
 - Add owner-only read-only reconciliation for an externally removed uncertain
   VK schedule, with schema-v4 immutable evidence and actor/binding epoch fencing.
   Original unknown operation and attempt remain unchanged; no publication retry.

@@ -34,3 +34,16 @@ Reference: official VKCOM/vk-api-schema `photos/methods.json` (saveWallPhoto,
 getWallUploadServer) and `photos/objects.json` (photo identity and sizes). The
 observed additional orig_photo field is optional, not an assumed schema guarantee.
 Real before/after fingerprints and lifecycle receipts are required for acceptance.
+
+## Live lifecycle correction (reported defect, Not done until rechecked)
+
+Live post9 proved exact copied-photo bytes. Its subsequent text edit exposed a
+separate incorrect transport assumption: VK clears attachments if wall.edit omits
+them. Preserve ordered verified community IDs explicitly on text edit/reschedule;
+do not reupload or restore by guessing. The same readback rounded publish_date to
+a minute. Require whole-minute VK schedules at preflight (no silent rounding),
+while retaining exact requested/effective-time verification. Existing cancel still
+works regardless of seconds in an old queue item. Official wall.edit schema lists
+attachments and publish_date but promises neither omission preservation nor
+second-precision round trips. These corrections follow observed authenticated
+readback, not a claim that the schema specifies those behaviors.

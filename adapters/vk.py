@@ -84,6 +84,9 @@ class VKAdapter:
             plain_text(request, limit=16000)
             verify_assets(request)
             schedule_guard(request, self.clock())
+            if request.scheduled_at and parse_time(request.scheduled_at) % 60:
+                raise DomainError('vk_schedule_minute_precision',
+                                  'VK scheduled lifecycle requires a whole minute; specify HH:MM')
             await self._rights(request)
             if request.existing:
                 existing = request.existing
@@ -339,7 +342,8 @@ class VKAdapter:
             native_media = state['source']['media']
         elif r.existing:
             native_media = list(r.existing.provider_media)
-            # Omitting attachments on edit preserves remote objects and avoids storing access keys.
+            # VK wall.edit clears omitted attachments; explicitly keep verified IDs.
+            attachments = list(native_media)
         params = {'owner_id': int(r.native_target)}
         if r.action == 'forward':
             method, params = 'wall.repost', {'object': state['source']['object'], 'group_id': group}
@@ -353,8 +357,7 @@ class VKAdapter:
             if r.existing:
                 method = 'wall.edit'
                 params['post_id'] = int(r.existing.native_id)
-                if not reuse and r.action == 'edit':
-                    params['attachments'] = ','.join(attachments)
+                params['attachments'] = ','.join(attachments)
             else:
                 method = 'wall.post'
                 params.update(from_group=1, signed=0, guid=digest([r.operation_id, r.attempt_id]))
