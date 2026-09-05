@@ -1,5 +1,11 @@
 # Documentation
 
+**Current remote checkout is a partial source checkpoint, not a runnable release.**
+Read [runtime delivery status](operations/social-runtime.md) before the historical
+handoffs below. Actual core files were saved in this turn; later source requests
+received a new request-safety block. The full local archive is still authoritative
+for the not-yet-delivered implementation.
+
 [Dependency and real Telegram SDK qualification](operations/dependency-sdk-verification.md)
 is an independent hosted CI gate, not full-runtime delivery.
 

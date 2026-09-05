@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Actual core source delivery and current access boundary — 2026-09-05
+
+- Read the existing access retrospectives and corrected an overbroad permanent
+  write-ban assumption. Standard authorized GitHub source writes succeeded.
+- Saved 26 original source/configuration paths in commits `938f303d` and
+  `348233a0`; independently matched the complete accepted partial tree hash.
+- Later VK adapter and rich-text source requests received explicit request-safety
+  evaluation blocks. Their payloads and 46 other pending paths are not delivered;
+  this partial checkout is not a runnable or deployable full application.
+- Preserved the mandatory full-runtime CI instead of claiming seed-only green
+  checks prove delivery. Updated canonical status and concise delivery proof rule.
+- No blocked payload retry via another route, agent delegation, MAX change,
+  provider/model call, merge or deployment.
+
 ### Locked environment and real core SDK regression — 2026-09-05
 
 - Pinned the independently qualified 70-package graph for Linux Python 3.12/3.13;
