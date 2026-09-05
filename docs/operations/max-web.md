@@ -195,3 +195,38 @@ previews, including unrelated snippets, in local tool output. That diagnostic
 was stopped; no such output is included in committed fixtures or CI artifacts.
 The saved driver restricts extraction to bound main panes and title-only discovery.
 Do not repeat global `button.innerText` / `body.innerText` dumps on authenticated UI.
+
+### Completed verification of code checkpoint
+
+Code/test SHA: `a18fa1c640596c4818b9c0405d986e4e51e74e6b`, pushed to the existing
+MAX branch. All **11 changed files** were read back byte-for-byte from an independent
+GitHub clone checked out detached at that exact SHA. No second feature branch.
+
+- New safety + observed-navigation suite: **44 passed**, no skips.
+- Local verified archive + exact MAX overlay: **99 passed**, zero skips, 225.77s;
+  includes the preserved 55 actual-core/fixture cases, not live-driver MCP wiring.
+- Archived contract regression: **24 passed + 193 subtests**, 3.55s.
+- [GitHub-hosted PR CI 33954798092](https://github.com/onedayonemasterpiece/vibepublish/actions/runs/33954798092):
+  **success**; inspected logs: **81 passed, 2 skipped core modules**, 80.19s,
+  plus **14 + 8** main-based contract checks. The 81 are the original 37 plus 44
+  new tests. No publishing-code replay or remote full-core claim.
+
+The acceptance source projection has 125 files (103 original core sources plus
+MAX-owned source/tests), canonical sorted JSON source-hash manifest SHA-256
+`336be2bd667470f9ee6e8c2654689803b84f9eaf4d770ffc5c123a9f0af48aa0`.
+This is explicitly a **manifest hash, not a Git tree SHA**. Inputs remain core
+`870e2a4304c57ef5dd7152de63df1db6431a942b` and the code SHA above. All 103 source
+hashes and port `4304a47116da01e267b0dd324b26e7fdae58a66c0bbd75617eb9cbb464015bf0`
+were rechecked unchanged. Local results reuse installed dependencies; no clean
+requirements.lock claim. At the final fetch PR #1 advanced to
+`73345b450793b92dfa1f3992713b4b7d7541c9b2` with dependency/SDK verification work;
+its full runtime is still not remotely delivered. MAX did not import that payload.
+
+Replay keeps provider event counters outside driver state and aborts every
+non-loopback browser request. Passing tests assert **zero attempted outbound real
+MAX requests and zero social effects** for this read-only subset. Source review
+and binding/sentinel checks found no private binding values in published files.
+This does not claim comprehensive certification of arbitrary future captures.
+
+Final documentation-only SHA and any later CI readback are recorded in PR #2;
+this code checkpoint remains distinct from those documentation updates.
