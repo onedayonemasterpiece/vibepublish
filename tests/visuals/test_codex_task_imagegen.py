@@ -211,6 +211,57 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('succeeded', (await self.adapter.find(key)).state)
         self.assertEqual([], self.native.calls)
 
+    async def test_find_saves_only_sanitized_exception_frames(self):
+        key = await self.adapter.submit(self.request)
+        private_text = 'PRIVATE_PROMPT_OR_TOKEN_MUST_NOT_BE_SAVED'
+        async def fail(method, params):
+            raise RuntimeError(private_text)
+        self.native.request = fail
+        observed = await self.adapter.find(key)
+        self.assertEqual('unknown', observed.state)
+        record = self.adapter._load(self.adapter._directory(key))
+        error = record['last_observation_error']
+        self.assertEqual('RuntimeError', error['class'])
+        self.assertTrue(error['frames'])
+        for frame in error['frames']:
+            self.assertEqual({'file', 'line', 'function'}, set(frame))
+            self.assertNotIn('/', frame['file'])
+            self.assertIsInstance(frame['line'], int)
+        self.assertNotIn(private_text, json.dumps(record))
+        self.assertNotIn('last_observation_error', observed.usage_json)
+
+    async def test_malformed_thread_response_is_diagnosed(self):
+        key = await self.adapter.submit(self.request)
+        async def malformed(method, params):
+            return {'thread': None}
+        self.native.request = malformed
+        self.assertEqual('unknown', (await self.adapter.inspect(key)).state)
+        record = self.adapter._load(self.adapter._directory(key))
+        self.assertEqual('AttributeError', record['last_observation_error']['class'])
+
+    async def test_observation_conversion_failure_is_diagnosed_before_reraise(self):
+        key = await self.adapter.submit(self.request)
+        def conversion_failure(record):
+            raise TypeError('PRIVATE_VALUES_NOT_DIAGNOSTICS')
+        self.adapter._observation = conversion_failure
+        with self.assertRaises(TypeError):
+            await self.adapter.inspect(key)
+        record = self.adapter._load(self.adapter._directory(key))
+        self.assertEqual('TypeError', record['last_observation_error']['class'])
+        self.assertNotIn('PRIVATE_VALUES_NOT_DIAGNOSTICS', json.dumps(record))
+
+    async def test_inspection_cancellation_is_recorded_and_propagated(self):
+        key = await self.adapter.submit(self.request)
+        async def cancelled(method, params):
+            raise asyncio.CancelledError('PRIVATE_CANCELLATION_TEXT')
+        self.native.request = cancelled
+        with self.assertRaises(asyncio.CancelledError):
+            await self.adapter.inspect(key)
+        record = self.adapter._load(self.adapter._directory(key))
+        self.assertEqual('unknown', record['state'])
+        self.assertEqual('CancelledError', record['last_observation_error']['class'])
+        self.assertNotIn('PRIVATE_CANCELLATION_TEXT', json.dumps(record))
+
     def test_environment_does_not_inherit_api_or_social_keys(self):
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'fixture', 'CODEX_API_KEY': 'fixture',
                                    'TELEGRAM_TOKEN': 'fixture'}):

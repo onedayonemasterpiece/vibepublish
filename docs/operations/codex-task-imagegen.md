@@ -150,3 +150,31 @@ Fix validation: 18 focused adapter/service tests passed; all 127 visual tests
 passed (two existing dependency deprecations); compileall and diff checks passed.
 No live calls, image generations, production database edits or deployments were
 performed during this regression fix.
+
+### Private observation diagnostics
+
+On an inspect/find remote-read or artifact-processing exception, the private task
+receipt now records `last_observation_error` with the exception class and up to
+16 traceback frames (`file` basename, numeric `line`, `function`). It never stores
+exception messages, argument values, locals, source lines, prompts or reasoning.
+The same diagnostic is saved before re-raising an observation-conversion error,
+including conversion of an already-terminal receipt. Cancellation is recorded
+then propagated; it is not converted into success or an automatic resend.
+Diagnostics do not enter public usage/provenance. A failure to acquire/read/write
+the private receipt itself cannot reliably be recorded in that same receipt.
+
+A read-only lookup of the reported original task
+`01a07247-6ab5-71c2-aa26-3f516667d33f` returned its completed turn
+`01a07247-74ba-7543-86a5-5af8bfdff04f` and one native image item. This confirms
+present readback only, not its earlier in-flight response. Official app-server
+documentation allows `thread/read` with runtime `active` status; the installed
+DevCoveer bridge also uses that read to locate in-flight turns for cancellation.
+No general in-flight rejection rule was found. Missing/ambiguous saved turns or
+transient read errors can still produce unknown; none is asserted as the proven
+cause of the original four-second generic service failure.
+
+Diagnostics validation: 22 focused tests passed, including the actual service
+running-to-candidate regression, sanitized error frames, malformed read response,
+observation conversion failure and cancellation propagation. Compileall/diff
+checks passed. No new task, generation, production DB change or social write was
+performed for this diagnostic change.

@@ -77,6 +77,17 @@ def _save(path: Path, data: bytes):
         temporary.unlink(missing_ok=True)
 
 
+def _exception_frames(exc):
+    """Bounded private diagnostics: no exception text, locals or source lines."""
+    frames = []
+    current = exc.__traceback__
+    while current is not None:
+        frames.append({'file': Path(current.tb_frame.f_code.co_filename).name[:160],
+            'line': current.tb_lineno, 'function': current.tb_frame.f_code.co_name[:160]})
+        current = current.tb_next
+    return {'class': type(exc).__name__[:160], 'frames': frames[-16:]}
+
+
 class AppServer:
     """One owned, drained stdio process; never attaches to or kills a shared bot."""
     def __init__(self, codex_home: Path, binary='/home/dev/.local/bin/codex'):
@@ -356,7 +367,12 @@ class CodexTaskImagegen:
         with self._lock(directory):
             record = self._load(directory)
             if record['state'] in ('succeeded', 'failed') or not record.get('thread_id'):
-                return self._observation(record)
+                try:
+                    return self._observation(record)
+                except Exception as exc:
+                    record['last_observation_error'] = _exception_frames(exc)
+                    self._record(directory, record)
+                    raise
             try:
                 response = await self.transport.request('thread/read', {
                     'threadId': record['thread_id'], 'includeTurns': True})
@@ -381,10 +397,23 @@ class CodexTaskImagegen:
                     await self.transport.request('turn/interrupt', {
                         'threadId': record['thread_id'], 'turnId': record['turn_id']})
                     record['state'] = 'unknown'
-            except (OSError, RuntimeError, ValueError, TypeError, KeyError, DomainError, asyncio.TimeoutError):
+            except asyncio.CancelledError as exc:
                 record['state'] = 'unknown'
+                record['last_observation_error'] = _exception_frames(exc)
+                self._record(directory, record)
+                raise
+            except Exception as exc:
+                record['state'] = 'unknown'
+                record['last_observation_error'] = _exception_frames(exc)
             self._record(directory, record)
-            return self._observation(record)
+            try:
+                return self._observation(record)
+            except Exception as exc:
+                # Keep diagnostic evidence if dataclass/receipt conversion fails
+                # after a successful native read; never substitute an artifact.
+                record['last_observation_error'] = _exception_frames(exc)
+                self._record(directory, record)
+                raise
 
     async def cancel(self, execution_ref):
         observed = await self.inspect(execution_ref)
