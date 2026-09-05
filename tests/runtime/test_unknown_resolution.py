@@ -149,3 +149,52 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM attempt_resolutions').fetchone()[0], 0)
             self.assertEqual(db.execute('SELECT revision FROM publications WHERE id=?', (self.args['publication_id'],)).fetchone()[0], 1)
             self.assertEqual(tuple(db.execute('SELECT * FROM attempts WHERE id=?', (self.old,)).fetchone()), self.snapshot)
+
+    async def seed_lifecycle(self, action, existing_changes=None):
+        await self.seed()
+        existing={'native_id':'8','native_target':'-241261191','namespace':'scheduled',
+                  'text':'test','fingerprint':'fixture','observed_at':timestamp(self.store.clock()),
+                  'scheduled_at':timestamp(self.store.clock()+172800),'media_hashes':[]}
+        existing.update(existing_changes or {})
+        with self.store.tx() as db:
+            db.execute("UPDATE attempts SET state='scheduled',checkpoint=? WHERE id=?",(canonical({'remote':existing}),self.old))
+            db.execute("UPDATE operations SET state='scheduled' WHERE id=?",(self.old_op,))
+        change={'kind':action,'content':{'text':'edited'}} if action == 'edit' else {'kind':action,'delivery':{'kind':'at','at':timestamp(self.store.clock()+259200)}}
+        accepted=await self.app.call(self.actor,'vibepublish_publication_update',{
+            'publication_id':self.args['publication_id'],'expected_revision':1,'change':change,'request_key':'lifecycle'})
+        self.assertIn('operation_id',accepted,accepted)
+        with self.store.tx() as db:
+            row=dict(db.execute('SELECT * FROM attempts WHERE operation_id=?',(accepted['operation_id'],)).fetchone())
+            cp=canonical({'transition':'vk_response','adapter':{'version':1,'attempt':row['id'],'plan':row['plan_digest'],'target':'-241261191','id':'8'}})
+            db.execute("UPDATE attempts SET state='outcome_unknown',dispatched=1,checkpoint=? WHERE id=?",(cp,row['id']))
+            db.execute("UPDATE operations SET state='outcome_unknown',complete=1,work_state='done' WHERE id=?",(accepted['operation_id'],))
+        self.old=row['id'];self.old_op=accepted['operation_id']
+        self.args.update(expected_revision=2,change={'kind':'reconcile_removed','attempt_id':self.old})
+        with self.store.connection() as db:
+            self.snapshot=tuple(db.execute('SELECT * FROM attempts WHERE id=?',(self.old,)).fetchone())
+
+    async def test_scheduled_edit_absence_resolves_without_repeating_edit(self):
+        await self.seed_lifecycle('edit');result=await self.run_resolution()
+        self.assertEqual(result['state'],'verified',result)
+        with self.store.connection() as db:
+            self.assertEqual(tuple(db.execute('SELECT * FROM attempts WHERE id=?',(self.old,)).fetchone()),self.snapshot)
+            self.assertEqual(db.execute('SELECT state FROM operations WHERE id=?',(self.old_op,)).fetchone()[0],'outcome_unknown')
+
+    async def test_scheduled_reschedule_absence_resolves(self):
+        await self.seed_lifecycle('reschedule');result=await self.run_resolution()
+        self.assertEqual(result['state'],'verified',result)
+
+    async def test_lifecycle_existing_id_must_match_response(self):
+        await self.seed_lifecycle('edit',{'native_id':'9'})
+        result=await self.app.call(self.actor,'vibepublish_publication_update',self.args)
+        self.assertEqual(result['error']['code'],'resolution_not_eligible');self.assertFalse(self.reader.calls)
+
+    async def test_lifecycle_existing_namespace_must_be_scheduled(self):
+        await self.seed_lifecycle('edit',{'namespace':'published'})
+        result=await self.app.call(self.actor,'vibepublish_publication_update',self.args)
+        self.assertEqual(result['error']['code'],'resolution_not_eligible');self.assertFalse(self.reader.calls)
+
+    async def test_lifecycle_existing_target_must_match_response(self):
+        await self.seed_lifecycle('edit',{'native_target':'-999'})
+        result=await self.app.call(self.actor,'vibepublish_publication_update',self.args)
+        self.assertEqual(result['error']['code'],'resolution_not_eligible');self.assertFalse(self.reader.calls)

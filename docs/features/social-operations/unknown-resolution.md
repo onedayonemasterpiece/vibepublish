@@ -58,3 +58,14 @@ Attempt/plan/target/native-ID bindings and ordinal mappings are validated again.
 Arbitrary adapter keys and rendition URLs are not copied to this final proof.
 Non-VK final checkpoints remain unchanged. Three worker integration/scope tests
 cover successful persistence, malformed mapping rejection and non-VK isolation.
+
+## Narrow scheduled lifecycle delta
+
+Status: **Not confirmed by user**. The same absence proof may resolve an uncertain
+scheduled `edit` or `reschedule`, but only when its immutable `plan.existing`
+identifies the same scheduled native target and native ID as its response
+checkpoint. Missing existing binding, published namespace, different target or ID,
+and actions other than publish/edit/reschedule are ineligible. All original
+actor/binding epoch fences remain; no lifecycle call is retried and the original
+unknown attempt is preserved. This enables safe reconciliation after an owner
+separately removed the exact test object, not a generic quarantine bypass.

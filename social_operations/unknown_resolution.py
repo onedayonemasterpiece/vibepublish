@@ -24,7 +24,7 @@ def bound_attempt(app, db, actor, args):
     binding = dict(app.store.binding(db, actor, binding_id=old['binding_id']))
     if binding['epoch'] != old['binding_epoch'] or plan['binding_epoch'] != binding['epoch']:
         raise DomainError('access_revoked')
-    if (plan['action'] != 'publish' or not plan.get('scheduled_at') or plan['provider'] != 'vk'
+    if (plan['action'] not in {'publish', 'edit', 'reschedule'} or not plan.get('scheduled_at') or plan['provider'] != 'vk'
             or plan['native_target'] != binding['native_id'] or plan['connection_id'] != binding['connection_id']):
         raise DomainError('resolution_not_eligible')
     try:
@@ -36,6 +36,12 @@ def bound_attempt(app, db, actor, args):
             raise ValueError()
     except (ValueError, KeyError, TypeError):
         raise DomainError('resolution_checkpoint_invalid') from None
+    if plan['action'] in {'edit', 'reschedule'}:
+        existing = plan.get('existing')
+        if (not isinstance(existing, dict) or existing.get('namespace') != 'scheduled'
+                or existing.get('native_target') != plan['native_target']
+                or existing.get('native_id') != str(cp['id']) or not existing.get('scheduled_at')):
+            raise DomainError('resolution_not_eligible')
     return pub, old, binding, str(cp['id'])
 
 
