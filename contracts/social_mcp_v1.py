@@ -212,13 +212,22 @@ TOOLS[-1]["inputSchema"]["oneOf"] = [
     {"required": ["publication_id", "expected_revision"], "not": {"required": ["item_ref"]}},
     {"required": ["item_ref"], "not": {"anyOf": [{"required": ["publication_id"]}, {"required": ["expected_revision"]}]}}]
 
-visual_cmd = {"oneOf": [ref("visual_spec"),
+visual_cmd = {"oneOf": [arm("import"), ref("visual_spec"),
     arm("select", {"job_id": ID, "candidate_id": ID, "expected_revision": REV, "token": string(512)},
         ("job_id", "candidate_id", "expected_revision", "token")),
     arm("feedback", {"job_id": ID, "candidate_id": ID, "rating": enum("accepted", "rejected"), "reason": string(2000)},
         ("job_id", "candidate_id", "rating"))]}
-tool("visual", "Generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Generate allows optional source references. Selection resumes only its exact authorized parent.",
-    obj({"command": visual_cmd, "request_key": KEY}, ("command",)), ref("receipt"), "visual")
+tool("visual", "Import a chat attachment as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Generate allows optional source references. Selection resumes only its exact authorized parent.",
+    obj({"command": visual_cmd, "request_key": KEY,
+         "file": obj({"download_url": string(8192), "file_id": string(512),
+                      "mime_type": enum("image/png", "image/jpeg", "image/webp"),
+                      "file_name": string(512)}, ("download_url", "file_id"))},
+        ("command",)), ref("receipt"), "visual")
+TOOLS[-1]["_meta"] = {"openai/fileParams": ["file"]}
+TOOLS[-1]["inputSchema"]["allOf"] = [{
+    "if": {"properties": {"command": {"properties": {"kind": {"const": "import"}}, "required": ["kind"]}}},
+    "then": {"required": ["file", "request_key"]},
+    "else": {"not": {"required": ["file"]}}}]
 
 tool("status", "Read local receipts and atomic progress, never retry. Watch one operation with after_event; return on its first new event, not all providers.",
     obj({"ids": array(ID, 1, 20), "limit": LIMIT, "cursor": string(512),
@@ -404,11 +413,16 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
             effective.add("engage")
         if "destination.profile" in effective:
             effective.add("destinations")
+    if "publish" in effective:
+        effective.add("visual")  # Import-only projection below; no generation grant.
     result = []
     for item in catalog()["tools"]:
         if item["required_scope"] not in effective:
             continue
         item.pop("required_scope")
+        if item["name"] == "vibepublish_visual" and "visual" not in scopes:
+            item["inputSchema"]["properties"]["command"] = arm("import")
+            item["description"] = "Import a chat attachment as a private image asset, without AI or publication."
         if item["name"] == "vibepublish_publish" and "visual" not in scopes:
             item["inputSchema"]["properties"].pop("visual", None)
             item["inputSchema"]["anyOf"] = [v for v in item["inputSchema"]["anyOf"] if v.get("required") != ["visual"]]
@@ -428,7 +442,7 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
             for _field in ("command", "query"):
                 _variants = item["inputSchema"].get("properties", {}).get(_field, {}).get("oneOf")
                 if _variants:
-                    item["inputSchema"]["properties"][_field]["oneOf"] = [v for v in _variants if not v["properties"]["kind"]["const"].startswith("emoji_")]
+                    item["inputSchema"]["properties"][_field]["oneOf"] = [v for v in _variants if not v.get("properties", {}).get("kind", {}).get("const", "").startswith("emoji_")]
         result.append(item)
     return result
 

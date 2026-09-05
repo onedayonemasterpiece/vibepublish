@@ -1,4 +1,4 @@
-"""The only application entrypoint for MCP and HTTP. No provider I/O at admission."""
+"""The application entrypoint for MCP and HTTP; attachment import may fetch bytes."""
 from __future__ import annotations
 import asyncio
 import hashlib
@@ -51,7 +51,11 @@ class Application:
             elif short in ('publish', 'engage', 'publication_update'):
                 result = self.accept(actor, short, arguments)
             elif short == 'visual':
-                result = self.visuals.command(actor, arguments)
+                if arguments['command']['kind'] == 'import':
+                    from .chat_file_ingress import import_chat_file
+                    result = await import_chat_file(self, actor, arguments)
+                else:
+                    result = self.visuals.command(actor, arguments)
             else:
                 raise DomainError('capability_not_implemented', next_action='contact_owner')
             # Validate outputs too; a malformed success must never escape to clients.
