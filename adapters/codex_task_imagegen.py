@@ -45,10 +45,12 @@ def _private(path: Path):
 def _read(path: Path, limit: int) -> bytes:
     if not path.is_absolute() or '..' in path.parts:
         raise ValueError('unconfined path')
-    directory = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    # O_PATH pins directories without requiring listing/read permission.
+    # Hardened systemd namespaces may expose execute-only ancestors.
+    directory = os.open('/', os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         for part in path.parts[1:-1]:
-            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            child = os.open(part, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
             os.close(directory); directory = child
         fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
         with os.fdopen(fd, 'rb') as source:

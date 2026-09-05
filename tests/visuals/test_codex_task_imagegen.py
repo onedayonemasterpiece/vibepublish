@@ -390,3 +390,45 @@ class AppServerInitializationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(client.reader)
                 process.terminate.assert_called_once()
                 self.assertEqual(1, client._exchange.await_count)
+
+
+class SecureTraversalTests(unittest.TestCase):
+    def test_read_pins_ancestors_with_opath_but_reads_final_file(self):
+        from adapters.codex_task_imagegen import _read
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'file.bin'
+            path.write_bytes(b'fixture')
+            original = os.open
+            calls = []
+            def record_open(path, flags, *args, **kwargs):
+                calls.append((str(path), flags))
+                return original(path, flags, *args, **kwargs)
+            with patch('adapters.codex_task_imagegen.os.open', side_effect=record_open):
+                self.assertEqual(b'fixture', _read(path, 100))
+            self.assertEqual('/', calls[0][0])
+            for _path, flags in calls[:-1]:
+                self.assertTrue(flags & os.O_PATH)
+                self.assertTrue(flags & os.O_DIRECTORY)
+                self.assertTrue(flags & os.O_NOFOLLOW)
+            self.assertFalse(calls[-1][1] & os.O_PATH)
+            self.assertTrue(calls[-1][1] & os.O_NOFOLLOW)
+
+    @unittest.skipUnless(hasattr(os, 'O_PATH'), 'Linux O_PATH required')
+    def test_execute_only_ancestor_needs_traversal_not_directory_listing(self):
+        from adapters.codex_task_imagegen import _read
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp) / 'execute-only'
+            parent.mkdir()
+            path = parent / 'file.bin'; path.write_bytes(b'fixture')
+            parent.chmod(0o111)
+            try:
+                try:
+                    descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+                except PermissionError:
+                    pass
+                else:
+                    os.close(descriptor)
+                    self.skipTest('runtime privileges bypass execute-only directory restriction')
+                self.assertEqual(b'fixture', _read(path, 100))
+            finally:
+                parent.chmod(0o700)

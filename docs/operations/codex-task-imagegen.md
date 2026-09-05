@@ -194,3 +194,23 @@ initialization. The full focused adapter/service file passes 24 tests and three
 subtests; compileall and diff checks pass. No live calls or generation were used.
 This confirmed lifecycle defect is not asserted as the cause of the separately
 reported four-second core failure after a successfully submitted native turn.
+
+### Execute-only namespace traversal — confirmed early failure cause
+
+The operator reproduced the early generic service error under the exact worker
+systemd protections: `_read` failed opening `/` with `O_RDONLY | O_DIRECTORY`
+because the namespace exposes an execute-only root. This happens while loading
+the receipt, before the observation try/diagnostic block; it is independent of
+the native task's separate bwrap/AppArmor failure.
+
+Secure reads now pin root and ancestor directories using Linux
+`O_PATH | O_DIRECTORY | O_NOFOLLOW`. The final file remains opened read-only with
+`O_NOFOLLOW`; ownership, regular-file, hardlink, size and hash checks are unchanged.
+The reader needs path traversal, not directory listing permission. No sandbox,
+systemd protection or host AppArmor setting is relaxed.
+
+Two regressions failed against the old implementation and pass with the fix:
+an actual execute-only ancestor, and inspection of root/ancestor/final-file open
+flags. All 26 focused tests and three subtests pass; compileall/diff checks pass.
+The exact systemd production read-only recheck belongs to the operator; this lane
+made no live calls or production writes for the fix.
