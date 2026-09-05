@@ -19,6 +19,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route, Mount
 from .domain import DomainError, canonical
 from .service import Application, SKILL
+from .asset_ingress import MAX_UPLOAD_BYTES, upload_image
 
 
 class AuthBoundary:
@@ -43,6 +44,8 @@ class AuthBoundary:
                 raise DomainError('unauthorized', 'A service bearer token is required', 'reauthorize')
             scope['vibepublish.actor'] = self.store.authenticate(authorization[7:])
             if scope['method'] in ('POST', 'PUT', 'PATCH'):
+                image_upload = scope['method'] == 'POST' and scope['path'] == '/v1/assets'
+                body_limit = MAX_UPLOAD_BYTES if image_upload else 512*1024
                 body = bytearray()
                 async with asyncio.timeout(10):
                     while True:
@@ -50,13 +53,14 @@ class AuthBoundary:
                         if message['type'] == 'http.disconnect':
                             return
                         body.extend(message.get('body', b''))
-                        if len(body) > 512*1024:
+                        if len(body) > body_limit:
                             raise DomainError('request_too_large')
                         if not message.get('more_body', False):
                             break
                 # Do not pass malformed/deep JSON into either transport projection.
                 try:
-                    json.loads(body)
+                    if not image_upload:
+                        json.loads(body)
                 except (ValueError, RecursionError):
                     raise DomainError('invalid_json') from None
                 original_receive = receive
@@ -184,6 +188,16 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'))
                 return JSONResponse(exc.output(), status_code=422)
         return run
 
+    async def upload_endpoint(request):
+        try:
+            result = upload_image(service, request.scope['vibepublish.actor'],
+                                  await request.body(), request.headers.get('content-type', ''),
+                                  request.headers.get('idempotency-key'))
+            return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+        except DomainError as exc:
+            status = 409 if exc.code == 'idempotency_conflict' else 403 if exc.code in {'access_denied', 'access_revoked'} else 422
+            return JSONResponse(exc.output(), status_code=status, headers={'Cache-Control': 'no-store'})
+
     async def asset_endpoint(request):
         try:
             data, mime, sha = service.read_asset(request.scope['vibepublish.actor'], request.path_params['id'])
@@ -206,7 +220,7 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'))
         except DomainError as exc:
             return JSONResponse(exc.output(), status_code=404, headers={'Cache-Control':'no-store'})
 
-    routes = [Route('/v1/emoji/catalogs/{id}', emoji_preview_endpoint, methods=['GET']), Route('/v1/assets/{id}', asset_endpoint, methods=['GET']), Route('/v1/bootstrap', endpoint('get_started'), methods=['GET']),
+    routes = [Route('/v1/assets', upload_endpoint, methods=['POST']), Route('/v1/emoji/catalogs/{id}', emoji_preview_endpoint, methods=['GET']), Route('/v1/assets/{id}', asset_endpoint, methods=['GET']), Route('/v1/bootstrap', endpoint('get_started'), methods=['GET']),
               Route('/v1/operations/{id}', endpoint('status'), methods=['GET']),
               Route('/v1/publications/{id}/commands', endpoint('publication_update', mutation=True), methods=['POST']),
               Route('/v1/items/{id}/commands', endpoint('publication_update', mutation=True, target_field='item_ref'), methods=['POST'])]
