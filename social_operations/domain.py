@@ -97,7 +97,7 @@ def parse_source(url: str) -> NativeSource:
             m = re.fullmatch(r"/c/([1-9][0-9]*)/([1-9][0-9]*)/?", p.path)
             if m:
                 channel, item = m.groups()
-                return NativeSource("telegram", "-100" + channel, item, False,
+                return NativeSource("telegram", str(-1_000_000_000_000 - int(channel)), item, False,
                                     f"https://t.me/c/{channel}/{item}")
         if host in {"vk.com", "vk.ru", "www.vk.com", "www.vk.ru"}:
             m = re.fullmatch(r"/wall(-?[1-9][0-9]*)_([1-9][0-9]*)/?", p.path)

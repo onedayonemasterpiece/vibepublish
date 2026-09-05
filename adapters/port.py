@@ -40,6 +40,18 @@ class RemoteItem:
     metrics: tuple[tuple[str, float, str], ...] = ()
     # Provider object IDs prove binding, not equality of transcoded bytes.
     media_check: str = "not_applicable"
+    native_target: str = field(default="", repr=False)
+    # Ordered opaque provider object identities, NOT hashes of transcoded bytes.
+    provider_media: tuple[str, ...] = field(default=(), repr=False)
+    # One logical album can have multiple physical native messages.
+    member_ids: tuple[str, ...] = field(default=(), repr=False)
+    entities_json: str = "[]"  # Additive immutable semantic entity observation (MAX compatible).
+
+
+    def __post_init__(self):
+        for name in ('media_hashes', 'provider_media', 'member_ids'):
+            object.__setattr__(self, name, tuple(getattr(self, name)))
+        object.__setattr__(self, 'metrics', tuple(tuple(metric) for metric in self.metrics))
 
 
 @dataclass(frozen=True, slots=True)
