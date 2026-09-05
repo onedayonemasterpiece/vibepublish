@@ -1,26 +1,35 @@
+[build-system]
+requires = ["setuptools>=80,<83"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "vibepublish"
 version = "0.1.0"
-description = "Requirement-led publishing project scaffold"
-requires-python = ">=3.11"
-dependencies = [
-  "google-genai>=1.75.0",
-  "google-generativeai>=0.5.0",
-  "supabase>=2.16.0",
-  "pydantic>=2.9,<2.13",
-  "cryptography>=41.0.0",
-  "requests>=2.31.0",
-  "PyYAML>=6.0",
-]
+description = "Native-only social command ledger and MCP service"
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
 
 [project.optional-dependencies]
-dev = [
-  "pytest>=8.1.1",
-  "pytest-asyncio>=0.23.6",
-  "playwright>=1.41.0",
-]
+telegram = ["Telethon==1.44.0"]
+vk = ["aiohttp==3.13.3"]
+legacy-google = ["google-genai>=1.75.0", "google-generativeai>=0.5.0",
+                 "supabase>=2.16.0", "requests>=2.31.0", "PyYAML>=6.0"]
+
+[project.scripts]
+vibepublish = "social_operations.cli:main"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.in"]}
+
+[tool.setuptools.packages.find]
+include = ["social_operations*", "adapters*", "contracts*", "google_ai*"]
+
+[tool.setuptools.package-data]
+social_operations = ["schema.sql", "visual_schema.sql", "emoji_schema.sql"]
+
+[tool.setuptools.data-files]
+"share/vibepublish" = ["docs/llm/vibepublish-social-skill.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
-
+addopts = "-ra"

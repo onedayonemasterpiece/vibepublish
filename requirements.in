@@ -1,7 +1,9 @@
-# Direct dependency pins. The generated transitive lock is recorded by CI.
+# Direct dependency pins. requirements.lock pins the CI-resolved transitive graph.
 mcp==1.29.0
 jsonschema[format]==4.26.0
 Pillow==12.3.0
 uvicorn==0.48.0
 pytest==9.0.2
 pytest-asyncio==1.3.0
+CairoSVG==2.8.2
+fonttools==4.63.0

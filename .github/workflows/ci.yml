@@ -54,6 +54,16 @@ jobs:
           "$PY" -m pip check
           "$PY" scripts/verify/dependencies.py artifacts/verification/resolved.lock > artifacts/verification/locked-environment.json
           "$PY" scripts/verify/telegram_wire.py > artifacts/verification/telegram-sdk-locked.json
+      - name: Install full application and browser prerequisites
+        run: |
+          "$VERIFY_PYTHON" -m pip install --no-deps --no-build-isolation -e .
+          "$VERIFY_PYTHON" -m pip check
+          "$VERIFY_PYTHON" -m playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends libcairo2 fonts-dejavu-core
+      - name: Real SDK and complete runtime regression - mandatory
+        run: |
+          "$VERIFY_PYTHON" scripts/verify/telegram_sdk.py > artifacts/verification/core-sdk.json
+          "$VERIFY_PYTHON" -m pytest tests -q --junitxml=artifacts/verification/full-tests.xml
       - name: Compile delivered implementation
         run: '"$VERIFY_PYTHON" -m compileall -q social_operations adapters scripts/verify'
       - name: Source and environment receipt

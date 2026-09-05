@@ -1,1 +1,1 @@
-"""Provider ports and implementations; no implicit production connections."""
+"""Independent provider implementations; no EventsBot runtime dependency."""
