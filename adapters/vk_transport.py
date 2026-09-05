@@ -6,6 +6,7 @@ No token, upload URL, provider body, cookies or access keys enter core checkpoin
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import ipaddress
 import json
 import socket
@@ -194,3 +195,37 @@ class VKHTTPTransport:
                 or not isinstance(response.get('hash'), str) or not 1 <= len(response['hash']) <= 512 or 'error' in response):
             raise DomainError('vk_upload_response_invalid')
         return {k: response[k] for k in ('server', 'photo', 'hash')}
+
+    async def image_fingerprint(self, url: str) -> dict:
+        """Read provider rendition bytes without forwarding credentials or URLs."""
+        import aiohttp
+        from social_operations.assets import verify_image
+        try:
+            async with asyncio.timeout(10):
+                host = validated_url(url)
+                addresses = await public_addresses(host)
+                connector = aiohttp.TCPConnector(resolver=PinnedResolver(host, addresses),
+                                                use_dns_cache=False, limit=1)
+                async with aiohttp.ClientSession(connector=connector, trust_env=False,
+                        cookie_jar=aiohttp.DummyCookieJar(), auto_decompress=False,
+                        timeout=aiohttp.ClientTimeout(total=10),
+                        headers={'Accept-Encoding': 'identity'}) as session:
+                    async with session.get(url, allow_redirects=False) as response:
+                        mime = response.headers.get('Content-Type', '').split(';')[0].strip().lower()
+                        if (response.status != 200 or mime not in {'image/jpeg', 'image/png', 'image/webp'}
+                                or response.headers.get('Content-Encoding', '').lower() not in {'', 'identity'}):
+                            raise DomainError('vk_photo_read_failed')
+                        chunks, length = [], 0
+                        async for chunk in response.content.iter_chunked(65536):
+                            length += len(chunk)
+                            if length > 20 * 1024 * 1024:
+                                raise DomainError('vk_photo_size_limit')
+                            chunks.append(chunk)
+                        data = b''.join(chunks)
+                verified = await asyncio.to_thread(verify_image, data, mime)
+                return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data),
+                        'mime': mime, 'width': verified.width, 'height': verified.height}
+        except DomainError:
+            raise
+        except Exception:
+            raise DomainError('vk_photo_read_failed') from None

@@ -36,3 +36,10 @@ R13 Partial: automatic scheduled composition verified; no-time live evidence tra
 R15 Partial: Kaliningrad tenant config read back and skill delivered; owner acceptance pending.
 All worker patches integrated as separate commits; root owns final tests, runtime and report.
 No unmerged writable work is intentionally abandoned; MAX/main/unrelated production remain out of scope.
+
+## Completion continuation: VK copy binding and explicit recovery
+R16 VK copied photo identities: root owns adapters/vk.py, vk_transport.py and provider tests; bind via verified pre/post provider image bytes, preserve order and no uncertain resend.
+R17 resolve quarantined externally removed scheduled attempt: worker in separate agent/vibepublish-unknown-resolution worktree owns bounded new owner reconciliation action, core recovery/storage/contracts/migration/tests/canonical recovery document. No VK adapter or deployment writes; root integrates after R16.
+R18 real crash/restart acceptance: root deployment-only exact-operation one-shot response-checkpoint hook, after R16/R17; never kill shared services.
+R19 remaining ingress/client/host gates: root after functional acceptance, preserve original host and credential permissions.
+Integration: R17 committed merge into root, combined tests, ownworker deployment, exact old VK resolution, new VK live lifecycle, crash canary, final evidence/push. No main/MAX/unrelated production edits.

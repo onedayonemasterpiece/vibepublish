@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### VK copied-photo identities and explicit unknown recovery — 2026-09-05
+
+- Bind VK user-upload IDs to community-copy IDs using ordered, exact provider
+  rendition fingerprints captured before dispatch; reject missing/changed proof.
+- Add bounded unauthenticated CDN reads and retain source hashes separately from
+  provider bytes; existing stable-ID verification stays unchanged.
+- Add owner-only read-only reconciliation for an externally removed uncertain
+  VK schedule, with schema-v4 immutable evidence and actor/binding epoch fencing.
+  Original unknown operation and attempt remain unchanged; no publication retry.
+
+
 ### Ordinary Codex tasks, chat files and immediate/default execution — 2026-09-05
 
 - Honor explicit visual execute now when no time is supplied, or native scheduling

@@ -115,3 +115,10 @@ Keep request identity separate from the immutable execution plan; freeze concret
 ## Delivery status
 
 This is a design/contract correction, not provider implementation or deployment. New schemas, fixtures and tests describe the corrected contract. Native scheduling, MAX UI, progressive behavior in actual MCP clients, scoped runtime reads, database/history/statistics and imagegen still require the implementation/live gates in the design. No Codex task or live provider operation is authorized or performed by this correction batch.
+
+## VK copied-photo recovery delta
+
+See [ordered photo-ID binding](vk-media-binding.md) and
+[owner-only unknown resolution](unknown-resolution.md) for the narrow native
+postponed correction and immutable absence evidence. Live evidence is maintained
+in [DevCoveer acceptance](../../operations/devcoveer-acceptance-20260905.md).
