@@ -54,6 +54,7 @@
 - Extended the existing engage command schema; no new forward synonym tool.
 - Added personal primary/secondary destination profiles with purpose, audience,
   topics, exclusions, notes, explicit/agent selection policy and CAS revision.
+  Profiles do not change provider identities or grants. Added routing_revision.
 - Extended get_started sections with forwarding, destinations and all; retained
   the single bootstrap/skill method and resource/prompt compatibility design.
 - Added narrow forward and destination.profile catalog projections without
