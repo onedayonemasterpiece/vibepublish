@@ -29,6 +29,8 @@ VERSION = 'codex-cli 0.153.0'
 MAX_IMAGE = 20 * 1024 * 1024
 MAX_SKILL = 64 * 1024
 MAX_MESSAGE = 128 * 1024 * 1024
+THREAD_READ_TIMEOUT = 3.0
+THREAD_READ_BACKOFF = (0.25, 0.5)
 
 
 def _private(path: Path):
@@ -402,6 +404,21 @@ class CodexTaskImagegen:
         if not (directory / 'receipt.json').exists(): return None
         return await self.inspect(job_key)
 
+    async def _read_thread(self, directory, record):
+        # Only this immutable-identity read is retried. Never retry submit,
+        # turn/start, interruption, binding checks or artifact validation.
+        for attempt in range(1 + len(THREAD_READ_BACKOFF)):
+            record['last_thread_read_attempts'] = attempt + 1
+            try:
+                return await asyncio.wait_for(self.transport.request('thread/read', {
+                    'threadId': record['thread_id'], 'includeTurns': True}), THREAD_READ_TIMEOUT)
+            except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
+                record['last_thread_read_error'] = _exception_frames(exc)
+                self._record(directory, record)
+                if attempt == len(THREAD_READ_BACKOFF):
+                    raise
+                await asyncio.sleep(THREAD_READ_BACKOFF[attempt])
+
     async def inspect(self, execution_ref):
         directory = self._directory(execution_ref)
         if not (directory / 'receipt.json').exists(): raise OutcomeUnknown('imagegen_job_not_observed')
@@ -415,8 +432,7 @@ class CodexTaskImagegen:
                     self._record(directory, record)
                     raise
             try:
-                response = await self.transport.request('thread/read', {
-                    'threadId': record['thread_id'], 'includeTurns': True})
+                response = await self._read_thread(directory, record)
                 thread = response['thread']
                 if thread.get('id') != record['thread_id']: raise ValueError('thread mismatch')
                 turns = thread.get('turns', [])

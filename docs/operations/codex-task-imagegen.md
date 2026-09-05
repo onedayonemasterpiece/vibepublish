@@ -240,3 +240,29 @@ skill context, private hash, missing/oversized/symlink guards, unchanged sandbox
 source input preservation and no replay when a skill disappears after dispatch.
 A local read-only preload smoke loaded the installed skill without a native
 request; no thread or image generation was started. Compileall/diff checks pass.
+
+### Bounded read-only retries for transient observation failures
+
+The operator observed a `thread/read` transport `RuntimeError` followed by a
+successful read of the same completed native task. The discarded remote error
+payload is unknown; this is evidence of a transient observation failure, not a
+reason to resend generation.
+
+Inspection now retries only the saved thread's `thread/read` request for
+`OSError`, `RuntimeError` or timeout: at most three reads, each capped at three
+seconds, with 0.25/0.5-second backoffs (9.75 seconds nominal maximum, inside the
+service's 15-second observation guard). Cancellation propagates. Response binding,
+turn selection, artifact validation and imports remain outside the retry boundary;
+those failures still fail closed without another read. No submit, thread/start,
+turn/start or interruption is retried by this policy. Exhaustion remains unknown,
+not a synthesized failure or success. The private receipt records attempt count
+and sanitized exception frames only; no exception messages or remote payloads
+are added to public usage metadata.
+
+Validation: 36 focused tests and six subtests passed. Actual VisualService fixture
+integration covers running-to-completed, first-read error then exactly one
+candidate, and three exhausted reads producing `imagegen_submit_outcome_unknown`
+with no candidates. Each case starts exactly one native turn. Additional fixtures
+cover all retryable exception classes, bounded timeout cancellation, and binding/
+artifact failures without retries. These are offline fixtures; no live native
+request, generation, production DB change or social write was made for this fix.

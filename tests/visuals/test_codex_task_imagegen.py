@@ -172,6 +172,70 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         key = await self.adapter.submit(self.request)
         self.native.items[0]['result'] = base64.b64encode(b'not image').decode()
         self.assertEqual('unknown', (await self.adapter.inspect(key)).state)
+        self.assertEqual(1, sum(m == 'thread/read' for m, _ in self.native.calls))
+
+    async def test_transport_read_errors_retry_only_saved_thread(self):
+        for error in (OSError, RuntimeError, asyncio.TimeoutError):
+            with self.subTest(error=error.__name__):
+                request = replace(self.request, job_key='visual_' + hashlib.md5(error.__name__.encode()).hexdigest())
+                self.native.calls.clear()
+                key = await self.adapter.submit(request)
+                original = self.native.request
+                attempts = []
+                async def flaky(method, params):
+                    attempts.append((method, params))
+                    if len(attempts) == 1:
+                        raise error('PRIVATE_TRANSIENT_ERROR')
+                    return await original(method, params)
+                self.native.request = flaky
+                try:
+                    observed = await self.adapter.inspect(key)
+                finally:
+                    self.native.request = original
+                self.assertEqual('succeeded', observed.state)
+                self.assertEqual([('thread/read', {'threadId': THREAD, 'includeTurns': True})] * 2, attempts)
+                self.assertEqual(1, len(observed.artifacts))
+                self.assertEqual(1, sum(m == 'turn/start' for m, _ in self.native.calls))
+                record = self.adapter._load(self.adapter._directory(key))
+                self.assertEqual(2, record['last_thread_read_attempts'])
+                self.assertEqual(error.__name__, record['last_thread_read_error']['class'])
+                self.assertNotIn('PRIVATE_TRANSIENT_ERROR', json.dumps(record))
+
+    async def test_read_timeout_budget_and_exhaustion(self):
+        from adapters.codex_task_imagegen import THREAD_READ_TIMEOUT, THREAD_READ_BACKOFF
+        self.assertEqual(3, 1 + len(THREAD_READ_BACKOFF))
+        self.assertLess(THREAD_READ_TIMEOUT * 3 + sum(THREAD_READ_BACKOFF), 15)
+        key = await self.adapter.submit(self.request)
+        attempts, cancelled = [], []
+        async def blocked(method, params):
+            attempts.append((method, params))
+            try:
+                await asyncio.sleep(60)
+            finally:
+                cancelled.append(True)
+        self.native.request = blocked
+        started = time.monotonic()
+        with patch('adapters.codex_task_imagegen.THREAD_READ_TIMEOUT', 0.01), patch(
+                'adapters.codex_task_imagegen.THREAD_READ_BACKOFF', (0.001, 0.002)):
+            observed = await self.adapter.inspect(key)
+        self.assertLess(time.monotonic() - started, 1)
+        self.assertEqual('unknown', observed.state)
+        self.assertEqual(3, len(cancelled))
+        self.assertEqual([('thread/read', {'threadId': THREAD, 'includeTurns': True})] * 3, attempts)
+        record = self.adapter._load(self.adapter._directory(key))
+        self.assertEqual(3, record['last_thread_read_attempts'])
+        self.assertEqual('TimeoutError', record['last_observation_error']['class'])
+
+    async def test_binding_failure_does_not_retry_read(self):
+        key = await self.adapter.submit(self.request)
+        original = self.native.request
+        async def wrong_thread(method, params):
+            response = await original(method, params)
+            response['thread']['id'] = 'different-thread'
+            return response
+        self.native.request = wrong_thread
+        self.assertEqual('unknown', (await self.adapter.inspect(key)).state)
+        self.assertEqual(1, sum(m == 'thread/read' for m, _ in self.native.calls))
 
     async def test_native_path_cannot_escape_saved_thread(self):
         key = await self.adapter.submit(self.request)
@@ -325,6 +389,15 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
 class VisualServiceTaskIntegration(unittest.IsolatedAsyncioTestCase):
     """Exercise the actual service contract, not just adapter-shaped fixtures."""
     async def test_running_native_task_becomes_service_candidates_without_resubmit(self):
+        await self._service_task()
+
+    async def test_transient_read_error_becomes_one_candidate_without_resubmit(self):
+        await self._service_task(read_failures=1)
+
+    async def test_exhausted_read_errors_remain_unknown_without_resubmit(self):
+        await self._service_task(read_failures=3)
+
+    async def _service_task(self, read_failures=0):
         from social_operations.service import Application
         from social_operations.storage import Store
         from social_operations.worker import Worker
@@ -333,10 +406,14 @@ class VisualServiceTaskIntegration(unittest.IsolatedAsyncioTestCase):
             root = Path(tmp)
             home = root / 'codex'; home.mkdir(mode=0o700)
             native = NativeFixture(home)
-            native.status = 'inProgress'
+            native.status = 'completed' if read_failures else 'inProgress'
             original = native.request
             reads = []
             async def request(method, params):
+                if method == 'thread/read' and len(reads) < read_failures:
+                    reads.append('error')
+                    native.calls.append((method, params))
+                    raise RuntimeError('PRIVATE_TRANSIENT_READ_ERROR')
                 response = await original(method, params)
                 if method == 'thread/read':
                     reads.append(response['thread']['turns'][0]['status'])
@@ -356,8 +433,19 @@ class VisualServiceTaskIntegration(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual('accepted', submitted['state'], submitted)
                 await worker.run_once()
                 ready = store.receipt(actor, submitted['operation_id'])
+                self.assertEqual(1, sum(m == 'thread/start' for m, _ in native.calls))
+                self.assertEqual(1, sum(m == 'turn/start' for m, _ in native.calls))
+                self.assertFalse(any(m == 'turn/interrupt' for m, _ in native.calls))
+                if read_failures == 3:
+                    self.assertEqual('outcome_unknown', ready['state'], ready)
+                    self.assertIn('imagegen_submit_outcome_unknown', json.dumps(ready))
+                    self.assertEqual(['error'] * 3, reads)
+                    with store.connection() as db:
+                        self.assertEqual(0, db.execute('SELECT count(*) FROM visual_candidates').fetchone()[0])
+                        self.assertEqual(0, db.execute('SELECT count(*) FROM publications').fetchone()[0])
+                    return
                 self.assertEqual('needs_selection', ready['state'], ready)
-                self.assertEqual(['inProgress', 'completed'], reads)
+                self.assertEqual(['error', 'completed'] if read_failures else ['inProgress', 'completed'], reads)
                 self.assertEqual(1, len(ready['candidates']))
                 self.assertEqual('codex-app-server-task', ready['executor']['actual_executor'])
                 self.assertEqual(1, sum(m == 'turn/start' for m, _ in native.calls))
