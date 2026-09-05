@@ -84,7 +84,11 @@ async def runtime(tmp_path, server):
                     except httpx.ConnectError:
                         pass
                     await asyncio.sleep(.05)
-        async with httpx.AsyncClient(headers={'Authorization':'Bearer '+token},trust_env=False) as http:
+        # MCP status permits a 10s long-poll; HTTPX defaults to a shorter 5s
+        # inactivity timeout. Keep transport aligned with ClientSession(30s),
+        # without weakening the separate 5s first-event assertion below.
+        async with httpx.AsyncClient(headers={'Authorization':'Bearer '+token},trust_env=False,
+                                     timeout=httpx.Timeout(30, connect=5)) as http:
             async with streamable_http_client(base+'/mcp/',http_client=http) as (read,write,_):
                 async with ClientSession(read,write,read_timeout_seconds=timedelta(seconds=30)) as session:
                     await session.initialize()

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- MAX observed-UI read/navigation subset, explicit existing-session read-only factory,
+  private structural export, and mandatory Chromium navigation/order-drift replay.
+  Live reads cover the three clarified destinations; publication/queue identity/
+  full lifecycle and real-driver core integration remain unimplemented.
+- MAX MCP test transport now aligns HTTPX read timeout with its explicit long-poll
+  budget; the separate first-event deadline and dispatch/crash assertions stay intact.
+
+
 ### Task prepared — owner-authorized MAX live completion, 2026-09-05
 
 - Added docs/handoffs/max-web-live-completion-20260905.md for continuing PR #2

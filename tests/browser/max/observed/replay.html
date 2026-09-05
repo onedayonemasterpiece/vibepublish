@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>Sanitized MAX observed navigation replay</title>
+<nav><button>Настройки</button></nav><aside></aside>
+<main tabindex="-1" class="main main--active" aria-labelledby="main-header-title"></main>
+<script>
+// Independent provider/navigation state. IDs and content below are invented;
+// DOM semantics/classes/labels are transcribed from allowed MAX UI, not app code.
+const state=window.provider={order:window.REPLAY_ORDER||['-101','-202','-303'],target:null,mode:'feed',effects:0,visits:[],rename:{},wrong:false};
+const titles={'-101':'Test Group','-202':'Channel A','-303':'Channel B'};
+function sidebar(){document.querySelector('aside').innerHTML=state.order.map(id=>`<div class="item" data-index="${state.order.indexOf(id)}"><div role="presentation"><button class="cell" onclick="go('${id}')"><h3 class="title"><span class="name"><span class="text">${titles[id]}</span></span></h3><span>Unrelated preview</span></button></div></div>`).join('')+`<div class="searchResultsList"><button aria-haspopup="dialog"><span class="title"><span class="name"><span class="text">Channel A</span></span></span><span class="text">preview</span></button><button><span class="title"><span class="name"><span class="text">Other chat</span></span></span><span class="text"><span>Test Group</span></span></button></div>`;}
+function render(){let main=document.querySelector('main');main.innerHTML=state.mode==='scheduled'?'<span>Запланированные посты</span>':`<h2 id="main-header-title">${titles[state.target]}</h2><button aria-label="Открыть профиль ${state.rename[state.target]||titles[state.wrong?'-202':state.target]}"></button><button aria-label="Открыть отложенные сообщения" onclick="provider.mode='scheduled';render()"></button>`;
+main.innerHTML+=`<div class="history"><div role="listitem"><div role="presentation" class="messageWrapper messageWrapper--isOut"><div class="bubbleContent"><span class="text">Safe example</span><span class="meta"><span class="text">12:00</span></span></div></div></div></div><div data-testid="composer"><div contenteditable role="textbox" data-lexical-editor="true" aria-placeholder="Сообщение"></div><button aria-label="Отправить сообщение" onclick="effect()"></button></div>`;}
+function effect(){state.effects++;fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'effect',target:state.target})});}
+function go(id){fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'visit',target:id})});state.target=id;state.visits.push(id);history.pushState({},'',id);render();}
+sidebar();go(location.pathname.slice(1)||'-101');
+</script>

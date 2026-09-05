@@ -1,0 +1,13 @@
+{
+  "recipe": "max-web-observed-20260905-v1",
+  "scope": "Read/navigation ONLY. Not full same-driver publishing replay or L16 completion.",
+  "provenance": "Personally observed authorized MAX UI on 2026-09-05. Structural manual transcription, not copied application JavaScript or HAR.",
+  "sanitization": ["All account/chat/item IDs invented", "All names/content/media replaced or omitted", "No auth/storage/headers/URLs/avatars", "CSS module hashes omitted; semantic class names retained", "Stateful provider functions independently authored, not MAX app code"],
+  "scenarios": [
+    {"id":"L12-partial", "state":"Chat titles nested in h3/name/text; list rows have unstable data-index", "positive":"test_all_orders_use_exact_native_route", "negative":"test_disappearing_reordered_duplicate_rows_do_not_redirect"},
+    {"id":"L13-partial", "state":"Search includes highlighted matching text inside OTHER message excerpts", "positive":"test_message_search_hit_not_a_chat_title", "negative":"test_unknown_renamed_header_fail_closed_not_alias_rebind"},
+    {"id":"L11-partial", "state":"Explicit existing session; settings phone is an account identifier, not display name", "positive":"test_visible_projection_never_claims_ids_or_complete_queue", "negative":"test_wrong_account_no_navigation; test_revoke_after_navigation_stops_read"},
+    {"id":"L14-partial", "state":"Svelte composer/main/list rerender; search input and composer both have textbox role", "positive":"test_rerender_reacquires_scoped_locator", "negative":"test_exact_target_allowlist_and_origin"}
+  ],
+  "not_covered": ["Effect attribution", "Queue IDs and complete pagination", "Live publishing", "Same-driver MCP/worker integration", "Mid-submit drift", "Rename positive behavior", "Media and recovery"]
+}
