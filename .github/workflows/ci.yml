@@ -1,0 +1,57 @@
+name: VibePublish verification
+on:
+  push:
+    branches: [main, work/vibepublish-core-20260904, work/vibepublish-max-web-20260904]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.in ]; then
+            python -m pip install -r requirements.in
+          else
+            python -m pip install -r contracts/requirements.txt
+          fi
+          python -m pip install -r adapters/max/requirements-test.txt
+          python -m playwright install --with-deps chromium
+      - name: Canonical contract regression
+        run: |
+          python tests/contracts/test_social_mcp_design.py
+          python tests/contracts/test_forwarding_profiles_design.py
+      - name: MAX fixture safety and observed navigation/recovery Chromium replay
+        run: |
+          test -s tests/browser/max/observed/replay.html
+          test -s tests/browser/max/observed/manifest.json
+          test -s tests/browser/max/observed/test_live_navigation.py
+          python -m pytest tests/adapters/max tests/browser/max -q -ra
+      - name: Passive imagegen inventory regression
+        if: ${{ hashFiles('tests/inspection/test_imagegen_inventory.py') != '' }}
+        run: python -m pytest tests/inspection -q
+      - name: Compile implementation
+        run: |
+          python -m compileall -q adapters
+          if [ -d social_operations ]; then python -m compileall -q social_operations; fi
+      - name: Reproducible source and SDK fixture
+        if: always()
+        run: |
+          mkdir -p artifacts/verification/wheels
+          git archive --format=tar HEAD > artifacts/verification/source.tar
+          git rev-parse HEAD > artifacts/verification/source-sha.txt
+          python -m pip freeze > artifacts/verification/environment.txt
+          python -m pip download --no-deps mcp==1.29.0 sse-starlette httpx-sse -d artifacts/verification/wheels
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-${{ github.sha }}
+          path: artifacts/verification/
+          retention-days: 7

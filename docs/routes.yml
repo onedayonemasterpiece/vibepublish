@@ -6,7 +6,7 @@ entrypoints:
   agent_routes: AGENTS.md
   changelog: CHANGELOG.md
   implementation_start: docs/handoffs/implementation-start-20260904.md
-  max_web_task: docs/handoffs/max-web-codex-20260904.md
+  max_web_task: docs/handoffs/max-web-live-completion-20260905.md
 
 sections:
   architecture:
@@ -15,6 +15,7 @@ sections:
   operations:
     requirements_governance: docs/operations/requirements-governance.md
     repository_workflow: docs/operations/repository-workflow.md
+    max_web: docs/operations/max-web.md
     llm_limits_setup: docs/operations/llm-limits-setup.md
   llm:
     index: docs/llm/README.md

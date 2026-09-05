@@ -2,6 +2,74 @@
 
 ## [Unreleased]
 
+### Fixed
+- MAX actual-core test subprocesses preserve the explicit Playwright browser
+  installation path while still scrubbing credentials; the early-progress
+  assertion deadline is unchanged.
+- MAX rejects unfinished live mutations before touching the composer or dispatching;
+  missing causal receipts cannot be enabled by an ad-hoc publishing flag.
+  Preserves unknown-attempt quarantine during read-only reconciliation.
+  One experimental live text attempt remains unknown and uncleared; this is not
+  publishing/lifecycle acceptance (see the MAX runbook).
+
+### Added
+- MAX exact-reference read-only recovery, explicitly bound to the original
+  attempt/digest through the actual core port. Repeated UI observation preserves
+  unknown state/quarantine; terminal resolution remains a core dependency.
+- Same-driver native-reference/order/drift replay (including reordering inside
+  awaited account callbacks) and real reader-process
+  crash/restart coverage, with no Send or profile unlock.
+- MAX observed-UI read/navigation subset, explicit existing-session read-only factory,
+  private structural export, and mandatory Chromium navigation/order-drift replay.
+  Live reads cover the three clarified destinations; publication/queue identity/
+  full lifecycle and real-driver core integration remain unimplemented.
+- MAX MCP test transport now aligns HTTPX read timeout with its explicit long-poll
+  budget; the separate first-event deadline and dispatch/crash assertions stay intact.
+
+
+### Task prepared — owner-authorized MAX live completion, 2026-09-05
+
+- Added docs/handoffs/max-web-live-completion-20260905.md for continuing PR #2
+  through real MAX implementation, live debugging and same-driver GitHub replay.
+- Recorded the owner's explicit scope: all social-operation scenarios in
+  «Тестовая группа»; feed/queue reads and task-owned scheduled probes only in
+  «Ух ты, Калининград!» and «Полюбить Калининград». Existing editorial content
+  remains read-only. Exact target binding, safe timing and cleanup are required.
+- Reuse the already authenticated MAX session; no login debugging now. Future
+  QR onboarding is documented separately, not implemented by this package.
+- Added L01–L16 acceptance cases, positive functional outcomes, all six target
+  permutations and mid-action reordering, DOM/media failures, protected replay
+  fixtures, no live MAX network/credentials in CI, and exact-SHA reproduction.
+- Updated the task route and MAX runbook so historical live prohibitions do not
+  contradict the new limited authorization. Prior offline evidence is retained
+  by pinned reference. No runtime code changed, no agent/live tests were launched.
+
+### Added — MAX canonical bridge and local core integration, 2026-09-05
+
+- Verified the supplied 103-source core ZIP/bundle/patch and moved it to local
+  artifacts; added a reproducible local-only MAX overlay assembler, no core upload.
+- Added MAX bridge importing the actual ProviderAdapter port/native helpers:
+  typed observations, scoped reads/cursors, proven input-media bindings and
+  recoverable attempt/plan checkpoints. Translates driver progress vocabulary to
+  core statuses without changing core dispatch/auth/ledger or the common port.
+- Added real MCP ClientSession/worker/SQLite + Chromium fixture integration for
+  early TG/VK progress, durable marker before effect, SIGKILL/restart without
+  duplicate sends, scoped external queue reads and preserved partial successes.
+  Original 37 tests and loopback guard remain; absent-core CI skips are explicit.
+- Live MAX factory/selectors, text-only attribution, cancel/delete evidence and
+  media-preserving reschedule remain unverified; no live actions or deployment.
+
+### Added — MAX-only offline checkpoint, 2026-09-05
+
+- Added a fixture-only deterministic MAX UI driver, process-exclusive profile
+  lock, persistent uncertainty quarantine, awaited hooks, native-time/CAS guards
+  and scoped saved-item readback. No live profile or runtime adapter is enabled.
+- Added real Chromium synthetic fixtures and process-kill/competition tests;
+  reused the canonical CI path for MAX checks. These do not prove live MAX.
+- Added canonical MAX runbook/capability/status matrix. Archived core ZIP is
+  missing in this environment: real port/worker/MCP integration remains blocked;
+  no substitute core contracts, live canaries or deployment were introduced.
+
 ### Development handoff — 2026-09-04, contract 1.2.0-design
 
 - Added canonical native Telegram/VK forwarding by exact post URL or authorized
@@ -72,7 +140,7 @@
 - Standalone scaffold, feature documentation routing, existing Google AI /
   Supabase limiter code/migrations and EventsBot donor map.
 
-### Verification boundary
+### Verification boundary of the earlier design checkpoint
 
 - This work changes requirements and executable design/tests, not social runtime,
   provider adapters, database migrations or deployment.

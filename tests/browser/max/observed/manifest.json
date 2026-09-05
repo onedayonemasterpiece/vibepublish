@@ -1,0 +1,60 @@
+{
+  "recipe": "max-web-observed-20260905-v1",
+  "scope": "Read/navigation and exact-reference observation-only recovery. No publishing/lifecycle completion.",
+  "provenance": "Personally observed authorized MAX UI on 2026-09-05. Structural manual transcription, not copied application JavaScript or HAR.",
+  "sanitization": [
+    "All account/chat/item IDs invented",
+    "All names/content/media replaced or omitted",
+    "No auth/storage/headers/private URLs/avatars; the native-link template has invented IDs and is clipboard text only",
+    "CSS module hashes omitted; semantic class names retained",
+    "Stateful provider functions independently authored, not MAX app code"
+  ],
+  "scenarios": [
+    {
+      "id": "L01-receipt-safety-only",
+      "state": "Experimental live send reached missing causal receipt recipe",
+      "positive": null,
+      "negative": "test_missing_causal_receipt_blocks_before_any_effect; test_unknown_attempt_survives_read_only_reconcile"
+    },
+    {
+      "id": "L12-partial",
+      "state": "Chat titles nested in h3/name/text; list rows have unstable data-index",
+      "positive": "test_all_orders_use_exact_native_route",
+      "negative": "test_disappearing_reordered_duplicate_rows_do_not_redirect"
+    },
+    {
+      "id": "L13-partial",
+      "state": "Search includes highlighted matching text inside OTHER message excerpts",
+      "positive": "test_message_search_hit_not_a_chat_title",
+      "negative": "test_unknown_renamed_header_fail_closed_not_alias_rebind"
+    },
+    {
+      "id": "L11-partial",
+      "state": "Explicit existing session; settings phone is an account identifier, not display name",
+      "positive": "test_visible_projection_never_claims_ids_or_complete_queue",
+      "negative": "test_wrong_account_no_navigation; test_revoke_after_navigation_stops_read"
+    },
+    {
+      "id": "L14-partial",
+      "state": "Svelte composer/main/list rerender; search input and composer both have textbox role",
+      "positive": "test_rerender_reacquires_scoped_locator",
+      "negative": "test_exact_target_allowlist_and_origin"
+    },
+    {
+      "id": "original-unknown-recovery",
+      "state": "Original task-owned outgoing message has native copy-link menu; independently reopened twice",
+      "positive": "test_exact_recovery_two_fresh_reads_preserve_original_fuse; test_actual_reader_process_crash_restart_never_sends",
+      "negative": "test_recovery_rejects_nonexact_candidates; test_recovery_binding_rejection; test_recovery_rechecks_after_awaited_callback",
+      "sanitization": "Original private native URL/content replaced by fictional -101/new-item and fixed test marker; only literal https://max.ru/c/ is copied text, never requested"
+    }
+  ],
+  "not_covered": [
+    "Effect attribution",
+    "Queue IDs and complete pagination",
+    "Live publishing",
+    "Same-driver MCP/worker integration",
+    "Mid-submit drift",
+    "Rename positive behavior",
+    "Media/lifecycle and post-submit writer recovery; terminal core resolution"
+  ]
+}
