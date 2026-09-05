@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Recover delivered commits and accepted documentation — 2026-09-05
+
+- Corrected the prior response's false "no new commits" claim: five source
+  commits through `18152e5d` added 30 unchanged archive files. Their source/tests
+  tree was independently verified from the real CI artifact.
+- Read back and attached existing accepted tree `1f36d725` as `76ad2c55`, restoring
+  ten documentation changes. No denied source payload was uploaded through it.
+- Preserved the remaining historical handoffs and full visual feature description;
+  updated current runtime status and continuation rather than creating another plan.
+- Re-ran 69 independent tests + 199 subtests in an empty hash-installed venv.
+  Full collection still has ten errors; the core SDK gate still fails. Only VK,
+  rich-text and Codex executor modules remain absent. No green full-runtime claim.
+- No runtime byte changes, weakened tests, MAX changes, model/provider calls,
+  alternate-route blocked writes, merge or deployment.
+
 ### Actual core source delivery and current access boundary — 2026-09-05
 
 - Read the existing access retrospectives and corrected an overbroad permanent
