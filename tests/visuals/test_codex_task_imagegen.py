@@ -320,3 +320,73 @@ class VisualServiceTaskIntegration(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(hashlib.sha256(payload).hexdigest(), sha)
             finally:
                 await executor.close()
+
+
+class AppServerInitializationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_initialize_cleans_owned_process_then_fresh_read_initializes(self):
+        from unittest.mock import AsyncMock, Mock
+        from adapters.codex_task_imagegen import VERSION
+
+        def version_process():
+            return Mock(returncode=0, communicate=AsyncMock(return_value=(VERSION.encode(), b'')))
+
+        def server_process():
+            process = Mock(returncode=None, wait=AsyncMock(return_value=-15))
+            process.terminate.side_effect = lambda: setattr(process, 'returncode', -15)
+            return process
+
+        first, second = server_process(), server_process()
+        client = AppServer(Path('/fixture/codex'))
+        requests = []
+        async def exchange(method, params):
+            requests.append(method)
+            if requests == ['initialize']:
+                raise RuntimeError('fixture initialization rejection')
+            if method == 'initialize': return {'codexHome': '/fixture/codex'}
+            return {'thread': {'id': THREAD}}
+        async def drain(process):
+            await asyncio.Event().wait()
+        client._exchange = exchange
+        client._write = AsyncMock()
+        client._drain = drain
+        with patch('adapters.codex_task_imagegen.asyncio.create_subprocess_exec',
+                   side_effect=[version_process(), first, version_process(), second]):
+            try:
+                with self.assertRaises(RuntimeError):
+                    await client.request('turn/start', {'threadId': THREAD})
+                self.assertIsNone(client.process)
+                self.assertIsNone(client.reader)
+                first.terminate.assert_called_once()
+                result = await client.request('thread/read', {'threadId': THREAD})
+                self.assertEqual(THREAD, result['thread']['id'])
+                self.assertEqual(['initialize', 'initialize', 'thread/read'], requests)
+            finally:
+                await client.close()
+
+    async def test_home_mismatch_notification_failure_and_cancellation_reset_ready(self):
+        from unittest.mock import AsyncMock, Mock
+        from adapters.codex_task_imagegen import VERSION
+
+        for stage, error in [('home', DomainError), ('notification', ConnectionError),
+                             ('cancelled', asyncio.CancelledError)]:
+            with self.subTest(stage=stage):
+                client = AppServer(Path('/fixture/codex'))
+                version = Mock(returncode=0, communicate=AsyncMock(return_value=(VERSION.encode(), b'')))
+                process = Mock(returncode=None, wait=AsyncMock(return_value=-15))
+                process.terminate.side_effect = lambda: setattr(process, 'returncode', -15)
+                client._exchange = AsyncMock(return_value={'codexHome':
+                    '/wrong/home' if stage == 'home' else '/fixture/codex'})
+                if stage == 'cancelled': client._exchange.side_effect = asyncio.CancelledError()
+                client._write = AsyncMock(side_effect=ConnectionError() if stage == 'notification' else None)
+                async def drain(process):
+                    await asyncio.Event().wait()
+                client._drain = drain
+                with patch('adapters.codex_task_imagegen.asyncio.create_subprocess_exec',
+                           side_effect=[version, process]):
+                    with self.assertRaises(error):
+                        await client.request('thread/read', {'threadId': THREAD})
+                self.assertFalse(client.initialized)
+                self.assertIsNone(client.process)
+                self.assertIsNone(client.reader)
+                process.terminate.assert_called_once()
+                self.assertEqual(1, client._exchange.await_count)

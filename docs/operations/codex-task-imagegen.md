@@ -178,3 +178,19 @@ running-to-candidate regression, sanitized error frames, malformed read response
 observation conversion failure and cancellation propagation. Compileall/diff
 checks passed. No new task, generation, production DB change or social write was
 performed for this diagnostic change.
+
+### Initialization cleanup regression
+
+The app-server client now tracks successful initialization explicitly. Process
+assignment alone does not mark it ready: the initialize response, expected Codex
+home and initialized notification must all succeed. Any handshake error, timeout
+or cancellation clears the flag and closes only this client's owned process and
+reader before propagating the failure. A later independent request may start a
+fresh handshake; the failed caller request is never replayed automatically.
+
+An offline regression reproduced the old process leak on initialization rejection.
+Additional fixtures cover home mismatch, notification write failure and cancelled
+initialization. The full focused adapter/service file passes 24 tests and three
+subtests; compileall and diff checks pass. No live calls or generation were used.
+This confirmed lifecycle defect is not asserted as the cause of the separately
+reported four-second core failure after a successfully submitted native turn.

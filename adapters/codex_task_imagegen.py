@@ -97,6 +97,7 @@ class AppServer:
         self.pending = {}
         self.serial = 0
         self.start_lock = asyncio.Lock()
+        self.initialized = False
 
     def environment(self):
         # Existing approved Codex auth is read by Codex, never by this adapter.
@@ -106,8 +107,12 @@ class AppServer:
 
     async def _start(self):
         async with self.start_lock:
-            if self.process is not None and self.process.returncode is None:
+            if self.initialized and self.process is not None and self.process.returncode is None:
                 return
+            # An assigned process is not evidence of a successful handshake.
+            # Clear stale or partly initialized owned state before a fresh call.
+            if self.process is not None or self.reader is not None:
+                await self.close()
             check = await asyncio.create_subprocess_exec(self.binary, '--version',
                 env=self.environment(), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
             try:
@@ -121,13 +126,20 @@ class AppServer:
                 env=self.environment(), cwd=str(self.home), stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, limit=MAX_MESSAGE)
             self.reader = asyncio.create_task(self._drain(self.process))
-            result = await self._exchange('initialize', {'clientInfo': {
-                'name': 'vibepublish-image-task', 'version': '1'},
-                'capabilities': {'experimentalApi': True}})
-            if result.get('codexHome') != str(self.home):
+            try:
+                result = await self._exchange('initialize', {'clientInfo': {
+                    'name': 'vibepublish-image-task', 'version': '1'},
+                    'capabilities': {'experimentalApi': True}})
+                if result.get('codexHome') != str(self.home):
+                    raise DomainError('codex_task_home_mismatch')
+                await self._write({'method': 'initialized', 'params': {}})
+                self.initialized = True
+            except BaseException:
+                # Includes cancellation/timeouts during either handshake step.
+                # Cleanup only our process, then propagate; never replay the
+                # caller's request or silently restart an uncertain mutation.
                 await self.close()
-                raise DomainError('codex_task_home_mismatch')
-            await self._write({'method': 'initialized', 'params': {}})
+                raise
 
     async def _write(self, payload):
         if self.process is None or self.process.returncode is not None:
@@ -176,6 +188,7 @@ class AppServer:
         return await self._exchange(method, params)
 
     async def close(self):
+        self.initialized = False
         process, self.process = self.process, None
         if process and process.returncode is None:
             process.terminate()
