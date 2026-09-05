@@ -15,6 +15,7 @@ sections:
   operations:
     requirements_governance: docs/operations/requirements-governance.md
     repository_workflow: docs/operations/repository-workflow.md
+    max_web: docs/operations/max-web.md
     llm_limits_setup: docs/operations/llm-limits-setup.md
   llm:
     index: docs/llm/README.md

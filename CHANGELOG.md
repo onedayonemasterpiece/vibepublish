@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added — MAX-only offline checkpoint, 2026-09-05
+
+- Added a fixture-only deterministic MAX UI driver, process-exclusive profile
+  lock, persistent uncertainty quarantine, awaited hooks, native-time/CAS guards
+  and scoped saved-item readback. No live profile or runtime adapter is enabled.
+- Added real Chromium synthetic fixtures and process-kill/competition tests;
+  reused the canonical CI path for MAX checks. These do not prove live MAX.
+- Added canonical MAX runbook/capability/status matrix. Archived core ZIP is
+  missing in this environment: real port/worker/MCP integration remains blocked;
+  no substitute core contracts, live canaries or deployment were introduced.
+
 ### Development handoff — 2026-09-04, contract 1.2.0-design
 
 - Added canonical native Telegram/VK forwarding by exact post URL or authorized
