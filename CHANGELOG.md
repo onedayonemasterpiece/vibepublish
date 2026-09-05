@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Owner correction: full Codex rollout includes real Imagegen — 2026-09-05
+
+- Replaced the rejected Telegram/VK-only handoff with a single-link task for local
+  Codex on DevCoveer: implementation, real generate/tune/compose, visible candidates,
+  selection, compositor, image/emoji publication/readback and persistent deployment.
+- Updated active continuation, docs routing and the imagegen runbook so historical
+  ChatGPT-stage no-generation/no-deployment limits do not silently shrink the new
+  owner-authorized task. Actual platform/access/budget controls remain required.
+- Preserved the existing core, tests and separate MAX PR #2. This is documentation
+  only: no missing source payload, model call, deployment or new test pass claimed.
+
 ### Restore Telegram rich text and VK source — 2026-09-05
 
 - Commit `ae73b259` delivers both exact archived modules through normal GitHub

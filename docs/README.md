@@ -1,11 +1,22 @@
 # Documentation
 
-**PR #1 is a partial source checkout, not a runnable release.** Begin with
+## Active owner-authorized rollout — 2026-09-05
+
+[Codex on DevCoveer: implementation, real Imagegen and product acceptance](handoffs/codex-full-product-rollout-20260905.md)
+is the current execution task. The owner rejected the reduced Telegram/VK-only
+proposal. Real generate/tune/compose, candidates and selection, inline publishing,
+image/emoji readback and deployment are required. Previous ChatGPT-stage limits
+on delegation/generation/deployment are historical for this task; actual security,
+access, budget and destination permissions remain in force. Saving this task does
+not mean code delivery, host activation or acceptance has already succeeded.
+
+**PR #1 still has a source-delivery gap.** Begin with
 [current runtime delivery and evidence](operations/social-runtime.md). The core,
 emoji palette/selector, VisualService, contract/skill 1.5 and all archived tests
-are transferred. The rich-text compiler and VK adapter are now delivered; only
-`adapters/codex_imagegen.py` remains absent after a new request-safety response.
-Historical full-source test counts are not remote CI.
+are transferred. The rich-text compiler and VK adapter are delivered; at the
+pre-handoff checkpoint `adapters/codex_imagegen.py` is absent after a recorded
+request-safety response. Historical full-source test counts are not remote CI.
+The new task does not ask another agent to proxy that denied payload.
 
 ## Current implementation
 
@@ -29,12 +40,12 @@ comments rather than copying old locator/fixture status from a handoff.
 ## Historical handoffs
 
 [Implementation start](handoffs/implementation-start-20260904.md),
-[native/visual delivery](handoffs/native-visual-delivery-20260905.md),
-[emoji input](handoffs/core-emoji-imagegen-continuation-20260905.md) and
+[native/visual delivery](handoffs/native-visual-delivery-20260905.md) and
 [emoji/SDK delivery](handoffs/emoji-imagegen-delivery-20260905.md) preserve earlier
-checkpoints. Their old remote HEADs and environment blockers are not current
-state. The [separate MAX handoff](handoffs/max-web-codex-20260905.md) is historical
-coordination for the existing task, not permission to launch another task.
+checkpoints. Their old remote HEADs, execution limits and environment blockers
+are not the current task. The [former ChatGPT continuation](handoffs/core-emoji-imagegen-continuation-20260905.md)
+now points to the full Codex rollout. The [separate MAX handoff](handoffs/max-web-codex-20260905.md)
+is historical coordination for the existing task, not permission to launch another.
 
 The owner corrections of September 4 remain binding: native-only schedules,
 partner reads within active publishing destinations, early per-child progress,

@@ -1,10 +1,17 @@
 # Local Codex image executor on DevCoveer
 
+> **Active task:** the owner now requires [Codex implementation, real Imagegen,
+> deployment and full product acceptance](../handoffs/codex-full-product-rollout-20260905.md).
+> The old ChatGPT-stage prohibition on generation/deployment is not the scope of
+> this new task. Actual host controls, permissions and budgets still apply.
+> This task update does not prove activation or resolve missing source.
+
 > **Current delivery is partial:** `adapters/codex_imagegen.py` received a
 > request-safety block and is absent from this branch. Its interface, integration
 > points and tests are delivered. The implementation description and process-test
 > evidence below refer to the complete archived module, not a runnable remote
-> executor. See [runtime status](social-runtime.md). Host activation stays disabled.
+> executor. See [runtime status](social-runtime.md). Host activation stays disabled
+> until the required controls and working implementation are actually verified.
 
 Status: bounded process implementation **Not confirmed by user**. Installed-host
 binding, image-only enforcement and real generation canary: **Not done**.
@@ -99,9 +106,12 @@ Until those installed-host controls are verified, leave the executor disabled.
 No fabricated example version, auth file, model backend or permissive sandbox is
 shipped as a working configuration.
 
-A host metadata/profile check needs no generation. A real image generation
-canary additionally needs explicit owner authorization; the current handoff
-forbids it. Deployment and social writes are not authorized by this document.
+A host metadata/profile check needs no generation. The historical archive stage
+forbade generation and deployment; the [new owner-authorized rollout](../handoffs/codex-full-product-rollout-20260905.md)
+requires actual generation and deployment after the relevant controls are verified.
+This does not grant new social-destination rights or bypass a tool's refusal.
+The generation runtime remains image-only; Codex engineering authority for this
+new task is distinct from the runtime generator's restricted tool permissions.
 
 ## Reproducible offline verification
 

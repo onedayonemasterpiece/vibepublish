@@ -5,7 +5,9 @@ entrypoints:
   docs_index: docs/README.md
   agent_routes: AGENTS.md
   changelog: CHANGELOG.md
-  core_continuation: docs/operations/social-runtime.md
+  core_continuation: docs/handoffs/codex-full-product-rollout-20260905.md
+  runtime_evidence: docs/operations/social-runtime.md
+  codex_full_product_rollout: docs/handoffs/codex-full-product-rollout-20260905.md
   archived_emoji_delivery: docs/handoffs/emoji-imagegen-delivery-20260905.md
   implementation_start: docs/handoffs/implementation-start-20260904.md
   native_visual_delivery: docs/handoffs/native-visual-delivery-20260905.md
@@ -117,6 +119,8 @@ features:
     status: partial_remote_source_not_runnable
     docs: docs/features/social-visuals/README.md
     live_executor: devcoveer_host_contract_unverified_no_canary
+    active_rollout: docs/handoffs/codex-full-product-rollout-20260905.md
+    rollout_requirement: real_imagegen_generate_tune_compose_and_end_to_end_acceptance
     process_module_delivery: request_safety_blocked
     process_executor: docs/operations/devcoveer-imagegen.md
     undelivered_entrypoints:
