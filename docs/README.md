@@ -1,41 +1,55 @@
 # Documentation
 
-**Current remote checkout is a partial source checkpoint, not a runnable release.**
-Read [runtime delivery status](operations/social-runtime.md) before the historical
-handoffs below. Actual core files were saved in this turn; later source requests
-received a new request-safety block. The full local archive is still authoritative
-for the not-yet-delivered implementation.
+**PR #1 is a partial source checkout, not a runnable release.** Begin with
+[current runtime delivery and evidence](operations/social-runtime.md). The core,
+emoji palette/selector, VisualService, contract/skill 1.5 and all archived tests
+are transferred. Three required production modules remain absent after explicit
+request-safety responses. Historical full-source test counts are not remote CI.
 
-[Dependency and real Telegram SDK qualification](operations/dependency-sdk-verification.md)
-is an independent hosted CI gate, not full-runtime delivery.
+## Current implementation
 
-## Current continuation — 2026-09-05
+- [Social operations](features/social-operations/README.md),
+  [MCP contract](features/social-operations/mcp-contract-v1.md) and
+  [canonical skill](llm/vibepublish-social-skill.md): eight tools, native queues,
+  scoped access, immutable revisions, progress and provider readback.
+- [Telegram custom emoji](features/social-operations/telegram-custom-emoji-v1.md):
+  sets, private numbered media, singles/chains, aliases/rules and frozen entities.
+- [Shared visuals](features/social-visuals/README.md) and
+  [DevCoveer image executor](operations/devcoveer-imagegen.md): local Codex **on
+  DevCoveer**, not the owner's desktop. Installed host activation is unverified.
+- [Native adapter provenance](reference/native-adapter-provenance.md),
+  [acceptance matrix](features/social-operations/acceptance-tests-v1.md) and
+  [dependency/SDK verification](operations/dependency-sdk-verification.md).
 
-- [Continue core/Telegram emoji/imagegen in ChatGPT](handoffs/core-emoji-imagegen-continuation-20260905.md).
-- [Telegram emoji set, visual choice and sequence workflow](features/social-operations/telegram-custom-emoji-v1.md): implemented in the separately verified local archive; not yet delivered to this branch.
-- [MAX task](handoffs/max-web-codex-20260905.md) is already assigned in PR #2; do not relaunch it. Its actual core bridge and offline tests were delivered separately; live implementation continues in that same PR. Do not use its branch to upload the protected core.
+MAX remains separately owned in PR #2. Do not relaunch or duplicate its task or
+use its branch to deliver a denied core payload. Read that PR's current HEAD and
+comments rather than copying old locator/fixture status from a handoff.
 
-The complete local core/native/visual code is in the separately delivered ZIP,
-not this remote branch. Read [runtime status](operations/social-runtime.md).
-Imagegen host is local Codex **on DevCoveer**, not the owner's desktop.
+## Historical handoffs
 
-## Historical design entrypoints — 2026-09-04
+[Implementation start](handoffs/implementation-start-20260904.md),
+[native/visual delivery](handoffs/native-visual-delivery-20260905.md),
+[emoji input](handoffs/core-emoji-imagegen-continuation-20260905.md) and
+[emoji/SDK delivery](handoffs/emoji-imagegen-delivery-20260905.md) preserve earlier
+checkpoints. Their old remote HEADs and environment blockers are not current
+state. The [separate MAX handoff](handoffs/max-web-codex-20260905.md) is historical
+coordination for the existing task, not permission to launch another task.
 
-- [Start implementation in a new ChatGPT window](handoffs/implementation-start-20260904.md).
-- [Separate Codex task for the MAX Web adapter](handoffs/max-web-codex-20260904.md).
-- [Current forwarding, primary-channel profiles and skill extension](features/social-operations/forwarding-and-editorial-profiles-v1.md), contract `1.2.0-design`.
-- [Automated acceptance tests and evidence boundaries](features/social-operations/acceptance-tests-v1.md).
+The owner corrections of September 4 remain binding: native-only schedules,
+partner reads within active publishing destinations, early per-child progress,
+forward attribution and personal routing profiles. Neither the old audit's local
+scheduler nor its separate partner-read grant supersedes those corrections.
 
-The social runtime and MCP base design remain in the existing social-operations documents. Read their v1.1 native-only queue/access/progress rules together with the v1.2 extension; they are not alternative architectures. The old audit's local scheduler and default-deny partner channel reads remain superseded.
+## Routing and maintenance
 
-The executable contract and new test cases are updated to v1.2. The write updating the canonical skill text was blocked by the connector in this session; `docs/llm/vibepublish-social-skill.md` remains v1.1. The core implementation batch must synchronize its forwarding/profile sections and examples with v1.2 before exposing the runtime. Requirements for that synchronization are complete in the extension; do not claim the old text already contains them.
+Machine-readable map: [routes.yml](routes.yml). Feature index:
+[features/README.md](features/README.md). Governance:
+[requirements](operations/requirements-governance.md) and
+[repository workflow](operations/repository-workflow.md).
 
-## Quick routing
-
-Machine-readable map: `docs/routes.yml`. Feature index: `docs/features/README.md`. Requirements governance: `docs/operations/requirements-governance.md`. LLM gateway: `docs/features/llm-gateway/README.md`.
-
-This directory is feature-oriented. Each feature has one canonical home in `docs/features/`. Architecture lives in `docs/architecture/`, operational instructions in `docs/operations/`, model instructions in `docs/llm/`, references in `docs/reference/`, backlog in `docs/backlog/`, reports/incidents in `docs/reports/`, handoffs in `docs/handoffs/` and tools in `docs/tools/`.
-
-## Adding or updating docs
-
-Route to an existing canonical feature before adding another document. Add/update the relevant entry in routes.yml. Keep explicit statuses: Draft, Fixed, Not done, Not confirmed by user, Done. Code/behavior changes update documentation and CHANGELOG. A passing schema fixture is not evidence of runtime or live-provider acceptance.
+Use an existing canonical feature home. Architecture lives in `architecture/`,
+operations in `operations/`, model instructions in `llm/`, references in
+`reference/`, backlog in `backlog/`, reports/incidents in `reports/`, handoffs in
+`handoffs/` and tools in `tools/`. Keep explicit Draft, Fixed, Not done,
+Not confirmed by user and Done boundaries. A schema pass, accepted tree or local
+archive is not proof of a remotely delivered and verified runtime.

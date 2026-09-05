@@ -1,8 +1,33 @@
 # VibePublish Social Operations
 
+> Current remote delivery: **partial, not a runnable release**. The implemented
+> behavior and historical test counts below describe the complete archived source.
+> Three production modules remain undelivered; current evidence and exact boundaries
+> are in [runtime status](../../operations/social-runtime.md).
+
+Current bounded runtime contract/skill: **1.5.0-runtime**, eight tools unchanged.
+[Telegram custom emoji](telegram-custom-emoji-v1.md) now has private catalogs,
+numbered visual selection, frozen aliases/rules and semantic native entities.
+This is offline implementation, **Not confirmed by user**, not a live Telegram
+capability claim. Historical design versions below remain requirements context.
+
+> Offline core and native adapter snapshot: [runtime runbook](../../operations/social-runtime.md).
+> This is not complete provider implementation or deployment; canonical goals
+> below remain binding, including all retained capability and live-verification gates.
+
 Owner requirements: `Fixed`, including the follow-up correction of 2026-09-04.
 Engineering realization: selected design `1.1.0-design`, `Not confirmed by user`.
-Runtime implementation: `Not done`.
+Runtime implementation: core, native Telegram/VK subset and offline VisualService **Not confirmed by user**; remaining capabilities **Not done**.
+
+Contract 1.3 adds mutually exclusive native `item_ref` lifecycle commands (scoped
+remote-snapshot CAS) and read-ref forwarding; see the runtime runbook and
+[native provenance](../../reference/native-adapter-provenance.md). Native item
+management never grants access to another author's private draft or assets.
+
+Contract 1.4 implements the existing visual method and inline branch through one
+VisualService, selected-asset hashes, scoped binary resources and single parent
+continuation. It does not add a ninth method. Real executor, initial-preset human
+acceptance and live capabilities remain unverified; see [visuals](../social-visuals/README.md).
 
 ## Current source of truth
 

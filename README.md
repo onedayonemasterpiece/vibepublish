@@ -2,7 +2,7 @@
 
 Independent Telegram, VK and MAX Web operations service, with one MCP/HTTP application core and an image/video pipeline.
 
-## Current design: 1.1.0-design
+## Current contract: 1.5.0-runtime; offline core, native adapters, emoji and visuals
 
 Owner corrections of 2026-09-04 are Fixed:
 
@@ -21,11 +21,41 @@ Owner corrections of 2026-09-04 are Fixed:
 
 The [original audit](docs/reports/vibepublish-audit-20260904.md) and historical handoff remain evidence of the earlier checkpoint. Their local-scheduler and separate partner read-grant decisions were rejected by the owner and are superseded by the current requirements. Existing Google limiter audit findings remain open; ordinary publishing does not depend on optional Google rewriting.
 
-## Verification boundary
+## Executable core snapshot
 
-This is an implementation-design checkpoint, **not a deployed publishing service**. Runtime remains Not done. The corrected executable contract has eight tools, sixteen input/output schemas, 105 golden jobs and 30 invalid calls. Fourteen offline test methods passed. These are schema/projection tests, not live provider, latency, weak-model, browser or database tests.
+See [runtime setup, tests and limitations](docs/operations/social-runtime.md).
+The snapshot contains a real MCP/HTTP service, a separate immediate-command
+worker, SQLite/WAL state, private image ingestion and explicit fake providers.
+It is **not a deployed publishing service** and has no automatic live connection.
+Concrete Telegram/VK adapters are exercised through scripted native transports.
+Telegram custom emoji has private numbered media catalogs, revision-bound single/
+chain choice, reusable aliases/rules, pre-send native entities and semantic
+readback. See [emoji workflow](docs/features/social-operations/telegram-custom-emoji-v1.md).
+The existing VisualService now has an optional
+[local Codex process executor for DevCoveer](docs/operations/devcoveer-imagegen.md),
+tested with an explicitly scripted CLI. It is disabled by default: the installed
+host's CLI/skill and image-only controls still require verification. No real
+image generation, social canary or deployment was performed. MAX is already a
+separate PR #2; no second driver was created.
 
-MAX remains a persistent-profile Playwright adapter, with native queue support proved during integration rather than replaced with a local timer. Later DevCoveer checks must prove real imagegen, independent credentials and provider execution after VibePublish is stopped. No Codex task, provider publication or image generation ran during this correction.
+**The remote checkout is still incomplete, not a runnable release.** Source,
+tests, skill and contract have been transferred, but `adapters/vk.py`,
+`social_operations/rich_text.py` and `adapters/codex_imagegen.py` received explicit
+request-safety blocks and are absent. The installation/test commands below are
+acceptance gates, not evidence that this partial checkout passes. The full
+implementation remains preserved in the verified source archive; do not rebuild
+it from the incomplete tree. [Runtime status](docs/operations/social-runtime.md)
+separates current remote delivery from historical full-source results.
+
+```bash
+python -m pip install -r requirements.lock
+python -m pip install --no-deps --no-build-isolation -e .
+python -m pytest tests
+```
+
+The canonical contract remains eight tools, sixteen input/output schemas,
+125 golden jobs and 44 invalid calls. Offline runtime tests are separate from
+these design fixtures and do not establish live provider/browser/model behavior.
 
 ## Reproduce design checks
 
