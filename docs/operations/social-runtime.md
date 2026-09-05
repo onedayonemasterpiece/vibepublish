@@ -4,6 +4,13 @@ Status: **Not confirmed by user / one source module still missing**. Keep PR #1
 DRAFT; the complete release and full CI are not accepted. Main and MAX PR #2
 are unchanged by this delivery.
 
+## Isolated DevCoveer observation — 2026-09-05
+
+A separate [acceptance stand](devcoveer-acceptance-20260905.md) now runs the
+unchanged core server/worker without native or Codex executors. Real MCP and
+restart readback passed; live provider acceptance and Imagegen remain blocked.
+This does not supersede the incomplete-source/full-CI gate below.
+
 ## Current source
 
 Branch: `work/vibepublish-core-20260904`.

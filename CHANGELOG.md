@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Isolated DevCoveer acceptance observation — 2026-09-05
+
+- Document running loopback MCP/server and worker, private state, verified MCP
+  readback/restart and exact provider/Imagegen blockers. No core/test/CI changes.
+- Record initial environment failures and successful focused rechecks separately
+  from the unchanged full-suite collection failure; no live acceptance claimed.
+
 ### Owner correction: full Codex rollout includes real Imagegen — 2026-09-05
 
 - Replaced the rejected Telegram/VK-only handoff with a single-link task for local
