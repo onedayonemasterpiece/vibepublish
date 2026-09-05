@@ -1,10 +1,13 @@
 # Documentation
 
+[Dependency and real Telegram SDK qualification](operations/dependency-sdk-verification.md)
+is an independent hosted CI gate, not full-runtime delivery.
+
 ## Current continuation — 2026-09-05
 
 - [Continue core/Telegram emoji/imagegen in ChatGPT](handoffs/core-emoji-imagegen-continuation-20260905.md).
-- [Telegram emoji set, visual choice and sequence workflow](features/social-operations/telegram-custom-emoji-v1.md): owner intent Fixed, detailed design Draft, runtime Not done.
-- [MAX task](handoffs/max-web-codex-20260905.md) is already assigned in PR #2; do not relaunch it. Its synthetic driver still needs the actual attached archive, shared-port integration and observed live selectors.
+- [Telegram emoji set, visual choice and sequence workflow](features/social-operations/telegram-custom-emoji-v1.md): implemented in the separately verified local archive; not yet delivered to this branch.
+- [MAX task](handoffs/max-web-codex-20260905.md) is already assigned in PR #2; do not relaunch it. Its actual core bridge and offline tests were delivered separately; live implementation continues in that same PR. Do not use its branch to upload the protected core.
 
 The complete local core/native/visual code is in the separately delivered ZIP,
 not this remote branch. Read [runtime status](operations/social-runtime.md).

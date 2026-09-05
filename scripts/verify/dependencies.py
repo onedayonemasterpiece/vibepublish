@@ -27,6 +27,43 @@ def pins(path: Path) -> dict[str, str]:
     return result
 
 
+def check_inputs(lock: Path, inputs: Path) -> dict:
+    """Check exact direct pins/includes against the committed qualified graph."""
+    expected = pins(lock)
+    direct = {}
+    root = inputs.resolve().parent
+    active = set()
+
+    def visit(path):
+        path = path.resolve()
+        if not path.is_relative_to(root) or path in active:
+            raise ValueError("Invalid or cyclic requirements include")
+        active.add(path)
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('-r '):
+                visit(path.parent / line[3:].strip())
+                continue
+            req = Requirement(line)
+            specs = list(req.specifier)
+            name = canonicalize_name(req.name)
+            if (req.url or req.marker or len(specs) != 1 or specs[0].operator != '=='
+                    or '*' in specs[0].version):
+                raise ValueError("Direct requirements must use exact pins")
+            version = specs[0].version
+            if expected.get(name) != version or name in direct and direct[name] != version:
+                raise ValueError("Direct input/lock mismatch: " + name)
+            direct[name] = version
+        active.remove(path)
+    visit(inputs)
+    if not direct:
+        raise ValueError("Empty direct inputs")
+    return dict(direct_pins=direct, locked_packages=len(expected),
+                evidence="direct_version_consistency_not_dependency_resolution")
+
+
 def wheel_lock(lock: Path, wheelhouse: Path) -> str:
     expected = pins(lock)
     found = {}
@@ -60,8 +97,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('lock', type=Path)
     parser.add_argument('--wheelhouse', type=Path)
+    parser.add_argument('--inputs', type=Path)
     args = parser.parse_args()
-    if args.wheelhouse:
+    if args.inputs and args.wheelhouse:
+        parser.error('Select inputs or wheelhouse, not both')
+    if args.inputs:
+        print(json.dumps(check_inputs(args.lock, args.inputs), indent=2))
+    elif args.wheelhouse:
         print(wheel_lock(args.lock, args.wheelhouse), end='')
     else:
         print(json.dumps(check(args.lock), indent=2))

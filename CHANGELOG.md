@@ -2,13 +2,25 @@
 
 ## [Unreleased]
 
+### Locked environment and real core SDK regression — 2026-09-05
+
+- Pinned the independently qualified 70-package graph for Linux Python 3.12/3.13;
+  normal hosted CI installs the committed lock. Added six input/include regression
+  tests. Qualification CI 33953694373 succeeded on both versions.
+- Full LOCAL core passed 327 tests + 199 subtests in a clean hashed-wheel environment.
+  Added 19 real SDK/core tests; fixed the old >8-byte SDK gate (valid config is 8).
+- Direct runtime pins unchanged; explicitly qualified transitive SVG updates:
+  cssselect2 0.10.1 and webencodings 0.6.1, plus optional SDK/browser/build pins.
+- Full core/source and its mandatory runtime CI remain local. No protected upload,
+  MAX change, delegated task, real generation or deployment.
+
 ### Dependency and native SDK qualification — 2026-09-05
 
 - Added an independent real Telethon 1.44 wire-roundtrip gate (14 request kinds,
   exact custom emoji IDs and UTF-16 spans), without credentials or provider RPCs.
 - Added dependency graph/wheelhouse validation and 10 regression cases; extended
   the same hosted CI to empty Python 3.12/3.13 environments and exact hashed,
-  offline reinstallation. Successful execution remains to be read back.
+  offline reinstallation. Both jobs succeeded in run 33953694373; source artifact bytes were read back.
 - Corrected the local pip diagnosis: DNS failure is not package nonexistence.
 - No protected core payload, MAX implementation, agent or model call is included.
 

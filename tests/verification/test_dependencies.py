@@ -38,3 +38,25 @@ def test_check_reports_missing_wrong_and_unexpected(tmp_path, monkeypatch):
     assert gate.check(lock)['packages'] == 1
     monkeypatch.setattr(gate.metadata, 'distributions', lambda: [Dist('other','1.0')])
     with pytest.raises(ValueError, match='version_mismatches'): gate.check(lock)
+
+
+@pytest.mark.parametrize('included', ['one==1.1', 'one>=1', 'two==1.0', '-r requirements.in'])
+def test_input_drift_and_cycles_rejected(tmp_path, included):
+    lock = tmp_path/'lock'; lock.write_text('one==1.0\n')
+    inputs = tmp_path/'requirements.in'; inputs.write_text(included)
+    with pytest.raises(ValueError): gate.check_inputs(lock, inputs)
+
+
+def test_direct_extra_includes_and_same_pin_duplicates(tmp_path):
+    lock = tmp_path/'lock'; lock.write_text('one==1.0\nother==2.0\n')
+    (tmp_path/'base.in').write_text('one[extra]==1.0\n')
+    inputs = tmp_path/'requirements.in'; inputs.write_text('-r base.in\none==1.0\n')
+    assert gate.check_inputs(lock, inputs)['direct_pins'] == {'one': '1.0'}
+
+
+def test_include_cannot_escape_source_directory(tmp_path):
+    (tmp_path/'other.in').write_text('one==1.0')
+    sub = tmp_path/'source'; sub.mkdir()
+    lock=sub/'lock'; lock.write_text('one==1.0\n')
+    inputs=sub/'requirements.in'; inputs.write_text('-r ../other.in')
+    with pytest.raises(ValueError, match='include'): gate.check_inputs(lock,inputs)

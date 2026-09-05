@@ -14,6 +14,7 @@ sections:
     overview: docs/architecture/overview.md
     social_runtime: docs/features/social-operations/implementation-design-v1.md
   operations:
+    dependency_sdk_verification: docs/operations/dependency-sdk-verification.md
     requirements_governance: docs/operations/requirements-governance.md
     repository_workflow: docs/operations/repository-workflow.md
     llm_limits_setup: docs/operations/llm-limits-setup.md

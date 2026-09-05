@@ -19,16 +19,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Qualify dependency graph in an empty environment
+      - name: Install committed dependency lock in an empty environment
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/verification/wheels
           python -m venv "$RUNNER_TEMP/vp-resolve"
           PY="$RUNNER_TEMP/vp-resolve/bin/python"
-          "$PY" -m pip install --disable-pip-version-check -r requirements.verification.in
+          "$PY" -m pip install --disable-pip-version-check -r requirements.lock
           "$PY" -m pip check
-          "$PY" -m pip freeze --all | grep -vi '^pip==' > artifacts/verification/resolved.lock
+          cp requirements.lock artifacts/verification/resolved.lock
+          "$PY" scripts/verify/dependencies.py requirements.lock --inputs requirements.verification.in > artifacts/verification/inputs.json
           "$PY" scripts/verify/dependencies.py artifacts/verification/resolved.lock > artifacts/verification/resolved-environment.json
           echo "VERIFY_PYTHON=$PY" >> "$GITHUB_ENV"
       - name: Canonical contract regression
