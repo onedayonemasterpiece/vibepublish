@@ -1,6 +1,7 @@
-> Delivery status: the shared VisualService, importer, compositor and regression
-> suites are in PR #1. The archived `adapters/codex_imagegen.py` module is not.
-> This is not a runnable complete release. See [runtime delivery status](../../operations/social-runtime.md).
+> Source/runtime evidence is tracked in [runtime delivery status](../../operations/social-runtime.md).
+> The shared service, importer, compositor and optional new Codex adapter are
+> delivered source; source availability alone does not prove host activation,
+> live visual quality or acceptance of the policy change below.
 
 # Social visuals
 
@@ -44,21 +45,56 @@ No shell fragments, arbitrary repository paths or raw model-selected commands co
 
 ## Visual recipe and exact text
 
-The art layer carries atmosphere/background/illustration. Exact Russian text, dates, venue names, addresses, logos and branded safe areas are composed deterministically from structured editorial fields using SVG/HTML/CSS or an equivalent layout engine. Presets own fonts, text overflow rules, safe zones, crops and allowed art treatments.
+The art layer carries atmosphere/background/illustration. When optional exact editorial copy is supplied, Russian text, dates, venue names, addresses, logos and branded safe areas are composed deterministically from those structured fields using SVG/HTML/CSS or an equivalent layout engine. Presets own fonts, text overflow rules, safe zones, crops and allowed art treatments.
 
 `4:5` and `9:16` are required output families. Text is reflowed for each family rather than cropped away. Source originals remain immutable. Resize/masks/metadata can use PIL; it is not the entire design system.
 
-If a draft contains baked-in text, do not blindly draw new text over old generated lettering. Separate or reconstruct the art layer and validate the complete composite. Editorial facts must come from explicit structured inputs or confirmed source extraction, not unchecked OCR. Facts ambiguous in a source produce a review blocker. Automated checks can establish dimensions, overflow, font/layout and supplied text; they cannot universally prove absence of accidental lettering or artistic quality. Human visual review remains necessary for the initial presets and any uncertain candidate.
+If a draft contains baked-in text, do not blindly draw new text over old generated lettering. Separate or reconstruct the art layer and validate the complete composite. Editorial facts must come from explicit user inputs or confirmed source extraction, not unchecked OCR. Facts ambiguous in a source produce a review blocker. Automated checks can establish dimensions, overflow, font/layout and supplied text; they cannot universally prove absence of accidental lettering or artistic quality. Initial presets and uncertain candidates retain an honest quality-review flag.
+The owner's future-native-queue authorization below waives mandatory manual
+selection for that delivery context, not artistic quality or exact-typography
+verification.
 
 ## Candidate and approval semantics
 
-Each job freezes mode, brief, sources, preset version and cost budget. Default 2 candidates, maximum 4. Default selection is human; automatic selection requires explicit request or a previously granted tenant policy and uses deterministic eligibility checks before any ranking. Selection cannot substitute a different asset after approval.
+Each job freezes mode, prompt/legacy brief, sources, preset version and cost budget.
+Default 2 candidates, maximum 4. **Owner correction — 2026-09-05 (`Fixed`,
+implementation `Not confirmed by user`, live acceptance `Not done`):** an explicit inline visual request attached
+to an execute publication with a future native delivery time authorizes automatic
+selection of an eligible candidate into that native queue without mandatory human
+selection. This replaces the initial-preset mandatory-review gate only for that
+bounded context. Explicit `selection: human` remains honored. Immediate execute,
+preview and standalone requests do not gain that default or any new publication
+authority. Automatic selection must never trigger an immediate execute send.
+Selection cannot substitute a different asset after approval.
 
 For inline publishing, the selected final derivative becomes the **first** media item. Explicit `media` entries follow in their declared order. Visual source images are never published just because they were generation inputs. Story/media-count constraints are checked before any send. The preview enumerates exactly what will be attached.
 
 Selection tokens bind tenant, job, parent publication, candidate hash, plan revision, surface, destinations, schedule and policy epoch. Replayed selection returns the existing result; stale/different selection fails CAS. Selection resumes the original publication only if its mode and original user authority permit execution. A preview-only publication remains awaiting approval. Schedule expiry, changed rights or changed editorial text blocks automatic resume.
 
 Standalone selection produces an asset only; it cannot publish. Feedback changes the preference record, never an already published image. Re-generation creates another job/revision with a bounded new cost reservation.
+
+## Prompt-first input (`Fixed` owner correction, acceptance `Not done`)
+
+Use `prompt` for generation, tuning or composition. It is a compatible alias for
+`brief`; legacy `brief` and optional structured `copy` keep working. Neither
+structured copy nor manually split title/date/location fields are mandatory.
+If both aliases are supplied they must match exactly. Quotes remain ordinary
+prompt text and are forwarded unchanged; no OCR, fact extraction or guaranteed
+exact typography is inferred from them. Structured copy, when explicitly supplied,
+continues through the deterministic compositor; the executor request explicitly
+asks for an art-only layer without lettering to avoid double overlay. Prompt-only lettering, if generated,
+is unverified free text, not compositor-certified editorial content.
+
+Generation optionally accepts 0–8 `sources` references; tune still requires one
+`source`, and compose requires 2–8 `sources`. Explicit publication media without a
+visual request are originals and must not call the generator. No new generator
+model, API fallback or host activation is authorized by this input alias.
+
+For example, `visual: {"kind":"generate","prompt":"Афиша с надписью \"Кто я?\""}`
+needs no title/date/location extraction by the caller. Adding `sources` supplies
+references, not publication attachments. Attach that visual to an execute
+publication with a future `delivery.kind: at` for the bounded native-queue default;
+set `selection: human` to request manual choice instead.
 
 ## Provenance and permissions
 
@@ -120,10 +156,9 @@ cannot be published via native connections; CLI rejects --native plus --fake-ima
 Real imagegen integration, verified originals of the two acceptance links above,
 baked-in lettering/art quality, owner review of the initial preset, multiple
 versioned brand presets and native-media canaries are not verified. Automatic
-selection currently runs only for explicit offline fixtures. A nonfixture result
-from an initial unreviewed preset remains needs_selection even if automatic was
-requested. This is a safety gate, not a claim that full production auto-selection
-is delivered. Public asset ingress, policy-controlled training consent/withdrawal,
+selection follows the owner-authorized future-native-queue exception above;
+other real initial-preset contexts remain manual. This policy change is not proof
+of artistic quality, exact prompt typography or live acceptance. Public asset ingress, policy-controlled training consent/withdrawal,
 retention/export deletion and real feedback-dataset consumption remain Not done.
 Consent defaults to shared_training=false; no training or export is performed.
 
@@ -138,3 +173,32 @@ job-scoped files into the existing importer. Defaults remain disabled. Scripted
 CLI subprocess tests are not a host/canary claim. The real installed version,
 image-only enforcement and billed-call budget require operator verification;
 actual image-model metadata stays unknown. No coding agent implemented this code.
+
+
+## Owner-policy implementation checkpoint — 2026-09-05
+
+Requirements above are owner-approved (`Fixed`); implementation/offline checks
+are `Not confirmed by user`; live generation and queue acceptance of this change
+remain `Not done` here. No provider, model or host configuration was called or
+changed by this implementation lane.
+
+`prompt` is normalized to `brief` before standalone/publication idempotency,
+including equal dual aliases; differing aliases fail before admission. Native
+future-queue defaults are derived only from frozen execute publication plans.
+All initial real candidates keep `requires_review=true` as an honest unverified
+quality indicator; owner-authorized future-queue selection may proceed despite
+that indicator. It does not certify artwork or lettering. Candidate provenance
+separates `prompt_text_unverified` from `explicit_copy_compositor_only`.
+
+The existing selection transaction still verifies authority, source/output hashes,
+format, schedule lead time, revision/token CAS, native fixture prohibition and
+single parent continuation. Immediate automatic execute is manual-gated even for
+fixtures. Existing explicit fixture standalone/preview selection remains harmless:
+standalone creates no publication and preview still requires publication approval.
+Ordinary media without visual bypasses VisualService and never calls Imagegen.
+
+New offline native-shaped provider regressions exercise all three modes, optional
+generation references, prompt/copy compatibility, exact selected-first media,
+idempotency/CAS, explicit human preference, no authority elevation, expiry,
+revocation, routing/revision changes, unknown generation and fixture fencing.
+These simulated artifacts and provider updates are not live acceptance evidence.

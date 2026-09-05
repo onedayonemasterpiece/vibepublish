@@ -119,6 +119,11 @@ DEFS["visual_copy"] = obj({"title": string(160), "subtitle": string(240),
     "body": string(1200), "date_line": string(160), "location_line": string(240),
     "source_line": string(300)})
 for visual_arm in DEFS["visual_spec"]["oneOf"]:
+    visual_arm["properties"]["prompt"] = {**string(5000), "description": "Visual request; quotes stay literal. Legacy brief is an alias. Structured copy is optional, not inferred from this text."}
+    visual_arm["required"].remove("brief")
+    visual_arm["anyOf"] = [{"required": ["prompt"]}, {"required": ["brief"]}]
+    if visual_arm["properties"]["kind"]["const"] == "generate":
+        visual_arm["properties"]["sources"] = array(ref("media"), 0, 8)
     visual_arm["properties"]["copy"] = ref("visual_copy")
     visual_arm["properties"]["formats"] = {**array(enum("post_4_5", "story_9_16"), 1, 2),
                                            "uniqueItems": True}
@@ -180,7 +185,7 @@ tool("get_started", "Get the versioned skill, allowed aliases and current capabi
         ("version", "schema_version", "skill_sha256", "skill", "estimated_tokens", "server_time", "policy_epoch", "scheduling", "read_policy", "destinations", "capabilities")),
     "bootstrap", True)
 
-tool("publish", "Create one publication now or in native provider queues; return accepted progress without waiting for providers. No local scheduler. Preview does not send.",
+tool("publish", "Create one publication now or in native provider queues; return accepted progress without waiting for providers. No local scheduler. Preview does not send. An explicit visual with future native delivery defaults to eligible automatic selection; immediate visual execution does not.",
     obj({"to": array(ALIAS, 1, 20), "content": ref("content"), "media": array(ref("media"), 0, 20),
         "surface": enum("post", "story", "message", "album", "video", "short_video"),
         "delivery": ref("delivery"), "mode": enum("execute", "preview"),
@@ -212,7 +217,7 @@ visual_cmd = {"oneOf": [ref("visual_spec"),
         ("job_id", "candidate_id", "expected_revision", "token")),
     arm("feedback", {"job_id": ID, "candidate_id": ID, "rating": enum("accepted", "rejected"), "reason": string(2000)},
         ("job_id", "candidate_id", "rating"))]}
-tool("visual", "Generate, tune or compose image candidates, select one, or record feedback. Selection resumes only its exact authorized parent.",
+tool("visual", "Generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Generate allows optional source references. Selection resumes only its exact authorized parent.",
     obj({"command": visual_cmd, "request_key": KEY}, ("command",)), ref("receipt"), "visual")
 
 tool("status", "Read local receipts and atomic progress, never retry. Watch one operation with after_event; return on its first new event, not all providers.",

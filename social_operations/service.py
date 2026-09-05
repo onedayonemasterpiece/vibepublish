@@ -239,6 +239,8 @@ class Application:
 
     def accept(self, actor, action, args):
         intent = normalize_intent(action, args)
+        if action == 'publish' and intent.get('visual'):
+            intent['visual'] = self.visuals.normalize_spec(intent['visual'])
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             op = self._replay(db, actor, action, intent, args)

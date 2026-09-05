@@ -23,11 +23,36 @@ class VisualService:
     def __init__(self, app):
         self.app, self.store = app, app.store
 
-    def _spec(self, spec, plans):
+    @staticmethod
+    def normalize_spec(spec):
         spec = json.loads(canonical(spec))
+        if 'prompt' in spec:
+            if 'brief' in spec and spec['brief'] != spec['prompt']:
+                raise DomainError('visual_prompt_conflict', 'prompt and legacy brief must match when both are supplied')
+            spec['brief'] = spec.pop('prompt')
+        return spec
+
+    def _native_queue_automatic(self, plans):
+        # This is authority for choosing an image, not a provider capability claim.
+        # Actual native-queue support is still checked before the provider effect.
+        return bool(plans) and all(
+            p['action'] == 'publish' and p['mode'] == 'execute'
+            and p['account_type'] != 'fake' and not p.get('admission_error')
+            and p['scheduled_at'] and parse_time(p['scheduled_at']) >= self.store.clock()+60
+            for p in plans)
+
+    def _automatic_context(self, plans, fixture):
+        if self._native_queue_automatic(plans):
+            return True
+        # Keep harmless fixture standalone/preview and scheduled-test semantics,
+        # but an automatic choice may never become an immediate execute send.
+        return fixture and all(p['mode'] == 'preview' or p['scheduled_at'] for p in plans)
+
+    def _spec(self, spec, plans):
+        spec = self.normalize_spec(spec)
         spec.setdefault('preset', PRESET)
         spec.setdefault('candidates', 2)
-        spec.setdefault('selection', 'human')
+        spec.setdefault('selection', 'automatic' if self._native_queue_automatic(plans) else 'human')
         spec.setdefault('copy', {})
         surface = plans[0]['surface'] if plans else 'post'
         spec.setdefault('formats', ['story_9_16' if surface == 'story' else 'post_4_5'])
@@ -107,6 +132,8 @@ class VisualService:
         intent = json.loads(canonical(args))
         intent.pop('request_key', None)
         command = intent['command']
+        if command['kind'] in {'generate', 'tune', 'compose'}:
+            command = intent['command'] = self.normalize_spec(command)
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             op = self.app._replay(db, actor, 'visual', intent, args, implicit=not bool(args.get('request_key')))
@@ -143,13 +170,15 @@ class VisualService:
         if not candidate or not secrets.compare_digest(candidate['selection_token_hash'], self.store.token_hash(command['token'])):
             raise DomainError('visual_selection_token_invalid', next_action='refresh')
         self._parent_authority(db, actor, job)
-        if automatic and candidate['requires_review']:
+        plans = json.loads(job['plans'])
+        if automatic and not self._automatic_context(plans, bool(candidate['fixture'])):
+            raise DomainError('visual_human_review_required', next_action='select_visual')
+        if automatic and candidate['requires_review'] and not self._native_queue_automatic(plans):
             raise DomainError('visual_human_review_required', next_action='select_visual')
         asset = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
                            (candidate['asset_ref'], actor.tenant_id, actor.principal_id)).fetchone()
         if not asset or hashlib.sha256(asset['bytes']).hexdigest() != candidate['sha256']:
             raise DomainError('asset_integrity')
-        plans = json.loads(job['plans'])
         if plans:
             required = 'story_9_16' if plans[0]['surface'] == 'story' else 'post_4_5'
             if candidate['format'] != required:
@@ -198,7 +227,12 @@ class VisualService:
                 sources.append(ImagegenSource(source['ref'], source['sha256'], source['mime'], source['width'], source['height'], source['size'], row['bytes']))
         spec = json.loads(job['spec'])
         budget = (spec['candidates']+len(spec['formats'])-1)//len(spec['formats'])
-        return ImagegenRequest(job['id'], job['input_digest'], spec['kind'], spec['brief'], tuple(sources),
+        brief = spec['brief']
+        if spec['copy']:
+            brief = ('Create only the art layer, without lettering or editorial text. '
+                     'Explicit structured copy is composed separately; do not bake it into the image.\n'
+                     + brief)
+        return ImagegenRequest(job['id'], job['input_digest'], spec['kind'], brief, tuple(sources),
                                spec['preset'], REQUESTED_ROUTE, budget, job['deadline'])
 
     async def process(self, worker, op, actor, executor=None):
@@ -307,9 +341,10 @@ class VisualService:
                     db.execute('INSERT INTO visual_asset_origins VALUES(?,?,?,?)', (asset_ref, job['id'], int(observation.fixture), 'final'))
                     sha = hashlib.sha256(final.data).hexdigest()
                     token, candidate_id = secrets.token_urlsafe(32), new_id('candidate')
-                    requires_review = not observation.fixture  # Initial real presets ALWAYS require human inspection.
+                    requires_review = not observation.fixture  # Quality is unverified even when native-queue selection is authorized.
                     candidate_provenance = {**provenance, 'executor_artifact_sha256': manifest.sha256,
-                                             'choice_binding': digest([job['input_digest'], candidate_id, sha, format, row['revision']])}
+                                             'choice_binding': digest([job['input_digest'], candidate_id, sha, format, row['revision']]),
+                                             'typography_evidence': 'explicit_copy_compositor_only' if spec['copy'] else 'prompt_text_unverified'}
                     db.execute('INSERT INTO visual_candidates VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                                (candidate_id, job['id'], ordinal, asset_ref, sha, art_ref, hashlib.sha256(art.data).hexdigest(),
                                 final.width, final.height, format, composite.recipe_json, canonical(candidate_provenance),
@@ -327,7 +362,7 @@ class VisualService:
                            (observation.execution_ref, canonical(provenance), job['id']))
                 db.execute("UPDATE operations SET state='needs_selection',complete=1,work_state='done',result=?,error=NULL WHERE id=?", (canonical(result), op['id']))
                 self.store.event(db, op['id'], 'awaiting_selection', 'completed', 'Candidate hashes and private lineage committed; no social effect yet')
-                if spec['selection'] == 'automatic' and observation.fixture:
+                if spec['selection'] == 'automatic' and self._automatic_context(json.loads(job['plans']), observation.fixture):
                     self.select(db, actor, automatic, automatic=True)
             return True
         except asyncio.CancelledError:
