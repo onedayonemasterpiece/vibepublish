@@ -49,7 +49,7 @@ def test_v1_to_v3_migration_preserves_existing_rows_and_is_concurrent_idempotent
         list(pool.map(lambda _:Store(path), range(8)))
     store=Store(path)
     with store.connection() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0]==3
+        assert db.execute('PRAGMA user_version').fetchone()[0]==4
         assert tuple(db.execute('SELECT id,storage_limit FROM tenants').fetchone())==('old-tenant',123456)
         assert db.execute('SELECT count(*) FROM visual_jobs').fetchone()[0]==0
         assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'

@@ -201,9 +201,10 @@ change = {"oneOf": [
     arm("edit", {"content": ref("content"), "media": array(ref("media"), 0, 20), "renderings": ref("renderings")}),
     arm("reschedule", {"delivery": DEFS["delivery"]["oneOf"][1]}, ("delivery",)),
     arm("cancel"), arm("delete"),
+    arm("reconcile_removed", {"attempt_id": ID}, ("attempt_id",)),
     arm("retry_failed", {"destinations": array(ALIAS, 1, 20)}, ("destinations",))]}
 change["oneOf"][1]["anyOf"] = [{"required": [p]} for p in ("content", "media", "renderings")]
-tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures.",
+tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication.",
     obj({"publication_id": ID, "expected_revision": REV, "item_ref": ID, "change": change, "request_key": KEY},
         ("change",)), ref("receipt"), "publication.manage")
 # Existing private publication CAS or one exact immutable observed native item.

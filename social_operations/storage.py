@@ -29,7 +29,7 @@ class Store:
         os.chmod(self.path, 0o600)
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3):
+            if version not in (0, 1, 2, 3, 4):
                 raise RuntimeError("Unsupported VibePublish database version")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -39,6 +39,9 @@ class Store:
 
             if version < 3:
                 db.executescript(Path(__file__).with_name("emoji_schema.sql").read_text())
+
+            if version < 4:
+                db.executescript(Path(__file__).with_name("resolution_schema.sql").read_text())
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:

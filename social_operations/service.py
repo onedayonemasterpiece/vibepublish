@@ -242,6 +242,9 @@ class Application:
                 **({'admission_error': admission_error} if admission_error else {})}
 
     def accept(self, actor, action, args):
+        if action == 'publication_update' and args['change']['kind'] == 'reconcile_removed':
+            from .unknown_resolution import accept_resolution
+            return accept_resolution(self, actor, args)
         intent = normalize_intent(action, args)
         if action == 'publish' and intent.get('visual'):
             intent['visual'] = self.visuals.normalize_spec(intent['visual'])
@@ -347,6 +350,8 @@ class Application:
         if not pub or pub['revision'] != args['expected_revision']:
             raise DomainError('revision_conflict', 'Refresh the exact publication revision', 'refresh')
         previous = self.store.private_operation(db, actor, pub['id'])
+        if json.loads(previous['request']).get('change', {}).get('kind') == 'reconcile_removed':
+            raise DomainError('remote_item_not_bound', 'Removed object cannot be edited or retried; create a new explicit publication')
         if previous['state'] == 'needs_selection':
             raise DomainError('visual_selection_required', next_action='select_visual')
         if previous['work_state'] != 'done':

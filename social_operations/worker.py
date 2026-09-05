@@ -80,7 +80,7 @@ class Worker:
                 restore = db.execute("SELECT value FROM settings WHERE key='restore_guard'").fetchone()
                 if restore and restore[0] == '1':
                     raise DomainError('restore_requires_reconciliation', next_action='contact_owner')
-                unresolved = db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
+                unresolved = db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND NOT EXISTS (SELECT 1 FROM attempt_resolutions z WHERE z.attempt_id=a.id) AND a.state NOT IN ('verified','scheduled','cancelled') LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
                 if unresolved:
                     raise DomainError('connection_outcome_unknown', next_action='review_outcome')
                 if attempt_id != child['id'] or plan_digest != child['plan_digest']:
@@ -122,6 +122,10 @@ class Worker:
             if await self.app.visuals.process(self, op, actor, self.imagegen):
                 return True
             if await self.app.emojis.process(self, op, actor):
+                return True
+            if op['action'] == 'publication_update' and json.loads(op['request']).get('change', {}).get('kind') == 'reconcile_removed':
+                from .unknown_resolution import run_resolution
+                await run_resolution(self, op, actor)
                 return True
             if op['action'] == 'read':
                 await self.run_read(op, actor)
