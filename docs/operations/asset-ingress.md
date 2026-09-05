@@ -64,3 +64,9 @@ the service verified its provenance with a separate OpenAI API.
 
 Chat imports are limited to two concurrent download/decode jobs per application
 process; excess jobs fail `asset_ingress_busy` rather than queue unbounded buffers.
+
+Permission-surface correction: older transport assertions expected the visual tool
+absent for publish-only principals. It is now present strictly for attachment
+import. Real MCP transport tests enforce the import-only schema and reject direct
+generate/tune/select calls, while retaining existing private-asset isolation and
+inline-generation denial checks. This is not an additional visual generation grant.

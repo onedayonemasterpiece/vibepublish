@@ -208,7 +208,19 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                 async with ClientSession(read,write,read_timeout_seconds=timedelta(seconds=15)) as session:
                     await session.initialize()
                     tools=await session.list_tools()
-                    self.assertNotIn('vibepublish_visual',[t.name for t in tools.tools])
+                    # Publish scope grants private attachment import, never image generation.
+                    visual=next(t for t in tools.tools if t.name=='vibepublish_visual')
+                    command_schema=visual.inputSchema['properties']['command']
+                    self.assertEqual(command_schema['properties']['kind'], {'const':'import'})
+                    self.assertNotIn('oneOf', command_schema)
+                    self.assertEqual(visual.meta['openai/fileParams'], ['file'])
+                    for denied_command in [
+                        {'kind':'generate','prompt':'No scope'},
+                        {'kind':'tune','prompt':'No scope','source':{'source':{'kind':'asset','id':candidate['asset_ref']}}},
+                        {'kind':'select','job_id':'visual_denied','candidate_id':'candidate_denied','expected_revision':1,'token':'denied'}]:
+                        denied=await session.call_tool('vibepublish_visual',{'command':denied_command,'request_key':'denied-'+denied_command['kind']})
+                        self.assertTrue(denied.isError)
+                        self.assertEqual(denied.structuredContent['error']['code'], 'invalid_input')
                     hidden=await session.call_tool('vibepublish_visual',args)
                     self.assertTrue(hidden.isError)
                     hidden=await session.call_tool('vibepublish_publish',{'to':['telegram'],'visual':{'kind':'generate','brief':'No scope'}})
