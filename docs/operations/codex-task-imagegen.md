@@ -83,8 +83,12 @@ before copying to a private immutable hash-named job artifact. No image is drawn
 or substituted locally. The existing service importer independently verifies
 that artifact again.
 
-Observation `usage_json` contains thread/turn IDs, observed orchestration model,
-native image item IDs/paths/hashes and the honest candidate-limit policy. The
+Observation `usage_json` contains only nonnegative numeric counters:
+`candidate_limit`, `native_images_completed`, and `imported_artifacts`, matching
+the shared VisualService contract. These count accepted output, not billed calls.
+Thread/turn IDs, observed orchestration model, native item IDs/paths/hashes and
+the candidate-limit policy remain in the private task receipt. The execution
+reference (job key) binds the shared provenance to that private receipt. The
 image model ID is unavailable in this event contract, so `actual_model` remains
 null; it is never fabricated from the requested Luna orchestration model.
 No reasoning or full private thread transcript is written into receipts.
@@ -118,3 +122,31 @@ also read the existing canary without starting a turn and verified its native
 PNG against the native base64 result: SHA-256
 `b03be1b7b0242035f7c19d5e0594e1501182ed35801d4be7dffc3a15a3626610`,
 1,989,613 bytes. No new generation or publication was performed by this lane.
+
+### Numeric usage contract regression — 2026-09-05
+
+The initial adapter incorrectly put rich task metadata in `usage_json`, while
+`VisualService.process` accepts only nonnegative numeric usage values. An actual
+Application/Worker/VisualService integration test reproduced terminal rejection
+as `blocked / imagegen_usage_invalid`. The corrected adapter keeps identities
+and native receipts private and exposes numeric counters only. The regression
+starts with a native-shaped running task, observes completion, commits a verified
+candidate and asserts that `turn/start` was called exactly once.
+
+This is not evidence explaining a separately reported early
+`imagegen_processing_unresolved` result. That generic failure was not reproduced
+by this integration test; the service catch discards the original exception
+class. Do not equate it with the confirmed usage validation failure.
+
+After a core operation is terminal `outcome_unknown`, adapter readback can still
+recover the same native thread, but cannot reopen that core operation. Current
+worker crash recovery applies to unfinished leased work, not `complete=1` /
+`work_state=done` operations. No automatic resend or database status edit is
+performed by this adapter. A future authorized core reconcile action would need
+fencing, authority rechecks, the same saved execution identity, dispatched-only
+readback and candidate CAS; this fix does not introduce that action.
+
+Fix validation: 18 focused adapter/service tests passed; all 127 visual tests
+passed (two existing dependency deprecations); compileall and diff checks passed.
+No live calls, image generations, production database edits or deployments were
+performed during this regression fix.

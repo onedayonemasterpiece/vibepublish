@@ -215,10 +215,11 @@ class CodexTaskImagegen:
         return ImagegenObservation(record['job_key'], record['input_digest'], record['job_key'],
             record['state'], tuple(ImagegenArtifact(**x) for x in record.get('artifacts', [])),
             'codex-app-server-task', record.get('actual_model'),
-            canonical({'thread_id': record.get('thread_id'), 'turn_id': record.get('turn_id'),
-                'task_model': record.get('task_model'), 'candidate_limit': record['candidate_budget'],
-                'budget_policy': 'prompt_and_accepted_output_not_hard_upstream_call_cap',
-                'native_image_items': record.get('native_image_items', [])}))
+            # VisualService's usage contract is numeric-only. Rich identities and
+            # native path/hash receipts remain in the private task receipt.
+            canonical({'candidate_limit': record['candidate_budget'],
+                'native_images_completed': len(record.get('native_image_items', [])),
+                'imported_artifacts': len(record.get('artifacts', []))}))
 
     def _validate(self, request):
         self._directory(request.job_key)
@@ -260,6 +261,7 @@ class CodexTaskImagegen:
                 source_inputs.append({'type': 'localImage', 'path': str(path)})
             record = {'job_key': request.job_key, 'input_digest': request.input_digest,
                 'candidate_budget': request.candidate_budget, 'state': 'unknown',
+                'budget_policy': 'prompt_and_accepted_output_not_hard_upstream_call_cap',
                 'deadline': min(request.deadline, time.time() + self.timeout),
                 'phase': 'thread_start_pending', 'thread_id': None, 'turn_id': None,
                 'task_model': None, 'actual_model': None, 'artifacts': []}

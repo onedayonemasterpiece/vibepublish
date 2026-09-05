@@ -86,9 +86,12 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('codex-app-server-task', observation.actual_executor)
         self.assertIsNone(observation.actual_model)
         usage = json.loads(observation.usage_json)
-        self.assertEqual(THREAD, usage['thread_id'])
-        self.assertEqual(TURN, usage['turn_id'])
-        self.assertEqual(MODEL, usage['task_model'])
+        self.assertEqual({'candidate_limit': 1, 'native_images_completed': 1, 'imported_artifacts': 1}, usage)
+        private = self.adapter._load(self.adapter._directory(key))
+        self.assertEqual(THREAD, private['thread_id'])
+        self.assertEqual(TURN, private['turn_id'])
+        self.assertEqual(MODEL, private['task_model'])
+        self.assertEqual('prompt_and_accepted_output_not_hard_upstream_call_cap', private['budget_policy'])
         self.assertEqual(hashlib.sha256(png()).hexdigest(), observation.artifacts[0].sha256)
         verified_artifact(self.adapter.artifact_root / key, observation.artifacts[0])
 
@@ -216,3 +219,53 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('OPENAI_API_KEY', env)
         self.assertNotIn('CODEX_API_KEY', env)
         self.assertNotIn('TELEGRAM_TOKEN', env)
+
+
+class VisualServiceTaskIntegration(unittest.IsolatedAsyncioTestCase):
+    """Exercise the actual service contract, not just adapter-shaped fixtures."""
+    async def test_running_native_task_becomes_service_candidates_without_resubmit(self):
+        from social_operations.service import Application
+        from social_operations.storage import Store
+        from social_operations.worker import Worker
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / 'codex'; home.mkdir(mode=0o700)
+            native = NativeFixture(home)
+            native.status = 'inProgress'
+            original = native.request
+            reads = []
+            async def request(method, params):
+                response = await original(method, params)
+                if method == 'thread/read':
+                    reads.append(response['thread']['turns'][0]['status'])
+                    native.status = 'completed'
+                return response
+            native.request = request
+            executor = CodexTaskImagegen(root / 'images', codex_home=home, transport=native)
+            store = Store(root / 'ledger.sqlite')
+            token = store.create_principal('tenant', 'owner', owner=True)
+            actor = store.authenticate(token)
+            app = Application(store)
+            worker = Worker(store, {}, imagegen=executor)
+            try:
+                submitted = await app.call(actor, 'vibepublish_visual', {'command': {
+                    'kind': 'generate', 'prompt': 'Афиша "Кто я?"',
+                    'candidates': 1, 'formats': ['post_4_5']}, 'request_key': 'native-task'})
+                self.assertEqual('accepted', submitted['state'], submitted)
+                await worker.run_once()
+                ready = store.receipt(actor, submitted['operation_id'])
+                self.assertEqual('needs_selection', ready['state'], ready)
+                self.assertEqual(['inProgress', 'completed'], reads)
+                self.assertEqual(1, len(ready['candidates']))
+                self.assertEqual('codex-app-server-task', ready['executor']['actual_executor'])
+                self.assertEqual(1, sum(m == 'turn/start' for m, _ in native.calls))
+                with store.connection() as db:
+                    row = db.execute('SELECT * FROM visual_candidates').fetchone()
+                    provenance = json.loads(row['provenance'])
+                    self.assertTrue(all(type(x) in (int, float) for x in provenance['usage'].values()))
+                    self.assertEqual(0, db.execute('SELECT count(*) FROM publications').fetchone()[0])
+                payload, _mime, sha = app.read_asset(actor, ready['candidates'][0]['asset_ref'])
+                self.assertEqual(hashlib.sha256(payload).hexdigest(), sha)
+            finally:
+                await executor.close()
