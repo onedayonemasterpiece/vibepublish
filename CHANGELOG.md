@@ -10,6 +10,8 @@
   provider bytes; existing stable-ID verification stays unchanged.
 - Preserve verified attachments explicitly on VK wall.edit/reschedule; reject
   non-whole-minute VK schedules rather than silently accepting provider rounding.
+- Verify live VK native post10 preview/publish/edit/reschedule/cancel, then real
+  post11 SIGKILL/restart recovery with one dispatch and no duplicate; cancel both.
 - Add owner-only read-only reconciliation for an externally removed uncertain
   VK schedule, with schema-v4 immutable evidence and actor/binding epoch fencing.
   Original unknown operation and attempt remain unchanged; no publication retry.

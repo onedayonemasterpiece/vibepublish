@@ -22,13 +22,13 @@ R12 ordinary Codex task with built-in image_gen uses owner Codex access/quota; n
 ## Closure evidence (engineering statuses, not owner sign-off)
 R01 Partial: public hostname works; shared-renderer persistence and TLS-renewal verification remain.
 R02 Partial: Saved Messages35826 delivered/read back; user confirmation pending.
-R03 Partial: Telegram native lifecycle/emoji/media verified; VK copied-photo binding blocked.
+R03 Engineering verified: Telegram lifecycle/emoji/media and VK post10 full media lifecycle; owner confirmation pending.
 R04 Superseded for runtime activation by ordinary-task R12; legacy source preserved.
 R05 Partial: integrated local suite and public service evidence recorded; no full hosted CI claim.
 R06 Partial: no-AI original ingress/readback verified; actual current chat attachment handoff not observed.
 R07 Partial: prompt-first generate/tune/compose native images verified; composition fully queued, failed task histories retained.
 R08 Superseded by explicit NOW as well as scheduled execute R13.
-R09 Blocked: VK photo owner/ID remapping lacks a verified automatic binding; no resend.
+R09 Engineering verified: exact ordered provider bytes prove copied IDs; old8/9 unknown histories retained and explicit absence resolutions recorded.
 R10 Partial: native image receipt/path/hash verified; not a hard billed-call attestation.
 R11/R14 Partial: HTTP and real MCP file-object ingress verified, client UI handoff unverified.
 R12 Partial: ordinary Luna tasks live, no API fallback; owner acceptance pending.
@@ -43,3 +43,5 @@ R17 resolve quarantined externally removed scheduled attempt: worker in separate
 R18 real crash/restart acceptance: root deployment-only exact-operation one-shot response-checkpoint hook, after R16/R17; never kill shared services.
 R19 remaining ingress/client/host gates: root after functional acceptance, preserve original host and credential permissions.
 Integration: R17 committed merge into root, combined tests, ownworker deployment, exact old VK resolution, new VK live lifecycle, crash canary, final evidence/push. No main/MAX/unrelated production edits.
+
+R16/R17/R18 engineering verified: live post10 lifecycle, owner absence proofs for8/9, real post11 response-checkpoint SIGKILL/recovery/cancel; owner confirmation pending. R19 remains partial: current client handoff unobserved, shared renderer activation/TLS renewal unresolved. Worker R17 commits8035af7/d1a6270/7cfc7ee/7b806b4 all integrated; reviewer fixes included, no abandoned patch.

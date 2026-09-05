@@ -1,6 +1,6 @@
 # VK photo identity rebinding
 
-Status: **Not done** (reported defect); owner requirement to support native VK
+Status: **Not confirmed by user** (engineering live lifecycle verified); owner requirement to support native VK
 postponed posts is **Fixed**. Engineering proof policy is **Not confirmed by user**.
 
 The existing design requires provider binding and ordered media verification
@@ -35,7 +35,7 @@ getWallUploadServer) and `photos/objects.json` (photo identity and sizes). The
 observed additional orig_photo field is optional, not an assumed schema guarantee.
 Real before/after fingerprints and lifecycle receipts are required for acceptance.
 
-## Live lifecycle correction (reported defect, Not done until rechecked)
+## Live lifecycle correction (engineering rechecked; owner confirmation pending)
 
 Live post9 proved exact copied-photo bytes. Its subsequent text edit exposed a
 separate incorrect transport assumption: VK clears attachments if wall.edit omits
@@ -47,3 +47,7 @@ works regardless of seconds in an old queue item. Official wall.edit schema list
 attachments and publish_date but promises neither omission preservation nor
 second-precision round trips. These corrections follow observed authenticated
 readback, not a claim that the schema specifies those behaviors.
+
+Live full lifecycle post10 and real crash/recovery post11 passed; both cancelled
+with complete native queue absence. See the canonical acceptance report for exact
+operation IDs, preserved failure histories, provider hashes and remaining gates.

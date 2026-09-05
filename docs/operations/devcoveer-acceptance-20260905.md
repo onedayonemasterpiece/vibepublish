@@ -2,6 +2,12 @@
 
 Status: **Not confirmed by user / partial live acceptance**. Not full CI or release acceptance.
 
+Latest: **VK postponed lifecycle and a real mid-publication crash/recovery now
+verified**, including copied-photo IDs, explicit media preservation and exact
+minute-level scheduling. See [VK completion](#vk-completion-and-live-crash-recovery)
+for receipts and current remaining gaps; earlier failures below are retained as
+historical evidence, not current blockers.
+
 ## Source and deployed scope
 
 Origin core HEAD checked as `24c33d9e74efa6a28fa48ecb70287c60bca7ef5c`,
@@ -25,7 +31,7 @@ all eight tools verified again after final route repair. Protocol 2025-11-25.
 User systemd units `vibepublish-acceptance-20260905-server.service` and
 `vibepublish-acceptance-20260905-worker.service` are enabled/active, with linger,
 private state `/home/dev/.local/state/vibepublish-acceptance-20260905` (0700),
-SQLite WAL schema 3 and restricted filesystem writes. Server binds loopback18765.
+SQLite WAL schema 4 and restricted filesystem writes. Server binds loopback18765.
 Worker reads dedicated `VIBE_PUBLISH_TG_SESSION` from approved my-data-hub `.env`,
 never falls back to EventsBot Telegram credentials. Ordinary Codex-task executor
 is wired; see the current continuation below for actual successes and failures.
@@ -305,7 +311,7 @@ photo and downloaded bytes, still exactly one matching caption.
 This is not a repeat of an uncertain command: different new-art intent, no source
 image, new operation; prior unknown generation/tune operations were not reset.
 
-## Final engineering verification and remaining gaps
+## Previous engineering snapshot (superseded by VK completion below)
 
 - **504 local tests and205 subtests passed**, two existing dependency-deprecation
   warnings,92.82s; compileall and diff checks passed. No existing tests disabled.
@@ -346,3 +352,125 @@ public-final.json, mcp-file-import.json, final-tests.log, compose-worker-live.js
 compose-replay.json, composed-native-readback*.json, downloaded readback images,
 generate-now-worker-live.json and generated-now-native-readback*.json. Model
 reasoning, social credentials and signed download URLs are not committed.
+
+
+## VK completion and live crash recovery
+
+Engineering verification completed 2026-09-05 22:48 UTC; owner confirmation pending.
+Runtime code is acceptance commit `3860be5` plus subsequent evidence-only docs.
+Both own services are active; schema4 migrated with a private pre-v4 SQLite backup
+and integrity_check=ok. No business rows manually reset. Core branch HEAD remains
+`24c33d9e74efa6a28fa48ecb70287c60bca7ef5c`; MAX/main untouched.
+
+### Corrected native behavior
+
+- Saved user-photo IDs really become community-copy IDs. Before/after exact
+  provider JPEG bytes now prove their ordered binding; source asset hashes remain
+  separate. Sanitized mapping survives final worker checkpoint persistence.
+- `wall.edit` omitted attachments actually cleared photos in live post9. Explicit
+  ordered verified IDs now go into both edit and reschedule, without reupload.
+- `wall.edit` rounded an observed seconds timestamp to a whole minute. VK
+  scheduled preflight now requires HH:MM / zero seconds rather than silently
+  accepting a changed time. Requested/effective time must still match exactly.
+- Native post ID stayed **10** throughout the successful queued lifecycle. That
+  observation is distinct from the changing photo IDs; no untested assertion is
+  made about the later queue-to-public-wall transition, which was not authorized
+  for this VK stand.
+
+Official contract consulted: [VK wall method schema](https://github.com/VKCOM/vk-api-schema/blob/master/wall/methods.json)
+and [photo schema](https://github.com/VKCOM/vk-api-schema/blob/master/photos/objects.json).
+Omitted-attachment preservation/second precision were incorrect assumptions, not
+promises in those schemas. Required Opus consultation was attempted with the
+project CLI; it returned “Not logged in”. Independent read-only reviewer found
+original-actor-epoch and final-proof persistence gaps, both fixed and tested.
+
+### Unknown history preserved, not resent
+
+Old post8: owner-only resolution **op_176086aa329f476b9aee050a58d77207**, publication
+`pub_957f3d1f136746a5b10fc0edffcedaa8` revision3, proves complete native queue absence
+and exact published lookup absence. Original unknown publish/attempt unchanged.
+
+Post9: publish **op_73a5df2be46948d1a11d258b5ab091d4** verified ordered copy mapping:
+`photo868977531_457260398/399` → `photo-241261191_457239026/027`.
+Edit **op_8aefc9df8b5646a5a868eed2a8c3a94d** became unknown when the live omission
+bug cleared media. No repeat; exact own test9 was separately deleted with native
+read-before/read-after safeguards (not claimed as MCP lifecycle acceptance).
+Resolution **op_7d029dc154cf43ad956311131f3a8b5f** verified absence at publication
+revision4 and released only that attempt's quarantine; original edit stays unknown.
+An intervening v2 approval **op_26b47863ed0b4c9b9472a1a60060d6dc** was blocked by
+quarantine before dispatch (`dispatched=0`), with no native post created. It was
+not reopened. New v3 canary began only after recorded absence resolution.
+
+### Successful full VK lifecycle
+
+Publication **pub_d8b9c3872c774637a13cb8648b6a93be**, target **-241261191**, native
+post **10**, revisions1→5, using two existing original image assets (no new AI):
+
+| Step | Operation | Observed result |
+|---|---|---|
+| preview | op_799b127cf69d4146a8dba16c081cab0c | needs_approval, no publish |
+| approve/publish | op_ce311c23988647beaade6e574355f246 | native scheduled10 |
+| edit | op_50df0404d17d4893a6d632f37c44c061 | same10, exact new text, media retained |
+| reschedule | op_e23b4ea7e00842c6b59e69890450b956 | same10, exact new native time |
+| cancel | op_5aae953909584dd2be74ce0ef7cb95e8 | cancelled, complete queue empty |
+
+Initial native time **2026-09-08 00:44 Kaliningrad** (2026-09-07T22:44:00Z),
+rescheduled **2026-09-09 00:44 Kaliningrad** (2026-09-08T22:44:00Z), always >24h.
+Ordered community photos **457239028, 457239029** survived edit/reschedule.
+Independent authenticated native readback downloaded both: blue TEST01 then orange
+TEST02, visually inspected; one exact matching post, no duplicates. Exact JPEG
+SHA256 in that order:
+
+- `39dff7fd7f66a0f4f294a89b6fd3e55b895126b4b41fbf1271911eaf27f68f9f`
+- `b6ddae52a555baaacc63fe8bdc8f89f997ade5ed132948c886ce60926b7e583f`
+
+### Real interrupted publication recovery, not just completed restart
+
+New explicit VK canary preview **op_72bbecb49e8d4fba9981a643f50255a6**; publication
+**pub_04e6da51edfc4d998b669a23945b4618**. Approval
+**op_894f709d03b44445942d347cbcb63e08**, attempt
+**attempt_cfad6735581f4030bb0286c69df348a2** created native post **11**.
+A temporary deployment-only wrapper, armed for this exact operation/target and
+`vk_response`, first delegated the real durable checkpoint, fsynced a one-shot
+marker, then SIGKILLed **only its own worker PID692967** at 22:46:24 UTC.
+Systemd automatically restarted once as PID693127; natural lease expiry reclaimed
+fence2 at22:46:53 and read-only reconciliation completed scheduled at22:46:56.
+
+Ledger: one attempt, one dispatch event, two uploads before the crash and no
+uploads/submissions after it; final sanitized mapping preserved. Independent
+complete queue read found exactly one post11, photos **457239030, 457239031**, same
+ordered byte fingerprints. No manual clock/lease/ledger edits and no wall.post
+resend. Temporary own-service drop-in removed and normal worker restored.
+MCP cancel **op_5ab3e2e45d124f4ebaf3a11430939136** verified native11 absent; independent
+complete VK postponed queue is now **empty**. All new VK canary posts cleaned up.
+
+### Checks and current remaining gaps
+
+- **539 tests +205 subtests passed**, two dependency deprecations; compileall and
+  git diff --check passed. This is local integrated testing, **not hosted/full CI**.
+- Public MCP authenticated200/unauthenticated401 and eight tools checked again.
+- Prior Telegram native lifecycle, custom emoji, media order, original ingress,
+  Luna image generation and automatic generated/composed publication evidence
+  remain valid. Image task model remains **gpt-5.6-luna**, native Codex image_gen,
+  owner login/quota, no API fallback.
+- Current UI attachment-to-MCP handoff and the two original business reference
+  images still lack end-to-end client acceptance. Server-side real file-object
+  import is verified; do not describe that as observed current-client behavior.
+- Three historical visual operations remain terminal unknown; their native task
+  evidence exists, but this social-attempt absence resolver does not reopen them.
+- Shared nginx renderer persistence patch is not activated: separate shared
+  controller update/restart authorization unanswered. The hostname currently
+  works but regeneration can remove its route. Automatic TLS renewal unverified.
+- Owner artistic/product acceptance pending. Telegram scheduled review8473 still
+  exists for **2026-09-07 18:37:11 Kaliningrad** and will publish unless cancelled.
+  No unrelated scheduled posts were changed.
+
+The crash marker `crash-canary-fired.json`, one-shot wrapper, and filtered
+`crash-systemd-journal.json` preserve the response-checkpoint seam and actual
+`code=killed, status=9/KILL` / restart-counter1 evidence.
+`crash-final-checkpoint.json` is explicitly the post-recovery snapshot, not a
+claimed pre-crash database capture.
+
+Private ignored evidence: `artifacts/acceptance/vk-completion/` contains exact MCP
+receipts, native readbacks/downloads, lifecycle/copy checkpoints, crash ledger and
+final tests. Credentials, signed URLs and provider private bodies are not committed.
