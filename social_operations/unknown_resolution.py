@@ -11,11 +11,13 @@ def bound_attempt(app, db, actor, args):
         raise DomainError('access_denied')
     pub = db.execute('SELECT * FROM publications WHERE id=? AND tenant_id=? AND principal_id=?',
                      (args['publication_id'], actor.tenant_id, actor.principal_id)).fetchone()
-    old = db.execute('SELECT a.* FROM attempts a JOIN operations o ON o.id=a.operation_id WHERE a.id=? AND o.publication_id=? AND o.tenant_id=? AND o.principal_id=? AND o.work_state=\'done\' AND o.state=\'outcome_unknown\'',
+    old = db.execute('SELECT a.*,o.actor_epoch AS original_actor_epoch FROM attempts a JOIN operations o ON o.id=a.operation_id WHERE a.id=? AND o.publication_id=? AND o.tenant_id=? AND o.principal_id=? AND o.work_state=\'done\' AND o.state=\'outcome_unknown\'',
                      (args['change']['attempt_id'], args['publication_id'], actor.tenant_id, actor.principal_id)).fetchone()
     if not pub or not old or old['state'] != 'outcome_unknown' or not old['dispatched']:
         raise DomainError('resolution_not_eligible')
     old = dict(old)
+    if old['original_actor_epoch'] != actor.epoch:
+        raise DomainError('access_revoked')
     plan = json.loads(old['plan'])
     if digest(plan) != old['plan_digest']:
         raise DomainError('resolution_checkpoint_invalid')

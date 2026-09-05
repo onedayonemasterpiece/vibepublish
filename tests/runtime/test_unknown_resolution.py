@@ -37,7 +37,8 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.store = Store(Path(self.temp.name)/'db')
-        self.actor = self.store.authenticate(self.store.create_principal('t', 'owner', owner=True))
+        self.token = self.store.create_principal('t', 'owner', owner=True)
+        self.actor = self.store.authenticate(self.token)
         self.store.add_connection(self.actor, 'vkconn', 'vk', account_type='fake')
         self.binding = self.store.bind(self.actor, 'owner', 'vk', 'vkconn', '-241261191')
         self.app = Application(self.store); self.reader = Reader(); self.worker = Worker(self.store, {'vk': self.reader})
@@ -134,3 +135,17 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
             db.execute("UPDATE attempts SET dispatched=1,state='outcome_unknown' WHERE operation_id=?",(second['operation_id'],))
             unresolved=[r[0] for r in db.execute("SELECT a.id FROM attempts a WHERE a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') AND NOT EXISTS (SELECT 1 FROM attempt_resolutions z WHERE z.attempt_id=a.id)")]
         self.assertEqual(len(unresolved),1); self.assertNotIn(resolved,unresolved)
+
+    async def test_fresh_owner_cannot_resolve_previous_actor_epoch(self):
+        await self.seed()
+        with self.store.tx() as db:
+            db.execute("UPDATE principals SET epoch=epoch+1 WHERE id='owner' AND tenant_id='t'")
+        fresh = self.store.authenticate(self.token)
+        self.assertGreater(fresh.epoch, self.actor.epoch)
+        result = await self.app.call(fresh, 'vibepublish_publication_update', self.args)
+        self.assertEqual(result['error']['code'], 'access_revoked')
+        self.assertFalse(self.reader.calls)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM attempt_resolutions').fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT revision FROM publications WHERE id=?', (self.args['publication_id'],)).fetchone()[0], 1)
+            self.assertEqual(tuple(db.execute('SELECT * FROM attempts WHERE id=?', (self.old,)).fetchone()), self.snapshot)

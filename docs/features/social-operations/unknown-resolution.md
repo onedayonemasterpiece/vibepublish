@@ -41,3 +41,9 @@ SQLite schema migration is additive version 4 and included in package data.
 Validation: 10 dedicated tests pass; broader runtime/contracts/verification and
 visual-recovery tests passed (101 tests and 199 subtests).
 Live acceptance is root integrator responsibility, not proven by these fixtures.
+
+The original dispatched operation's actor epoch must also equal the current
+authenticated owner epoch at admission and proof commit. Reauthentication after
+an epoch change does not authorize resolving an earlier-epoch uncertain effect.
+Regression: fresh authenticated owner after epoch bump is denied before reads or
+revision changes; original attempt and quarantine remain intact.
