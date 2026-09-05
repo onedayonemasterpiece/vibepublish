@@ -64,3 +64,30 @@ Current partial-source core verification fails on the undelivered rich-text
 module; live rights/capabilities remain unverified.
 The HTTP VK transport is implemented and covered by parsing/URL/token-policy
 checks, not exercised against VK servers. No live requests were made.
+
+## Basic-chat creator publication correction — 2026-09-05
+
+Status: implementation/offline verification **Not confirmed by user**; live
+canary **Not done** in this lane. The former unconditional Telegram group mutation
+gate rejected an active basic `Chat` owned by the
+current non-bot MTProto user. This is an implementation limitation, not a fixed
+product prohibition. The bounded correction permits only a new immediate `post`
+publication to that exact basic chat; no existing-item mutation, native schedule,
+forwarding, bot, non-creator, megagroup or migration-following capability is added.
+
+Telegram's [chat constructor](https://core.telegram.org/constructor/chat) identifies
+`creator` as the current user's ownership flag and exposes `deactivated` and
+`migrated_to`. Migrated basic groups must send new messages to the supergroup,
+so this adapter rejects those rather than silently retargeting the publication.
+[Telegram migration contract](https://core.telegram.org/api/channel)
+
+[Telethon 1.44 permissions](https://docs.telethon.dev/en/stable/modules/custom.html#telethon.tl.custom.participantpermissions.ParticipantPermissions)
+state that the creator has all permissions; `post_messages` is specific to
+broadcast channels and must not be inferred for basic groups. Existing transport,
+verified-media, immutable request, before-effect and exact-peer readback contracts
+are reused unchanged. Preflight is not a live send/readback claim.
+
+New offline regressions in `tests/providers/test_basic_chat_creator.py` cover
+text, single image and album exact basic-chat readback, read-only preflight, rights
+revocation before uploads/effects, an actual Telethon `Chat` constructor, and the
+retained negative capability gates. No live Telegram RPC was made in this lane.

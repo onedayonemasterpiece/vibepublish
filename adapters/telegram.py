@@ -170,8 +170,18 @@ class TelegramAdapter:
             if not (getattr(permissions, 'is_creator', False) or getattr(permissions, required, False)):
                 raise DomainError('provider_access_denied')
         elif getattr(entity, 'megagroup', False) or type(entity).__name__.startswith('Chat'):
-            # Group mutation permissions have different semantics; not inferred from channel rights.
-            raise DomainError('telegram_group_mutations_needs_review', next_action='contact_owner')
+            # Basic-chat ownership is explicit native evidence, not a channel's
+            # post_messages permission. Keep every other group mutation gated.
+            if not (type(entity).__name__ == 'Chat'
+                    and getattr(entity, 'creator', False) is True
+                    and not getattr(entity, 'megagroup', False)
+                    and not getattr(entity, 'deactivated', False)
+                    and getattr(entity, 'migrated_to', None) is None
+                    and self.account_type == 'mtproto_user'
+                    and request.action == 'publish' and request.surface == 'post'
+                    and request.existing is None and request.scheduled_at is None
+                    and request.source is None):
+                raise DomainError('telegram_group_mutations_needs_review', next_action='contact_owner')
         elif peer_key(entity) != peer_key(me):
             raise DomainError('telegram_direct_messages_needs_review', next_action='contact_owner')
         return entity
