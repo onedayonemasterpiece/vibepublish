@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Telegram custom emoji workflow and continuation — 2026-09-05
+
+- Recorded required emoji-set links, private numbered previews, exact single or
+  ordered-chain selection, personal aliases/rules, frozen semantic entities and
+  pre-publication compilation; detailed workflow is Draft, runtime Not done.
+- Read actual EventsBot transformer/tests and composite-ID/medallion incidents;
+  reuse deterministic behavior, not hard-coded two-unit spans or delayed editing.
+- Corrected imagegen execution target to local Codex on DevCoveer, not the owner's
+  desktop/OpenCode candidate; generator invocation is not coding delegation.
+- Verified the original transfer archive again and recorded MAX PR #2's actual
+  fixture-only scope, missing-archive integration blocker and continuation.
+- Added one ChatGPT continuation handoff; no runtime code, emoji/live test,
+  generation, MAX task, deployment or previously blocked core write performed.
+
 ### MAX handoff and imagegen plugin identification — 2026-09-05
 
 - Published the separate MAX Web task against the actual archived shared port,

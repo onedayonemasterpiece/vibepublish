@@ -5,6 +5,7 @@ entrypoints:
   docs_index: docs/README.md
   agent_routes: AGENTS.md
   changelog: CHANGELOG.md
+  core_continuation: docs/handoffs/core-emoji-imagegen-continuation-20260905.md
   implementation_start: docs/handoffs/implementation-start-20260904.md
   max_web_task: docs/handoffs/max-web-codex-20260905.md
 
@@ -64,6 +65,8 @@ features:
     docs: docs/features/social-operations/README.md
     design: docs/features/social-operations/implementation-design-v1.md
     mcp_contract: docs/features/social-operations/mcp-contract-v1.md
+    telegram_custom_emoji: docs/features/social-operations/telegram-custom-emoji-v1.md
+    telegram_custom_emoji_status: workflow_draft_runtime_not_done
     latest_extension: docs/features/social-operations/forwarding-and-editorial-profiles-v1.md
     acceptance_tests: docs/features/social-operations/acceptance-tests-v1.md
     skill: docs/llm/vibepublish-social-skill.md

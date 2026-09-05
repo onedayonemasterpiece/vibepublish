@@ -41,3 +41,35 @@ plus 199 subtests, and 38 visual tests, in separate successful commands. An
 earlier monolithic invocation timed out without a completed summary. These are
 not locked-install or remote full-runtime CI evidence. MAX/imagegen canaries and
 deployment were not run. Do not overwrite these newer docs with the old archive.
+
+
+## Latest owner corrections and actual work queue — 2026-09-05
+
+Telegram custom/premium emoji is a required product capability, not merely an
+inline alias in the schema. [The workflow and donor findings](../features/social-operations/telegram-custom-emoji-v1.md)
+cover set links, private numbered previews, ordered sequences and reusable rules.
+Runtime compilation/catalog/selection remains **Not done**. This batch read donor
+code/tests/incidents and designed the delta; it did not execute those donor tests
+or implement the emoji runtime. No new pass count is claimed for this design.
+
+Imagegen must use local Codex ON DEVCOVEER, where the owner reports it works.
+The researched third-party OpenCode plugin is not the target; do not request a
+probe on the owner's personal computer. Actual host binding/process result
+recovery is still **Not done**; scripted process tests can be written in ChatGPT
+without delegating development or running a generation canary.
+
+MAX PR #2 now exists at `d0bceb2efd1ab2da83e6553a61f1a33b31a7b755`.
+Its CI 33947076136 verify job is successful; the imagegen-inventory step is skipped
+because that file is absent on the main-based MAX branch. 37 MAX + 22 contract
+tests are the reported MAX checkpoint, NOT core/MCP/live integration. Runbook
+states FixtureDriver accepts only loopback synthetic pages; actual port wiring,
+production factory and observed live selectors remain missing. ZIP was not
+mounted in that Codex task. The original ZIP is present in this ChatGPT session;
+103 source hashes, cumulative patch and port hash were checked again. This does
+not move bytes to Codex automatically. Reattach the original archive to the same
+MAX task; no duplicate task or MAX implementation in ChatGPT.
+
+Use [the continuation handoff](../handoffs/core-emoji-imagegen-continuation-20260905.md).
+Full core remote delivery/locked CI remains the first release blocker, followed
+by the implemented slices and existing explicit provider/deployment gates. The
+new design/docs do not make the archived runtime remotely delivered.

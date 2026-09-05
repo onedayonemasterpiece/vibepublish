@@ -1,6 +1,16 @@
 # Documentation
 
-## Current work entrypoints — 2026-09-04
+## Current continuation — 2026-09-05
+
+- [Continue core/Telegram emoji/imagegen in ChatGPT](handoffs/core-emoji-imagegen-continuation-20260905.md).
+- [Telegram emoji set, visual choice and sequence workflow](features/social-operations/telegram-custom-emoji-v1.md): owner intent Fixed, detailed design Draft, runtime Not done.
+- [MAX task](handoffs/max-web-codex-20260905.md) is already assigned in PR #2; do not relaunch it. Its synthetic driver still needs the actual attached archive, shared-port integration and observed live selectors.
+
+The complete local core/native/visual code is in the separately delivered ZIP,
+not this remote branch. Read [runtime status](operations/social-runtime.md).
+Imagegen host is local Codex **on DevCoveer**, not the owner's desktop.
+
+## Historical design entrypoints — 2026-09-04
 
 - [Start implementation in a new ChatGPT window](handoffs/implementation-start-20260904.md).
 - [Separate Codex task for the MAX Web adapter](handoffs/max-web-codex-20260904.md).
