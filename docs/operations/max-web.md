@@ -283,8 +283,13 @@ Inputs used for this failed live run: complete archived core
 reverified by `tests/adapters/max/assemble_core.py`; port SHA unchanged
 `4304a47116da01e267b0dd324b26e7fdae58a66c0bbd75617eb9cbb464015bf0`.
 Fresh-read PR #1 was `76ad2c554fe5866ddd23f79154095d281e099154`; its partial runtime
-was not substituted for the complete archive. Compatibility with its newer
-optional entities field has not been tested in this checkpoint.
+was not substituted for the complete archive. A later narrow check loaded the actual port from PR #1 commit
+`b84c2082ca771a3e9fd72853011d35c7396c1c52` in a separate process and verified
+`MaxAdapter._remote` constructs its `RemoteItem` with default `entities_json="[]"`.
+That port SHA-256 is
+`0bf0ca135d42c3535da117589140bf180ba979e1296301d5415a8c7a94517174`.
+This is constructor compatibility only, not full partial-runtime integration or
+rich support; no core source in either assembled tree was replaced.
 
 Diagnostic reference: [Playwright WebSocket events](https://playwright.dev/python/docs/api/class-websocket)
 and [page WebSocket creation event](https://playwright.dev/python/docs/api/class-page#page-event-websocket).
@@ -313,3 +318,19 @@ The first assembled-tree invocation also omitted the documented
 `--asyncio-mode=auto` option: core pytest configuration does not enable MAX async
 tests automatically. That invalid invocation was interrupted; the corrected run
 uses the existing documented mode without changing core configuration.
+
+The corrected assembled invocation exposed a separate test harness fault: its
+credential-scrubbed child environment dropped `PLAYWRIGHT_BROWSERS_PATH`, so
+`process-1.log` showed Chromium executable missing before any worker event.
+The MAX-only transport test now passes this non-secret browser installation
+setting through its explicit allowlist. The first-event deadline remains exactly
+5 seconds; HTTPX/core/dispatch logic is unchanged.
+
+Final local corrected results for this safety checkpoint: **87 passed, 2 skipped**
+standalone (the unavailable actual-core modules only), **105 passed, zero skips**
+archived actual-core/fixture assembly, and **14 + 8** contract checks. The 105
+preserve all prior 99 cases plus six negative receipt/quarantine tests; none are
+new positive live publishing/core replay. Detached remote checkout of the safety
+code ran the 25 observed navigation/receipt-guard tests successfully. Remote CI
+and final commit readback are recorded on PR #2 rather than equated with local
+archived-core integration.

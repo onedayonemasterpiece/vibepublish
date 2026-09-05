@@ -50,7 +50,7 @@ async def runtime(tmp_path, server):
         stream=(tmp_path/f'process-{len(processes)}.log').open('wb')
         logs.append(stream)
         proc=subprocess.Popen([sys.executable,*command],cwd=source_root,
-            env={k:v for k,v in os.environ.items() if k in {'PATH','HOME','LD_LIBRARY_PATH'}} | {'PYTHONPATH':str(source_root)},
+            env={k:v for k,v in os.environ.items() if k in {'PATH','HOME','LD_LIBRARY_PATH','PLAYWRIGHT_BROWSERS_PATH'}} | {'PYTHONPATH':str(source_root)},
             stdout=subprocess.DEVNULL,stderr=stream,start_new_session=True)
         processes.append(proc)
         return proc

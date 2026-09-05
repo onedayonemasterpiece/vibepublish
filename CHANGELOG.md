@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Fixed
+- MAX actual-core test subprocesses preserve the explicit Playwright browser
+  installation path while still scrubbing credentials; the early-progress
+  assertion deadline is unchanged.
 - MAX rejects unfinished live mutations before touching the composer or dispatching;
   missing causal receipts cannot be enabled by an ad-hoc publishing flag.
   Preserves unknown-attempt quarantine during read-only reconciliation.
