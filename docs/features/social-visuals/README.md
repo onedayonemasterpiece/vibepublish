@@ -12,6 +12,14 @@ Tuning means image-to-image improvement, not training the model. Real fine-tunin
 
 ## Required executor
 
+Owner clarification 2026-09-05: imagegen is an already used plugin/bundle, not
+a hypothetical API or a requirement for an executable named `$imagegen`.
+See [verified plugin sources and passive host inventory](../../reference/imagegen-plugin-discovery-20260905.md).
+Codex built-in, explicit API-key fallback and an OpenCode package are distinct
+execution paths. The researched OpenCode candidate is not yet identified as
+the owner installation and hard-codes a different routing model; do not select
+it silently. The actual VibePublish plugin-host binding remains **Not done**.
+
 ```text
 VisualService -> ImagegenExecutor -> verified $imagegen route
 requested route: gpt-5.6-luna

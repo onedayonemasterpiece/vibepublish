@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### MAX handoff and imagegen plugin identification — 2026-09-05
+
+- Published the separate MAX Web task against the actual archived shared port,
+  with independent MAX commits and explicit offline/browser/live boundaries.
+- Verified official Codex imagegen sources and the separately identified
+  OpenCode candidate; do not infer the owner installation or requested route.
+- Added passive bounded installation inventory and 21 tests. No auth reads,
+  plugin imports, agent delegation, generation or deployment.
+- Extended the existing GitHub-hosted CI with inventory tests. This does not
+  deliver or validate the separately archived full runtime.
+- Documented actual GitHub write permissions versus the previous per-call
+  OpenAI safety-check block; the new MAX document write/readback succeeded.
+
 ### Development handoff — 2026-09-04, contract 1.2.0-design
 
 - Added canonical native Telegram/VK forwarding by exact post URL or authorized

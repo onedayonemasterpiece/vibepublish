@@ -21,6 +21,8 @@ jobs:
         run: |
           python tests/contracts/test_social_mcp_design.py
           python tests/contracts/test_forwarding_profiles_design.py
+      - name: Passive imagegen inventory regression
+        run: python -m pytest tests/inspection -q
       - name: Compile implementation
         run: python -m compileall -q social_operations adapters
       - name: Reproducible source and SDK fixture
