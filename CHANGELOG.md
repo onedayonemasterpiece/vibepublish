@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Dependency and native SDK qualification — 2026-09-05
+
+- Added an independent real Telethon 1.44 wire-roundtrip gate (14 request kinds,
+  exact custom emoji IDs and UTF-16 spans), without credentials or provider RPCs.
+- Added dependency graph/wheelhouse validation and 10 regression cases; extended
+  the same hosted CI to empty Python 3.12/3.13 environments and exact hashed,
+  offline reinstallation. Successful execution remains to be read back.
+- Corrected the local pip diagnosis: DNS failure is not package nonexistence.
+- No protected core payload, MAX implementation, agent or model call is included.
+
 ### Telegram custom emoji workflow and continuation — 2026-09-05
 
 - Recorded required emoji-set links, private numbered previews, exact single or

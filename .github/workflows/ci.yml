@@ -9,33 +9,62 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Install dependencies
-        run: python -m pip install -r requirements.in
+          python-version: ${{ matrix.python }}
+      - name: Qualify dependency graph in an empty environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/verification/wheels
+          python -m venv "$RUNNER_TEMP/vp-resolve"
+          PY="$RUNNER_TEMP/vp-resolve/bin/python"
+          "$PY" -m pip install --disable-pip-version-check -r requirements.verification.in
+          "$PY" -m pip check
+          "$PY" -m pip freeze --all | grep -vi '^pip==' > artifacts/verification/resolved.lock
+          "$PY" scripts/verify/dependencies.py artifacts/verification/resolved.lock > artifacts/verification/resolved-environment.json
+          echo "VERIFY_PYTHON=$PY" >> "$GITHUB_ENV"
       - name: Canonical contract regression
         run: |
-          python tests/contracts/test_social_mcp_design.py
-          python tests/contracts/test_forwarding_profiles_design.py
-      - name: Passive imagegen inventory regression
-        run: python -m pytest tests/inspection -q
-      - name: Compile implementation
-        run: python -m compileall -q social_operations adapters
-      - name: Reproducible source and SDK fixture
+          "$VERIFY_PYTHON" tests/contracts/test_social_mcp_design.py
+          "$VERIFY_PYTHON" tests/contracts/test_forwarding_profiles_design.py
+      - name: Passive inventory and verification-tool regression
+        run: '"$VERIFY_PYTHON" -m pytest tests/inspection tests/verification -q --junitxml=artifacts/verification/tool-tests.xml'
+      - name: Real Telegram SDK wire roundtrip - not core or live evidence
+        run: '"$VERIFY_PYTHON" scripts/verify/telegram_wire.py > artifacts/verification/telegram-sdk.json'
+      - name: Build a hashed dependency wheelhouse
+        run: |
+          "$VERIFY_PYTHON" -m pip wheel --no-deps -r artifacts/verification/resolved.lock -w artifacts/verification/wheels
+          "$VERIFY_PYTHON" scripts/verify/dependencies.py artifacts/verification/resolved.lock --wheelhouse artifacts/verification/wheels > artifacts/verification/wheelhouse.lock
+      - name: Reinstall locked graph offline into a second empty environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/vp-locked"
+          PY="$RUNNER_TEMP/vp-locked/bin/python"
+          "$PY" -m pip install --no-index --only-binary=:all: --require-hashes --find-links artifacts/verification/wheels -r artifacts/verification/wheelhouse.lock
+          "$PY" -m pip check
+          "$PY" scripts/verify/dependencies.py artifacts/verification/resolved.lock > artifacts/verification/locked-environment.json
+          "$PY" scripts/verify/telegram_wire.py > artifacts/verification/telegram-sdk-locked.json
+      - name: Compile delivered implementation
+        run: '"$VERIFY_PYTHON" -m compileall -q social_operations adapters scripts/verify'
+      - name: Source and environment receipt
         if: always()
         run: |
-          mkdir -p artifacts/verification/wheels
+          mkdir -p artifacts/verification
           git archive --format=tar HEAD > artifacts/verification/source.tar
           git rev-parse HEAD > artifacts/verification/source-sha.txt
-          python -m pip freeze > artifacts/verification/environment.txt
-          python -m pip download --no-deps mcp==1.29.0 sse-starlette httpx-sse -d artifacts/verification/wheels
+          python --version > artifacts/verification/python.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: verification-${{ github.sha }}
+          name: verification-${{ matrix.python }}-${{ github.sha }}
           path: artifacts/verification/
           retention-days: 7
