@@ -322,7 +322,11 @@ class OAuthBoundary:
                             value=(CALLBACK+'?'+urlencode(query)).encode()
                         fixed.append((key,value))
                     out=fixed
-                out.extend([(b'cache-control',b'no-store'),(b'referrer-policy',b'no-referrer'),(b'x-content-type-options',b'nosniff')])
+                # no-referrer makes navigate-mode HTML POST Origin:null in
+                # browsers. Only the consent document needs strict-origin; it
+                # reveals no path/query and keeps same-origin Origin verifiable.
+                policy = b'strict-origin' if path=='/oauth/login' and method=='GET' and message['status']==200 else b'no-referrer'
+                out.extend([(b'cache-control',b'no-store'),(b'referrer-policy',policy),(b'x-content-type-options',b'nosniff')])
                 if message['status']==401:
                     out.append((b'www-authenticate',self.challenge.encode()))
                 message = {**message,'headers':out}
@@ -424,7 +428,7 @@ def create_oauth_app(store, *, auth_db, issuer, resource=None):
                 csrf = provider.consent_page(request_id)
                 esc = html.escape
                 markup = f'''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Подключить VibePublish</title><body><main><h1>Подключить VibePublish к ChatGPT</h1><p>Разрешить ChatGPT работать с вашими доступными назначениями, публикациями и изображениями через VibePublish. Ограничения тестового стенда сохраняются.</p><p>Введите токен VibePublish из Избранного Telegram. Это не пароль Telegram или VK. Токен останется только у VibePublish.</p><form method="post" action="/oauth/login"><input type="hidden" name="request" value="{esc(request_id)}"><input type="hidden" name="csrf" value="{esc(csrf)}"><label>Токен VibePublish <input type="password" name="service_token" required maxlength="512" autocomplete="off"></label><p><label><input type="checkbox" name="consent" value="yes" required> Разрешаю подключение</label></p><button type="submit">Подключить ChatGPT</button></form><p>Не хотите подключать — закройте эту страницу.</p></main></body></html>'''
-                response = HTMLResponse(markup,headers={'Content-Security-Policy':"default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"})
+                response = HTMLResponse(markup,headers={'Content-Security-Policy':f"default-src 'none'; form-action 'self' {CALLBACK}; frame-ancestors 'none'; base-uri 'none'"})
                 response.set_cookie(COOKIE,csrf,secure=True,httponly=True,samesite='strict',max_age=PENDING_TTL,path='/')
                 return response
             data = await request.form()

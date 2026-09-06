@@ -289,3 +289,26 @@ def test_actual_mcp_tools_oauth_descriptor(setup):
         assert tool['_meta']['securitySchemes']==tool['securitySchemes']
     response=client.post('/mcp/',json={'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'vibepublish_get_started','arguments':{'section':'all'}}},headers=headers)
     assert response.status_code==200 and 'skill_sha256' in response.json()['result']['structuredContent']
+
+
+def test_browser_consent_origin_policy_and_exact_redirect_csp(setup):
+    _,token,_,client=setup
+    cid=register(client).json()['client_id']
+    response,_=begin(client,cid)
+    assert response.headers['referrer-policy']=='no-referrer'
+    page=client.get(response.headers['location'])
+    assert page.headers['referrer-policy']=='strict-origin'
+    directives=dict(part.strip().split(' ',1) for part in page.headers['content-security-policy'].split(';'))
+    assert directives['form-action']=="'self' "+CALLBACK
+    assert directives['default-src']=="'none'"
+    assert directives['frame-ancestors']=="'none'"
+    assert '<form method="post" action="/oauth/login">' in page.text
+    fields=dict(re.findall(r'name="(request|csrf)" value="([^"]+)"',page.text))
+    body={**fields,'service_token':token,'consent':'yes'}
+    denied=client.post('/oauth/login',data=body,headers={'Origin':'null'})
+    assert denied.status_code==403 and denied.json()['error']=='invalid_origin'
+    result=client.post('/oauth/login',data=body,headers={'Origin':ISSUER})
+    assert result.status_code==303
+    assert result.headers['location'].startswith(CALLBACK+'?')
+    assert result.headers['referrer-policy']=='no-referrer'
+    assert client.get('/.well-known/oauth-authorization-server').headers['referrer-policy']=='no-referrer'

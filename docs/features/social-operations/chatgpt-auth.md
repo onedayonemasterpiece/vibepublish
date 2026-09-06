@@ -78,3 +78,17 @@ Operator recovery must audit inactive registrations in the separate OAuth databa
 and preserve every client referenced by a live pending request or grant; no automatic
 client deletion or business-ledger modification is performed. This is a bounded
 availability limit, not an unlimited public identity service.
+
+### Browser consent regression — 2026-09-06
+
+Status: **Not done** pending corrected real-browser acceptance. Offline protocol
+checks did not expose a navigation-specific browser failure: `no-referrer` on the
+consent document caused its HTML POST to send `Origin: null`, correctly denied by
+the origin boundary. The consent document alone must use `strict-origin` (origin
+only, never its request query). Null origins remain denied; all other responses
+keep `no-referrer`. Chromium may also enforce `form-action` on a POST's 303 redirect,
+so its CSP must allow only `'self'` plus the exact registered ChatGPT callback. The
+form action itself stays `/oauth/login`; no service token is posted cross-origin.
+
+References: [MDN Origin effects](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy#effect_on_the_origin_header),
+[MDN form-action redirects](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/form-action).
