@@ -18,6 +18,11 @@ pre-handoff checkpoint `adapters/codex_imagegen.py` is absent after a recorded
 request-safety response. Historical full-source test counts are not remote CI.
 The new task does not ask another agent to proxy that denied payload.
 
+## ChatGPT connection continuation
+
+[OAuth and current connection readiness](operations/chatgpt-readiness-20260906.md)
+supersedes stale domain/TLS blockers in the previous acceptance snapshot.
+
 ## Current implementation
 
 - [Social operations](features/social-operations/README.md),

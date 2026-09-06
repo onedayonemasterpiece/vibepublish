@@ -13,7 +13,13 @@ def public_host(value: str) -> str:
     return value
 
 
-def build_app(path: Path, host: str | None = None):
+def build_app(path: Path, host: str | None = None, oauth_db: Path | None = None):
+    if oauth_db is not None:
+        if host is None:
+            raise ValueError('OAuth requires the exact public hostname')
+        from social_operations.oauth import create_oauth_app
+        return create_oauth_app(Store(path), auth_db=oauth_db,
+                                issuer='https://' + public_host(host))
     hosts = ('127.0.0.1', 'localhost') + ((public_host(host),) if host else ())
     return create_app(Store(path), allowed_hosts=hosts)
 
@@ -23,9 +29,10 @@ def main():
     parser.add_argument('--db', required=True, type=Path)
     parser.add_argument('--port', type=int, default=18765)
     parser.add_argument('--public-host', type=public_host)
+    parser.add_argument('--oauth-db', type=Path, help='Opt-in persistent ChatGPT OAuth store (private path)')
     args = parser.parse_args()
     import uvicorn
-    uvicorn.run(build_app(args.db, args.public_host), host='127.0.0.1', port=args.port,
+    uvicorn.run(build_app(args.db, args.public_host, args.oauth_db), host='127.0.0.1', port=args.port,
                 proxy_headers=False, access_log=False, log_level='warning')
 
 

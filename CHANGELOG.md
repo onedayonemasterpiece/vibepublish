@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### ChatGPT OAuth and unattended TLS readiness — 2026-09-06
+
+- Add opt-in MCP SDK OAuth2.1/DCR/PKCE owner consent, resource-bound expiring
+  credentials, durable refresh rotation/replay revocation and current-authority
+  fencing, without replacing existing scoped bearer access or publishing core.
+- Wire isolated stand OAuth persistence; add real HTTP/MCP and launcher security
+  regressions and dedicated connection instructions.
+- Verify the already deployed shared controller reproduces the active exact-host
+  nginx config; correct stale claims that domain persistence was still missing.
+- Switch only VibePublish certificate renewal to HTTP-01; staging renewal and
+  actual nginx-t/graceful reload hook pass without browser/cloud credential auth.
+
+
 ### VK copied-photo identities and explicit unknown recovery — 2026-09-05
 
 - Bind VK user-upload IDs to community-copy IDs using ordered, exact provider

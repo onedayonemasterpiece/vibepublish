@@ -25,6 +25,8 @@ sections:
     asset_ingress: docs/operations/asset-ingress.md
     codex_task_imagegen: docs/operations/codex-task-imagegen.md
     devcoveer_acceptance: docs/operations/devcoveer-acceptance-20260905.md
+    chatgpt_readiness: docs/operations/chatgpt-readiness-20260906.md
+    chatgpt_auth: docs/features/social-operations/chatgpt-auth.md
     llm_limits_setup: docs/operations/llm-limits-setup.md
   llm:
     index: docs/llm/README.md

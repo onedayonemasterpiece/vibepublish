@@ -45,3 +45,10 @@ R19 remaining ingress/client/host gates: root after functional acceptance, prese
 Integration: R17 committed merge into root, combined tests, ownworker deployment, exact old VK resolution, new VK live lifecycle, crash canary, final evidence/push. No main/MAX/unrelated production edits.
 
 R16/R17/R18 engineering verified: live post10 lifecycle, owner absence proofs for8/9, real post11 response-checkpoint SIGKILL/recovery/cancel; owner confirmation pending. R19 remains partial: current client handoff unobserved, shared renderer activation/TLS renewal unresolved. Worker R17 commits8035af7/d1a6270/7cfc7ee/7b806b4 all integrated; reviewer fixes included, no abandoned patch.
+
+## ChatGPT readiness 2026-09-06
+R20 OAuth ChatGPT authentication (missing, implement): dedicated worker high/security lane in separate agent/vibepublish-chatgpt-auth owns OAuth module, narrow server auth integration, auth tests and canonical auth doc. Root owns ownstand launcher/wiring, live protocol/browser acceptance, TLS and report. No publishing in this continuation.
+R21 certificate renewal (unverified): root inspect existing hooks/timer, scoped lineage dry-run only; no unrelated certificates/credentials.
+R22 durable shared renderer (pending scoped controller permission): root read-only until explicit answer; no watchdog/runtime injection.
+R23 real ChatGPT client/file handoff: root protocol+browser checks, real account flow requires owner's UI action if no authenticated browser available; never claim synthetic file import is observed ChatGPT attachment transfer.
+Integrate OAuth worker committed patch, run full existing suite and auth/browser tests, deploy only ownstand with owner-readable instructions; final public discovery/MCP evidence, commit and remote readback. Shared controller remains a separate scope.
