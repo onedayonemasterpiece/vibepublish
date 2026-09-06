@@ -23,8 +23,9 @@ from .asset_ingress import MAX_UPLOAD_BYTES, upload_image
 
 
 class AuthBoundary:
-    def __init__(self, app, store, hosts):
+    def __init__(self, app, store, hosts, authenticate=None):
         self.app, self.store, self.hosts = app, store, frozenset(hosts)
+        self.authenticate = authenticate or store.authenticate
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
@@ -42,7 +43,7 @@ class AuthBoundary:
             authorization = headers.get('authorization', '')
             if not authorization.startswith('Bearer '):
                 raise DomainError('unauthorized', 'A service bearer token is required', 'reauthorize')
-            scope['vibepublish.actor'] = self.store.authenticate(authorization[7:])
+            scope['vibepublish.actor'] = self.authenticate(authorization[7:])
             if scope['method'] in ('POST', 'PUT', 'PATCH'):
                 image_upload = scope['method'] == 'POST' and scope['path'] == '/v1/assets'
                 body_limit = MAX_UPLOAD_BYTES if image_upload else 512*1024
@@ -80,7 +81,7 @@ class AuthBoundary:
             return await JSONResponse(DomainError('request_timeout').output(), status_code=408)(scope, receive, send)
 
 
-def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver')):
+def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'), authenticate=None, oauth_scopes=()):
     service = Application(store)
     mcp = Server('VibePublish', version='0.1.0')
 
@@ -92,7 +93,12 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'))
 
     @mcp.list_tools()
     async def list_tools():
-        return [types.Tool(**tool) for tool in service.tools(actor())]
+        tools = service.tools(actor())
+        if oauth_scopes:
+            security = [{'type': 'oauth2', 'scopes': list(oauth_scopes)}]
+            tools = [{**tool, 'securitySchemes': security,
+                      '_meta': {**tool.get('_meta', {}), 'securitySchemes': security}} for tool in tools]
+        return [types.Tool(**tool) for tool in tools]
 
     @mcp.call_tool(validate_input=False)
     async def call_tool(name, arguments):
@@ -235,4 +241,4 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'))
         ('/v1/engagement/commands','engage',True), ('/v1/visuals/commands','visual',True), ('/v1/destinations/commands','destinations',True)]:
         routes.append(Route(path, endpoint(name, mutation=mutation), methods=['POST']))
     routes.append(Mount('/mcp', app=mcp_endpoint))
-    return AuthBoundary(Starlette(routes=routes, lifespan=lifespan), store, allowed_hosts)
+    return AuthBoundary(Starlette(routes=routes, lifespan=lifespan), store, allowed_hosts, authenticate)
