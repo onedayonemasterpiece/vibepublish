@@ -38,15 +38,17 @@ private persistence and consent/current-authority enforcement belong to this pro
 
 ## Verification
 
-34 focused OAuth tests and four existing transport regression tests passed
-(38 total; two dependency deprecation warnings). Includes actual MCP initialize,
+35 focused OAuth tests, four existing transport regressions and two launcher
+checks passed (41 total; two dependency deprecation warnings). Includes actual MCP initialize,
 tools/list and bootstrap using OAuth, restart persistence, one-use code, binding
 rejections, CSRF, grant-authority changes denying real HTTP/MCP requests, refresh
 rotation/replay revocation, expiry, exact metadata issuer and non-secret persistence.
 No social effects are performed by these tests. Not hosted/full CI.
 
-Deployment readback, desktop/mobile consent rendering and actual ChatGPT account
-linking remain integration/user-surface checks; see the main acceptance report.
+Deployment readback, desktop/mobile real-browser consent, refresh/revocation and
+persistence across an actual own-service restart passed. Actual ChatGPT account
+linking and its attachment handoff remain unobserved; see
+[the public acceptance evidence](../../operations/chatgpt-readiness-20260906.md).
 
 ### Operator integration
 
@@ -81,7 +83,7 @@ availability limit, not an unlimited public identity service.
 
 ### Browser consent regression — 2026-09-06
 
-Status: **Not done** pending corrected real-browser acceptance. Offline protocol
+Status: **Not confirmed by user**; corrected real-browser acceptance passed. Offline protocol
 checks did not expose a navigation-specific browser failure: `no-referrer` on the
 consent document caused its HTML POST to send `Origin: null`, correctly denied by
 the origin boundary. The consent document alone must use `strict-origin` (origin

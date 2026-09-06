@@ -52,3 +52,18 @@ R21 certificate renewal (unverified): root inspect existing hooks/timer, scoped 
 R22 durable shared renderer (pending scoped controller permission): root read-only until explicit answer; no watchdog/runtime injection.
 R23 real ChatGPT client/file handoff: root protocol+browser checks, real account flow requires owner's UI action if no authenticated browser available; never claim synthetic file import is observed ChatGPT attachment transfer.
 Integrate OAuth worker committed patch, run full existing suite and auth/browser tests, deploy only ownstand with owner-readable instructions; final public discovery/MCP evidence, commit and remote readback. Shared controller remains a separate scope.
+
+
+### R20–R23 closure (2026-09-06; engineering, not owner sign-off)
+R20 Not confirmed by user: OAuth main/browser worker commits98d878e/244ff05
+integrated as5c55fd0/d2b8e3b, ownstand wiring413843e; deployed public browser,
+PKCE,8tools, refresh, actual server restart and revocation verified. No abandoned
+worker patch; root owns closure docs. Reviewer found no security must-fix.
+R21 Not confirmed by user: only VibePublish lineage reconfigured to existing
+HTTP-01 webroot; saved-config staging renew and real nginx-t/HUP hook passed.
+R22 Not confirmed by user: earlier pending-permission assumption superseded;
+already deployed combined runtime renderer produces byte-identical live config.
+No shared controller restart required or performed. R01/R19 host gaps resolved.
+R23 Partial: real OAuth MCP file import/replay verified, but owner ChatGPT account
+linking and attachment handoff are unobserved; exact UI instructions delivered.
+Final local576tests+205subtests, focused41, compileall/diff-check passed; no full CI.

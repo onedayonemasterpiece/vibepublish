@@ -2,6 +2,11 @@
 
 Status: **Not confirmed by user / partial live acceptance**. Not full CI or release acceptance.
 
+**Current connection status (2026-09-06):**
+[OAuth, durable domain and automatic TLS renewal are deployed and verified](chatgpt-readiness-20260906.md).
+Connect ChatGPT using OAuth, not a manual bearer-key field. Below is historical
+Telegram/VK acceptance evidence; its dated failures are not current gate claims.
+
 Latest: **VK postponed lifecycle and a real mid-publication crash/recovery now
 verified**, including copied-photo IDs, explicit media preservation and exact
 minute-level scheduling. See [VK completion](#vk-completion-and-live-crash-recovery)
@@ -22,7 +27,9 @@ working checkout remain untouched; existing tests/CI were not disabled.
 ## Connection
 
 MCP: **https://mcp-vibepublish.kenigevents.ru/mcp/** (also exact `/mcp`).
-Streamable HTTP, `Authorization: Bearer <service_token>`.
+Streamable HTTP. **ChatGPT: OAuth** via the public consent page; see the current
+connection guide above. Operator API clients may still use
+`Authorization: Bearer <service_token>`.
 Token and current endpoint were delivered/read back in owner's Saved Messages,
 message **35826**. Never copy token into Git/chat logs.
 Authenticated bootstrap 200, unauthenticated 401, real SDK initialization and
@@ -36,7 +43,7 @@ Worker reads dedicated `VIBE_PUBLISH_TG_SESSION` from approved my-data-hub `.env
 never falls back to EventsBot Telegram credentials. Ordinary Codex-task executor
 is wired; see the current continuation below for actual successes and failures.
 
-**Ingress durability gap:** a concurrent shared nginx regeneration removed the
+**Historical ingress durability gap (resolved; see 2026-09-06 guide):** a concurrent shared nginx regeneration removed the
 new route during this run. Restored only exact VibePublish SNI/server block on top
 of the new current config, preserving all other routes, with candidate/live
 `nginx -t` and HUP, then actual public MCP readback. No network container restarted
@@ -458,9 +465,9 @@ complete VK postponed queue is now **empty**. All new VK canary posts cleaned up
   import is verified; do not describe that as observed current-client behavior.
 - Three historical visual operations remain terminal unknown; their native task
   evidence exists, but this social-attempt absence resolver does not reopen them.
-- Shared nginx renderer persistence patch is not activated: separate shared
-  controller update/restart authorization unanswered. The hostname currently
-  works but regeneration can remove its route. Automatic TLS renewal unverified.
+- Domain/TLS gap from this snapshot is **superseded** by the
+  [2026-09-06 deployment verification](chatgpt-readiness-20260906.md): current
+  runtime renderer preserves the route and unattended renewal/hook dry-run passes.
 - Owner artistic/product acceptance pending. Telegram scheduled review8473 still
   exists for **2026-09-07 18:37:11 Kaliningrad** and will publish unless cancelled.
   No unrelated scheduled posts were changed.

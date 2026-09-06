@@ -9,6 +9,9 @@
   fencing, without replacing existing scoped bearer access or publishing core.
 - Wire isolated stand OAuth persistence; add real HTTP/MCP and launcher security
   regressions and dedicated connection instructions.
+- Fix real-browser consent Origin/referrer and exact-callback CSP behavior; verify
+  public Chromium consent/PKCE,8tools, original import, refresh, real service
+  restart persistence and revocation. Actual owner ChatGPT linking is not claimed.
 - Verify the already deployed shared controller reproduces the active exact-host
   nginx config; correct stale claims that domain persistence was still missing.
 - Switch only VibePublish certificate renewal to HTTP-01; staging renewal and
