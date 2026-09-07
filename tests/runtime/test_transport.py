@@ -140,6 +140,47 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': LostReceipt(sys.argv[2], 'te
             self.assertEqual(db.execute('SELECT count(*) FROM operations').fetchone()[0], 1)
             self.assertEqual(db.execute('SELECT finalize_state FROM attempt_recovery').fetchone()[0], 'done')
 
+    async def test_sdk_safe_retry_of_predispatch_edit_preserves_original_operation(self):
+        script = """
+import asyncio, sys
+from adapters.fake import FakeProvider
+from social_operations.domain import DomainError
+from social_operations.storage import Store
+from social_operations.worker import Worker
+class BlockedEdit(FakeProvider):
+    async def execute(self, prepared, hooks):
+        raise DomainError('observed_heading_changed')
+asyncio.run(Worker(Store(sys.argv[1]), {'telegram': BlockedEdit(sys.argv[2], 'telegram')}).run_once())
+"""
+        async with httpx.AsyncClient(headers={'Authorization':'Bearer '+self.token}, trust_env=False) as http:
+            async with streamable_http_client(self.base+'/mcp/',http_client=http) as (read,write,_):
+                async with ClientSession(read,write,read_timeout_seconds=timedelta(seconds=15)) as session:
+                    await session.initialize()
+                    original=(await session.call_tool('vibepublish_publish',{'to':['telegram'],'content':{'text':'Before edit'},'request_key':'retry-original'})).structuredContent
+                    await self.run_worker()
+                    edit=(await session.call_tool('vibepublish_publication_update',{'publication_id':original['resource_id'],'expected_revision':1,'change':{'kind':'edit','content':{'text':'After edit'}},'request_key':'blocked-edit'})).structuredContent
+                    run=await asyncio.to_thread(subprocess.run,[sys.executable,'-c',script,str(self.store.path),str(self.root/'remote.sqlite')],capture_output=True,timeout=15)
+                    self.assertEqual(run.returncode,0,run.stderr.decode())
+                    blocked=(await session.call_tool('vibepublish_status',{'ids':[edit['operation_id']]})).structuredContent['receipts'][0]
+                    self.assertEqual(blocked['state'],'blocked')
+                    args={'publication_id':edit['resource_id'],'expected_revision':2,'change':{'kind':'retry_failed','destinations':['telegram']},'request_key':'safe-edit-retry'}
+                    retry=(await session.call_tool('vibepublish_publication_update',args)).structuredContent
+                    self.assertEqual(retry['operation_id'],edit['operation_id'])
+                    self.assertEqual(retry['revision'],2)
+                    self.assertFalse(retry['operation_complete'])
+                    await self.run_worker()
+                    result=(await session.call_tool('vibepublish_publication_update',args)).structuredContent
+                    self.assertEqual(result['state'],'verified',result)
+                    self.assertEqual(result['deliveries'][0]['attempt_id'],blocked['deliveries'][0]['attempt_id'])
+                    self.assertTrue(result['operation_complete'])
+        from adapters.fake import FakeProvider
+        remote=FakeProvider(self.root/'remote.sqlite','telegram')
+        self.assertEqual(remote.count('effect'),2)
+        with remote.db() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM items').fetchone()[0],1)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM operations').fetchone()[0],2)
+
     async def test_http_mcp_same_identity_and_direct_hidden_variant_denied(self):
         headers={'Authorization':'Bearer '+self.token,'Idempotency-Key':'cross-transport'}
         args={'to':['telegram'],'content':{'text':'Same intent'}}

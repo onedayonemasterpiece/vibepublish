@@ -121,6 +121,47 @@ matrix is unchanged and remains mandatory: a green focused job must not be repor
 as green full CI. The pre-existing missing `adapters.codex_imagegen` is reported
 separately, never hidden or skipped in that strict gate.
 
+### Explicit safe retry before dispatch
+
+`publication_update` also implements its existing `retry_failed` branch:
+
+```json
+{
+  "publication_id": "pub_original",
+  "expected_revision": 2,
+  "change": {"kind": "retry_failed", "destinations": ["max"]},
+  "request_key": "retry-blocked-edit"
+}
+```
+
+This explicitly re-admits the **same operation, revision and selected attempts**
+only when they are completed blocked/failed attempts with `dispatched=0`. It is
+not a new publication or revision and does not depend on a successful checkpoint:
+the original immutable plan already contains the existing native item/CAS for an
+edit, reschedule, cancel or delete. Current actor/binding epochs and rights,
+connection/target identity, frozen emoji access and asset integrity are rechecked.
+Successful siblings and their receipts remain untouched. Unknown outcomes anywhere
+in the operation, or any selected previously dispatched child, reject retry;
+uncertain effects must use observation-only reconciliation instead.
+
+Authorized retry renews only the 120-second immediate command deadline, then uses
+the normal prepare → before_effect dispatch CAS → execute path. Original content,
+assets, native identity and requested schedule remain frozen. Provider preflight
+must still prove the native object unchanged; an expired native time blocks rather
+than falling back to immediate publication. Exactly one dispatch transition is
+possible for the selected original attempt, including across retries and restarts.
+
+The same matching request key joins in-flight work or replays successful results.
+If another attempt stops before dispatch, that same key may explicitly re-admit
+it again. A retry that crosses dispatch and becomes unknown cannot be submitted
+again. Durable events distinguish retry admission from the preceding failure.
+The original failed operation's publication revision remains usable for later
+lifecycle changes after successful retry; private item adoption is not required.
+Tests include authenticated MCP ClientSession and independent worker processes,
+expired command/native deadlines, external changes, epochs and partial successes.
+Implementation status: **Not confirmed by user**; offline checks are not live MAX
+acceptance.
+
 ### Opt-in native MAX worker wiring
 
 The ordinary owner CLI accepts `connection --provider max --account-type max_web

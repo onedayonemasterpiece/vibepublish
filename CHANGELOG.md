@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed — explicit retries of never-dispatched failures
+
+- `retry_failed` now re-admits selected original blocked attempts only while
+  durable dispatch remains zero, preserving publication revision, immutable
+  native CAS and successful siblings; dispatched/unknown effects remain forbidden.
+- Renewed the immediate command deadline only; frozen native times and current
+  authorization/integrity checks still apply. Added same-key, epoch, external-CAS,
+  partial-success and actual MCP/separate-worker retry regressions.
+
 ### Added — opt-in MAX native worker factory
 
 - Standard `worker --native` now lazily selects the optional MAX context factory

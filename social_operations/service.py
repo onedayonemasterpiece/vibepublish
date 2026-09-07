@@ -238,6 +238,9 @@ class Application:
                 **({'admission_error': admission_error} if admission_error else {})}
 
     def accept(self, actor, action, args):
+        if action == 'publication_update' and args['change']['kind'] == 'retry_failed':
+            from .recovery import retry_failed
+            return retry_failed(self, actor, args)
         if action == 'publication_update' and args['change']['kind'] == 'reconcile':
             from .recovery import admit
             return admit(self, actor, args)
