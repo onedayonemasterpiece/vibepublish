@@ -1,17 +1,18 @@
 # Documentation
 
-## Current work entrypoints — 2026-09-04
+## Current work entrypoints — 2026-09-08
 
-- [ChatGPT core recovery completion for the existing MAX PR — 2026-09-07](handoffs/max-core-recovery-completion-20260907.md).
-
+- **[Active MAX product-completion task for Codex](handoffs/max-product-completion-codex-20260908.md)** — current owner instruction for completing MAX end to end, including necessary shared core work.
+- [MAX Web active runbook](operations/max-web.md) — current operational baseline and acceptance matrix.
 - [Start implementation in a new ChatGPT window](handoffs/implementation-start-20260904.md).
-- [Separate Codex task for the MAX Web adapter](handoffs/max-web-codex-20260904.md).
 - [Current forwarding, primary-channel profiles and skill extension](features/social-operations/forwarding-and-editorial-profiles-v1.md), contract `1.2.0-design`.
 - [Automated acceptance tests and evidence boundaries](features/social-operations/acceptance-tests-v1.md).
 
+Historical MAX handoffs from 2026-09-05/07 are redirect stubs only. Their old executor-ownership rules, missing-archive assumptions and source-write-refusal language must not override the 2026-09-08 owner instruction.
+
 The social runtime and MCP base design remain in the existing social-operations documents. Read their v1.1 native-only queue/access/progress rules together with the v1.2 extension; they are not alternative architectures. The old audit's local scheduler and default-deny partner channel reads remain superseded.
 
-The executable contract and new test cases are updated to v1.2. The write updating the canonical skill text was blocked by the connector in this session; `docs/llm/vibepublish-social-skill.md` remains v1.1. The core implementation batch must synchronize its forwarding/profile sections and examples with v1.2 before exposing the runtime. Requirements for that synchronization are complete in the extension; do not claim the old text already contains them.
+The executable contract and new test cases are updated to v1.2. The canonical skill text may still require synchronization with the forwarding/profile extension before runtime release; treat that as ordinary implementation work, not as a blocker to MAX completion.
 
 ## Quick routing
 
