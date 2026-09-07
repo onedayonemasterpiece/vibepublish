@@ -4,6 +4,52 @@ Updated: 2026-09-07. Branch: `work/vibepublish-max-web-20260904`, [PR #2](https:
 
 **Implementation status: Partial / Not confirmed by user.** The code includes the preserved fixture/actual-core bridge, live read-only recovery and loopback-only writer qualification. Production publishing and full live lifecycle remain unimplemented. See the execution checkpoint below.
 
+## Optional visual recovery — Gemini Lite through shared limits
+
+**Partial / Not confirmed by user.** `RealMaxDriver.reconcile` now has an optional
+`visual_recovery` dependency (also accepted by `existing_session`). DOM/native
+verification remains first. Only technical observation/menu/deadline failures may
+capture a single exact task-owned outgoing plain-message row. Account, target,
+content, native-reference and quarantine mismatches do not invoke a model.
+
+`adapters.max.visual.visual_gateway` creates a dedicated `GoogleAIClient` using
+the supplied shared Supabase limiter. It disables reserve/local-limiter bypasses,
+model substitution and retry loops; it never constructs a direct Gemini SDK client.
+`VisualRecovery` requires an awaited durable evidence sink. The cropped PNG and
+capture metadata are recorded before the external request; interpreted evidence
+is recorded before one fresh complete native-reference read. Rate-limit failure,
+invalid model JSON, disagreement or disk failure cannot produce success/retry.
+No screenshots of settings/sidebar/unrelated messages are sent. Screenshot text
+is untrusted input, never instructions or authority to act.
+
+The model is `gemini-3.1-flash-lite` for image **understanding**, not generation;
+[official model reference](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite).
+Each original/final DOM pass retains its bounded driver timeout; the optional
+visual phase has a maximum 30-second budget. At most one model-assisted retry
+occurs. A positive model response alone cannot establish a native ID, release
+quarantine, declare a deletion or change the operation ledger. Existing successful
+DOM reads do not spend model quota.
+
+Configure explicitly: create `visual_gateway(supabase_client=shared_client)`,
+wrap in `VisualRecovery(client, record=private_durable_sink)`, and pass it as
+`visual_recovery` to the existing session factory. The sink receives PNG bytes
+and a metadata dictionary with phase `captured` or `interpreted`; it must fsync
+private artifacts and must not write them to Git. No env auto-discovery or secret
+copying was added. The owner supplied a shared configuration path for live
+qualification. Live Gemini Lite read the cropped original post successfully;
+complete DOM/native checks succeeded before and after. The shared limiter's
+`vibepublish-max-visual` audit was read back: one succeeded/finalized attempt,
+1145 tokens. Original ledger/quarantine remained unchanged. This explicit live
+visual qualification did not inject a failure into MAX or claim a live mutation.
+Final test counts and source SHA are recorded in PR #2.
+
+This implements a bounded assistance/reverification path, **not** the still
+missing terminal core resolution or full live mutation/media/scheduling lifecycle.
+The existing bridge deliberately returns observation-only unknown evidence until
+core historical resolution: changing that string alone would not durably finish
+the original operation. It is incorrect to describe successful DOM observation
+as an inability to see the existing post.
+
 ## September 7 live continuation — transient native-copy menu
 
 **Partial / Not confirmed by user.** The original marked outgoing post was

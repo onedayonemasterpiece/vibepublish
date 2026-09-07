@@ -16,6 +16,9 @@
   publishing/lifecycle acceptance (see the MAX runbook).
 
 ### Added
+- MAX optional scoped screenshot/Gemini Lite recovery through the strict shared
+  GoogleAIClient limiter, durable capture/interpretation and one complete native
+  recheck; no automatic success, mutation retry or quarantine release from a model.
 - MAX loopback-only same-driver exact plain edit and lost-response observation,
   preserving native identity and quarantine; six-order and stale binding/mode
   regressions. No live editor, core release, delete or media capability claimed.

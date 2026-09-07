@@ -54,7 +54,7 @@ class VisibleSnapshot:
 
 class RealMaxDriver:
     def __init__(self, page, lane: ProfileLane, *, targets: tuple[Target, ...],
-                 account_check, origin='https://web.max.ru', timeout=10):
+                 account_check, origin='https://web.max.ru', timeout=10, visual_recovery=None):
         parsed = urlsplit(origin)
         if not (origin == 'https://web.max.ru' or
                 parsed.scheme == 'http' and parsed.hostname == '127.0.0.1'
@@ -66,6 +66,7 @@ class RealMaxDriver:
         self.page, self.lane, self.account_check = page, lane, account_check
         self.targets = {t.native_id: t for t in targets}
         self.origin, self.timeout, self._busy = origin, timeout, False
+        self.visual_recovery = visual_recovery
 
     def _enter(self, target):
         self.lane.owned()
@@ -537,6 +538,36 @@ class RealMaxDriver:
             raise MaxBlocked('recovery_attempt_mismatch')
 
     async def reconcile(self, state):
+        """DOM first; optional scoped visual corroboration, then ONE fresh DOM read.
+
+        Neither the model nor its screenshot replaces native-reference checks.
+        Identity/content/quarantine failures never enter model-assisted recovery.
+        """
+        try:
+            return await self._reconcile_dom(state)
+        except MaxBlocked as exc:
+            if self.visual_recovery is None or str(exc) not in {
+                    'native_copy_menu_unavailable', 'recovery_observation_unavailable',
+                    'recovery_observation_deadline'}:
+                raise
+        self._enter(state['target'])
+        try:
+            try:
+                evidence = await self.visual_recovery.observe(self, state)
+            except MaxBlocked:
+                raise
+            except Exception:
+                # No provider error payload, screenshot text or secrets in core errors.
+                raise MaxBlocked('visual_observation_unavailable') from None
+        finally:
+            self._busy = False
+        if not evidence['exact_text_match']:
+            raise MaxBlocked('visual_text_unconfirmed')
+        # No recursion, Send/Save, or manual release. Original native checks run again.
+        result = await self._reconcile_dom(state)
+        return dict(result, visual_evidence=evidence)
+
+    async def _reconcile_dom(self, state):
         """Observation only: no execute, checkpoint write, or fuse release.
 
         Accept an exact reference supplied by the trusted recovery caller, not

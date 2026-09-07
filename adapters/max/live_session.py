@@ -34,7 +34,7 @@ def private_json(path):
 
 
 @asynccontextmanager
-async def existing_session(*, profile, executable, allowlist, explicit_live=False, timeout=30):
+async def existing_session(*, profile, executable, allowlist, explicit_live=False, timeout=30, visual_recovery=None):
     if explicit_live is not True:
         raise MaxBlocked('explicit_live_required')
     profile = Path(profile).absolute()
@@ -74,7 +74,7 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                         field = identity_page.locator('aside .phone')
                         await field.wait_for(timeout=10000)
                         return await field.inner_text() == phone
-                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout)
+                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery)
                 finally:
                     await context.close()
         finally:
