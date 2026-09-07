@@ -337,6 +337,135 @@ class RealMaxDriver:
                     pass  # Closed page/context; never convert uncertainty to retry.
             self._busy = False
 
+    async def edit_plain_candidate(self, *, existing, text, attempt_id, plan_digest, hooks):
+        """Exact plain-text edit qualification only; no live or core release.
+
+        Requires the observed edit-mode heading as well as a copied native
+        reference. Unknown/closed edit mode must never turn Save into new Send.
+        Media/rich/scheduled objects are refused, never silently stripped.
+        """
+        import json
+        if not re.fullmatch(r'http://127\.0\.0\.1:[0-9]+', self.origin):
+            raise MaxBlocked('writer_live_qualification_pending')
+        try:
+            target, old, reference = existing['target'], existing['text'], existing['url']
+            match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', reference)
+            if (not match or match[1] != target or match[2] != existing['id']
+                    or existing['namespace'] != 'feed' or existing['media']
+                    or existing['scheduled_at'] is not None or not old
+                    or not isinstance(text, str) or not text.strip() or len(text) > 4000
+                    or old == text or not attempt_id or not plan_digest or hooks is None):
+                raise ValueError()
+        except (KeyError, TypeError, ValueError):
+            raise MaxBlocked('exact_plain_existing_required') from None
+        self._enter(target)
+        armed = False
+        guard = None
+        try:
+            self.lane.assert_clear()
+            if self.targets[target].policy != 'test_group':
+                raise MaxBlocked('published_channel_edit_denied')
+            async with asyncio.timeout(self.timeout):
+                await self._account()
+                await self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded')
+                main = await self._scope(target)
+                composer = main.locator(COMPOSER)
+                if await composer.text_content():
+                    raise MaxBlocked('existing_draft')
+                rows = main.locator('.messageWrapper').filter(
+                    has=self.page.locator('.bubbleContent > .text').filter(has_text=old))
+                observed = await self._plain_candidate(target, old, rows)
+                if observed['url'] != reference:
+                    raise MaxBlocked('existing_reference_changed')
+                await rows.click(button='right')
+                await self.page.get_by_role('menu').get_by_role('menuitem', name='Редактировать', exact=True).click()
+                await expect(main.get_by_text('Редактирование поста', exact=True)).to_have_count(1)
+                if await composer.text_content() != old:
+                    raise MaxBlocked('edit_draft_mismatch')
+                await composer.fill(text)
+                # Guard the actual trusted Save click, including a mode closure
+                # during pointerdown. No synthetic ID or provider state access.
+                guard = await main.evaluate_handle("""(main, x)=>{
+                    let clicks=0, blocked=false;
+                    const ready=()=>{
+                        const rows=[...main.querySelectorAll('.messageWrapper')]
+                            .filter(e=>e.querySelector('.bubbleContent > .text')?.textContent===x.old);
+                        return main.isConnected && location.href===x.route &&
+                            [...main.querySelectorAll('button')].some(e=>e.getAttribute('aria-label')===x.header) &&
+                            [...main.querySelectorAll('*')].some(e=>e.children.length===0 && e.textContent==='Редактирование поста') &&
+                            main.querySelector(x.composer)?.textContent===x.text && rows.length===1 &&
+                            rows[0].classList.contains('messageWrapper--isOut') &&
+                            !rows[0].querySelector('.media, img, video, audio, .bubbleContent a');
+                    };
+                    const check=e=>{
+                        if(!e.target.closest('button[aria-label="Отправить сообщение"]'))return;
+                        if(!e.isTrusted || !ready() || clicks){blocked=true;e.preventDefault();e.stopImmediatePropagation();return;}
+                        clicks++;
+                    };
+                    document.addEventListener('click',check,true);
+                    return {ready, result:()=>({clicks,blocked}),stop:()=>document.removeEventListener('click',check,true)};
+                }""", dict(route=self.origin+'/'+target, composer=COMPOSER,text=text,old=old,
+                            header='Открыть профиль '+self.targets[target].alias))
+                state = dict(target=target,text=text,old_text=old,kind='feed',action='edit',
+                    media=[],scheduled_at=None,existing_id=existing['id'],
+                    recovery_reference=reference,attempt_id=attempt_id,plan_digest=plan_digest)
+                await hooks.checkpoint('MAX_EDIT_PREPARED', json.dumps(state))
+                await hooks.emit_progress('submitting','running','{}')
+                await self._account()
+                await self._scope(target)
+                self.lane.arm(attempt_id,plan_digest)
+                armed = True
+                await hooks.before_effect(attempt_id,plan_digest)
+                await self._account()
+                self._check_attempt_fuse(attempt_id,plan_digest)
+                main = await self._scope(target)
+                current = await self._plain_candidate(target,old,rows)
+                if current['url'] != reference or not await guard.evaluate('(g)=>g.ready()'):
+                    raise MaxBlocked('edit_binding_or_mode_changed')
+                await main.get_by_role('button',name='Отправить сообщение',exact=True).click()
+                transition = await guard.evaluate('(g)=>g.result()')
+                if transition != dict(clicks=1,blocked=False):
+                    raise MaxBlocked('edit_transition_unverified')
+                await hooks.emit_progress('reading_back','running','{}')
+                await expect(main.get_by_text('Редактирование поста',exact=True)).to_have_count(0)
+                updated = main.locator('.messageWrapper').filter(
+                    has=self.page.locator('.bubbleContent > .text').filter(has_text=text))
+                await expect(updated).to_have_count(1,timeout=self.timeout*1000)
+                item = await self._plain_candidate(target,text,updated)
+                if item['url'] != reference:
+                    raise MaxBlocked('edit_created_other_object')
+                await hooks.checkpoint('MAX_EDIT_REFERENCE',json.dumps(dict(state,item=item)))
+                await guard.evaluate('(g)=>g.stop()');await guard.dispose();guard=None
+                await self._account()
+                await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
+                main = await self._scope(target)
+                updated = main.locator('.messageWrapper').filter(
+                    has=self.page.locator('.bubbleContent > .text').filter(has_text=text))
+                item = await self._plain_candidate(target,text,updated)
+                await self._account()
+                self._check_attempt_fuse(attempt_id,plan_digest)
+                final = await self._plain_candidate(target,text,updated)
+                if item['url'] != reference or final['url'] != reference:
+                    raise MaxBlocked('edit_created_other_object')
+                await hooks.checkpoint('MAX_EDIT_OBSERVED',json.dumps(dict(state,item=final)))
+                return dict(item=final,quarantine_released=False,history_complete=False,
+                    attribution='requires_core_historical_evidence_validation')
+        except BaseException as exc:
+            if isinstance(exc,(asyncio.CancelledError,KeyboardInterrupt,SystemExit)):
+                raise
+            if armed:
+                raise MaxBlocked('outcome_unknown') from None
+            if isinstance(exc,MaxBlocked):
+                raise
+            raise MaxBlocked('edit_prepare_unavailable') from None
+        finally:
+            if guard is not None:
+                try:
+                    await guard.evaluate('(g)=>g.stop()');await guard.dispose()
+                except Exception:
+                    pass
+            self._busy=False
+
     async def _plain_candidate(self, target, text, row):
         await self._scope(target)
         await expect(row).to_have_count(1)
@@ -403,7 +532,7 @@ class RealMaxDriver:
             reference = state['recovery_reference']
             marker = state.get('task_marker', text)
             attempt, plan = state['attempt_id'], state['plan_digest']
-            if (state['kind'] != 'feed' or state['action'] != 'publish'
+            if (state['kind'] != 'feed' or state['action'] not in {'publish', 'edit'}
                     or state['media'] or state['scheduled_at'] is not None
                     or not isinstance(text, str) or not text or len(text) > 4000
                     or not isinstance(marker, str) or not marker
@@ -412,6 +541,10 @@ class RealMaxDriver:
                 raise ValueError()
             match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', reference)
             if not match or match[1] != target:
+                raise ValueError()
+            if state['action'] == 'edit' and (state.get('existing_id') != match[2]
+                    or not isinstance(state.get('old_text'), str) or not state['old_text']
+                    or state['old_text'] == text):
                 raise ValueError()
         except (KeyError, TypeError, ValueError):
             raise MaxBlocked('recovery_evidence_required') from None

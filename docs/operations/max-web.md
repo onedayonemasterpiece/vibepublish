@@ -4,6 +4,49 @@ Updated: 2026-09-07. Branch: `work/vibepublish-max-web-20260904`, [PR #2](https:
 
 **Implementation status: Partial / Not confirmed by user.** The code includes the preserved fixture/actual-core bridge, live read-only recovery and loopback-only writer qualification. Production publishing and full live lifecycle remain unimplemented. See the execution checkpoint below.
 
+## Later September 7 continuation — exact edit qualification
+
+**Partial / Not confirmed by user.** The owner now permits this executor to
+modify core as well as MAX. The old ownership restriction is no longer a blocker.
+Fresh-read core HEAD is `c4b1ff454bbc6592b4b5c62352a5a5ce7712110c`; its delta
+from `24c33d9` is **two documents, not runtime**. The latest
+[core implementation/delivery report](https://github.com/onedayonemasterpiece/vibepublish/pull/1#issuecomment-5573614571)
+records a new actual safety-evaluation refusal on complete-content port/storage/
+pyproject delivery. This executor read that report; it did not receive the refusal
+itself. Do not route the rejected payload through another tool/branch/implementation
+or integrate the report's incomplete intermediate trees. A separate report says
+the original recovery ZIP was found in another window: do not ask the owner to
+carry it manually again. There is still no verified remote recovery runtime.
+
+Independent MAX implementation now adds `RealMaxDriver.edit_plain_candidate`:
+**loopback qualification only**, no live activation or second driver. Exact
+native URL/ID/target/plain-content checks precede the observed Edit menu; the
+composer must contain the old text and explicit edit-mode heading. The heading/
+Save semantics originate from the existing MAX skill's observed editor recipe;
+this group-specific recipe has NOT been live-qualified in this continuation.
+It must not be presented as newly captured live group evidence.
+
+Awaited checkpoint/dispatch and account/target/native reference/old content checks
+protect the save. A trusted-click guard requires edit mode at the actual click,
+so closed edit mode cannot become a new publication. A fresh read must preserve
+the same native URL/ID. No media/rich/scheduled edit support is implied: such
+objects are rejected rather than stripped. The method never releases quarantine.
+
+Replay independently edits the provider object by its own ID; no driver test ID
+or provider-state access. Six chat orders, stale reference/text/media, closed mode,
+revoked account, wrong target, replacement object and lost response are covered.
+Read-only reconcile accepts an exact saved edit reference/old/new intent and
+checks its original ID; lost Save response can be observed without another Save.
+This returns existence evidence, NOT retroactive core attribution/resolution.
+
+Public live `mutate` and the recovery-only core bridge remain blocked. No live
+session, original post, ledger or quarantine was changed. New writer/edit-to-MCP,
+core compensation/finalize, delete, media preservation/reschedule and native
+scheduling remain unfinished. Historical results below do not close those gates.
+New tests are in the existing `tests/browser/max/observed/test_submit.py` and run
+under the unchanged full MAX CI command; current source/counts/CI are recorded
+in the continuation PR result. Private logs: `artifacts/codex/max-edit-20260907/`.
+
 ## 2026-09-07 continuation — writer qualification, NOT live completion
 
 Owner-requested single-link core handoff: [detailed ChatGPT completion prompt](../handoffs/max-core-recovery-completion-20260907.md). This is a task handoff, not delivery of the missing recovery implementation.

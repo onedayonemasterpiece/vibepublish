@@ -53,6 +53,13 @@
       "positive": "test_submit_once_durable_reference_fresh_read_all_orders; test_submit_process_kill_after_reference_restart_reads_never_resends; test_submit_saved_candidate_reconcile_without_invented_marker",
       "negative": "test_submit_callback_drift_zero_send; test_submit_checkpoint_failure_never_retries; test_submit_ambiguous_or_lost_response_stays_unknown; test_submit_observer_loss_or_last_input_route_drift_never_sends",
       "boundary": "Loopback-only qualification method in RealMaxDriver, not FixtureDriver and not live-enabled. Candidate observation is not final attribution or release. No MAX protocol or deletion dialog invented."
+    },
+    {
+      "id": "L03-L10-exact-edit-qualification",
+      "state": "Existing outgoing message copy-link/Edit menu; editor heading/Save from installed MAX skill, not a new live group capture",
+      "positive": "test_exact_edit_preserves_identity_all_orders; test_edit_lost_response_reconcile_same_object_without_resave",
+      "negative": "test_edit_dispatch_drift_zero_effect; test_edit_post_effect_uncertainty_never_repeats; test_edit_recovery_cannot_switch_saved_native_id",
+      "boundary": "Plain edit on same-driver loopback only; no production activation, media stripping, core resolution or quarantine release."
     }
   ],
   "not_covered": [

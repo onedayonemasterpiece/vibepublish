@@ -35,11 +35,17 @@ async def writer(tmp_path):
                     # this state. Dispatch must already have been durably awaited.
                     assert state.get('dispatched') == ('attempt', 'plan')
                     assert driver.lane.marker.exists()
-                    message = dict(id='provider-item', target=event['target'], text=event['text'], outgoing=True)
-                    if state['fault'] == 'foreign': message['outgoing'] = False
-                    state['messages'].append(message)
-                    if state['fault'] == 'duplicate':
-                        state['messages'].append(dict(message, id='other-item'))
+                    if event.get('action') == 'edit':
+                        matches=[m for m in state['messages'] if m['id']==event['existing'] and m.get('target')==event['target']]
+                        assert len(matches)==1
+                        matches[0]['text']=event['text']
+                        if state['fault']=='replace_edit': matches[0]['id']='replacement'
+                    else:
+                        message = dict(id='provider-item', target=event['target'], text=event['text'], outgoing=True)
+                        if state['fault'] == 'foreign': message['outgoing'] = False
+                        state['messages'].append(message)
+                        if state['fault'] == 'duplicate':
+                            state['messages'].append(dict(message, id='other-item'))
                     if state['fault'] == 'lost_response':
                         await r.abort(); return
                 await r.fulfill(body=json.dumps(dict(messages=state['messages'])), content_type='application/json')
@@ -259,4 +265,106 @@ async def test_submit_observer_loss_or_last_input_route_drift_never_sends(writer
                 "e=>e.addEventListener('pointerdown',()=>history.pushState({},'', '/-303'),{once:true})")
     hooks.before_effect=dispatch
     with pytest.raises(MaxBlocked,match='outcome_unknown'): await submit(writer)
+    assert not effects(state) and d.lane.marker.exists()
+
+
+def edit_seed(writer):
+    _,_,state,_=writer
+    state['messages']=[dict(id='existing-item',target='-101',text='Original plain text',outgoing=True)]
+    return dict(id='existing-item',target='-101',text='Original plain text',url='https://max.ru/c/-101/existing-item',
+                namespace='feed',media=[],scheduled_at=None)
+
+
+async def edit(writer, existing):
+    d,_,_,hooks=writer
+    return await d.edit_plain_candidate(existing=existing,text='Edited plain text',
+        attempt_id='attempt',plan_digest='plan',hooks=hooks)
+
+
+@pytest.mark.parametrize('order',list(itertools.permutations(['-101','-202','-303'])))
+async def test_exact_edit_preserves_identity_all_orders(writer,order):
+    d,page,state,_=writer
+    existing=edit_seed(writer)
+    state.update(orders=order,reorder=True)
+    result=await edit(writer,existing)
+    assert result['item']['id']==existing['id'] and result['item']['text']=='Edited plain text'
+    assert result['item']['url']==existing['url']
+    assert len(state['messages'])==1 and len(effects(state))==1
+    assert effects(state)[0]['action']=='edit' and effects(state)[0]['existing']==existing['id']
+    assert not result['quarantine_released'] and d.lane.marker.exists()
+    assert [n for n,_ in state['checkpoints']]==['MAX_EDIT_PREPARED','MAX_EDIT_REFERENCE','MAX_EDIT_OBSERVED']
+    with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
+    assert len(effects(state))==1
+
+
+@pytest.mark.parametrize('fault',['reference','text','media','mode','account','target'])
+async def test_edit_dispatch_drift_zero_effect(writer,fault):
+    d,page,state,hooks=writer
+    existing=edit_seed(writer)
+    async def dispatch(*args):
+        state['dispatched']=tuple(args)
+        if fault=='reference': await page.evaluate("messages[0].id='other'")
+        elif fault=='text': await page.locator('.bubbleContent > .text').evaluate("e=>e.textContent='External edit'")
+        elif fault=='media': await page.locator('.messageWrapper').evaluate("e=>e.insertAdjacentHTML('beforeend','<span class=media></span>')")
+        elif fault=='mode': await page.evaluate("document.querySelector('.edit-heading').remove();provider.editing=null")
+        elif fault=='account': state['revoked']=True
+        elif fault=='target': await page.evaluate("go('-303')")
+    hooks.before_effect=dispatch
+    d.timeout=3
+    with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
+    assert not effects(state) and d.lane.marker.exists()
+
+
+@pytest.mark.parametrize('fault',['replace_edit','lost_response'])
+async def test_edit_post_effect_uncertainty_never_repeats(writer,fault):
+    d,page,state,_=writer
+    existing=edit_seed(writer);state['fault']=fault;d.timeout=3
+    with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
+    assert len(effects(state))==1 and len(state['messages'])==1
+    with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
+    assert len(effects(state))==1
+
+
+async def test_edit_live_origin_still_denied(writer):
+    d,_,state,_=writer;existing=edit_seed(writer);d.origin='https://web.max.ru'
+    with pytest.raises(MaxBlocked,match='writer_live_qualification_pending'): await edit(writer,existing)
+    assert not state['events']
+
+
+async def test_edit_lost_response_reconcile_same_object_without_resave(writer):
+    d,page,state,_=writer
+    existing=edit_seed(writer);state['fault']='lost_response';d.timeout=3
+    with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
+    saved=state['checkpoints'][0][1]
+    assert saved['action']=='edit'
+    d.timeout=10
+    recovered=await d.reconcile(saved)
+    assert recovered['item']['id']==existing['id']
+    assert recovered['item']['text']=='Edited plain text' and recovered['observation_only']
+    assert len(effects(state))==1 and d.lane.marker.exists()
+
+
+async def test_edit_recovery_cannot_switch_saved_native_id(writer):
+    d,page,state,_=writer
+    existing=edit_seed(writer)
+    await edit(writer,existing)
+    saved=dict(state['checkpoints'][0][1],existing_id='another-object')
+    with pytest.raises(MaxBlocked,match='recovery_evidence_required'): await d.reconcile(saved)
+    assert len(effects(state))==1
+
+
+@pytest.mark.parametrize('fault',['mode','media','header'])
+async def test_edit_final_pointerdown_drift_cannot_turn_save_into_publish(writer,fault):
+    d,page,state,hooks=writer
+    existing=edit_seed(writer)
+    async def dispatch(*args):
+        state['dispatched']=tuple(args)
+        await page.get_by_role('button',name='Отправить сообщение',exact=True).evaluate(
+            """(e,fault)=>e.addEventListener('pointerdown',()=>{
+                if(fault==='mode'){document.querySelector('.edit-heading').remove();provider.editing=null;}
+                if(fault==='media')document.querySelector('.messageWrapper').insertAdjacentHTML('beforeend','<span class=media></span>');
+                if(fault==='header')document.querySelector('main button').setAttribute('aria-label','Wrong header');
+            },{once:true})""",fault)
+    hooks.before_effect=dispatch
+    with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
     assert not effects(state) and d.lane.marker.exists()

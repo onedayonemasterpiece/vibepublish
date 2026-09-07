@@ -13,6 +13,9 @@
   publishing/lifecycle acceptance (see the MAX runbook).
 
 ### Added
+- MAX loopback-only same-driver exact plain edit and lost-response observation,
+  preserving native identity and quarantine; six-order and stale binding/mode
+  regressions. No live editor, core release, delete or media capability claimed.
 - Single-link ChatGPT handoff for the existing MAX/core recovery dependency, with
   verified source gaps, acceptance criteria and GitHub delivery boundaries.
 - MAX same-RealMaxDriver loopback-only plain-submit qualification: pre-Send DOM/input
