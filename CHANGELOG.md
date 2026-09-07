@@ -15,6 +15,9 @@
 - Added terminal recovery, authority/fence, migration, partial-success,
   release/crash/restart and real MCP ClientSession/separate-worker regressions.
   Live MAX acceptance and its driver remain in the existing MAX PR #2.
+- Added an independent Python 3.12/3.13 core recovery/transport/provider/SDK CI
+  gate with exact-SHA/JUnit evidence; retained the unchanged mandatory full-suite
+  gate and its separately reported pre-existing imagegen collection blocker.
 
 ### Owner correction: full Codex rollout includes real Imagegen — 2026-09-05
 

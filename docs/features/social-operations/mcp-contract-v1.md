@@ -114,6 +114,12 @@ Offline regression lives in `tests/runtime/test_recovery.py`; the transport suit
 also exercises authenticated MCP `ClientSession` admission, disconnect/reconnect,
 and independent worker processes against the durable provider simulator. These
 prove core wiring/no duplicate effect in the simulator, **not** MAX live behavior.
+The independent CI `core-recovery` job runs runtime/contract/provider/SDK tests on
+Python 3.12 and 3.13, uploads JUnit/SDK/source-SHA receipts, and stays runnable when
+an unrelated full-suite collection problem exists. The original strict `verify`
+matrix is unchanged and remains mandatory: a green focused job must not be reported
+as green full CI. The pre-existing missing `adapters.codex_imagegen` is reported
+separately, never hidden or skipped in that strict gate.
 
 ### Reads, queue, history and statistics
 
