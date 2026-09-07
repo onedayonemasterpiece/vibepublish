@@ -2,6 +2,8 @@
 
 ## Current work entrypoints — 2026-09-04
 
+- [ChatGPT core recovery completion for the existing MAX PR — 2026-09-07](handoffs/max-core-recovery-completion-20260907.md).
+
 - [Start implementation in a new ChatGPT window](handoffs/implementation-start-20260904.md).
 - [Separate Codex task for the MAX Web adapter](handoffs/max-web-codex-20260904.md).
 - [Current forwarding, primary-channel profiles and skill extension](features/social-operations/forwarding-and-editorial-profiles-v1.md), contract `1.2.0-design`.

@@ -13,6 +13,8 @@
   publishing/lifecycle acceptance (see the MAX runbook).
 
 ### Added
+- Single-link ChatGPT handoff for the existing MAX/core recovery dependency, with
+  verified source gaps, acceptance criteria and GitHub delivery boundaries.
 - MAX same-RealMaxDriver loopback-only plain-submit qualification: pre-Send DOM/input
   observation, awaited dispatch, native-reference checkpoint and fresh read;
   original-text recovery without an injected marker, callback/response failures,

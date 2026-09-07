@@ -6,6 +6,8 @@ Updated: 2026-09-07. Branch: `work/vibepublish-max-web-20260904`, [PR #2](https:
 
 ## 2026-09-07 continuation — writer qualification, NOT live completion
 
+Owner-requested single-link core handoff: [detailed ChatGPT completion prompt](../handoffs/max-core-recovery-completion-20260907.md). This is a task handoff, not delivery of the missing recovery implementation.
+
 The owner reiterated unrestricted test quantity/social scenarios in **Тестовая
 группа**. Channel permissions and the explicit prohibition on bypassing the
 original quarantine/core boundary remain. No new live Send, edit or delete was

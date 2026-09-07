@@ -7,6 +7,7 @@ entrypoints:
   changelog: CHANGELOG.md
   implementation_start: docs/handoffs/implementation-start-20260904.md
   max_web_task: docs/handoffs/max-web-live-completion-20260905.md
+  max_core_recovery_handoff: docs/handoffs/max-core-recovery-completion-20260907.md
 
 sections:
   architecture:
