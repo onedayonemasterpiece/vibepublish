@@ -35,7 +35,9 @@ async def writer(tmp_path):
                     # this state. Dispatch must already have been durably awaited.
                     assert state.get('dispatched') == ('attempt', 'plan')
                     assert driver.lane.marker.exists()
-                    if event.get('action') == 'edit':
+                    if event.get('action') == 'delete':
+                        state['messages'][:]=[m for m in state['messages'] if not(m['id']==event['existing'] and m.get('target')==event['target'])]
+                    elif event.get('action') == 'edit':
                         matches=[m for m in state['messages'] if m['id']==event['existing'] and m.get('target')==event['target']]
                         assert len(matches)==1
                         matches[0]['text']=event['text']
@@ -368,3 +370,40 @@ async def test_edit_final_pointerdown_drift_cannot_turn_save_into_publish(writer
     hooks.before_effect=dispatch
     with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
     assert not effects(state) and d.lane.marker.exists()
+
+
+async def test_plain_send_ignores_unrelated_history_media(writer):
+    d,page,state,h=writer
+    state['messages']=[dict(id='unrelated',target='-101',text='Old photo',outgoing=True,media=True)]
+    result=await submit(writer)
+    assert result['item']['text']==TEXT and len(effects(state))==1
+
+
+async def test_observed_delete_all_requires_durable_dispatch_and_exact_reference(writer):
+    d,page,state,h=writer
+    d.live_writes=True
+    state['messages']=[dict(id='owned',target='-101',text=TEXT,outgoing=True)]
+    existing=dict(id='owned',target='-101',text=TEXT,url='https://max.ru/c/-101/owned',namespace='feed',media=[],scheduled_at=None)
+    result=await d.delete_plain(existing=existing,attempt_id='attempt',plan_digest='plan',hooks=h)
+    assert result['item']['id']=='owned' and not state['messages']
+    assert len(effects(state))==1 and effects(state)[0]['action']=='delete'
+    assert state['checkpoints'][-1][1]['transition']==dict(clicks=1,removed=True,blocked=False)
+    assert d.lane.marker.exists()
+
+async def test_exact_native_read_does_not_use_chat_or_message_order(writer):
+    d,page,state,h=writer
+    state.update(reorder=True,messages=[
+        dict(id='old-photo',target='-101',text='Old photo',outgoing=True,media=True),
+        dict(id='owned',target='-101',text=TEXT,outgoing=True)])
+    result=await d.read('-101',native_item='owned')
+    assert len(result)==1 and result[0]['id']=='owned' and result[0]['text']==TEXT
+    assert not effects(state) and not d.lane.marker.exists()
+
+
+async def test_observed_group_edit_heading(writer):
+    d,page,state,h=writer
+    await page.add_init_script('window.REPLAY_GROUP_EDIT=true')
+    state['messages']=[dict(id='owned',target='-101',text=TEXT,outgoing=True)]
+    existing=dict(id='owned',target='-101',text=TEXT,url='https://max.ru/c/-101/owned',namespace='feed',media=[],scheduled_at=None)
+    result=await d.edit_plain_candidate(existing=existing,text=TEXT+' edited',attempt_id='attempt',plan_digest='plan',hooks=h)
+    assert result['item']['id']=='owned' and len(effects(state))==1

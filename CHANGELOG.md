@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Fixed
+- MAX core-admitted original recovery now reaches durable verified resolution and
+  post-commit matching-fuse finalization through the actual worker. Live original
+  recovery and exact MCP deletion completed without a second Send.
+- Plain Send checks the composer attachment scope, not unrelated history media;
+  the observed MAX regression is covered alongside native all-participants delete.
 - MAX read-only native-link recovery reopens a disappeared context menu once,
   preserves exact scope and clipboard freshness, and refuses an existing disabled
   menu; regressions and two original-object live reads preserve unknown/quarantine.
@@ -12,10 +17,12 @@
 - MAX rejects unfinished live mutations before touching the composer or dispatching;
   missing causal receipts cannot be enabled by an ad-hoc publishing flag.
   Preserves unknown-attempt quarantine during read-only reconciliation.
-  One experimental live text attempt remains unknown and uncleared; this is not
-  publishing/lifecycle acceptance (see the MAX runbook).
+  Historical experimental-attempt quarantine is now resolved through the core
+  recovery path; this still does not constitute full lifecycle acceptance.
 
 ### Added
+- Explicit same-driver live plain mutation bridge with durable native-reference
+  transitions and idempotent core finalization; actual shared-port regression tests.
 - MAX optional scoped screenshot/Gemini Lite recovery through the strict shared
   GoogleAIClient limiter, durable capture/interpretation and one complete native
   recheck; no automatic success, mutation retry or quarantine release from a model.

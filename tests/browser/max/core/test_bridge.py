@@ -146,3 +146,35 @@ async def test_real_driver_actual_port_original_binding_is_required(replay,fault
     with pytest.raises((DomainError,OutcomeUnknown)):
         await adapter.reconcile(r,checkpoint,hooks())
     assert adapter.driver.lane.marker.read_bytes()==before
+
+async def test_core_admitted_original_recovery_then_idempotent_finalize(replay):
+    from dataclasses import asdict
+    adapter,r,checkpoint=await live_recovery_adapter(replay)
+    raw=json.loads(checkpoint)
+    admitted=dict(operation_id=r.operation_id,attempt_id=r.attempt_id,plan_digest=r.plan_digest,
+                  native_reference=adapter.recovery.native_reference)
+    raw['core_recovery']=admitted
+    before=adapter.driver.lane.marker.read_bytes()
+    result=await adapter.reconcile(r,json.dumps(raw),hooks())
+    assert result.observed=='published' and result.items[0].native_id=='original-item'
+    assert adapter.driver.lane.marker.read_bytes()==before  # Core hasn't committed yet.
+    final=json.dumps(dict(remote=asdict(result.items[0]),original_checkpoint=checkpoint,core_recovery=admitted))
+    await adapter.finalize(r,final,hooks())
+    assert not adapter.driver.lane.marker.exists()
+    await adapter.finalize(r,final,hooks())
+    assert not adapter.driver.lane.marker.exists()
+    adapter.driver.lane.arm('other-attempt','other-plan')
+    with pytest.raises(Exception):
+        await adapter.finalize(r,final,hooks())
+    assert adapter.driver.lane.marker.exists()
+
+@pytest.mark.parametrize('field', ['operation_id','attempt_id','plan_digest','native_reference'])
+async def test_core_admission_cannot_rebind_original_recovery(replay,field):
+    adapter,r,checkpoint=await live_recovery_adapter(replay)
+    admitted=dict(operation_id=r.operation_id,attempt_id=r.attempt_id,plan_digest=r.plan_digest,
+                  native_reference=adapter.recovery.native_reference)
+    admitted[field]='other'
+    raw=json.loads(checkpoint);raw['core_recovery']=admitted
+    with pytest.raises(OutcomeUnknown):
+        await adapter.reconcile(r,json.dumps(raw),hooks())
+    assert adapter.driver.lane.marker.exists()

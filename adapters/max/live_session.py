@@ -34,7 +34,7 @@ def private_json(path):
 
 
 @asynccontextmanager
-async def existing_session(*, profile, executable, allowlist, explicit_live=False, timeout=30, visual_recovery=None):
+async def existing_session(*, profile, executable, allowlist, explicit_live=False, timeout=30, visual_recovery=None, live_writes=False):
     if explicit_live is not True:
         raise MaxBlocked('explicit_live_required')
     profile = Path(profile).absolute()
@@ -74,7 +74,7 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                         field = identity_page.locator('aside .phone')
                         await field.wait_for(timeout=10000)
                         return await field.inner_text() == phone
-                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery)
+                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery, live_writes=live_writes)
                 finally:
                     await context.close()
         finally:
@@ -84,6 +84,40 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                     lock.unlink()
             except (OSError, ValueError, MaxBlocked):
                 pass
+
+
+@asynccontextmanager
+async def configured_adapter(*, connection_id, env):
+    """Standard core worker factory; only explicit private existing-profile config.
+
+    Nothing here creates auth, selects a fallback profile or borrows credentials.
+    The core owns the connection binding and supplies this factory only for MAX.
+    """
+    from social_operations.domain import DomainError
+    from .bridge import MaxAdapter
+    raw=env.get('VIBEPUBLISH_MAX_PROFILE')
+    if not isinstance(raw,str) or not raw:
+        raise DomainError('max_profile_config_missing')
+    try:
+        config=json.loads(raw)
+        required={'profile','executable','allowlist','live_writes'}
+        if (not isinstance(config,dict) or not required <= config.keys()
+                or config.keys()-required-{'timeout'} or config['live_writes'] is not True
+                or any(not isinstance(config[k],str) or not Path(config[k]).is_absolute()
+                       for k in ('profile','executable','allowlist'))
+                or type(config.get('timeout',90)) not in (int,float)
+                or not 1 <= config.get('timeout',90) <= 120):
+            raise ValueError()
+    except (ValueError,TypeError):
+        raise DomainError('max_profile_config_invalid') from None
+    try:
+        async with existing_session(profile=config['profile'],executable=config['executable'],
+                allowlist=config['allowlist'],explicit_live=True,live_writes=True,
+                timeout=config.get('timeout',90)) as driver:
+            await driver.page.context.grant_permissions(['clipboard-read','clipboard-write'],origin=driver.origin)
+            yield MaxAdapter(driver,connection_id=connection_id)
+    except MaxBlocked as exc:
+        raise DomainError('max_'+str(exc)) from None
 
 
 async def _read_command(args):

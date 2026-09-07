@@ -38,11 +38,22 @@ render=function(){
    if(message.outgoing){
     const edit=document.createElement('button');edit.role='menuitem';edit.textContent='Редактировать';
     edit.onclick=()=>{state.editing=message.id;menu.remove();
-     const label=document.createElement('span');label.textContent='Редактирование поста';label.className='edit-heading';
+     const label=document.createElement('span');label.textContent=window.REPLAY_GROUP_EDIT?'Редактирование сообщения':'Редактирование поста';label.className='edit-heading';
      document.querySelector('main').append(label);
      document.querySelector('main [contenteditable]').textContent=message.text;
     };
     menu.append(edit);
+    const remove=document.createElement('button');remove.role='menuitem';remove.textContent='Удалить';
+    remove.onclick=()=>{menu.remove();
+     const dialog=document.createElement('div');dialog.role='dialog';
+     dialog.innerHTML='<h2>Удалить сообщение</h2><label><input type="checkbox">Удалить для всех?</label><button>Удалить</button><button>Отменить</button>';
+     dialog.querySelectorAll('button')[1].onclick=()=>dialog.remove();
+     dialog.querySelector('button').onclick=async()=>{
+      if(!dialog.querySelector('input').checked)return;
+      const response=await fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'effect',action:'delete',target:state.target,existing:message.id})});
+      const result=await response.json();messages.splice(0,messages.length,...result.messages);dialog.remove();render();
+     };document.body.append(dialog);
+    };menu.append(remove);
    }
    document.body.append(menu);
    if(window.REPLAY_DROP_MENUS>0){window.REPLAY_DROP_MENUS--;queueMicrotask(()=>menu.remove());}

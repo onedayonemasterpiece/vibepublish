@@ -24,7 +24,44 @@ A green fixture suite is evidence, not acceptance. Live acceptance is required i
 
 PR #2 already contains substantial MAX work: real session/navigation/read paths, `RealMaxDriver`, browser regressions, crash/reconcile qualification, exact native-reference handling, scoped Gemini Lite visual assistance, and actual-core integration tests. Treat these as assets to continue, not as completion.
 
-Known unfinished product areas include terminal operation resolution, production mutation wiring through MCP/worker, full edit/delete lifecycle, media lifecycle, native scheduled lifecycle and remaining supported social operations.
+The independently implemented shared-core recovery/finalization is now available in
+PR #1 (`f34ad34caf342966239209a171ef58b06b3bc201`). The MAX bridge accepts
+core-admitted immutable original-attempt evidence and releases only its matching
+profile fuse after durable core resolution. Missing/different admission never
+turns an observation-only recovery into a mutation or release.
+
+Live evidence in the authorized Test Group (2026-09-08 local time):
+- Original stuck publication: actual MCP reconcile + worker returned `verified`,
+  original attempt preserved (one dispatched attempt), finalize journal `done`,
+  exact fuse released, zero new Send. A subsequent reporter SQLite I/O failure
+  was separately audited: fresh connection integrity `ok`, durable success intact.
+- Original object: normal MCP publication delete + worker + this RealMaxDriver
+  verified deletion for everyone, same native identity, finalization completed.
+- New ordinary unmarked plain text: actual MCP publish + worker verified native
+  URL/content through repeated fresh reads and completed finalization.
+- Exact item read through MCP/worker succeeded after replacing positional row
+  iteration with semantic candidate rebinding and native-ID verification. Unrelated
+  unsupported rows cannot prevent a positive exact-item read; a missing/unverified
+  requested item still fails, never masquerades as a proven absence.
+- Plain text full chain completed: publish → exact read → edit → exact read →
+  delete of the same native object, all through actual MCP/worker, all `verified`
+  and finalized. The first edit was blocked before dispatch because the observed
+  group heading is `Редактирование сообщения`, not the channel's heading; this is
+  now replay-tested. A fresh exact `item_ref` was adopted through the public API
+  for the successful edit after that pre-effect failure; no second Send occurred.
+- Media/native-scheduled/social completion is NOT claimed by these results.
+
+Production wiring is explicit `existing_session(..., live_writes=True)` into the
+same `MaxAdapter`; no second driver, auth path, direct MAX API or local scheduler.
+The allowlist still limits these immediate mutations to `test_group`. Without
+that trusted wiring the historical observation-only gate remains. Plain deletion
+requires a native-copied own object, observed `Удалить сообщение` dialog,
+`Удалить для всех?` checked, durable checkpoint and dispatch before one trusted
+confirmation. The exact connected-row removal is persisted before fresh absence
+checks; absence alone cannot authorize deletion recovery or finalization.
+
+Known unfinished product areas include complete production lifecycle qualification,
+media lifecycle, native scheduled lifecycle and remaining supported social operations.
 
 Fresh-read actual PR HEAD/code/CI before changing anything; historical SHA values in old comments are checkpoints only.
 
@@ -162,3 +199,23 @@ The following are history only and must not override this runbook or the 2026-09
 - old PR comments describing missing ZIPs, prior executor ownership limits or prior ChatGPT source-write refusals.
 
 Git history and PR discussion preserve their evidence; they are no longer active routing instructions.
+
+### Observed read regression reference
+
+The exact-read fix follows the [Playwright locator contract](https://playwright.dev/python/docs/locators):
+`nth()` can resolve to a different element after the list changes. MAX history
+scrolling/rerendering made positional enumeration unsuitable. Snapshot candidate
+text is only a locator aid, not identity: each returned object still requires
+native copied-link identity and a second fresh confirmation. No provider API or
+application internal state is used.
+
+### Standard worker configuration
+
+In an assembled core/MAX install, the native worker's MAX factory is
+`adapters.max.live_session.configured_adapter(connection_id=..., env=...)`.
+`VIBEPUBLISH_MAX_PROFILE` is an explicitly supplied private JSON object with
+absolute `profile`, `executable`, `allowlist` paths, `live_writes: true`, and optional
+`timeout` (1–120 seconds). No defaults, profile discovery, QR, auth copying or
+credential borrowing occurs. The existing allowlist/account checks and exclusive
+profile lifetime remain mandatory. Core must include the additive native-factory
+seam in PR #1; older core intentionally leaves MAX unwired.

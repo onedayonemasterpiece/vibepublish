@@ -1,6 +1,7 @@
-"""Canonical ProviderAdapter bridge: fixture effects or explicitly bound live recovery.
+"""Canonical ProviderAdapter bridge: fixture or explicitly wired real MAX.
 
-Live recovery grants no execute/prepare capability and never releases quarantine.
+Observation-only bindings grant no mutation; core-admitted durable resolutions
+release only their exact attempt fuse through the post-commit finalize hook.
 Import requires the actual core port and native
 helpers; neither is vendored here. Core owns auth, dispatch, identity and ledger.
 """
@@ -32,11 +33,13 @@ class MaxAdapter:
     """Explicit trusted dependency injection, not automatic/live MAX wiring."""
 
     def __init__(self, driver: FixtureDriver, *, connection_id: str, recovery: RecoveryBinding | None = None):
-        self.recovery_only = isinstance(driver, RealMaxDriver)
+        self.is_real = isinstance(driver, RealMaxDriver)
+        self.live_enabled = self.is_real and driver.live_writes
+        self.recovery_only = self.is_real and not self.live_enabled
         if self.recovery_only:
             if not isinstance(recovery, RecoveryBinding) or not all((recovery.attempt_id, recovery.plan_digest, recovery.native_reference, recovery.task_marker)):
                 raise DomainError('max_explicit_recovery_binding_required')
-        elif not isinstance(driver, FixtureDriver) or recovery is not None:
+        elif not self.live_enabled and (not isinstance(driver, FixtureDriver) or recovery is not None):
             raise DomainError('max_fixture_driver_required')
         self.recovery = recovery
         self.driver, self.connection_id = driver, connection_id
@@ -54,6 +57,9 @@ class MaxAdapter:
                 raise DomainError('max_recovery_binding_mismatch')
             if request.action != 'publish' or request.assets or request.scheduled_at is not None:
                 raise DomainError('max_recovery_surface_unsupported')
+        elif self.live_enabled:
+            if request.account_type != 'max_web' or request.secret_ref != 'VIBEPUBLISH_MAX_PROFILE':
+                raise DomainError('max_live_binding_mismatch')
         elif request.account_type != 'fake' or request.secret_ref:
             raise DomainError('max_live_factory_not_implemented')
         if request.action not in {'publish', 'edit', 'reschedule', 'cancel', 'delete'} or request.source:
@@ -78,13 +84,18 @@ class MaxAdapter:
             return Capability('needs_review', 'Observation-only recovery binding; no execute capability', evidence='max_web_read_only')
         try:
             self._validate(request)
-            await self.driver.read(request.native_target, 'scheduled' if request.scheduled_at else 'feed')
-            await self.driver._scope(request.native_target, write=True)
+            if self.live_enabled:
+                await self.driver.mutation_preflight(request.native_target, request.action,
+                    media=request.assets, scheduled_at=request.scheduled_at)
+                await self.driver.open(request.native_target)
+            else:
+                await self.driver.read(request.native_target, 'scheduled' if request.scheduled_at else 'feed')
+                await self.driver._scope(request.native_target, write=True)
         except (DomainError, MaxBlocked):
             return Capability('needs_review', 'MAX request/profile capability not verified', evidence='offline_fixture',
                               min_lead_seconds=self.driver.min_lead)
-        return Capability('supported', 'Explicit loopback fixture only; NOT live MAX evidence',
-                          min_lead_seconds=self.driver.min_lead, evidence='offline_fixture')
+        return Capability('supported', 'Native UI receipt path' if self.live_enabled else 'Explicit loopback fixture only; NOT live MAX evidence',
+                          min_lead_seconds=self.driver.min_lead, evidence='max_web_dom' if self.live_enabled else 'offline_fixture')
 
     async def prepare(self, request: ProviderRequest, hooks: Hooks) -> Prepared:
         if self.recovery_only:
@@ -93,7 +104,7 @@ class MaxAdapter:
         capability = await self.inspect(request)
         if capability.status != 'supported':
             raise DomainError('max_preflight_needs_review')
-        await hooks.emit_progress('validating', 'completed', 'MAX offline preflight complete')
+        await hooks.emit_progress('validating', 'completed', 'MAX preflight complete')
         return Prepared(request, capability, saved_checkpoint(request))
 
     @staticmethod
@@ -101,7 +112,7 @@ class MaxAdapter:
         if remote is None:
             return None
         item = dict(id=remote.native_id, target=remote.native_target,
-                    namespace='feed' if remote.namespace == 'published' else remote.namespace,
+                    namespace='feed' if remote.namespace == 'published' else remote.namespace, url=remote.url,
                     text=remote.text, media=list(remote.provider_media), scheduled_at=remote.scheduled_at)
         return dict(item, fingerprint=fingerprint(item))
 
@@ -135,7 +146,7 @@ class MaxAdapter:
         # These SHA values describe the validated INPUT assets bound to observed
         # upload IDs, never hashes calculated from transcoded provider bytes.
         item = bind_media(request, item, state['media'])
-        observed = 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
+        observed = 'deleted' if request.action == 'delete' else 'cancelled' if request.action == 'cancel' else 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
         return Observation(observed, (item,))
 
     async def execute(self, prepared: Prepared, hooks: Hooks) -> Observation:
@@ -144,13 +155,13 @@ class MaxAdapter:
         request = prepared.request
         text = self._validate(request)
         load_checkpoint(request, prepared.state_json)
-        if prepared.capability.status != 'supported' or prepared.capability.evidence != 'offline_fixture':
+        if prepared.capability.status != 'supported' or prepared.capability.evidence != ('max_web_dom' if self.live_enabled else 'offline_fixture'):
             raise DomainError('max_prepared_capability_invalid')
         state = None
 
         async def checkpoint(transition, raw):
             nonlocal state
-            if transition == 'MAX_PREPARED':
+            if self.live_enabled or transition == 'MAX_PREPARED':
                 state = json.loads(raw)
             if state is None:
                 raise DomainError('max_missing_prepare_checkpoint')
@@ -164,7 +175,7 @@ class MaxAdapter:
             # Driver-local "running" is not a valid durable core event status.
             # Translate vocabulary, not event persistence or authorization.
             await hooks.emit_progress(stage, 'started' if status == 'running' else status,
-                                      'MAX fixture stage: ' + stage)
+                                      'MAX stage: ' + stage)
 
         try:
             items = await self.driver.mutate(target=request.native_target, text=text,
@@ -185,6 +196,18 @@ class MaxAdapter:
         self._validate(request, check_time=False)
         state = self._state(request, checkpoint)
         await hooks.emit_progress('reading_back', 'started', 'MAX observation only; no submit')
+        if self.live_enabled:
+            envelope = json.loads(checkpoint)
+            admitted = envelope.get('core_recovery', {})
+            reference = state.get('recovery_reference') or admitted.get('native_reference')
+            if not reference:
+                raise OutcomeUnknown('max_native_reference_required')
+            try:
+                result = await self.driver.reconcile(dict(state, recovery_reference=reference,
+                    attempt_id=request.attempt_id, plan_digest=request.plan_digest))
+            except MaxBlocked:
+                raise OutcomeUnknown('max_recovery_observation_unavailable') from None
+            return self._observation(request, [result['item']], state)
         if self.recovery_only:
             try:
                 result = await self.driver.reconcile(dict(state,
@@ -193,6 +216,14 @@ class MaxAdapter:
                     attempt_id=request.attempt_id, plan_digest=request.plan_digest))
             except MaxBlocked:
                 raise OutcomeUnknown('max_recovery_observation_unavailable') from None
+            envelope = json.loads(checkpoint)
+            admitted = envelope.get('core_recovery')
+            if admitted is not None:
+                self._recovery_admission(request, admitted)
+                # The original pre-dispatch marked intent, exact trusted reference,
+                # outgoing full content and repeated native reads are now bound to
+                # this core-admitted recovery, not a matching newest feed row.
+                return Observation('published', (self._remote(result['item']),))
             # Positive EXISTENCE evidence, not a fabricated resolution. Core
             # must validate historical attribution and commit before release.
             # Do not call checkpoint/before_effect or touch the fuse here.
@@ -210,6 +241,53 @@ class MaxAdapter:
                 raise OutcomeUnknown('max_profile_other_uncertain_attempt')
             self.driver.lane.resolve_observed()
         return result
+
+    def _recovery_admission(self, request, admitted):
+        if not isinstance(admitted, dict) or any(admitted.get(k) != v for k, v in {
+                'operation_id': request.operation_id, 'attempt_id': request.attempt_id,
+                'plan_digest': request.plan_digest,
+                'native_reference': self.recovery.native_reference}.items()):
+            raise OutcomeUnknown('max_core_recovery_binding_mismatch')
+        text = plain_text(request, limit=4000)
+        marker = self.recovery.task_marker
+        if len(marker) != 32 or any(c not in '0123456789abcdef' for c in marker) or text.count(marker) != 1:
+            raise OutcomeUnknown('max_original_marked_intent_required')
+
+    async def finalize(self, request: ProviderRequest, checkpoint: str, hooks: Hooks):
+        """Core-only post-commit cleanup, idempotent and never a social effect."""
+        if not self.is_real:
+            return
+        self._validate(request, check_time=False)
+        envelope = json.loads(checkpoint)
+        remote = envelope.get('remote', {})
+        admitted = envelope.get('core_recovery', {})
+        if self.recovery_only:
+            self._recovery_admission(request, admitted)
+            expected_reference = self.recovery.native_reference
+        else:
+            if any(admitted.get(k) != v for k,v in {
+                    'operation_id':request.operation_id,'attempt_id':request.attempt_id,
+                    'plan_digest':request.plan_digest}.items()):
+                raise OutcomeUnknown('max_finalize_binding_mismatch')
+            original = envelope.get('original_checkpoint')
+            if isinstance(original, str): original = json.loads(original)
+            original_state = self._state(request, json.dumps(original))
+            expected_reference = original_state.get('recovery_reference') or admitted.get('native_reference')
+        if (not expected_reference or remote.get('url') != expected_reference
+                or remote.get('native_target') != request.native_target
+                or remote.get('text') != plain_text(request, limit=4000)
+                or remote.get('namespace') != 'published'):
+            raise OutcomeUnknown('max_terminal_receipt_mismatch')
+        self.driver._enter(request.native_target)
+        try:
+            # The worker's durable finalize outbox is authority. An absent marker
+            # means a previous cleanup completed before its acknowledgement.
+            import os
+            if os.path.lexists(self.driver.lane.marker):
+                self.driver._check_attempt_fuse(request.attempt_id, request.plan_digest)
+                self.driver.lane.resolve_observed()
+        finally:
+            self.driver._busy = False
 
     async def read(self, request: ReadRequest, hooks: Hooks) -> ReadPage:
         if self.recovery_only:
@@ -234,9 +312,9 @@ class MaxAdapter:
                     raise ValueError()
             except (ValueError, KeyError, TypeError):
                 raise DomainError('max_cursor_scope') from None
-        await hooks.emit_progress('reading_back', 'started', 'Reading the bound MAX fixture channel')
+        await hooks.emit_progress('reading_back', 'started', 'Reading the bound MAX native target' if self.live_enabled else 'Reading the bound MAX fixture channel')
         try:
-            rows = await self.driver.read(request.native_target, kind)
+            rows = await self.driver.read(request.native_target, kind, **({'native_item':request.native_item} if self.live_enabled else {}))
         except MaxBlocked:
             raise DomainError('max_read_unavailable') from None
         items = [self._remote(row) for row in rows]
