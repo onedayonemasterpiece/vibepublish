@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Fixed
+- MAX read-only native-link recovery reopens a disappeared context menu once,
+  preserves exact scope and clipboard freshness, and refuses an existing disabled
+  menu; regressions and two original-object live reads preserve unknown/quarantine.
 - MAX actual-core test subprocesses preserve the explicit Playwright browser
   installation path while still scrubbing credentials; the early-progress
   assertion deadline is unchanged.

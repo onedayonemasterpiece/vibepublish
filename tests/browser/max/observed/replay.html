@@ -24,8 +24,10 @@ render=function(){
   if(message.media){const media=document.createElement('span');media.className='media';row.append(media);}
   row.oncontextmenu=event=>{
    event.preventDefault();document.querySelector('[role=menu]')?.remove();
+   window.REPLAY_MENU_OPENS=(window.REPLAY_MENU_OPENS||0)+1;
    const menu=document.createElement('div');menu.role='menu';
    const copy=document.createElement('button');copy.role='menuitem';copy.textContent='Скопировать ссылку на сообщение';
+   copy.disabled=Boolean(window.REPLAY_DISABLED_COPY);
    copy.onclick=async()=>{
     const ref='https://max.ru/c/'+(window.REPLAY_COPY_TARGET||state.target)+'/'+(window.REPLAY_COPY_ID||message.id);
     if(!window.REPLAY_SILENT_COPY)await navigator.clipboard.writeText(ref);
@@ -43,6 +45,7 @@ render=function(){
     menu.append(edit);
    }
    document.body.append(menu);
+   if(window.REPLAY_DROP_MENUS>0){window.REPLAY_DROP_MENUS--;queueMicrotask(()=>menu.remove());}
   };
   history.append(row);
  }

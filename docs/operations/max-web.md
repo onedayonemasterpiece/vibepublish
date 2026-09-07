@@ -4,6 +4,45 @@ Updated: 2026-09-07. Branch: `work/vibepublish-max-web-20260904`, [PR #2](https:
 
 **Implementation status: Partial / Not confirmed by user.** The code includes the preserved fixture/actual-core bridge, live read-only recovery and loopback-only writer qualification. Production publishing and full live lifecycle remain unimplemented. See the execution checkpoint below.
 
+## September 7 live continuation — transient native-copy menu
+
+**Partial / Not confirmed by user.** The original marked outgoing post was
+reobserved live on September 7. Two consecutive complete read-only runs through
+`MaxAdapter` and the actual archived `ProviderAdapter` port validated the original
+account, target, full text and native URL across fresh navigations. The original
+operation remains `outcome_unknown`, with one dispatched attempt and byte-for-byte
+unchanged ledger/quarantine. No Send, Save, delete, compensation or channel write
+was performed. This is observation, not core resolution or lifecycle acceptance.
+
+The native-copy menu can disappear while Playwright is acquiring its item. The
+old code then waited on a menu that no longer existed. `_copy_native_reference`
+now activates its own message page and reopens that **read-only** menu at most
+once, only when it has disappeared. The target and unique row are checked again;
+the clipboard sentinel is reset. An existing disabled menu fails closed without
+reopening. Send/Save are never retried; the outer recovery deadline is unchanged.
+A two-second limit applies to acquiring the transient menu item, not to the
+message row's normal actionability wait. No forced/coordinate click was added.
+
+The disappearance regression fails against the previous method and passes with
+this change. Additional replay tests cover the two-opening bound, an existing
+disabled control, and focus after an identity-tab check. The focus case also
+passed against the previous method: it is coverage, not proof that focus caused
+the live failure. Two live successes qualify this read repair, not every possible
+MAX UI state. Existing fixture and actual-core tests remain required.
+
+Private evidence: `artifacts/codex/max-live-current/` and
+`artifacts/codex/max-menu-fix-20260907/`. An interrupted earlier probe left its own
+browser-owner record; its exact token/timestamp and both absent process IDs were
+checked under `ProfileLane` before cleaning up that record. The uncertainty fuse,
+Chromium locks and login state were not manually removed. Both new browser
+contexts closed normally. Opus review was attempted but unavailable (`Not logged
+in`); it is not claimed as completed consultation.
+
+Reproduction uses the unchanged full MAX command below. Red/green counts, full
+standalone/actual-core counts, final SHA and remote CI are recorded in the PR
+continuation result. Full MCP/worker resolution, live publish/edit/delete, media
+lifecycle and native scheduling remain **Not done**.
+
 ## Later September 7 continuation — exact edit qualification
 
 **Partial / Not confirmed by user.** The owner now permits this executor to

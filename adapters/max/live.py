@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
-from playwright.async_api import expect
+from playwright.async_api import expect, TimeoutError as PlaywrightTimeoutError
 
 from .profile import MaxBlocked, ProfileLane
 
@@ -488,13 +488,32 @@ class RealMaxDriver:
         import uuid
         await self._scope(target)
         await expect(row).to_have_count(1)
+        # Identity validation uses another page; activate our own message page
+        # before clipboard and pointer interactions (never a recovered user tab).
+        await self.page.bring_to_front()
+        await self._scope(target)
         # A failed copy must not accidentally reuse a previous clipboard receipt.
         sentinel = 'vibepublish-copy-' + uuid.uuid4().hex
         await self.page.evaluate('(value)=>navigator.clipboard.writeText(value)', sentinel)
-        await row.click(button='right')
-        menu = self.page.get_by_role('menu')
-        await expect(menu).to_have_count(1)
-        await menu.get_by_role('menuitem', name='Скопировать ссылку на сообщение', exact=True).click()
+        # MAX can detach its transient menu during a feed rerender. Retrying
+        # this read-only menu is safe; never reuse this loop around Send/Save.
+        for opening in range(2):
+            await self._scope(target)
+            await expect(row).to_have_count(1)
+            await row.click(button='right', timeout=self.timeout*1000)
+            menu = self.page.get_by_role('menu')
+            try:
+                await menu.get_by_role('menuitem', name='Скопировать ссылку на сообщение', exact=True).click(
+                    timeout=min(self.timeout*1000, 2000))
+                break
+            except PlaywrightTimeoutError:
+                await self._scope(target)
+                if opening or await menu.count():
+                    # Only a disappeared menu is reopened. Existing but disabled,
+                    # unfamiliar or ambiguous controls are not force-clicked.
+                    raise MaxBlocked('native_copy_menu_unavailable') from None
+                # This is still an observation, not a second social effect.
+                await self.page.evaluate('(value)=>navigator.clipboard.writeText(value)', sentinel)
         value = await self.page.evaluate('navigator.clipboard.readText()')
         match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', value)
         if not match or match[1] != target:

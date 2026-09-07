@@ -294,3 +294,44 @@ async def test_two_readers_share_one_serial_profile_lane(replay):
         release.set()
     result=await first
     assert result['item']['id']=='new-item' and d.lane.marker.read_bytes()==before
+
+async def test_recovery_restores_message_page_focus_after_identity_tab(replay):
+    d,page=await recovery_setup(replay)
+    identity=await page.context.new_page()
+    await identity.goto(d.origin+'/-303')
+    async def account_in_other_tab():
+        await identity.bring_to_front()
+        assert await identity.evaluate('document.hasFocus()')
+        return True
+    d.account_check=account_in_other_tab
+    before=d.lane.marker.read_bytes()
+    result=await d.reconcile(recovery_state())
+    assert result['item']['id']=='new-item'
+    assert await page.evaluate('document.hasFocus()')
+    assert d.lane.marker.read_bytes()==before
+    await identity.close()
+
+
+async def test_recovery_reopens_disappeared_read_menu_without_social_effect(replay):
+    d,page=await recovery_setup(replay,extra='window.REPLAY_DROP_MENUS=1;')
+    result=await d.reconcile(recovery_state())
+    assert result['item']['id']=='new-item' and result['observation_only']
+    assert d.lane.marker.exists()
+
+
+async def test_recovery_missing_menu_retry_is_bounded(replay):
+    d,page=await recovery_setup(replay,extra='window.REPLAY_DROP_MENUS=99;')
+    before=d.lane.marker.read_bytes()
+    with pytest.raises(MaxBlocked,match='native_copy_menu_unavailable'):
+        await d.reconcile(recovery_state())
+    assert await page.evaluate('window.REPLAY_MENU_OPENS')==2
+    assert d.lane.marker.read_bytes()==before
+
+
+async def test_recovery_existing_disabled_menu_is_not_reopened(replay):
+    d,page=await recovery_setup(replay,extra='window.REPLAY_DISABLED_COPY=true;')
+    before=d.lane.marker.read_bytes()
+    with pytest.raises(MaxBlocked,match='native_copy_menu_unavailable'):
+        await d.reconcile(recovery_state())
+    assert await page.evaluate('window.REPLAY_MENU_OPENS')==1
+    assert d.lane.marker.read_bytes()==before
