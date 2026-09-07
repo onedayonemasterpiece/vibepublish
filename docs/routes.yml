@@ -6,8 +6,12 @@ entrypoints:
   agent_routes: AGENTS.md
   changelog: CHANGELOG.md
   implementation_start: docs/handoffs/implementation-start-20260904.md
-  max_web_task: docs/handoffs/max-web-live-completion-20260905.md
-  max_core_recovery_handoff: docs/handoffs/max-core-recovery-completion-20260907.md
+  max_product_completion: docs/handoffs/max-product-completion-codex-20260908.md
+  max_web_runbook: docs/operations/max-web.md
+
+historical_entrypoints:
+  max_web_live_20260905: docs/handoffs/max-web-live-completion-20260905.md
+  max_core_recovery_20260907: docs/handoffs/max-core-recovery-completion-20260907.md
 
 sections:
   architecture:
