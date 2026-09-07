@@ -142,8 +142,14 @@ def recovery_server():
             self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers();self.wfile.write(body)
         def do_POST(self):
             if self.path!='/replay-event': self.send_error(404);return
-            state['events'].append(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
-            self.send_response(200);self.end_headers();self.wfile.write(b'{}')
+            event=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            state['events'].append(event)
+            if event['kind']=='effect':
+                # Only the writer-process test installs this independent fence check.
+                assert state['before_effect']()
+                state['messages'].append(dict(id='new-item',target=event['target'],text=event['text'],outgoing=True))
+            self.send_response(200);self.end_headers()
+            self.wfile.write(json.dumps(dict(messages=state['messages'])).encode())
     httpd=ThreadingHTTPServer(('127.0.0.1',0),Handler)
     thread=threading.Thread(target=httpd.serve_forever,daemon=True);thread.start()
     try: yield f'http://127.0.0.1:{httpd.server_port}',state

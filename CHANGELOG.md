@@ -13,6 +13,11 @@
   publishing/lifecycle acceptance (see the MAX runbook).
 
 ### Added
+- MAX same-RealMaxDriver loopback-only plain-submit qualification: pre-Send DOM/input
+  observation, awaited dispatch, native-reference checkpoint and fresh read;
+  original-text recovery without an injected marker, callback/response failures,
+  all six chat orders and real post-submit process-kill/restart with one Send.
+  Live mutate/bridge remain blocked; no attribution, release or lifecycle claim.
 - MAX exact-reference read-only recovery, explicitly bound to the original
   attempt/digest through the actual core port. Repeated UI observation preserves
   unknown state/quarantine; terminal resolution remains a core dependency.

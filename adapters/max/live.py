@@ -1,7 +1,8 @@
 """Observed MAX Web read/navigation recipe, not a publishing-capability claim.
 
-This code runs unchanged against MAX and sanitized loopback replay. It deliberately
-has no submit path until native causal receipts and stable queue refs are proved.
+Read/recovery code runs unchanged against MAX and sanitized loopback replay.
+The same class now contains a loopback-only writer qualification path; public
+mutate/live factory remain blocked until attribution and core release are proved.
 No API, storage-state reads, account-wide message search or synthetic selectors.
 """
 from __future__ import annotations
@@ -200,6 +201,159 @@ class RealMaxDriver:
                      attempt_id, plan_digest, hooks, existing=None):
         await self.mutation_preflight(target, action, media=media, scheduled_at=scheduled_at)
 
+    async def submit_plain_candidate(self, *, target, text, attempt_id, plan_digest, hooks):
+        """Qualification-only writer in this same driver; NEVER live-enabled yet.
+
+        Runs observed composer/Send/native-copy selectors on loopback. Captures
+        the UI transition before Send and persists an exact reference before a
+        fresh read. Evidence is a candidate, not core-authorized attribution or
+        release. No required marker is appended to ordinary user text.
+        """
+        import json
+        if not re.fullmatch(r'http://127\.0\.0\.1:[0-9]+', self.origin):
+            raise MaxBlocked('writer_live_qualification_pending')
+        self._enter(target)
+        armed = False
+        observer = None
+        try:
+            self.lane.assert_clear()
+            if self.targets[target].policy != 'test_group':
+                raise MaxBlocked('immediate_publication_denied')
+            if (not isinstance(text, str) or not text.strip() or len(text) > 4000
+                    or not attempt_id or not plan_digest or hooks is None):
+                raise MaxBlocked('invalid_publish_intent')
+            async with asyncio.timeout(self.timeout):
+                await self._account()
+                await self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded')
+                main = await self._scope(target)
+                composer = main.locator(COMPOSER)
+                await expect(composer).to_have_count(1)
+                if await composer.text_content():
+                    raise MaxBlocked('existing_draft')
+                if await main.locator('.messageWrapper').filter(
+                        has=self.page.locator('.bubbleContent > .text').filter(has_text=text)).count():
+                    raise MaxBlocked('preexisting_content_candidate')
+                await composer.fill(text)
+                # Page-local observation of DOM and trusted input only. No app
+                # internals, cookies, network interception, IDs or test selectors.
+                observer = await main.evaluate_handle("""(main, intent) => {
+                    const content = '.bubbleContent > .text';
+                    const state = {clicks:0, changed:false, blocked:false};
+                    const candidates = () => [...main.querySelectorAll('.messageWrapper')]
+                        .filter(r=>r.querySelector(content)?.textContent===intent.text);
+                    const watch = new MutationObserver(() => {
+                        if(state.clicks===1 && candidates().length) state.changed=true;
+                    });
+                    watch.observe(main,{subtree:true,childList:true,characterData:true});
+                    const guard = e => {
+                        const send=e.target.closest('button[aria-label="Отправить сообщение"]');
+                        if(!send) return;
+                        const editors=main.querySelectorAll(intent.composer);
+                        const header=[...main.querySelectorAll('button')]
+                            .some(b=>b.getAttribute('aria-label')===intent.header);
+                        if(!main.isConnected || !main.contains(send) || !e.isTrusted ||
+                           location.href!==intent.route || !header ||
+                           editors.length!==1 || editors[0].textContent!==intent.text ||
+                           main.querySelector('.media, img, video, audio') ||
+                           candidates().length || state.clicks) {
+                            state.blocked=true;e.preventDefault();e.stopImmediatePropagation();return;
+                        }
+                        state.clicks++;
+                    };
+                    document.addEventListener('click',guard,true);
+                    return {state, ready:()=>main.isConnected && location.href===intent.route && !state.clicks && !state.blocked,
+                        stop:()=>{watch.disconnect();document.removeEventListener('click',guard,true);}};
+                }""", dict(text=text, composer=COMPOSER, route=self.origin+'/'+target,
+                            header='Открыть профиль '+self.targets[target].alias))
+                state = dict(target=target, text=text, kind='feed', action='publish',
+                             media=[], scheduled_at=None, existing_id=None,
+                             attempt_id=attempt_id, plan_digest=plan_digest,
+                             observer_installed=True, baseline_scope='loaded_target_rows_only')
+                await hooks.checkpoint('MAX_PREPARED', json.dumps(state))
+                await hooks.emit_progress('submitting', 'running', '{}')
+                await self._account()
+                await self._scope(target)
+                self.lane.arm(attempt_id, plan_digest)
+                armed = True
+                await hooks.before_effect(attempt_id, plan_digest)
+                await self._account()
+                self._check_attempt_fuse(attempt_id, plan_digest)
+                main = await self._scope(target)
+                if await main.locator(COMPOSER).text_content() != text:
+                    raise MaxBlocked('composer_changed')
+                if not await observer.evaluate('(o)=>o.ready()'):
+                    raise MaxBlocked('submit_observer_lost')
+                # No retry loop: after this boundary any failure is unknown.
+                await main.get_by_role('button', name='Отправить сообщение', exact=True).click()
+                await hooks.emit_progress('reading_back', 'running', '{}')
+                rows = main.locator('.messageWrapper').filter(
+                    has=self.page.locator('.bubbleContent > .text').filter(has_text=text))
+                await expect(rows).to_have_count(1, timeout=self.timeout*1000)
+                transition = await observer.evaluate('(o)=>o.state')
+                if transition != dict(clicks=1, changed=True, blocked=False):
+                    raise MaxBlocked('submit_transition_unverified')
+                item = await self._plain_candidate(target, text, rows)
+                state.update(recovery_reference=item['url'], transition=transition)
+                await hooks.checkpoint('MAX_NATIVE_REFERENCE', json.dumps(state))
+                # The checkpoint is awaited BEFORE navigation destroys the observer.
+                await self._account()
+                await self._scope(target)
+                await observer.evaluate('(o)=>o.stop()')
+                await observer.dispose()
+                observer = None
+                await self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded')
+                main = await self._scope(target)
+                rows = main.locator('.messageWrapper').filter(
+                    has=self.page.locator('.bubbleContent > .text').filter(has_text=text))
+                await expect(rows).to_have_count(1, timeout=self.timeout*1000)
+                fresh = await self._plain_candidate(target, text, rows)
+                if fresh['url'] != item['url']:
+                    raise MaxBlocked('native_reference_changed')
+                await self._account()
+                await self._scope(target)
+                # Account callback may rerender the list: do not return old data.
+                final = await self._plain_candidate(target, text, rows)
+                if final['url'] != item['url']:
+                    raise MaxBlocked('native_reference_changed')
+                self._check_attempt_fuse(attempt_id, plan_digest)
+                await hooks.checkpoint('MAX_CANDIDATE_OBSERVED', json.dumps(dict(state, item=final)))
+                return dict(item=final, transition=transition, quarantine_released=False,
+                            attribution='requires_core_historical_evidence_validation',
+                            history_complete=False)
+        except BaseException as exc:
+            if isinstance(exc, (asyncio.CancelledError, KeyboardInterrupt, SystemExit)):
+                raise
+            if armed:
+                raise MaxBlocked('outcome_unknown') from None
+            if isinstance(exc, MaxBlocked):
+                raise
+            raise MaxBlocked('prepare_unavailable') from None
+        finally:
+            if observer is not None:
+                try:
+                    await observer.evaluate('(o)=>o.stop()')
+                    await observer.dispose()
+                except Exception:
+                    pass  # Closed page/context; never convert uncertainty to retry.
+            self._busy = False
+
+    async def _plain_candidate(self, target, text, row):
+        await self._scope(target)
+        await expect(row).to_have_count(1)
+        if ('messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()
+                or await row.locator('.bubbleContent > .text').text_content() != text
+                or await row.locator('.media, img, video, audio, .bubbleContent a').count()):
+            raise MaxBlocked('nonexact_plain_candidate')
+        reference, native_id = await self._copy_native_reference(row, target)
+        # Copy awaits UI work, so content/ownership must still match afterward.
+        if ('messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()
+                or await row.locator('.bubbleContent > .text').text_content() != text
+                or await row.locator('.media, img, video, audio, .bubbleContent a').count()):
+            raise MaxBlocked('candidate_changed_during_copy')
+        return dict(id=native_id, url=reference, target=target, namespace='feed',
+                    text=text, media=[], scheduled_at=None,
+                    observed_at=datetime.now(timezone.utc).isoformat())
+
     async def _copy_native_reference(self, row, target):
         """Observed message-menu recipe; never infer an ID from row position."""
         import uuid
@@ -219,6 +373,21 @@ class RealMaxDriver:
         await self._scope(target)
         return value, match[2]
 
+    def _check_attempt_fuse(self, attempt, plan):
+        import json
+        import os
+        try:
+            fd = os.open(self.lane.marker, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, 'rb') as stream:
+                raw = stream.read(4097)
+            if len(raw) > 4096:
+                raise ValueError()
+            saved = json.loads(raw)
+        except (OSError, ValueError):
+            raise MaxBlocked('recovery_quarantine_required') from None
+        if saved != {'attempt_id': attempt, 'plan_digest': plan}:
+            raise MaxBlocked('recovery_attempt_mismatch')
+
     async def reconcile(self, state):
         """Observation only: no execute, checkpoint write, or fuse release.
 
@@ -226,17 +395,19 @@ class RealMaxDriver:
         text discovery as an attribution certificate. Core must independently
         validate the historical chain and persist its resolution before release.
         Missing historical receipt/evidence is NOT repaired by this method.
+        A saved native reference also permits exact ordinary-text observation;
+        task markers are optional locator hints, never appended to user content.
         """
-        import json
-        import os
         try:
             target, text = state['target'], state['text']
-            reference, marker = state['recovery_reference'], state['task_marker']
+            reference = state['recovery_reference']
+            marker = state.get('task_marker', text)
             attempt, plan = state['attempt_id'], state['plan_digest']
             if (state['kind'] != 'feed' or state['action'] != 'publish'
                     or state['media'] or state['scheduled_at'] is not None
                     or not isinstance(text, str) or not text or len(text) > 4000
-                    or not isinstance(marker, str) or len(marker) < 16
+                    or not isinstance(marker, str) or not marker
+                    or ('task_marker' in state and len(marker) < 16)
                     or text.count(marker) != 1 or not attempt or not plan):
                 raise ValueError()
             match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', reference)
@@ -248,17 +419,7 @@ class RealMaxDriver:
         try:
             # Match, but NEVER clear, the original durable quarantine.
             def check_fuse():
-                try:
-                    fd = os.open(self.lane.marker, os.O_RDONLY | os.O_NOFOLLOW)
-                    with os.fdopen(fd, 'rb') as stream:
-                        raw = stream.read(4097)
-                    if len(raw) > 4096:
-                        raise ValueError()
-                    saved = json.loads(raw)
-                except (OSError, ValueError):
-                    raise MaxBlocked('recovery_quarantine_required') from None
-                if saved != {'attempt_id': attempt, 'plan_digest': plan}:
-                    raise MaxBlocked('recovery_attempt_mismatch')
+                self._check_attempt_fuse(attempt, plan)
             check_fuse()
             observations = []
             async with asyncio.timeout(self.timeout):

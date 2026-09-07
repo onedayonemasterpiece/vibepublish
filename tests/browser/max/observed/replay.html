@@ -17,6 +17,7 @@ render=function(){
  originalRender();
  const history=document.querySelector('main .history');history.replaceChildren();
  for(const message of messages){
+  if(message.target && message.target!==state.target)continue;
   const row=document.createElement('div');row.className='messageWrapper'+(message.outgoing?' messageWrapper--isOut':'');
   const bubble=document.createElement('div');bubble.className='bubbleContent';
   const content=document.createElement('span');content.className='text';content.textContent=message.text;bubble.append(content);row.append(bubble);
@@ -36,7 +37,13 @@ render=function(){
   history.append(row);
  }
 };
-function effect(){state.effects++;fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'effect',target:state.target})});}
+async function effect(){
+ state.effects++;
+ const text=document.querySelector('main [contenteditable]').textContent;
+ const response=await fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'effect',target:state.target,text})});
+ const result=await response.json();
+ if(result.messages){messages.splice(0,messages.length,...result.messages);render();}
+}
 function go(id){fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'visit',target:id})});state.target=id;state.visits.push(id);history.pushState({},'',id);render();}
 sidebar();go(location.pathname.slice(1)||'-101');
 </script>

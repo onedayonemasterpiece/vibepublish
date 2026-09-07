@@ -1,8 +1,96 @@
 # MAX Web — current task and verified baseline
 
-Updated: 2026-09-05. Branch: `work/vibepublish-max-web-20260904`, [PR #2](https://github.com/onedayonemasterpiece/vibepublish/pull/2).
+Updated: 2026-09-07. Branch: `work/vibepublish-max-web-20260904`, [PR #2](https://github.com/onedayonemasterpiece/vibepublish/pull/2).
 
-**Implementation status: Partial / Not confirmed by user.** The latest code baseline remains an offline fixture driver and actual-core bridge. The new task is partially executed: observed read/navigation code and live reads now exist; publishing is still unimplemented. See the execution checkpoint below.
+**Implementation status: Partial / Not confirmed by user.** The code includes the preserved fixture/actual-core bridge, live read-only recovery and loopback-only writer qualification. Production publishing and full live lifecycle remain unimplemented. See the execution checkpoint below.
+
+## 2026-09-07 continuation — writer qualification, NOT live completion
+
+The owner reiterated unrestricted test quantity/social scenarios in **Тестовая
+группа**. Channel permissions and the explicit prohibition on bypassing the
+original quarantine/core boundary remain. No new live Send, edit or delete was
+performed in this continuation, and the live profile was not opened.
+
+Fresh read: MAX PR #2 starts at `d35c58772b0d6dc33c603a78842b511a3f337018`;
+core PR #1 remote remains `24c33d9e74efa6a28fa48ecb70287c60bca7ef5c`.
+**Dependency correction:** [core comment 5552197400](https://github.com/onedayonemasterpiece/vibepublish/pull/1#issuecomment-5552197400)
+reports a locally implemented/tested terminal recovery API, not remotely delivered
+source. Its local checkpoint is `564f76c0a5a4934fa1d37d4f6cea9e921670a1d9`.
+The required `vibepublish-core-recovery-20260905.zip` (159087 bytes, SHA-256
+`a33fcd0654ba61fb774c1dbbeed6ae21d69761aad45c80685e9533106bcfc5cf`)
+was not found by filename search in `/home/dev/projects`, `/home/dev/Downloads`,
+`/tmp` and `/mnt`. This is missing local delivery, NOT proof of absent implementation.
+Do not consume its unreferenced intermediate Git tree, reconstruct a surrogate
+port, or route blocked core delivery through this MAX PR.
+
+Original operation was rechecked via read-only SQLite: still `outcome_unknown`,
+one dispatched attempt, profile fuse matches that exact attempt/digest. Original
+post existence was last verified live on September 5, not reverified today.
+Protected readback: `artifacts/codex/max-writer-20260907/original-state.json`.
+
+### Code and evidence boundary
+
+`RealMaxDriver.submit_plain_candidate` is the same driver's **loopback-only
+qualification method**, not a second driver or a production capability. Existing
+`mutate`, live factory and recovery-only MaxAdapter still refuse live execution.
+There is no runtime flag enabling this candidate writer against MAX. It uses
+previously observed composer/Send/native-copy UI selectors and no provider API,
+synthetic driver-readable identity attributes or injected task marker.
+
+- Installs a scoped DOM observer and trusted-input guard before the awaited
+  prepare/progress/dispatch callbacks. Checks observer survival, account, target,
+  composer and original fuse after callbacks. A capture-phase click guard rejects
+  final route/composer/namespace changes without a second click.
+- Exactly one Send on the independent replay provider, then outgoing/full plain
+  content checks, native link copy, awaited reference checkpoint, fresh target
+  navigation and repeated exact-reference observation. File-backed test callbacks
+  are **not** a claim of new MCP/SQLite writer integration.
+- No matching old row is accepted as a new publication. Duplicates, foreign rows,
+  lost response and callback/persistence failures retain uncertainty. A process
+  kill after the saved native reference restarts into read-only reconcile with
+  exactly one provider effect. Missing native reference remains unknown; no
+  invented late receipt is fabricated from text.
+- Original plain text is preserved; recovery accepts a saved exact native URL
+  without requiring a new marker. The original live RecoveryBinding is unchanged.
+- Never releases any fuse. Candidate observation explicitly reports incomplete
+  history and unresolved attribution, not `published`/core resolution.
+
+The browser tests cover six initial chat orders with callback reordering,
+pre/post-effect checkpoint refusal, dispatch denial, changed account/target/draft,
+observer destroyed by reload, last-input route drift, changed native reference,
+foreign/duplicate candidates, lost response and actual post-submit process kill.
+The existing read-only replay still asserts zero effects; only the separate
+writer harness permits independently counted loopback effects using the **same
+observed replay HTML**. Every harness rejects real outbound requests.
+
+Remaining L03/L08/L09 work: core recovery package delivery/integration, full
+MCP/worker writer and compensation, positive historical attribution, original
+edit/delete, pre-reference post-submit recovery, live qualification. L04–L07 and
+L10–L15 media/edit/delete/native scheduling are not implemented by this checkpoint.
+Do not call the whole scenario package complete or blame all remaining work on
+core delivery. The new core API's compensation branch still needs MAX-specific
+implementation against its verified actual port, not only comment-derived types.
+
+Validation commands (run browser suites serially):
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright artifacts/max-venv/bin/python -m pytest \
+  tests/adapters/max tests/browser/max -q -ra
+python3 tests/adapters/max/assemble_core.py --archive \
+  artifacts/codex/max-core-integration-20260905/vibepublish-native-visual-20260905.zip \
+  --output artifacts/codex/max-writer-20260907/core-tree
+# From that assembled tree, with the absolute original core-venv Python:
+PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright VIBEPUBLISH_MAX_CORE_REQUIRED=1 \
+  /home/dev/projects/vibepublish-max-web/artifacts/core-venv/bin/python -m pytest \
+  tests/adapters/max tests/browser/max --asyncio-mode=auto -q -ra
+```
+
+Completed counts/exact final remote SHA/CI are recorded in the continuation PR
+comment after readback; historical results below are not new results. Local logs
+are under `artifacts/codex/max-writer-20260907/`. Browser APIs checked against
+[Playwright Locator](https://playwright.dev/python/docs/api/class-locator#locator-click)
+and [MutationObserver](https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver);
+these sources do not certify MAX attribution or live capability.
 
 ## Current authority and continuation
 
