@@ -19,7 +19,7 @@ def parser():
     connect = sub.add_parser('connection'); connect.add_argument('--id', required=True)
     connect.add_argument('--provider', choices=('telegram','vk','max'), required=True)
     connect.add_argument('--shared', action='store_true'); connect.add_argument('--secret-ref', default='')
-    connect.add_argument('--account-type', choices=('unconfigured','fake','mtproto_user','mtproto_bot','vk_user','vk_group'), default='unconfigured')
+    connect.add_argument('--account-type', choices=('unconfigured','fake','mtproto_user','mtproto_bot','vk_user','vk_group','max_web'), default='unconfigured')
     bind = sub.add_parser('bind'); bind.add_argument('--principal', required=True); bind.add_argument('--alias', required=True)
     bind.add_argument('--connection', required=True); bind.add_argument('--native-id', required=True); bind.add_argument('--label', required=True)
     partner = sub.add_parser('principal'); partner.add_argument('--tenant', required=True); partner.add_argument('--principal', required=True)

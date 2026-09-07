@@ -63,7 +63,7 @@ async def test_opt_in_native_wiring_disables_implicit_retries_and_never_starts_l
     store = Store(tmp_path/'ledger.sqlite')
     actor = store.authenticate(store.create_principal('tenant', 'owner', owner=True))
     store.add_connection(actor, 'native-tg', 'telegram', account_type='mtproto_user', secret_ref='VIBEPUBLISH_TG')
-    store.add_connection(actor, 'separate-max', 'max', account_type='max_web', secret_ref='VIBEPUBLISH_MAX')
+    store.add_connection(actor, 'separate-max', 'max', account_type='unconfigured')
     events, options = [], {}
     class Client(TelegramClient):
         async def connect(self): events.append('connect')

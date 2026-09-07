@@ -121,6 +121,35 @@ matrix is unchanged and remains mandatory: a green focused job must not be repor
 as green full CI. The pre-existing missing `adapters.codex_imagegen` is reported
 separately, never hidden or skipped in that strict gate.
 
+### Opt-in native MAX worker wiring
+
+The ordinary owner CLI accepts `connection --provider max --account-type max_web
+--secret-ref VIBEPUBLISH_MAX_PROFILE`. `worker --native` selects this exact active
+connection family; `serve`/MCP admission never launches a browser. Fake or
+unconfigured connections are still skipped. Wrong MAX account types or secret
+references fail closed before importing or opening any MAX session.
+
+`adapters.wiring.native_adapters(..., max_factory=None)` lazily imports the optional
+`adapters.max.live_session.configured_adapter` only when a configured MAX connection
+is selected. A missing optional MAX package returns `max_adapter_not_installed`.
+Telegram/VK need no MAX installation when MAX is not selected; their credential
+validation, retry disabling and cleanup remain unchanged.
+
+The callable contract is an async context manager:
+`configured_adapter(*, connection_id: str, env: Mapping[str, str])`, yielding the
+actual provider adapter. Its context owns profile/browser startup and cleanup;
+core's `AsyncExitStack` closes entered contexts on completion, errors or cancellation.
+The MAX package validates explicit `VIBEPUBLISH_MAX_PROFILE` configuration and
+requires approved profile/executable/allowlist and write opt-in; core does not
+parse or guess MAX profile paths, copy sessions, or borrow credentials. The same
+callable can be injected through `max_factory` for offline tests. There is no
+custom provider worker or alternate social dispatch path.
+
+Implementation status: **Not confirmed by user**. The core seam has offline
+factory-lifetime and standard CLI worker tests; MAX configuration, actual browser
+capability and live acceptance remain in PR #2. The focused core CI includes these
+tests, while the strict full-suite gate remains separate and unchanged.
+
 ### Reads, queue, history and statistics
 
 `vibepublish_read` supports item, dialogs (owner only), feed, stories, scheduled, notifications, audience, editorial_sample, thread, reactions, search, history and analytics.

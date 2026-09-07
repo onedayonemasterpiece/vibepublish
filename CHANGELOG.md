@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added — opt-in MAX native worker factory
+
+- Standard `worker --native` now lazily selects the optional MAX context factory
+  only for approved `max_web` connections; CLI connection provisioning accepts
+  that account type. Explicit MAX configuration remains owned by its adapter.
+- Added context cleanup, missing-package, denied-binding and standard CLI worker
+  regression tests without opening real profiles or changing Telegram/VK wiring.
+
 ### Fixed — original-terminal provider recovery
 
 - Added authenticated `publication_update.change.kind=reconcile` for original
