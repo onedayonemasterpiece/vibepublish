@@ -249,3 +249,20 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.call('publication_update', self.args(receipt))
         await Worker(restored, {'max': self.provider}).run_once()
         self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'verified')
+
+    async def test_same_key_readmission_after_transient_unknown_is_observation_only(self):
+        receipt = await self.stuck()
+        args = self.args(receipt)
+        await self.call('publication_update', args)
+        await self.worker.run_once()
+        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
+        self.provider.unknown = False
+        again = await self.call('publication_update', args)
+        self.assertEqual(again['operation_id'], receipt['operation_id'])
+        self.assertFalse(again['operation_complete'])
+        await self.worker.run_once()
+        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'verified')
+        self.assertEqual(self.provider.count('effect'), 1)
+        self.assertEqual(self.provider.count('execute'), 1)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM request_keys WHERE key='recover'").fetchone()[0], 1)

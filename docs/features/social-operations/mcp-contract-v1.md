@@ -73,8 +73,9 @@ connection/target/secret-reference identity, the original plan digest and the
 worker fence. A revoked original epoch requires an explicit owner remediation;
 it is never rewritten to the new epoch. Native-reference hints are durably tied
 to the original attempt/plan/checkpoint; an already admitted different reference
-is rejected. Repeated request keys replay the original receipt; an explicit new
-key can request another observation after unresolved evidence. A running operation
+is rejected. Repeated request keys join running work or replay a resolved receipt. After a
+transient observation ends unknown, the same matching key may re-admit observation
+of the original attempt; no new key or effect is needed. A running operation
 is joined rather than concurrently reopened. Successful siblings remain untouched.
 
 Only originally dispatched `outcome_unknown` children are reopened. The worker

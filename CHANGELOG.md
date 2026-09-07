@@ -6,7 +6,8 @@
 
 - Added authenticated `publication_update.change.kind=reconcile` for original
   dispatched unknown attempts, preserving operation/revision/plan identity,
-  request-key replay, scoped authority and successful sibling receipts.
+  request-key replay (including observation-only re-admission after transient
+  unknown evidence), scoped authority and successful sibling receipts.
 - Added schema-4 durable evidence/resolution journal and optional idempotent
   provider finalization hook. Quarantine release follows durable resolution;
   pending release blocks connection effects and resumes after worker restart

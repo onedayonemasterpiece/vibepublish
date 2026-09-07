@@ -23,7 +23,7 @@ def admit(app, actor, args):
         if replay:
             if replay['digest'] != intent_hash or replay['operation_id'] != op['id']:
                 raise DomainError('idempotency_conflict')
-        else:
+        if not replay or op['work_state'] == 'done':
             children = list(db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)))
             if change.get('attempt_id') and not any(c['id'] == change['attempt_id'] for c in children):
                 raise DomainError('recovery_operation_mismatch')
@@ -52,6 +52,6 @@ def admit(app, actor, args):
                     db.execute("UPDATE attempts SET state='running',stage='verifying' WHERE id=?", (child['id'],))
                 db.execute("UPDATE operations SET state='accepted',complete=0,work_state='ready',error=NULL WHERE id=?", (op['id'],))
                 store.event(db, op['id'], 'verifying', 'started', 'Observation-only recovery admitted for the original dispatched intent')
-            if key:
+            if key and not replay:
                 app._key(db, actor, key, intent_hash, op['id'])
     return store.receipt(actor, op['id'])
