@@ -238,6 +238,9 @@ class Application:
                 **({'admission_error': admission_error} if admission_error else {})}
 
     def accept(self, actor, action, args):
+        if action == 'publication_update' and args['change']['kind'] == 'reconcile':
+            from .recovery import admit
+            return admit(self, actor, args)
         intent = normalize_intent(action, args)
         with self.store.tx() as db:
             actor = self.store.current(db, actor)

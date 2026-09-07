@@ -29,7 +29,7 @@ class Store:
         os.chmod(self.path, 0o600)
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3):
+            if version not in (0, 1, 2, 3, 4):
                 raise RuntimeError("Unsupported VibePublish database version")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -39,6 +39,9 @@ class Store:
 
             if version < 3:
                 db.executescript(Path(__file__).with_name("emoji_schema.sql").read_text())
+
+            if version < 4:
+                db.executescript(Path(__file__).with_name("recovery_schema.sql").read_text())
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -260,7 +263,7 @@ class Store:
             page = rows[:event_limit]
             deliveries = []
             for child in db.execute("SELECT * FROM attempts WHERE operation_id=? ORDER BY rowid", (op["id"],)):
-                result = {"destination": child["alias"], "provider": child["provider"], "state": child["state"],
+                result = {"destination": child["alias"], "provider": child["provider"], "attempt_id": child["id"], "state": child["state"],
                           "stage": child["stage"], "observed": child["observed"], "revision": op["revision"],
                           "media_check": "not_applicable", "retry_safe": False}
                 result.update(json.loads(child["result"]))

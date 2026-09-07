@@ -87,7 +87,7 @@ DEFS = {
         "surface": string(80), "status": enum("supported", "unsupported", "needs_auth", "needs_review", "temporarily_unavailable"),
         "observed_at": DATE, "reason": string(500)},
         ("destination", "operation", "surface", "status", "observed_at")),
-    "delivery_result": obj({"destination": ALIAS, "provider": PROVIDER,
+    "delivery_result": obj({"destination": ALIAS, "provider": PROVIDER, "attempt_id": ID,
         "state": STATE, "observed": enum("not_attempted", "provider_scheduled", "provider_processing", "published", "edited", "deleted", "cancelled", "absent", "unknown"),
         "observed_at": DATE, "revision": REV, "requested_at": DATE, "effective_at": DATE,
         "stage": STAGE, "scheduling_owner": {"const": "provider"}, "item_ref": ID, "url": URL,
@@ -196,9 +196,10 @@ change = {"oneOf": [
     arm("edit", {"content": ref("content"), "media": array(ref("media"), 0, 20), "renderings": ref("renderings")}),
     arm("reschedule", {"delivery": DEFS["delivery"]["oneOf"][1]}, ("delivery",)),
     arm("cancel"), arm("delete"),
+    arm("reconcile", {"operation_id": ID, "attempt_id": ID, "native_reference": string(2048)}, ("operation_id",)),
     arm("retry_failed", {"destinations": array(ALIAS, 1, 20)}, ("destinations",))]}
 change["oneOf"][1]["anyOf"] = [{"required": [p]} for p in ("content", "media", "renderings")]
-tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures.",
+tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures. Reconcile observes the original uncertain operation without repeating its effect.",
     obj({"publication_id": ID, "expected_revision": REV, "item_ref": ID, "change": change, "request_key": KEY},
         ("change",)), ref("receipt"), "publication.manage")
 # Existing private publication CAS or one exact immutable observed native item.

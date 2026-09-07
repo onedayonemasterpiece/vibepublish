@@ -106,7 +106,7 @@ An active partner publisher normally receives six core methods, including `read`
 
 ## Reliability and related features
 
-Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. Preserve per-provider successes. Perform deterministic all-target preflight while publishing its stages; after dispatch, providers proceed independently. Record the dispatch boundary before side effects. Unknown outcomes are reconciled, never blindly retried. Media evidence distinguishes input hashes from provider-transcoded results.
+Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. Preserve per-provider successes. Perform deterministic all-target preflight while publishing its stages; after dispatch, providers proceed independently. Record the dispatch boundary before side effects. Unknown outcomes are reconciled, never blindly retried. The owner-authorized additive [original-terminal recovery contract](mcp-contract-v1.md#original-terminal-recovery-owner-max-completion-correction-2026-09-08) reopens the original operation for observation only and durably finalizes matching provider quarantine after resolution; successful siblings are preserved. Media evidence distinguishes input hashes from provider-transcoded results.
 
 [Social visuals](../social-visuals/README.md) preserves `$imagegen` through the requested `gpt-5.6-luna` route, candidate choice, deterministic exact typography and separate training consent. A pending visual is not yet a queued provider post; approval/selection after the native lead-time window blocks submission instead of sending immediately.
 

@@ -1,5 +1,15 @@
 # Documentation
 
+## Active MAX completion correction — 2026-09-08
+
+The owner's [active MAX product-completion task](https://github.com/onedayonemasterpiece/vibepublish/blob/work/vibepublish-max-web-20260904/docs/handoffs/max-product-completion-codex-20260908.md)
+authorizes independent necessary core changes in existing PR #1 and MAX changes
+in PR #2. Earlier separate-ownership and historical denied-payload notes do not
+prohibit independently implementing this task. The additive original-terminal
+recovery contract is [canonical here](features/social-operations/mcp-contract-v1.md#original-terminal-recovery-owner-max-completion-correction-2026-09-08).
+No historical rejected payload is imported or reconstructed. Code/automated
+checks do not establish MAX live acceptance or authorize unrelated deployment.
+
 ## Active owner-authorized rollout — 2026-09-05
 
 [Codex on DevCoveer: implementation, real Imagegen and product acceptance](handoffs/codex-full-product-rollout-20260905.md)

@@ -36,7 +36,83 @@ Scheduled delivery has exactly `kind` and `at`. `backend`, `late`, service fallb
 
 `mode: preview` never submits to a provider. Approval/visual selection do not imply that a pending preview was already scheduled. Recheck timing and rights before its native submission. Default surface remains post; supported story/message/album/video/short_video map to actual capabilities. Native scheduling unavailable for a surface means explicit rejection/review, not local emulation.
 
-`publication_update` still requires publication_id and expected_revision. Its change kinds are approve/edit/reschedule/cancel/delete/retry_failed. Reschedule modifies the existing provider queue item; cancel removes that item and verifies removal; delete acts on a published item. A never-dispatched intent can be cancelled locally, clearly distinguished from a native queue cancellation. No silent delete/re-create or automatic deletion after a cancel/publication race.
+`publication_update` still requires publication_id and expected_revision. Its change kinds are approve/edit/reschedule/cancel/delete/retry_failed/reconcile. Reschedule modifies the existing provider queue item; cancel removes that item and verifies removal; delete acts on a published item. A never-dispatched intent can be cancelled locally, clearly distinguished from a native queue cancellation. No silent delete/re-create or automatic deletion after a cancel/publication race.
+
+### Original-terminal recovery (owner MAX completion correction, 2026-09-08)
+
+Requirements: **Fixed** by the active owner MAX completion task in PR #2,
+`docs/handoffs/max-product-completion-codex-20260908.md`. Implementation:
+**Not confirmed by user**; automated checks are not live MAX acceptance.
+
+```json
+{
+  "publication_id": "pub_original",
+  "expected_revision": 1,
+  "change": {
+    "kind": "reconcile",
+    "operation_id": "op_original",
+    "attempt_id": "attempt_original",
+    "native_reference": "https://max.ru/exact-task-owned-reference"
+  },
+  "request_key": "observe-original-once"
+}
+```
+
+`reconcile` is an additive branch of `publication_update`, not a retry/send tool.
+It returns the **original** operation and revision. No new operation, attempt,
+publication, frozen plan, or dispatch marker is created. `operation_id` must be
+an exact private operation belonging to the supplied publication and its current
+revision; `item_ref` adoption is forbidden. The optional exact reference requires
+an explicit original attempt (private receipt deliveries now expose `attempt_id`). It is untrusted evidence input, not permission to
+navigate arbitrary targets, nor proof of a publication by itself.
+
+Admission rechecks the authenticated principal, `publication.manage` tool scope,
+original actor epoch, all original binding epochs, current binding access and
+mutation rights. Worker observation and resolution recheck active authority,
+connection/target/secret-reference identity, the original plan digest and the
+worker fence. A revoked original epoch requires an explicit owner remediation;
+it is never rewritten to the new epoch. Native-reference hints are durably tied
+to the original attempt/plan/checkpoint; an already admitted different reference
+is rejected. Repeated request keys replay the original receipt; an explicit new
+key can request another observation after unresolved evidence. A running operation
+is joined rather than concurrently reopened. Successful siblings remain untouched.
+
+Only originally dispatched `outcome_unknown` children are reopened. The worker
+uses **reconcile only**, never prepare/execute/before_effect for these children.
+The old send deadline does not prohibit read-only recovery. Provider reconciliation
+receives the original checkpoint plus top-level `core_recovery` containing
+`operation_id`, `attempt_id`, `plan_digest`, and optional `native_reference`.
+Providers independently check original durable intent and native attribution;
+MAX must verify its original marker and fresh exact native item. A positive exact
+identity need not prove completeness of unrelated history. Missing checks,
+wrong content/target/media/time/identity, or an unknown observation remain unknown;
+core does not convert an uncertainty enum into a success.
+
+SQLite schema 4 adds `attempt_recovery`: immutable original checkpoint and plan
+identity, admitted hints, full native observation, resolution and finalization
+state/timestamps. Exact observation, child receipt and history fact, and any
+pending finalization are committed atomically. The resolved child checkpoint
+contains `remote`, `original_checkpoint`, and `core_recovery`; historical evidence
+is preserved instead of overwritten by a bare success snapshot. Recovery metadata
+is private; raw hints/checkpoints are not added to public receipts.
+
+Providers may implement the additive optional
+`finalize(request, checkpoint, hooks) -> None` hook. It runs only **after** durable
+child resolution and receives that resolved checkpoint envelope. It must release
+only quarantine matching the original attempt/digest; absent quarantine is
+idempotent success, different quarantine is an error. It must never perform a
+social effect. Old Telegram/VK/provider implementations without the hook remain
+compatible. A pending hook does not relabel a verified child as unknown, but keeps
+the operation incomplete and blocks new effects on its connection. The worker
+retries finalization after a 30-second lease interval or process restart. A crash
+before release or after release but before acknowledgement replays only this
+idempotent hook, never execute or an already successful child's readback. Successful
+resolution removes stale uncertainty errors from the original receipt.
+
+Offline regression lives in `tests/runtime/test_recovery.py`; the transport suite
+also exercises authenticated MCP `ClientSession` admission, disconnect/reconnect,
+and independent worker processes against the durable provider simulator. These
+prove core wiring/no duplicate effect in the simulator, **not** MAX live behavior.
 
 ### Reads, queue, history and statistics
 

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed — original-terminal provider recovery
+
+- Added authenticated `publication_update.change.kind=reconcile` for original
+  dispatched unknown attempts, preserving operation/revision/plan identity,
+  request-key replay, scoped authority and successful sibling receipts.
+- Added schema-4 durable evidence/resolution journal and optional idempotent
+  provider finalization hook. Quarantine release follows durable resolution;
+  pending release blocks connection effects and resumes after worker restart
+  without repeating execute. Existing providers remain compatible.
+- Added terminal recovery, authority/fence, migration, partial-success,
+  release/crash/restart and real MCP ClientSession/separate-worker regressions.
+  Live MAX acceptance and its driver remain in the existing MAX PR #2.
+
 ### Owner correction: full Codex rollout includes real Imagegen — 2026-09-05
 
 - Replaced the rejected Telegram/VK-only handoff with a single-link task for local

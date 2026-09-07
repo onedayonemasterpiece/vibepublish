@@ -36,7 +36,7 @@ class StorageTests(unittest.TestCase):
         with self.store.connection() as db:
             self.assertEqual(db.execute('PRAGMA journal_mode').fetchone()[0], 'wal')
             self.assertEqual(db.execute('PRAGMA foreign_keys').fetchone()[0], 1)
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 3)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 4)
             with self.assertRaises(sqlite3.IntegrityError):
                 db.execute("INSERT INTO profiles VALUES('other','owner','channel',1,'{}')")
 

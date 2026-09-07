@@ -81,6 +81,9 @@ class Worker:
                 if restore and restore[0] == '1':
                     raise DomainError('restore_requires_reconciliation', next_action='contact_owner')
                 unresolved = db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
+                pending_release = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND r.finalize_state='pending' LIMIT 1", (plan['connection_id'],)).fetchone()
+                if pending_release:
+                    raise DomainError('connection_finalization_pending', next_action='check_status')
                 if unresolved:
                     raise DomainError('connection_outcome_unknown', next_action='review_outcome')
                 if attempt_id != child['id'] or plan_digest != child['plan_digest']:
@@ -165,6 +168,7 @@ class Worker:
                 return True
             else:
                 await asyncio.gather(*(self.run_child(op, c, actor, prepared.get(c['id'])) for c in pending))
+            await self.finalize_pending(op, actor)
             self.aggregate(op)
         except asyncio.CancelledError:
             # A stopped worker leaves its durable claim for observation-only recovery.
@@ -189,11 +193,22 @@ class Worker:
                 with self.store.connection() as db:
                     self.store.fence(db, op['id'], self.id, op['fence'])
                     current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
+                    if current['dispatched']:
+                        self.recovery_authority(db, op, child, actor)
+                checkpoint = current['checkpoint']
+                if current['dispatched']:
+                    with self.store.tx() as db:
+                        self.store.fence(db, op['id'], self.id, op['fence'])
+                        db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,created) VALUES(?,?,?,?)',
+                                   (child['id'], child['plan_digest'], checkpoint, self.store.clock()))
+                        recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
+                        hint = {**json.loads(recovery['hint']), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
+                        checkpoint = canonical({**json.loads(checkpoint), 'core_recovery': hint})
                 timeout = max(0.1, min(90, op['deadline']-self.store.clock())) if not current['dispatched'] else 30
                 async with asyncio.timeout(timeout):
-                    observation = (await adapter.reconcile(request, current['checkpoint'], hooks) if current['dispatched'] else
+                    observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
                                    await adapter.execute(prepared, hooks))
-                self.finish_child(op, child, actor, observation)
+                self.finish_child(op, child, actor, observation, needs_finalize=callable(getattr(adapter, 'finalize', None)))
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -203,7 +218,64 @@ class Worker:
                 if stale.code != 'stale_worker':
                     raise
 
-    def finish_child(self, op, child, actor, observation):
+    def recovery_authority(self, db, op, child, actor):
+        self.store.current(db, actor)
+        if op['actor_epoch'] != actor.epoch:
+            raise DomainError('access_revoked', next_action='reauthorize')
+        b = self.store.binding(db, actor, binding_id=child['binding_id'])
+        plan = json.loads(child['plan'])
+        if b['epoch'] != child['binding_epoch'] or plan['action'] not in json.loads(b['rights']):
+            raise DomainError('access_revoked', next_action='reauthorize')
+        if any(b[key] != plan[key] for key in ('connection_id', 'destination_id', 'account_type', 'secret_ref')) or b['native_id'] != plan['native_target']:
+            raise DomainError('recovery_binding_changed', next_action='reauthorize')
+        if digest(plan) != child['plan_digest']:
+            raise DomainError('plan_mismatch')
+
+    async def finalize_pending(self, op, actor):
+        with self.store.connection() as db:
+            children = [dict(r) for r in db.execute("SELECT a.* FROM attempts a JOIN attempt_recovery r ON r.attempt_id=a.id WHERE a.operation_id=? AND r.finalize_state='pending'", (op['id'],))]
+        for child in children:
+            request = self.request(op, child, actor)
+            adapter = self.adapter(child['provider'], request.connection_id)
+            # Missing hook after restart is not evidence that quarantine was released.
+            finalize = getattr(adapter, 'finalize', None)
+            try:
+                async with self.lane(request.connection_id):
+                    with self.store.connection() as db:
+                        self.store.fence(db, op['id'], self.id, op['fence'])
+                        self.recovery_authority(db, op, child, actor)
+                    if not callable(finalize):
+                        raise DomainError('provider_finalize_unavailable')
+                    async with asyncio.timeout(30):
+                        await finalize(request, child['checkpoint'], self.finalization_hooks(op, child))
+                    with self.store.tx() as db:
+                        self.store.fence(db, op['id'], self.id, op['fence'])
+                        self.recovery_authority(db, op, child, actor)
+                        db.execute("UPDATE attempt_recovery SET finalize_state='done',finalized=? WHERE attempt_id=? AND finalize_state='pending'", (self.store.clock(), child['id']))
+                        self.store.event(db, op['id'], 'finished', 'completed', 'Provider quarantine finalization acknowledged', child['alias'])
+            except asyncio.CancelledError:
+                raise
+            except DomainError as exc:
+                if exc.code == 'stale_worker':
+                    raise
+                self.finalization_deferred(op, child)
+            except Exception:
+                self.finalization_deferred(op, child)
+
+    def finalization_hooks(self, op, child):
+        hooks = self.hooks(op, child)
+        async def no_checkpoint(*args):
+            raise DomainError('resolved_checkpoint_immutable')
+        async def no_effect(*args):
+            raise DomainError('finalization_effect_forbidden')
+        return Hooks(hooks.emit_progress, no_checkpoint, no_effect)
+
+    def finalization_deferred(self, op, child):
+        with self.store.tx() as db:
+            self.store.fence(db, op['id'], self.id, op['fence'])
+            self.store.event(db, op['id'], 'verifying', 'blocked', 'Effect is durably resolved; provider quarantine finalization will retry without an effect', child['alias'])
+
+    def finish_child(self, op, child, actor, observation, *, needs_finalize=False):
         if not observation.items or observation.missing_checks:
             raise OutcomeUnknown('incomplete_readback')
         plan = json.loads(child['plan'])
@@ -244,6 +316,20 @@ class Worker:
             raise OutcomeUnknown('forward_attribution_incomplete')
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
+            current_child = db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone()
+            if not current_child['dispatched']:
+                raise OutcomeUnknown('dispatch_not_recorded')
+            recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
+            if recovery:
+                self.recovery_authority(db, op, child, actor)
+            original = recovery['original_checkpoint'] if recovery else current_child['checkpoint']
+            hint = {**(json.loads(recovery['hint']) if recovery else {}), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
+            saved_checkpoint = canonical({'remote': asdict(remote), 'original_checkpoint': json.loads(original), 'core_recovery': hint})
+            if recovery or needs_finalize:
+                db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,hint,created) VALUES(?,?,?,?,?)',
+                           (child['id'], child['plan_digest'], original, canonical(hint), self.store.clock()))
+                db.execute('UPDATE attempt_recovery SET observation=?,finalize_state=?,resolved=? WHERE attempt_id=?',
+                           (canonical(asdict(observation)), 'pending' if needs_finalize else 'done', self.store.clock(), child['id']))
             b = db.execute('SELECT * FROM bindings WHERE id=?', (child['binding_id'],)).fetchone()
             # Internal outcome persistence survives revocation; private receipt access still denies it.
             item = self.app.project_item(db, actor, b, asdict(remote), publication=op['publication_id'])
@@ -256,7 +342,7 @@ class Worker:
                 result['forward_origin'] = {'source_ref': new_id('source'), 'provider': child['provider'], 'mode': 'native', 'origin_check': 'matched', 'original_url': remote.origin}
             state = 'scheduled' if observation.observed == 'provider_scheduled' else 'cancelled' if observation.observed == 'cancelled' else 'verified'
             db.execute('UPDATE attempts SET state=?,stage=\'finished\',observed=?,result=?,checkpoint=? WHERE id=?',
-                       (state, observation.observed, canonical(result), canonical({'remote': asdict(remote)}), child['id']))
+                       (state, observation.observed, canonical(result), saved_checkpoint, child['id']))
             self.store.event(db, op['id'], 'finished', 'completed', 'Exact provider item observed: '+observation.observed, child['alias'])
 
     def save_fact(self, db, destination, remote, actor=None, publication=None):
@@ -301,8 +387,14 @@ class Worker:
                 state = 'partial' if any(s in ('verified', 'scheduled') for s in states) else 'blocked'
             else:
                 state = 'blocked' if error else 'verified'
+            pending_finalize = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id WHERE a.operation_id=? AND r.finalize_state='pending'", (op['id'],)).fetchone()
+            if pending_finalize:
+                state = 'running'
+                db.execute('UPDATE operations SET lease_until=? WHERE id=?', (self.store.clock()+30, op['id']))
             complete = state != 'running'
             db.execute('UPDATE operations SET state=?,complete=?,work_state=? WHERE id=?', (state, int(complete), 'done' if complete else 'working', op['id']))
+            if state in ('verified', 'scheduled', 'cancelled'):
+                db.execute('UPDATE operations SET error=NULL WHERE id=?', (op['id'],))
             if error:
                 db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(error.output()), op['id']))
             self.store.event(db, op['id'], 'finished', 'completed', 'Automatic command work ended; future delivery remains provider-owned')

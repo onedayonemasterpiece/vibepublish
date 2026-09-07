@@ -133,6 +133,18 @@ class ProviderAdapter(Protocol):
     async def reconcile(self, request: ProviderRequest, checkpoint: str, hooks: Hooks) -> Observation: ...
 
 
+class FinalizingProviderAdapter(ProviderAdapter, Protocol):
+    """Optional additive hook, discovered via getattr; old providers need no change.
+
+    Called only after the original outcome and complete observation are durable.
+    checkpoint contains remote, original_checkpoint and core_recovery identity.
+    Release only matching attempt/plan quarantine; already released is success.
+    Never execute a social mutation here. Failures remain durably pending and are
+    retried by a later worker, including after a crash following successful release.
+    """
+    async def finalize(self, request: ProviderRequest, checkpoint: str, hooks: Hooks) -> None: ...
+
+
 class UnavailableAdapter:
     """Default for unwired providers, especially the separately implemented MAX."""
     async def inspect(self, request: ProviderRequest) -> Capability:

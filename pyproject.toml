@@ -25,7 +25,7 @@ dependencies = {file = ["requirements.in"]}
 include = ["social_operations*", "adapters*", "contracts*", "google_ai*"]
 
 [tool.setuptools.package-data]
-social_operations = ["schema.sql", "visual_schema.sql", "emoji_schema.sql"]
+social_operations = ["schema.sql", "visual_schema.sql", "emoji_schema.sql", "recovery_schema.sql"]
 
 [tool.setuptools.data-files]
 "share/vibepublish" = ["docs/llm/vibepublish-social-skill.md"]
