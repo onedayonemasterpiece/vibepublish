@@ -34,7 +34,7 @@ def private_json(path):
 
 
 @asynccontextmanager
-async def existing_session(*, profile, executable, allowlist, explicit_live=False, timeout=30, visual_recovery=None, live_writes=False):
+async def existing_session(*, profile, executable, allowlist, explicit_live=False, timeout=30, visual_recovery=None, visual_palette=None, live_writes=False):
     if explicit_live is not True:
         raise MaxBlocked('explicit_live_required')
     profile = Path(profile).absolute()
@@ -76,7 +76,7 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                         field = identity_page.locator('aside .phone')
                         await field.wait_for(timeout=10000)
                         return await field.inner_text() == phone
-                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery, live_writes=live_writes, semantic_selectors=True, evidence_pages=(page,identity_page))
+                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery, visual_palette=visual_palette, live_writes=live_writes, semantic_selectors=True, evidence_pages=(page,identity_page))
                 finally:
                     await context.close()
         finally:
@@ -104,7 +104,7 @@ async def configured_adapter(*, connection_id, env):
         config=json.loads(raw)
         required={'profile','executable','allowlist','live_writes'}
         if (not isinstance(config,dict) or not required <= config.keys()
-                or config.keys()-required-{'timeout'} or config['live_writes'] is not True
+                or config.keys()-required-{'timeout','visual_env','visual_evidence_dir'} or config['live_writes'] is not True
                 or any(not isinstance(config[k],str) or not Path(config[k]).is_absolute()
                        for k in ('profile','executable','allowlist'))
                 or type(config.get('timeout',90)) not in (int,float)
@@ -113,9 +113,15 @@ async def configured_adapter(*, connection_id, env):
     except (ValueError,TypeError):
         raise DomainError('max_profile_config_invalid') from None
     try:
+        palette=None
+        if 'visual_env' in config or 'visual_evidence_dir' in config:
+            if any(not isinstance(config.get(k),str) or not Path(config[k]).is_absolute() for k in ('visual_env','visual_evidence_dir')):
+                raise DomainError('max_visual_config_invalid')
+            from .visual import configured_palette
+            palette=configured_palette(env_file=config['visual_env'],evidence_dir=config['visual_evidence_dir'])
         async with existing_session(profile=config['profile'],executable=config['executable'],
                 allowlist=config['allowlist'],explicit_live=True,live_writes=True,
-                timeout=config.get('timeout',90)) as driver:
+                timeout=config.get('timeout',90),visual_palette=palette) as driver:
             await driver.page.context.grant_permissions(['clipboard-read','clipboard-write'],origin=driver.origin)
             yield MaxAdapter(driver,connection_id=connection_id)
     except MaxBlocked as exc:

@@ -74,3 +74,85 @@ def test_full_page_is_not_fabricated_complete_queue():
     observer._sent(event({'chatId':-101,'from':1,'forward':1,'itemType':'DELAYED'}))
     observer._received(event({'messages':[{}]}))
     assert observer.rows is None and str(observer.error)=='native_queue_incomplete'
+
+
+def social_observer(kind):
+    from types import SimpleNamespace
+    from adapters.max.wire import HistoryObserver,ReactionObserver
+    page=SimpleNamespace(url='https://web.max.ru/-101')
+    if kind=='history':return HistoryObserver(page,'-101','https://web.max.ru')
+    return ReactionObserver(page,'-101','https://web.max.ru',native_item='42')
+
+
+def social_event(value,*,opcode=49,socket='owned'):
+    return {'requestId':socket,'response':{'opcode':2,'payloadData':packet(value,opcode=opcode)}}
+
+
+@pytest.mark.parametrize('kind',['history','reaction'])
+def test_social_read_requires_exact_target_owned_socket_and_page(kind):
+    o=social_observer(kind);opcode=49 if kind=='history' else 180
+    request={'chatId':-101,'getMessages':True,'messageIds':[42]}
+    response={'messages':[{'id':42,'text':'Owned'}]} if kind=='history' else {'messagesReactions':{'42':{'yourReaction':'👍'}}}
+    o._received(social_event(response,opcode=opcode));assert o.rows is None
+    o._sent(social_event(dict(request,chatId=-202),opcode=opcode))
+    o._received(social_event(response,opcode=opcode));assert o.rows is None
+    o._sent(social_event(request,opcode=opcode))
+    o._received(social_event(response,opcode=opcode,socket='other'));assert o.rows is None
+    o._received(social_event(response,opcode=opcode),index=1);assert o.rows is None
+    o._received(social_event(response,opcode=opcode));assert o.rows is not None
+
+
+@pytest.mark.parametrize('bad',[True,{},[],1,'', 'x'*101])
+def test_reaction_metadata_is_not_guessed_or_coerced(bad):
+    o=social_observer('reaction')
+    o._sent(social_event({'chatId':-101,'messageIds':[42]},opcode=180))
+    o._received(social_event({'messagesReactions':{'42':{'yourReaction':bad}}},opcode=180))
+    assert o.rows is None and o.error
+
+
+def test_only_correlated_explicit_read_can_prove_empty_own_reactions():
+    o=social_observer('reaction')
+    o._sent(social_event({'chatId':-101,'messageIds':[99]},opcode=180))
+    o._received(social_event({'messagesReactions':{}},opcode=180));assert o.rows is None
+    o._sent(social_event({'chatId':-101,'messageIds':[42]},opcode=180))
+    o._received(social_event({'messagesReactions':{}},opcode=180))
+    assert o.rows=={'native_id':'42','your_reaction':None}
+
+
+def test_history_relationship_projection_excludes_account_body_and_urls():
+    o=social_observer('history')
+    o._sent(social_event({'chatId':-101,'getMessages':True}))
+    o._received(social_event({'messages':[{'id':42,'text':'Owned','sender':999,
+        'link':{'type':'REPLY','message':{'id':21,'sender':888,'text':'private','url':'secret'}}}]}))
+    assert o.rows[0]['link']=={'type':'REPLY','message':{'id':21}}
+    assert 'sender' not in o.rows[0]
+
+
+@pytest.mark.parametrize('rows',[[{'id':True}],[{'id':-1}],[{'id':42},{'id':42}],[{'id':42,'text':{}}],[{'id':42,'attaches':{}}]])
+def test_history_malformed_or_duplicated_identity_is_rejected(rows):
+    o=social_observer('history');o._sent(social_event({'chatId':-101,'getMessages':True}))
+    o._received(social_event({'messages':rows}));assert o.rows is None and o.error
+
+
+def test_decoder_cannot_be_repurposed_for_auth_or_mutation():
+    for opcode in (18,178,179):
+        assert decode_queue_frame(packet({'private':'data'},opcode=opcode),opcode=opcode) is None
+
+
+def test_published_link_identity_decodes_without_fabricating_urls():
+    from adapters.max.wire import published_wire_id
+    for n in [1,2**61+37]:
+        copied=base64.urlsafe_b64encode(n.to_bytes(8,'big')).decode().rstrip('=')
+        assert published_wire_id(copied)==str(n)
+    for bad in ['https://max.ru/c/-101/item','42','AAAAAAAAAAA','!!!!!!!!!!!','AAAAAAAAAAB']:
+        with pytest.raises(MaxBlocked):published_wire_id(bad)
+
+
+@pytest.mark.parametrize('info,expected',[(None,None),({},[]),({'yourReaction':'👍'},['👍'])])
+def test_history_only_explicit_reaction_info_proves_own_state(info,expected):
+    o=social_observer('history');o._sent(social_event({'chatId':-101,'getMessages':True}))
+    row={'id':42,'text':'Owned'}
+    if info is not None:row['reactionInfo']=info
+    o._received(social_event({'messages':[row]}))
+    assert o.rows[0].get('own_reactions')==expected
+    assert ('own_reactions' in o.rows[0])==(info is not None)

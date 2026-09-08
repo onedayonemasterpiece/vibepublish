@@ -49,6 +49,9 @@ class MaxAdapter:
             raise DomainError('max_connection_or_target_denied')
 
     def _content(self, request):
+        if self.live_enabled and request.action=='react' and request.existing:
+            from social_operations.rich_text import max_entities
+            return request.existing.text,max_entities(request.existing.text,json.loads(request.existing.entities_json))
         if self.live_enabled:
             from social_operations.rich_text import max_content
             return max_content(request.content_json,4000)
@@ -71,10 +74,13 @@ class MaxAdapter:
                 raise DomainError('max_live_binding_mismatch')
         elif request.account_type != 'fake' or request.secret_ref:
             raise DomainError('max_live_factory_not_implemented')
-        if request.action not in {'publish', 'edit', 'reschedule', 'cancel', 'delete'} or request.source:
+        if request.action not in ({'publish', 'edit', 'reschedule', 'cancel', 'delete','react'} if self.live_enabled else {'publish', 'edit', 'reschedule', 'cancel', 'delete'}) or request.source:
             raise DomainError('max_action_unsupported')
         if request.surface not in {'post', 'album'}:
             raise DomainError('max_surface_unsupported')
+        if request.action=='react' and (not request.subject or request.subject!=request.existing
+                or request.reaction_mode not in {'add','remove'} or not request.reaction):
+            raise DomainError('max_reaction_subject_required')
         text = self._text(request)
         if self.live_enabled:
             from .rich import QUALIFIED
@@ -135,6 +141,7 @@ class MaxAdapter:
         remote = RemoteItem(native_id=item['id'], namespace='published' if item['namespace'] == 'feed' else item['namespace'],
                             native_target=item['target'], text=item['text'], fingerprint='', observed_at=item['observed_at'],
                             scheduled_at=item['scheduled_at'], provider_media=tuple(item['media']),
+                            **({'own_reactions':tuple(item['own_reactions']),'own_reactions_observed':True} if item.get('own_reactions_observed') else {}),
                             url=item.get('url'), entities_json=json.dumps(item.get('entities',[])), member_ids=tuple(item.get('member_ids',(item['id'],))), **({'observed_media':tuple(item['observed_media'])} if item.get('observed_media') else {}), media_check='download_binding' if item.get('observed_media') else 'provider_identity_only' if item['media'] else 'not_applicable')
         return replace(remote, fingerprint=identity(remote))
 
@@ -147,6 +154,7 @@ class MaxAdapter:
                     or max_entities(state['text'],state.get('entities',[])) != self._content(request)[1]
                     or state['action'] != request.action or state['scheduled_at'] != request.scheduled_at
                     or state['kind'] != kind or state.get('media_slots',len(state['media'])) != (len(request.assets) if request.assets else (len(getattr(request.existing,'observed_media',())) or len(request.existing.provider_media)) if request.existing else 0)
+                    or (request.action=='react' and (state.get('reaction')!=request.reaction or state.get('reaction_mode')!=request.reaction_mode))
                     or state['existing_id'] != (request.existing.native_id if request.existing else None)):
                 raise ValueError()
         except (TypeError, KeyError, ValueError):
@@ -174,7 +182,7 @@ class MaxAdapter:
             item=bind_download_media(request,item,binding=state['download_binding'],replacement=replacement)
         else:
             item = bind_media(request, item, state['media'])
-        observed = 'deleted' if request.action == 'delete' else 'cancelled' if request.action == 'cancel' else 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
+        observed = 'reacted' if request.action=='react' else 'deleted' if request.action == 'delete' else 'cancelled' if request.action == 'cancel' else 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
         return Observation(observed, (item,), replacement=replacement)
 
     @staticmethod
@@ -228,6 +236,7 @@ class MaxAdapter:
                 attempt_id=request.attempt_id, plan_digest=request.plan_digest,
                 existing=self._existing(request.existing),
                 **({'entities':self._content(request)[1]} if self.live_enabled else {}),
+                **({'reaction':request.reaction,'reaction_mode':request.reaction_mode} if request.action=='react' else {}),
                 hooks=Hooks(progress, checkpoint, hooks.before_effect))
             return self._observation(request, items, state)
         except MaxBlocked as exc:

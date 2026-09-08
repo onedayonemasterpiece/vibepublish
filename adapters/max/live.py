@@ -56,7 +56,7 @@ class VisibleSnapshot:
 
 class RealMaxDriver:
     def __init__(self, page, lane: ProfileLane, *, targets: tuple[Target, ...],
-                 account_check, origin='https://web.max.ru', timeout=10, visual_recovery=None, live_writes=False, semantic_selectors=False, evidence_pages=()):
+                 account_check, origin='https://web.max.ru', timeout=10, visual_recovery=None, visual_palette=None, live_writes=False, semantic_selectors=False, evidence_pages=()):
         parsed = urlsplit(origin)
         if not (origin == 'https://web.max.ru' or
                 parsed.scheme == 'http' and parsed.hostname == '127.0.0.1'
@@ -71,6 +71,7 @@ class RealMaxDriver:
         self.evidence_pages = tuple(evidence_pages) or (page,)
         self.semantic_selectors = semantic_selectors
         self.visual_recovery = visual_recovery
+        self.visual_palette = visual_palette
         self.live_writes = live_writes is True
         self.min_lead = 60
 
@@ -211,12 +212,15 @@ class RealMaxDriver:
             wanted=datetime.fromisoformat(scheduled_at.replace('Z','+00:00'))
             if wanted.second or wanted.microsecond:raise MaxBlocked('native_schedule_minute_precision')
             return
-        if action not in {'publish', 'edit', 'delete'} or scheduled_at is not None:
+        if action not in {'publish', 'edit', 'delete', 'react'} or scheduled_at is not None:
             raise MaxBlocked('live_surface_not_implemented')
 
     async def mutate(self, *, target, text, media, scheduled_at, action,
-                     attempt_id, plan_digest, hooks, existing=None, entities=()):
+                     attempt_id, plan_digest, hooks, existing=None, entities=(), reaction=None, reaction_mode=None):
         await self.mutation_preflight(target, action, media=media, scheduled_at=scheduled_at)
+        if action=='react':
+            from . import engagement
+            return await engagement.react(self,existing=existing,reaction=reaction,reaction_mode=reaction_mode,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
         if action=='cancel':
             from . import queue
             return await queue.cancel(self,existing=existing,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
@@ -830,6 +834,9 @@ class RealMaxDriver:
         Neither the model nor its screenshot replaces native-reference checks.
         Identity/content/quarantine failures never enter model-assisted recovery.
         """
+        if state.get('action')=='react':
+            from .engagement import reconcile_reaction
+            return await reconcile_reaction(self,state)
         if state.get('kind')=='scheduled':
             from . import queue
             return await queue.reconcile(self,state)

@@ -418,3 +418,49 @@ same native item, original time and identical downloaded image. Four offline
 queued-editor cases cover success, closed edit mode, changed media, and delayed
 preview. Durable guarded input precedes fresh native readback; recovery stays
 read-only. Reply/reaction/forwarding acceptance is still **Not done**.
+
+### Social lifecycle implementation (2026-09-08, in progress)
+
+The shared engagement contract is in existing PR #1, `196d302`: exact authorized
+subject snapshots, additive owner-only reply/react rights (without changing
+binding epochs), explicit own-reaction proof including removal, and native reply
+relationship verification. MAX actual-core CI is pinned to that dependency.
+Reply/forward product acceptance is still **Not done**; this section is not a
+claim that passive reading alone completes social operations.
+
+Native feed history carries an integer message ID, while the actual copied
+published-message link carries its canonical eight-byte URL-safe Base64 form.
+Both representations were matched for the own native-output test object. Decode
+only an already copied native ID; never manufacture a message URL from a row.
+History evidence is correlated to an exact target UI request and owned
+page/socket/sequence. It is bounded, not complete-history or deletion evidence.
+An explicit `reactionInfo` provides own-reaction state; an absent field is not
+proof of reaction removal. No auth/mutation frames, actor data, app storage or
+private signed URLs are retained by the passive projector.
+
+The observed compact reaction palette has unlabeled canvas buttons. Its opening
+animation initially gives zero/negative cell rectangles; capture with Playwright
+`screenshot(animations='disabled')` before measuring cells, rather than sleeping
+or weakening bounds. A palette-only Gemini Lite proposal uses the existing
+GoogleAIClient and mandatory shared limiter. Native reaction readback, not the
+proposal, proves the result. DOM handles are retained across the model call and
+checked for replacement/reordering before a single trusted click. The durable
+prepared checkpoint and original attempt fuse precede that click. Recovery reads
+the exact object without clicking again; core alone finalizes/releases the fuse.
+
+Optional trusted MAX profile config `visual_env` and `visual_evidence_dir` selects
+an explicitly authorized local dotenv path and private evidence directory.
+Only Google key aliases and Supabase URL/key are selected; no global env import,
+local limiter fallback, alternate model or direct provider call is introduced.
+Captures/proposals are fsynced private artifacts, never Git fixtures. They do not
+include the source message, chat sidebar, account settings or authorization data.
+
+Actual MCP ClientSession → native worker → RealMaxDriver added **👍** to the
+existing own native-output image: `verified/complete`, one dispatched effect,
+fresh native own-reaction proof, unchanged downloaded image/text, normal core
+finalization. Removal's first attempt was blocked **before dispatch** by staggered
+cell animation, so it did not toggle the reaction. Cell handles now wait for
+visible/stable individually before capture; the parent being stable is
+insufficient. Its same original intent is being resumed through `retry_failed`,
+not recreated. Offline reaction guard/restart cases: 5 passed; passive identity
+and strict palette gateway cases: 35 passed. This is not full social acceptance.

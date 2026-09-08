@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added: MAX native social identity/own-reaction evidence, bounded shared-limiter canvas classification, and guarded reaction/recovery implementation (live acceptance in progress).
+
 ### Added — native scheduled editing
 
 - Edit an exact queued MAX message while preserving native time and media, with

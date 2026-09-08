@@ -3,7 +3,8 @@
 Never sends a MAX request, intercepts/modifies traffic, reads app state/storage,
 logs raw frames or decodes authentication traffic. UI drives every operation.
 The observed v10 envelope uses bounded LZ4 + MessagePack with integer extension1.
-Only history (49) frames are decoded; a scheduled response is retained only
+Only history (49) and own-reaction read (180) frames are decoded.
+A scheduled response is retained only
 after matching its socket/sequence to the UI request with itemType=DELAYED and
 the exact authorized chatId. No raw frame is logged or sent by this module.
 """
@@ -17,14 +18,14 @@ from .profile import MaxBlocked
 MAX_FRAME = 2_000_000
 
 
-def decode_queue_frame(encoded):
+def decode_queue_frame(encoded, *, opcode=49):
     import msgpack
     import lz4.block
-    if not isinstance(encoded,str) or len(encoded)>MAX_FRAME*2:
+    if opcode not in (49,180) or not isinstance(encoded,str) or len(encoded)>MAX_FRAME*2:
         return None
     try:
         raw=base64.b64decode(encoded,validate=True)
-        if len(raw)<10 or raw[0]!=10 or int.from_bytes(raw[4:6],'big')!=49:
+        if len(raw)<10 or raw[0]!=10 or int.from_bytes(raw[4:6],'big')!=opcode:
             return None
         size=int.from_bytes(raw[7:10],'big')
         if not size or size!=len(raw)-10 or size>MAX_FRAME:return None
@@ -115,3 +116,112 @@ class QueueObserver:
 
     async def __aexit__(self,*_):
         for session in self.sessions:await session.detach()
+
+
+
+def published_wire_id(copied_native_id):
+    """Decode a copied native link's canonical 8-byte ID; never create a URL."""
+    if not isinstance(copied_native_id,str) or len(copied_native_id)!=11:
+        raise MaxBlocked('native_link_id_unverified')
+    try:
+        raw=base64.b64decode(copied_native_id+'=',altchars=b'-_',validate=True)
+        if len(raw)!=8 or base64.urlsafe_b64encode(raw).decode().rstrip('=')!=copied_native_id:
+            raise ValueError()
+        value=int.from_bytes(raw,'big')
+        if value<=0:raise ValueError()
+        return str(value)
+    except (ValueError,TypeError):
+        raise MaxBlocked('native_link_id_unverified') from None
+
+
+def own_reactions(value):
+    """Only explicit native reactionInfo can prove presence or absence."""
+    if not isinstance(value,dict):raise MaxBlocked('native_reactions_unverified')
+    own=value.get('yourReaction')
+    if own is None:return []
+    if not isinstance(own,str) or not 0<len(own)<=100:raise MaxBlocked('native_reaction_schema')
+    return [own]
+
+
+def native_link(value, depth=0):
+    """Retain only native relationship coordinates, never sender/account data."""
+    if not isinstance(value,dict) or depth>2:return None
+    result={}
+    for key in ('type','id','chatId','messageId','message','chat'):
+        if key not in value:continue
+        current=value[key]
+        if isinstance(current,dict):result[key]=native_link(current,depth+1)
+        elif current is None or type(current) in (str,int):result[key]=current
+    return result
+
+
+class HistoryObserver(QueueObserver):
+    """Passive feed history requested by our exact target's normal UI."""
+    def _sent(self,event,index=0):
+        key,payload=self._frame(event,index)
+        if payload is None:return
+        if (payload.get('chatId')==int(self.target) and payload.get('itemType') in (None,'MESSAGE')
+                and payload.get('getMessages') is True and len(self.pending)<100):
+            self.pending[key]=True
+
+    def _received(self,event,index=0):
+        key,payload=self._frame(event,index)
+        if payload is None or key not in self.pending:return
+        self.pending.pop(key)
+        try:
+            rows=payload.get('messages')
+            if not isinstance(rows,list) or len(rows)>200:raise MaxBlocked('native_history_bound')
+            result=[];ids=set()
+            for row in rows:
+                if (not isinstance(row,dict) or type(row.get('id')) is not int
+                        or row['id'] <= 0 or row['id'] in ids
+                        or not isinstance(row.get('text',''),str)
+                        or not isinstance(row.get('attaches',[]),list)):
+                    raise MaxBlocked('native_history_schema')
+                ids.add(row['id'])
+                result.append(dict(id=str(row['id']),text=row.get('text',''),time_ms=row.get('time'),
+                    link=native_link(row.get('link')),media_count=len(row.get('attaches',[])),
+                    **({'own_reactions':own_reactions(row['reactionInfo'])} if 'reactionInfo' in row else {})))
+            self.rows=result
+        except (TypeError,ValueError,MaxBlocked):self.error=MaxBlocked('native_history_unverified')
+        self.event.set()
+
+
+class ReactionObserver(QueueObserver):
+    """Observe own-reaction metadata from UI-generated opcode180 reads only."""
+    def __init__(self,page,target,origin,pages=(),*,native_item):
+        super().__init__(page,target,origin,pages)
+        self.native_item=native_item
+
+    def _frame(self,event,index):
+        if self.page.url!=self.origin+'/'+self.target:return None,None
+        response=event.get('response',{})
+        if response.get('opcode')!=2:return None,None
+        frame=decode_queue_frame(response.get('payloadData'),opcode=180)
+        if frame is None:return None,None
+        return (index,event.get('requestId'),frame['sequence']),frame['payload']
+
+    def _sent(self,event,index=0):
+        key,payload=self._frame(event,index)
+        if payload is None:return
+        ids=payload.get('messageIds')
+        if (payload.get('chatId')==int(self.target) and isinstance(ids,list) and len(ids)<=200
+                and self.native_item in [str(value) for value in ids] and len(self.pending)<100):
+            self.pending[key]=True
+
+    def _received(self,event,index=0):
+        key,payload=self._frame(event,index)
+        if payload is None or key not in self.pending:return
+        self.pending.pop(key)
+        values=payload.get('messagesReactions')
+        if not isinstance(values,dict) or len(values)>200:
+            self.error=MaxBlocked('native_reactions_unverified')
+        else:
+            own=next((value for key,value in values.items() if str(key)==self.native_item),{})
+            if not isinstance(own,dict):self.error=MaxBlocked('native_reactions_unverified')
+            else:
+                value=own.get('yourReaction')
+                if value is not None and (not isinstance(value,str) or not 0<len(value)<=100):
+                    self.error=MaxBlocked('native_reaction_schema')
+                else:self.rows=dict(native_id=self.native_item,your_reaction=value)
+        self.event.set()
