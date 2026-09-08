@@ -23,10 +23,14 @@ render=function(){
   const content=document.createElement('span');content.className='text';content.textContent=message.text;bubble.append(content);row.append(bubble);
   if(message.media){const media=document.createElement('span');media.className='media';if(Array.isArray(message.media)){
    const grid=document.createElement('div');grid.setAttribute('aria-label','Прикрепленные фото');media.append(grid);
-   for(const src of message.media){const tile=document.createElement('button');const img=document.createElement('img');img.src=src;img.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();};if(window.REPLAY_LAZY_MEDIA)setTimeout(()=>tile.append(img),window.REPLAY_LAZY_MEDIA);else tile.append(img);grid.append(tile);
+   for(const src of message.media){const tile=document.createElement('button');const isVideo=src.endsWith('.mp4');
+    if(isVideo){const video=document.createElement('video');const source=document.createElement('source');source.src=src;video.append(source);tile.append(video);
+     // Actual media tile contains nested player buttons: they are not album slots.
+     for(const label of ['Развернуть на весь экран','Включить звук','Воспроизвести']){const control=document.createElement('button');control.setAttribute('aria-label',label);tile.append(control);}
+    }else{const img=document.createElement('img');img.src=src;img.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();};if(window.REPLAY_LAZY_MEDIA)setTimeout(()=>tile.append(img),window.REPLAY_LAZY_MEDIA);else tile.append(img);}grid.append(tile);
     tile.onclick=()=>{const dialog=document.createElement('div');dialog.role='dialog';
-     const download=document.createElement('button');download.textContent='Скачать';
-     download.onclick=()=>{const link=document.createElement('a');link.href=src+'?download=1';link.download='photo.png';document.body.append(link);link.click();link.remove();};
+     const download=document.createElement('button');download.textContent=isVideo?'Скачать видео':'Скачать';
+     download.onclick=()=>{const link=document.createElement('a');link.href=src+'?download=1';link.download=isVideo?'video.mp4':'photo.png';document.body.append(link);link.click();link.remove();};
      const close=document.createElement('button');close.setAttribute('aria-label','Закрыть');close.onclick=()=>dialog.remove();dialog.append(download,close);document.body.append(dialog);};
    }
   }row.append(media);}
@@ -76,7 +80,7 @@ function uploadMenu(){
 }
 function previewFiles(input){
  const parent=document.querySelector('.attaches');parent.replaceChildren();
- for(const file of input.files){const attach=document.createElement('div');attach.className='attach';const img=document.createElement('img');img.src=URL.createObjectURL(file);img.alt=file.name;attach.append(img);parent.append(attach);}
+ for(const file of input.files){const attach=document.createElement('div');attach.className='attach';const img=document.createElement('img');img.src=file.type==='video/mp4'?'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==':URL.createObjectURL(file);img.alt=file.name;attach.append(img);parent.append(attach);}
 }
 async function effect(){
  state.effects++;

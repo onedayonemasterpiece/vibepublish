@@ -1,7 +1,7 @@
 {
   "recipe": "max-web-observed-20260905-v1",
-  "scope": "Read/navigation and exact-reference observation-only recovery; loopback-only same-driver plain submit qualification. No live writer/lifecycle completion.",
-  "provenance": "Personally observed authorized MAX UI on 2026-09-05. Structural manual transcription, not copied application JavaScript or HAR.",
+  "scope": "Sanitized observed MAX UI replay for the same production text/image/video driver; offline replay is not live acceptance evidence.",
+  "provenance": "Personally observed authorized MAX UI on 2026-09-05 and 2026-09-08. Structural manual transcription, not copied application JavaScript or HAR.",
   "sanitization": [
     "All account/chat/item IDs invented",
     "All names/content/media replaced or omitted",
@@ -60,15 +60,24 @@
       "positive": "test_exact_edit_preserves_identity_all_orders; test_edit_lost_response_reconcile_same_object_without_resave",
       "negative": "test_edit_dispatch_drift_zero_effect; test_edit_post_effect_uncertainty_never_repeats; test_edit_recovery_cannot_switch_saved_native_id",
       "boundary": "Plain edit on same-driver loopback only; no production activation, media stripping, core resolution or quarantine release."
+    },
+    {
+      "id": "native-media-20260908",
+      "state": "Actual chooser, lazy photo tiles, native Download and video keyboard activation with nested player controls",
+      "positive": "test_observed_image_chooser_bound_before_one_send; test_exact_image_read_waits_for_lazy_tile_image; test_video_bridge_downloads_exact_native_tile_not_nested_controls",
+      "boundary": "Exact downloaded-byte evidence through actual core; no rotating URL identity or fake attachment IDs. Live matrix remains in docs/operations/max-web.md."
     }
   ],
   "not_covered": [
-    "Effect attribution",
-    "Queue IDs and complete pagination",
-    "Live publishing",
-    "Same-driver MCP/worker integration",
-    "Mid-submit drift",
-    "Rename positive behavior",
-    "Media/lifecycle and post-submit writer recovery; terminal core resolution"
-  ]
+    "Live provider acceptance (documented separately in the runbook)",
+    "Native scheduled IDs and complete queue pagination",
+    "Rich/social surfaces not yet replay-qualified",
+    "Rename positive behavior"
+  ],
+  "generated_media": {
+    "sample.mp4": {
+      "provenance": "Locally generated two-second blue/gold geometric H.264 clip, no captured MAX/private media",
+      "sha256": "c6bf68c53761280350a8d7ae5ada42a60b18658f69df9d0cb08774d527f38767"
+    }
+  }
 }

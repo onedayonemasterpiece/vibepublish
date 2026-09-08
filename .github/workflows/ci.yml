@@ -79,6 +79,8 @@ jobs:
           mkdir -p core/tests/browser core/tests/adapters
           cp -a max/tests/browser/max core/tests/browser/max
           cp -a max/tests/adapters/max core/tests/adapters/max
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
           python -m pip install -r core/requirements.in
           python -m pip install -r max/adapters/max/requirements-test.txt
           python -m playwright install --with-deps chromium

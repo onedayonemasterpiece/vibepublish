@@ -244,7 +244,11 @@ operation recovered without another Send, then exact read → edit → exact rea
 delete of that same object all reached `verified` with `operation_complete=true`.
 The downloaded image evidence before/after edit was identical. Private receipts:
 `artifacts/codex/max-product-20260908/image-{recovery,read,edit,read-edited,delete}-status.json`.
-This is image lifecycle evidence, **not** completion of album/video/native
+A subsequent fresh two-image album also completed publish → read → edit → read
+→ delete through the same MCP/standard-worker path, all verified/complete, with
+both ordered downloaded proofs unchanged after edit. Its private receipts are
+`album-{publish,read,edit,read-edited,delete}-status.json` in the same directory.
+This is image/album lifecycle evidence, **not** completion of video/native
 schedule/social acceptance. Those requirements remain Not done pending their
 own live checks. Requires the additive typed-download/read projection in PR #1.
 
@@ -254,3 +258,32 @@ adapter/tests onto exact core `593da8363df50d017ef5b1a44cd21543da4e87c5`
 from existing PR #1, and requires the genuine MCP/worker suites without missing-core
 skips. It does not merge or vendor core into PR #2. The original MAX-only job
 remains separate. Both jobs use offline provider replays, not live browser access.
+
+
+Native queue discovery: the two authorized channels expose the queue and
+**Отправить сейчас / Изменить время / Редактировать / Скопировать текст / Выбрать /
+Удалить**. Unlike published messages, scheduled rows expose neither a copy-link
+menu item nor a native ID in rendered DOM (only positional `data-index`, which
+is not identity). No existing channel queue item was changed during discovery.
+Schedule clock spinbuttons were live-confirmed to respond to ArrowUp/ArrowDown;
+no schedule confirmation was clicked in that read-only form inspection.
+
+
+### Video verification (2026-09-08)
+
+The observed video upload preview is a data-URL placeholder (not the image blob
+preview) and **Отменить загрузку** disappears when upload completes. Readback
+counts direct media tiles, not their nested player-control buttons. Keyboard
+Enter on the exact outer tile opens the native viewer without the nested
+pointer overlays; its download action is **Скачать видео**. The existing shared
+core video validator performs bounded H.264/MP4 decode/probe; hashes describe the
+original downloaded bytes, not the sanitized ingress derivative or a signed URL.
+A native copied reference is checkpointed before inspecting the video download.
+
+Actual MCP/standard worker: original video publish was recovered read-only after
+the initial missing-video-reader result, without another Send. Exact read → edit
+→ exact read with identical video evidence → same-object delete then all reached
+verified/complete. Private `video-*-status.json` receipts are in the same task
+artifact directory. This does not claim a fresh no-recovery video acceptance yet.
+Offline MP4 replay uses a small locally generated geometric clip, not private
+MAX media. Video verification requires the shared core and ffmpeg/ffprobe.

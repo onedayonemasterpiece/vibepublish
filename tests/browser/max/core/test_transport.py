@@ -1,4 +1,4 @@
-"""Genuine archived MCP/SQLite/worker integration, LOCAL assembled tree only."""
+"""Genuine MCP/SQLite/worker integration against explicitly assembled actual core."""
 import asyncio
 import importlib
 import io

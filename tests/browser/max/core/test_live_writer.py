@@ -111,3 +111,48 @@ async def test_image_bridge_binds_native_downloads_and_reconciles_without_resend
         core_recovery=dict(operation_id='op',attempt_id='attempt',plan_digest='plan')))
     await adapter.finalize(request,final,h)
     assert not d.lane.marker.exists() and len(effects(state))==1
+
+
+async def test_video_bridge_downloads_exact_native_tile_not_nested_controls(writer):
+    import hashlib
+    from pathlib import Path
+    from adapters.port import Asset
+    d,page,state,h=writer
+    d.live_writes=True
+    adapter=MaxAdapter(d,connection_id='max')
+    data=(Path(__file__).parents[1]/'observed'/'sample.mp4').read_bytes()
+    asset=Asset('video-asset',hashlib.sha256(data).hexdigest(),'video/mp4',len(data),role='video',data=data)
+    request=ProviderRequest('op','attempt','plan','max','max_web','VIBEPUBLISH_MAX_PROFILE',
+        'destination','-101','publish','post',json.dumps({'text':TEXT}),(asset,),None,time.time()+300)
+    observed=await adapter.execute(await adapter.prepare(request,h),h)
+    item=observed.items[0]
+    assert len(effects(state))==1 and item.provider_media==()
+    assert len(item.observed_media)==1 and item.observed_media[0].mime=='video/mp4'
+    assert item.media_hashes==(asset.sha256,) and item.media_check=='download_binding'
+    latest=state['checkpoints'][-1][1]
+    recovered=await adapter.reconcile(request,json.dumps(latest),h)
+    assert recovered.items[0].observed_media==item.observed_media and len(effects(state))==1
+
+    # Each subsequent action has a distinct operation/attempt and is admitted only
+    # after the previous durable observation's finalize envelope releases its fuse.
+    from dataclasses import replace
+    current=request
+    for index,action in enumerate(('edit','delete'),start=2):
+        latest=state['checkpoints'][-1][1]
+        final=json.dumps(dict(remote=asdict(item),original_checkpoint=latest,
+            core_recovery=dict(operation_id=current.operation_id,attempt_id=current.attempt_id,plan_digest=current.plan_digest)))
+        await adapter.finalize(current,final,h)
+        assert not d.lane.marker.exists()
+        state['expected_dispatch']=(f'attempt-{index}',f'plan-{index}')
+        current=replace(request,operation_id=f'op-{index}',attempt_id=f'attempt-{index}',plan_digest=f'plan-{index}',
+            action=action,content_json=json.dumps({'text':TEXT+' edited'}),assets=(),existing=item)
+        result=await adapter.execute(await adapter.prepare(current,h),h)
+        assert result.items[0].native_id==item.native_id
+        assert result.items[0].observed_media==item.observed_media
+        item=result.items[0]
+    assert len(effects(state))==3 and not state['messages']
+    latest=state['checkpoints'][-1][1]
+    final=json.dumps(dict(remote=asdict(item),original_checkpoint=latest,
+        core_recovery=dict(operation_id=current.operation_id,attempt_id=current.attempt_id,plan_digest=current.plan_digest)))
+    await adapter.finalize(current,final,h)
+    assert not d.lane.marker.exists()

@@ -33,7 +33,7 @@ async def writer(tmp_path):
                 if event['kind'] == 'effect':
                     # Independent provider: the driver cannot allocate IDs or read
                     # this state. Dispatch must already have been durably awaited.
-                    assert state.get('dispatched') == ('attempt', 'plan')
+                    assert state.get('dispatched') == state.get('expected_dispatch', ('attempt', 'plan'))
                     assert driver.lane.marker.exists()
                     if event.get('action') == 'delete':
                         state['messages'][:]=[m for m in state['messages'] if not(m['id']==event['existing'] and m.get('target')==event['target'])]
@@ -44,7 +44,7 @@ async def writer(tmp_path):
                         if state['fault']=='replace_edit': matches[0]['id']='replacement'
                     else:
                         message = dict(id='provider-item', target=event['target'], text=event['text'], outgoing=True)
-                        if event.get('media'):message['media']=['https://i.oneme.ru/replay/'+str(i)+'.png' for i,_ in enumerate(event['media'])]
+                        if event.get('media'):message['media']=[('https://maxvd.example.okcdn.ru/replay/'+str(i)+'.mp4') if name.endswith('.mp4') else ('https://i.oneme.ru/replay/'+str(i)+'.png') for i,name in enumerate(event['media'])]
                         if state['fault'] == 'foreign': message['outgoing'] = False
                         state['messages'].append(message)
                         if state['fault'] == 'duplicate':
@@ -52,6 +52,8 @@ async def writer(tmp_path):
                     if state['fault'] == 'lost_response':
                         await r.abort(); return
                 await r.fulfill(body=json.dumps(dict(messages=state['messages'])), content_type='application/json')
+            elif r.request.url.startswith('https://maxvd.example.okcdn.ru/replay/'):
+                await r.fulfill(body=Path(__file__).with_name('sample.mp4').read_bytes(),content_type='video/mp4',headers={'Content-Disposition':'attachment; filename=video.mp4'} if 'download=1' in r.request.url else {})
             elif r.request.url.startswith('https://i.oneme.ru/replay/'):
                 import base64
                 await r.fulfill(body=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='),content_type='image/png',headers={'Content-Disposition':'attachment; filename=photo.png'} if 'download=1' in r.request.url else {})

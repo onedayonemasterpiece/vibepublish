@@ -67,8 +67,8 @@ class MaxAdapter:
         if request.surface not in {'post', 'album'}:
             raise DomainError('max_surface_unsupported')
         text = plain_text(request, limit=4000)
-        verify_assets(request)
-        if any(a.mime not in {'image/png', 'image/jpeg'} for a in request.assets):
+        verify_assets(request, allow_video=self.live_enabled)
+        if any(a.mime not in ({'image/png', 'image/jpeg', 'video/mp4'} if self.live_enabled else {'image/png', 'image/jpeg'}) for a in request.assets):
             raise DomainError('max_media_unsupported')
         if check_time:
             schedule_guard(request, time.time(), lead=self.driver.min_lead)
@@ -198,7 +198,7 @@ class MaxAdapter:
 
         try:
             items = await self.driver.mutate(target=request.native_target, text=text,
-                media=tuple({'name': f'{i}.png' if a.mime == 'image/png' else f'{i}.jpg',
+                media=tuple({'name': f'{i}.mp4' if a.mime == 'video/mp4' else f'{i}.png' if a.mime == 'image/png' else f'{i}.jpg',
                              'mimeType': a.mime, 'buffer': a.data} for i, a in enumerate(request.assets)),
                 scheduled_at=request.scheduled_at, action=request.action,
                 attempt_id=request.attempt_id, plan_digest=request.plan_digest,
@@ -230,7 +230,7 @@ class MaxAdapter:
                 # The original uploaded input intent is immutable. A core-admitted
                 # exact native observation may bind previously missing provider IDs;
                 # it never uploads/sends again or rewrites the historical checkpoint.
-                names=[f'{i}.png' if asset.mime=='image/png' else f'{i}.jpg' for i,asset in enumerate(request.assets)]
+                names=[f'{i}.mp4' if asset.mime=='video/mp4' else f'{i}.png' if asset.mime=='image/png' else f'{i}.jpg' for i,asset in enumerate(request.assets)]
                 if (request.action!='publish' or any(x is not None for x in state['media'])
                         or [p.get('name') for p in state.get('upload_previews',[])]!=names
                         or not names or any(admitted.get(k)!=v for k,v in {

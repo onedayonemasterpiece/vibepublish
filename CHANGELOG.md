@@ -25,6 +25,9 @@
   recovery path; this still does not constitute full lifecycle acceptance.
 
 ### Added
+- Observed MAX video chooser/readback with durable copied reference, native video
+  downloads and shared bounded decoder; direct tile identity excludes nested
+  player controls. Live same-object recovery/read/edit/delete retains video bytes.
 - Separate exact-core GitHub CI assembly for actual MCP/worker/MAX bridge tests,
   in addition to the existing MAX-only regression job; no vendored shared core.
 - Explicit same-driver live plain mutation bridge with durable native-reference

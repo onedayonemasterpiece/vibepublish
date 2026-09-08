@@ -1,4 +1,4 @@
-"""Actual port tests. Explicitly skipped in remote seed-only MAX CI."""
+"""Actual port tests. Required in pinned-core CI; skipped only in MAX-only CI."""
 import importlib
 import json
 import os
