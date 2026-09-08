@@ -165,3 +165,10 @@ MAX forwarding from a bound read ref preserves its verified native permalink,
 subject content/entities/download evidence and native attribution. External MAX
 URL ingress remains disabled; no URL becomes a grant. These core tests do not
 claim live MAX social acceptance; the real driver qualification is in PR #2.
+
+Native MAX forwarded downloads may bind to the already authorized, frozen source
+subject without re-uploading media. This requires exact provider/source URL/chat/
+item coordinates and matching downloaded bytes; it does not accept arbitrary
+provider observations as upload evidence. Core still separately requires native
+forward-origin proof and exact source body/entities/media before committing the
+result. Existing publish/edit bindings and other providers remain unchanged.

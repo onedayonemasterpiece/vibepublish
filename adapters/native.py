@@ -133,6 +133,14 @@ def bind_download_media(request: ProviderRequest, item: RemoteItem, *, binding: 
             or (source_hashes and len(source_hashes) != len(observed))):
         raise OutcomeUnknown('download_binding_media_mismatch')
     if not source_hashes:
-        if not request.existing or request.existing.observed_media != observed:
+        subject=request.existing
+        if (request.action=='forward' and request.source_authorized and request.subject
+                and request.source and request.source.provider=='max'
+                and request.subject.namespace=='published'
+                and request.source.canonical_url==request.subject.url
+                and request.source.channel==request.subject.native_target
+                and request.source.item==request.subject.native_id):
+            subject=request.subject
+        if not subject or subject.observed_media != observed:
             raise OutcomeUnknown('download_binding_source_missing')
     return replace(item, media_hashes=source_hashes, media_check='download_binding')

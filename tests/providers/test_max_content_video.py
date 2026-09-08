@@ -397,3 +397,28 @@ def test_native_reschedule_download_binding_requires_exact_replacement():
         bind_download_media(replace(request,action='edit'),new,binding=binding,replacement=proof)
     with pytest.raises(OutcomeUnknown):
         bind_download_media(request,replace(new,observed_media=[download_record(sha='e'*64)]),binding=binding,replacement=proof)
+
+
+@pytest.mark.parametrize('bad',[None,'grant','source','subject','media','action'])
+def test_native_forward_downloads_bind_only_the_authorized_exact_source(bad):
+    from adapters.port import ProviderRequest
+    from adapters.native import bind_download_media
+    from social_operations.domain import NativeSource,OutcomeUnknown
+    source=RemoteItem('source','published','text','',timestamp(1800000000),native_target='source-chat',
+        url='https://max.ru/c/source-chat/source',observed_media=[download_record()])
+    request=ProviderRequest('op','attempt','plan','connection','max_web','secret','dest','target',
+        'forward','post','{"text":"text"}',(),None,1800000000,subject=source,source_authorized=True,
+        source=NativeSource('max','source-chat','source',False,source.url))
+    item=replace(source,native_id='forwarded',native_target='target',url='https://max.ru/c/target/forwarded',origin=source.url)
+    binding=dict(operation_id='op',attempt_id='attempt',plan_digest='plan',native_target='target',
+        native_id='forwarded',namespace='published',source_hashes=[],observed_media=[download_record()])
+    if bad=='grant':request=replace(request,source_authorized=False)
+    if bad=='source':request=replace(request,source=replace(request.source,item='other'))
+    if bad=='subject':request=replace(request,subject=None)
+    if bad=='media':request=replace(request,subject=replace(source,observed_media=[download_record(sha='e'*64)]))
+    if bad=='action':request=replace(request,action='publish')
+    if bad:
+        with pytest.raises(OutcomeUnknown):bind_download_media(request,item,binding=binding)
+    else:
+        result=bind_download_media(request,item,binding=binding)
+        assert result.observed_media==source.observed_media and result.media_hashes==()
