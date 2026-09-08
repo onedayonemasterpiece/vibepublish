@@ -99,7 +99,7 @@ def bind_media(request: ProviderRequest, item: RemoteItem, expected_media: list[
                    media_check='provider_binding' if expected_media else 'not_applicable')
 
 
-def bind_download_media(request: ProviderRequest, item: RemoteItem, *, binding: dict) -> RemoteItem:
+def bind_download_media(request: ProviderRequest, item: RemoteItem, *, binding: dict, replacement=None) -> RemoteItem:
     """Bind repeated UI-download evidence to a previously persisted exact intent.
 
     The adapter must durably save this binding from the actual original upload
@@ -119,7 +119,10 @@ def bind_download_media(request: ProviderRequest, item: RemoteItem, *, binding: 
     if any(binding[key] != value for key, value in expected.items()) or item.native_target != request.native_target:
         raise OutcomeUnknown('download_binding_identity_mismatch')
     if request.existing and (request.existing.native_id != item.native_id or request.existing.native_target != item.native_target):
-        raise OutcomeUnknown('download_binding_identity_mismatch')
+        from .port import NativeReplacement
+        if not isinstance(replacement, NativeReplacement) or not replacement.matches(
+                request.existing,item,action=request.action,provider="max",account_type=request.account_type):
+            raise OutcomeUnknown('download_binding_identity_mismatch')
     observed = downloaded_media(binding['observed_media'])
     source_hashes = tuple(asset.sha256 for asset in request.assets)
     if (item.provider_media or not observed or item.observed_media != observed

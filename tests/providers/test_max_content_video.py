@@ -374,3 +374,26 @@ def test_max_font_semantics_retain_symbols_digits_and_style_gaps():
         assert max_entities(text,e)==e
     assert max_entities('AB',[dict(type='bold',offset=0,length=1),dict(type='bold',offset=1,length=1)])==[dict(type='bold',offset=0,length=2)]
     assert max_entities('A B',[dict(type='bold',offset=0,length=1),dict(type='bold',offset=2,length=1)])==[dict(type='bold',offset=0,length=1),dict(type='bold',offset=2,length=1)]
+
+
+def test_native_reschedule_download_binding_requires_exact_replacement():
+    from adapters.port import ProviderRequest, NativeReplacement
+    from adapters.native import bind_download_media
+    from social_operations.domain import OutcomeUnknown
+    old=RemoteItem('old','scheduled','text','old-fingerprint',timestamp(1800000000),
+        native_target='target',scheduled_at=timestamp(1800003600),observed_media=[download_record()])
+    new=replace(old,native_id='new',scheduled_at=timestamp(1800007200))
+    request=ProviderRequest('op','attempt','plan','connection','max_web','secret','dest','target',
+        'reschedule','post','{"text":"text"}',(),new.scheduled_at,1800000000,existing=old)
+    binding=dict(operation_id='op',attempt_id='attempt',plan_digest='plan',native_target='target',
+        native_id='new',namespace='scheduled',source_hashes=[],observed_media=[download_record()])
+    proof=NativeReplacement('old','new','old-fingerprint','trusted_ui_native_queue_replacement')
+    with pytest.raises(OutcomeUnknown):bind_download_media(request,new,binding=binding)
+    result=bind_download_media(request,new,binding=binding,replacement=proof)
+    assert result.native_id=='new' and result.observed_media==old.observed_media
+    for bad in [replace(proof,previous_fingerprint='wrong'),replace(proof,previous_native_id='wrong'),replace(proof,evidence='text_match')]:
+        with pytest.raises(OutcomeUnknown):bind_download_media(request,new,binding=binding,replacement=bad)
+    with pytest.raises(OutcomeUnknown):
+        bind_download_media(replace(request,action='edit'),new,binding=binding,replacement=proof)
+    with pytest.raises(OutcomeUnknown):
+        bind_download_media(request,replace(new,observed_media=[download_record(sha='e'*64)]),binding=binding,replacement=proof)

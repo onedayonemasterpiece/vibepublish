@@ -339,7 +339,18 @@ class Worker:
         elif remote.namespace != 'published':
             raise OutcomeUnknown('published_namespace_mismatch')
         if plan['existing'] and remote.native_id != plan['existing']['native_id']:
-            raise OutcomeUnknown('lifecycle_identity_changed')
+            from adapters.port import NativeReplacement
+            proof=observation.replacement
+            old=plan['existing']
+            if (not isinstance(proof,NativeReplacement) or plan['provider']!='max' or plan['account_type']!='max_web'
+                    or action!='reschedule' or old['namespace']!='scheduled' or remote.namespace!='scheduled'
+                    or proof.previous_native_id!=old['native_id'] or proof.native_id!=remote.native_id
+                    or proof.previous_fingerprint!=old['fingerprint']
+                    or proof.evidence not in {'trusted_ui_native_queue_replacement','stable_native_correlation'}
+                    or remote.text!=old['text']):
+                raise OutcomeUnknown('lifecycle_identity_changed')
+        elif observation.replacement is not None:
+            raise OutcomeUnknown('unexpected_native_replacement')
         if plan['action'] in ('publish', 'edit', 'reschedule'):
             if remote.text != json.loads(plan['content_json'])['text']:
                 raise OutcomeUnknown('content_readback_mismatch')

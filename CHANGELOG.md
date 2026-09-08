@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added — native scheduled replacement evidence
+
+- Bind MAX reschedule native ID replacements to original fingerprint and exact
+  observed time/content/media without retrying Save or widening other providers.
+
+
 ### Added — guarded no-effect compensation
 
 - Finalization carries the committed observation separately from immutable

@@ -136,12 +136,30 @@ class NoEffectProof:
 
 
 @dataclass(frozen=True, slots=True)
+class NativeReplacement:
+    """Observed provider-native replacement within the same logical lifecycle."""
+    previous_native_id: str
+    native_id: str
+    previous_fingerprint: str
+    evidence: str
+
+    def matches(self, old, new, *, action, provider, account_type):
+        return (provider == 'max' and account_type == 'max_web' and action == 'reschedule'
+            and old.namespace == new.namespace == 'scheduled'
+            and self.previous_native_id == old.native_id and self.native_id == new.native_id
+            and self.previous_fingerprint == old.fingerprint
+            and old.native_target == new.native_target and old.text == new.text
+            and self.evidence in {'trusted_ui_native_queue_replacement', 'stable_native_correlation'})
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     observed: str
     items: tuple[RemoteItem, ...] = ()
     missing_checks: tuple[str, ...] = ()
     forward_origin_matched: bool = False
     no_effect: NoEffectProof | None = None
+    replacement: NativeReplacement | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -130,3 +130,13 @@ Finalization receives the already committed observation from the recovery journa
 without overwriting its immutable original checkpoint. Thus a native ID first
 learned during read-only recovery can be validated during post-commit release;
 no caller-supplied reference or fake scheduled URL is required.
+
+MAX Web may replace a native queued item ID when changing its native time.
+`Observation.replacement` carries typed `NativeReplacement` evidence binding the
+old fingerprint/ID to the new ID. Core accepts this only for MAX Web scheduled
+reschedule, with exact target/content, requested time and unchanged downloaded
+media. Other providers/actions and missing/incorrect proofs retain strict native
+identity checks. Download binding accepts the same explicit proof; it does not
+pretend the old and new native IDs are equal. Logical publication/revision and
+original attempt remain unchanged. Post-commit finalization receives the durable
+replacement observation, including across restart; it never repeats Save.
