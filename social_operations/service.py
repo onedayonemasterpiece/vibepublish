@@ -181,7 +181,7 @@ class Application:
             raise DomainError('too_many_destinations')
         return list(result.values())
 
-    def _media(self, db, actor, items):
+    def _media(self, db, actor, items, *, allow_video=False):
         output = []
         for entry in items:
             if entry['source']['kind'] != 'asset':
@@ -196,10 +196,15 @@ class Application:
             if emoji_origin:
                 self.emojis.catalog(db, actor, emoji_origin['catalog_id'], latest=True)
             role = entry.get('role', 'image')
-            if role not in ('image', 'auto'):
+            if role == 'auto':
+                role = 'video' if row['mime'] == 'video/mp4' else 'image'
+            if role == 'video':
+                if not allow_video or row['mime'] != 'video/mp4':
+                    raise DomainError('media_role_not_enabled')
+            elif role != 'image' or not row['mime'].startswith('image/'):
                 raise DomainError('media_role_not_enabled')
             output.append({'ref': row['id'], 'sha256': row['sha256'], 'mime': row['mime'], 'size': len(row['bytes']),
-                           'role': 'image', 'caption': entry.get('caption', ''), 'alt_text': entry.get('alt_text', '')})
+                           'role': role, 'caption': entry.get('caption', ''), 'alt_text': entry.get('alt_text', '')})
         return output
 
     def _plan(self, db, actor, binding, target, action, existing=None, *, pending_visual=False):
@@ -209,7 +214,7 @@ class Application:
         if target.get('visual') and not pending_visual:
             raise DomainError('visual_requires_visual_service')
         content = target.get('renderings', {}).get(binding['provider'], target.get('content', {'text': ''}))
-        assets = self._media(db, actor, target.get('media', []))
+        assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] == 'max' and binding['account_type'] == 'max_web')
         if binding['account_type'] != 'fake':
             for asset in assets:
                 fixture = db.execute('SELECT fixture FROM visual_asset_origins WHERE asset_id=?', (asset['ref'],)).fetchone()
@@ -328,8 +333,8 @@ class Application:
             raise DomainError('external_media_replace_needs_review', next_action='contact_owner')
         target = {'content': {'text': remote['text']}, 'media': [], 'surface': 'post',
                   'delivery': {'kind': 'at', 'at': remote['scheduled_at']} if remote.get('scheduled_at') else {'kind': 'now'}}
-        if b['provider'] == 'telegram' and remote.get('entities_json', '[]') != '[]':
-            target['content'] = {'text': remote['text'], 'format': 'telegram_entities', 'entities': json.loads(remote['entities_json'])}
+        if (b['provider'] == 'telegram' or (b['provider'] == 'max' and b['account_type'] == 'max_web')) and remote.get('entities_json', '[]') != '[]':
+            target['content'] = {'text': remote['text'], 'format': 'telegram_entities' if b['provider'] == 'telegram' else 'max_entities', 'entities': json.loads(remote['entities_json'])}
         if kind == 'edit':
             target.update({k: v for k, v in change.items() if k != 'kind'})
         elif kind == 'reschedule':
@@ -372,7 +377,7 @@ class Application:
             if kind in ('edit', 'reschedule') and old['action'] == 'forward':
                 raise DomainError('forward_lifecycle_not_enabled', next_action='contact_owner')
             b = self.store.binding(db, actor, binding_id=child['binding_id'])
-            target = {'content': json.loads(old['content_json']), 'media': [{'source': {'kind': 'asset', 'id': a['ref']}, 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']],
+            target = {'content': json.loads(old['content_json']), 'media': [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']],
                       'surface': old['surface'], 'delivery': {'kind': 'at', 'at': old['scheduled_at']} if old['scheduled_at'] else {'kind': 'now'}, 'mode': 'execute'}
             if kind == 'edit':
                 target.update({k: v for k, v in change.items() if k != 'kind'})

@@ -191,6 +191,67 @@ factory-lifetime and standard CLI worker tests; MAX configuration, actual browse
 capability and live acceptance remain in PR #2. The focused core CI includes these
 tests, while the strict full-suite gate remains separate and unchanged.
 
+### Opt-in MAX semantic content and bounded local video
+
+Implementation status: **Not confirmed by user**. This is the shared-core part of
+the active MAX completion task; browser capability and live readback remain PR #2.
+Only a `max` / `max_web` binding enables these additions. Telegram/VK and fake-MAX
+defaults are not widened; unsupported provider content still fails closed.
+
+The existing public semantic `paragraphs` input supports labeled links and
+`bold`, `italic`, `code`, `spoiler` text styles. For example:
+
+```json
+{"content":{"paragraphs":[[{"kind":"text","text":"Important","style":"bold"},{"kind":"link","label":"Details","url":"https://example.org/details"}]]}}
+```
+
+The frozen internal content is `{text, format:"max_entities", entities:[...]}`.
+`social_operations.rich_text.max_content(content_json: str, limit: int)` returns
+`(text, normalized_entities)`, validating UTF-16 offsets/lengths and the caller's
+UTF-16 text limit. Supported internal entity types are `bold`, `italic`, `code`,
+`spoiler`, `text_link`, `url`; link records include `url`. Raw provider entities
+are not accepted as public mutation input. Custom Telegram emoji are not MAX
+entities. Publication verification compares exact normalized entities as well as
+text. Existing-item adoption preserves their native CAS; edits/reschedules preserve
+frozen media roles instead of coercing video to image. A missing style/link in
+provider evidence cannot become verified plain-text success.
+
+The owner CLI adds `vibepublish --db PRIVATE_LEDGER video --file LOCAL_FILE
+--mime video/mp4`, returning a private derivative asset ref. Use that ref in the
+existing media shape `{"source":{"kind":"asset","id":"asset_ref"},"role":"video"}`
+(or `role:"auto"`). `adapters.native.verify_assets(request, *, allow_video=True)`
+is the explicit adapter opt-in; its default still accepts images only. Existing
+PNG/JPEG/WebP ingress is unchanged. MAX adapters must independently qualify their
+actual upload surface and native readback, not infer capability from admission.
+
+Initial ingress accepts only a regular non-symlink local MP4 file, up to 20 MiB,
+one H.264 video stream plus at most one AAC audio stream, duration at most 120
+seconds, and dimensions up to 1920×1080 (portrait orientation allowed). FFmpeg and
+FFprobe must be installed locally. Fixed arguments force the MOV/MP4 demuxer,
+file-only protocol, disabled external data references/absolute track paths, and
+H.264/AAC codec whitelist. Header probing, full decode and metadata-stripping
+container remux are time bounded; the derivative is re-probed for matching
+size/duration/packet counts. Temporary files stay under the private ledger's
+`artifacts/video-processing` directory and are removed, including on failure.
+No source URL or network protocol is accepted, and no shell, browser, credential,
+image-generation call or social action is part of video import.
+
+Original and sanitized derivative bytes remain private owned assets; both count
+against tenant storage and retain original SHA-256 lineage. Source/derivative
+limits and current authority are rechecked before storage. Unsupported codecs,
+corruption, timeout, unavailable tools or quota failure produce explicit errors,
+not a video-to-image fallback. Both CI matrices install FFmpeg as a local fixture
+prerequisite; the mandatory strict full-suite gate is not weakened or skipped.
+
+The command contract follows official [FFprobe options](https://ffmpeg.org/ffprobe.html),
+[protocol whitelist](https://ffmpeg.org/ffmpeg-protocols.html),
+[MOV demuxer data-reference controls](https://ffmpeg.org/ffmpeg-formats.html), and
+[FFmpeg metadata mapping and error options](https://ffmpeg.org/ffmpeg.html).
+`tests/providers/test_max_content_video.py` proves actual local decode/remux and
+CLI ingress, limits, sanitized metadata, provider-default isolation, immutable
+video roles, semantic readback and adoption. Its provider is an offline port
+fixture, not evidence of native MAX video/rich capability.
+
 ### Reads, queue, history and statistics
 
 `vibepublish_read` supports item, dialogs (owner only), feed, stories, scheduled, notifications, audience, editorial_sample, thread, reactions, search, history and analytics.

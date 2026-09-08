@@ -24,11 +24,12 @@ def plain_text(request: ProviderRequest, *, limit: int) -> str:
     return content['text']
 
 
-def verify_assets(request: ProviderRequest) -> None:
+def verify_assets(request: ProviderRequest, *, allow_video: bool = False) -> None:
     if len(request.assets) > 10:
         raise DomainError('provider_media_limit')
     for asset in request.assets:
-        if (asset.role not in {'image', 'auto'} or asset.mime not in {'image/png', 'image/jpeg', 'image/webp'}
+        video = allow_video and asset.role == 'video' and asset.mime == 'video/mp4'
+        if ((not video and (asset.role not in {'image', 'auto'} or asset.mime not in {'image/png', 'image/jpeg', 'image/webp'}))
                 or asset.caption or asset.alt_text):
             raise DomainError('media_rendering_needs_review', next_action='contact_owner')
         if (not 0 < asset.size <= 20 * 1024 * 1024 or len(asset.data) != asset.size

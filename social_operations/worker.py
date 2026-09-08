@@ -302,7 +302,7 @@ class Worker:
         if plan['action'] in ('publish', 'edit', 'reschedule'):
             if remote.text != json.loads(plan['content_json'])['text']:
                 raise OutcomeUnknown('content_readback_mismatch')
-            if plan['provider'] == 'telegram':
+            if plan['provider'] == 'telegram' or (plan['provider'] == 'max' and plan['account_type'] == 'max_web'):
                 from .rich_text import normalized_entities
                 expected = json.loads(plan['content_json']).get('entities', [])
                 actual = normalized_entities(remote.text, json.loads(remote.entities_json))

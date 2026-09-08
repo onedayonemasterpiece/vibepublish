@@ -59,7 +59,7 @@ jobs:
           "$VERIFY_PYTHON" -m pip install --no-deps --no-build-isolation -e .
           "$VERIFY_PYTHON" -m pip check
           "$VERIFY_PYTHON" -m playwright install --with-deps chromium
-          sudo apt-get install -y --no-install-recommends libcairo2 fonts-dejavu-core
+          sudo apt-get install -y --no-install-recommends libcairo2 fonts-dejavu-core ffmpeg
       - name: Real SDK and complete runtime regression - mandatory
         run: |
           "$VERIFY_PYTHON" scripts/verify/telegram_sdk.py > artifacts/verification/core-sdk.json
@@ -99,7 +99,7 @@ jobs:
           python -m pip install --no-deps --no-build-isolation -e .
           python -m pip check
       - name: Offline rendering prerequisites used by runtime fixtures
-        run: sudo apt-get install -y --no-install-recommends libcairo2 fonts-dejavu-core
+        run: sudo apt-get install -y --no-install-recommends libcairo2 fonts-dejavu-core ffmpeg
       - name: Original recovery, authenticated MCP workers and provider compatibility
         run: |
           mkdir -p artifacts/core-recovery

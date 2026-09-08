@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added — MAX-only semantic content and verified video ingress
+
+- Added opt-in MAX semantic styles/links with exact entity verification and
+  immutable edit/adoption preservation; Telegram/VK defaults remain unchanged.
+- Added owner-only bounded local MP4 ingress with actual decode, metadata removal,
+  source lineage, quota checks and preserved video roles; native adapters opt in
+  explicitly. FFmpeg is now a CI fixture prerequisite, not a social capability.
+- Added real local media/CLI and offline plan/readback regressions; native MAX
+  rich/video acceptance remains separately owned in PR #2.
+
 ### Fixed — explicit retries of never-dispatched failures
 
 - `retry_failed` now re-admits selected original blocked attempts only while

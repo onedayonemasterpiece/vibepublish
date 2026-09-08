@@ -25,6 +25,7 @@ def parser():
     partner = sub.add_parser('principal'); partner.add_argument('--tenant', required=True); partner.add_argument('--principal', required=True)
     revoke = sub.add_parser('revoke'); revoke.add_argument('--binding-id', required=True)
     asset = sub.add_parser('image'); asset.add_argument('--file', required=True, type=Path); asset.add_argument('--mime', required=True)
+    video = sub.add_parser('video'); video.add_argument('--file', required=True, type=Path); video.add_argument('--mime', required=True, choices=('video/mp4',))
     backup = sub.add_parser('backup'); backup.add_argument('--output', required=True, type=Path)
     serve = sub.add_parser('serve'); serve.add_argument('--port', type=int, default=8765)
     work = sub.add_parser('worker'); work.add_argument('--once', action='store_true'); work.add_argument('--fake-remote', type=Path)
@@ -98,6 +99,9 @@ def main():
             with args.file.open('rb') as source:
                 data = source.read(20*1024*1024+1)
             print(import_image(store, actor, data, args.mime))
+        elif args.command == 'video':
+            from .video_assets import import_video, read_video_file
+            print(import_video(store, actor, read_video_file(args.file), args.mime))
         elif args.command == 'backup':
             store.backup(args.output)
     except DomainError as exc:

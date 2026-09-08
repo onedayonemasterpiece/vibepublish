@@ -159,9 +159,39 @@ def provider_content(content_json, limit):
     return c['text'], entities
 
 
-def compile_content(content, resolve, rules=(), *, provider='telegram', fallback=False, context=None):
+MAX_ENTITY_TYPES = frozenset({'bold', 'italic', 'code', 'spoiler', 'text_link', 'url'})
+
+
+def max_content(content_json: str, limit: int):
+    """Opt-in MAX semantic content; never widens Telegram/VK validators."""
+    c = json.loads(content_json)
+    if not isinstance(c, dict) or not isinstance(c.get('text'), str):
+        raise DomainError('rich_content_invalid')
+    if c.get('format', 'plain') == 'plain':
+        if set(c) - {'text', 'format'}:
+            raise DomainError('rich_content_invalid')
+        entities = []
+    elif c.get('format') == 'max_entities':
+        if set(c) - {'text', 'format', 'entities'}:
+            raise DomainError('rich_content_invalid')
+        entities = normalized_entities(c['text'], c.get('entities', []))
+        if any(e['type'] not in MAX_ENTITY_TYPES for e in entities):
+            raise DomainError('max_entity_unsupported')
+    else:
+        raise DomainError('rich_content_needs_review')
+    if utf16(c['text']) > limit:
+        raise DomainError('provider_text_limit')
+    return c['text'], entities
+
+
+def compile_content(content, resolve, rules=(), *, provider='telegram', fallback=False, context=None, max_native=False):
     """Return immutable-by-value compilation; frozen internal input is never re-expanded."""
     c = copy.deepcopy(content)
+    if c.get('format') == 'max_entities':
+        if provider != 'max' or not max_native:
+            raise DomainError('rich_content_needs_review')
+        max_content(canonical(c), 32768)
+        return c
     if c.get('format') == 'telegram_entities':
         provider_content(canonical(c), 32768)
         return c
@@ -199,12 +229,12 @@ def compile_content(content, resolve, rules=(), *, provider='telegram', fallback
                 if run['kind'] == 'text':
                     value = run['text']; style = run.get('style', 'normal')
                     if style != 'normal' and value:
-                        if provider != 'telegram':
+                        if provider != 'telegram' and not (provider == 'max' and max_native):
                             raise DomainError('rich_fallback_needs_review')
                         entities.append({'type': style, 'offset': start, 'length': utf16(value)})
                     text += value
                 elif run['kind'] == 'link':
-                    if provider != 'telegram':
+                    if provider != 'telegram' and not (provider == 'max' and max_native):
                         raise DomainError('rich_fallback_needs_review')
                     value = run['label']
                     entities.append({'type': 'text_link', 'offset': start, 'length': utf16(value), 'url': run['url']})
@@ -268,6 +298,10 @@ def compile_content(content, resolve, rules=(), *, provider='telegram', fallback
     entities = normalized_entities(text, entities)
     if not entities and not snapshots:
         return {'text': text}
+    if provider == 'max' and max_native and entities:
+        result = {'text': text, 'format': 'max_entities', 'entities': entities}
+        max_content(canonical(result), 32768)
+        return result
     if provider != 'telegram':
         return {'text': text}  # Explicit semantic fallback, not Telegram alt glyphs.
     return {'text': text, 'format': 'telegram_entities', 'entities': entities,

@@ -131,7 +131,8 @@ class EmojiService:
         self.frozen_access(db, actor, content)
         return compile_content(content, lambda name: self.alias(db, actor, name),
             self.rules(db, actor) if binding['provider'] == 'telegram' else (), provider=binding['provider'],
-            fallback=target.get('emoji_fallback') == 'approved_text', context=target.get('emoji_context'))
+            fallback=target.get('emoji_fallback') == 'approved_text', context=target.get('emoji_context'),
+            max_native=binding['provider'] == 'max' and binding['account_type'] == 'max_web')
 
     def _image(self, db, actor, ident, image):
         used = db.execute('SELECT COALESCE(SUM(length(bytes)),0) FROM assets WHERE tenant_id=?', (actor.tenant_id,)).fetchone()[0]
