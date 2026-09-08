@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fixed: MAX exact reads establish copied native identity before downloading candidate media; duplicate bodies are enumerated once.
+
 - Added: native MAX replies/forwards with exact relationship proof and recovery; duplicate-body reads and handle-bound lifecycle preserve the other native object.
 
 - Added: MAX native social identity/own-reaction evidence, bounded shared-limiter canvas classification, and guarded reaction/recovery implementation (live acceptance in progress).

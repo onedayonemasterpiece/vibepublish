@@ -83,3 +83,18 @@ async def test_detached_readonly_delete_preparation_rebinds_before_single_effect
     result=await d.delete_plain(existing=existing,attempt_id='attempt',plan_digest='plan',hooks=h)
     assert result['item']['id']=='own' and calls==2
     assert len([e for e in state['events'] if e['kind']=='effect'])==1
+
+
+async def test_exact_read_never_downloads_or_projects_an_unrelated_candidate(writer,monkeypatch):
+    d,page,state,h=writer
+    state['messages']=[dict(id='wanted',target='-101',text='Exact wanted',outgoing=True),
+                       dict(id='unrelated',target='-101',text='Unrelated candidate',outgoing=True)]
+    original=d._plain_candidate;projected=[]
+    async def candidate(target,text,row,**kwargs):
+        projected.append(text)
+        assert text=='Exact wanted'
+        return await original(target,text,row,**kwargs)
+    monkeypatch.setattr(d,'_plain_candidate',candidate)
+    assert (await d.read('-101',native_item='wanted'))[0]['id']=='wanted'
+    assert projected==['Exact wanted','Exact wanted']
+    assert not [e for e in state['events'] if e['kind']=='effect']

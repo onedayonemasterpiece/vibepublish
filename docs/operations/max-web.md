@@ -529,3 +529,37 @@ passes on Python 3.12/3.13 (246 tests plus 202 subtests locally). The separate
 full-core verify jobs still fail on the existing missing `adapters.codex_imagegen`
 collection dependency; they are not reported as green. This MAX task does not
 execute image generation or replace that dependency.
+
+A fresh intentional repetition must supply core `repeat_of` plus a new request key;
+a new key alone still replays the same 24-hour semantic intent. The first fresh
+forward harness correctly received its old operation (whose object was already
+deleted), not a new Send. This is not counted as a second live forward. Exact
+item reads now copy identity before projecting/downloading any candidate media,
+and enumerate duplicate bodies once. Unrelated rows never become media evidence
+for a requested native item.
+
+### Fresh social cycles and exact-SHA CI (2026-09-08)
+
+MAX `75b8eb9b9ac560a803b995adea93e29823bbb155` is saved in PR #2.
+Its [exact remote CI](https://github.com/onedayonemasterpiece/vibepublish/actions/runs/34216871824)
+passed **263 MAX tests / 4 missing-core skips**, plus **54 actual-core tests**
+with no missing-core skips. These are separate from live evidence.
+
+The explicit `repeat_of` plain forward then passed forward → exact read → delete
+→ unchanged-source read without recovery. A native **image forward** likewise
+passed all those steps through MCP/worker; its original image remains unchanged.
+Both forwarded copies were removed, not their same-body originals. Native origin
+and source-bound downloaded bytes were verified by the actual core before success.
+
+An MCP own-reaction read hit the shared worker's old 30-second read limit.
+Core now allows native MAX browser reads up to 90 seconds, still capped by the
+command deadline; other providers retain 30 seconds. With that fix, the same
+actual source's explicit empty own-reaction set is verified through MCP. Expiry
+now reports a precise read deadline, not an undifferentiated worker failure.
+The existing add/remove effects remain single guarded UI actions.
+
+Read-budget core dependency: `87be8fcfca1229c419a5e0e47a8d68dacff5ea1f`.
+Local core validation covered 250 tests + 202 subtests: 249 tests passed in the
+full run; the SDK subprocess test initially lacked `PYTHONPATH=.` in the reused
+venv and passed its focused rerun with the correct repository path. No SDK code
+was changed. Exact MAX read/reply/duplicate-body regression: **8 passed**.
