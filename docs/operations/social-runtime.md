@@ -140,3 +140,9 @@ identity checks. Download binding accepts the same explicit proof; it does not
 pretend the old and new native IDs are equal. Logical publication/revision and
 original attempt remain unchanged. Post-commit finalization receives the durable
 replacement observation, including across restart; it never repeats Save.
+
+Cancelled/deleted receipts omit pending-queue navigation/requested-time fields,
+including projection of older committed results retaining a native scheduled
+snapshot. That historical snapshot remains immutable; status serialization does
+not manufacture a new schedule or require a repeated deletion. The regression
+covers both fresh cancellation and legacy nullable requested-time results.

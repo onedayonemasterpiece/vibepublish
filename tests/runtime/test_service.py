@@ -446,5 +446,37 @@ asyncio.run(Worker(s,{'telegram':p}).run_once())
         self.assertEqual(self.result(r)['deliveries'][0]['missing_checks'],['media_readback_mismatch'])
 
 
+    async def test_cancel_retained_native_schedule_is_schema_valid_including_legacy_receipt(self):
+        class RetainedSchedule(FakeProvider):
+            async def execute(self, prepared, hooks):
+                observation=await super().execute(prepared,hooks)
+                if prepared.request.action=='cancel':
+                    old=prepared.request.existing
+                    observation=replace(observation,items=(replace(observation.items[0],
+                        namespace='scheduled',scheduled_at=old.scheduled_at),))
+                return observation
+        provider=RetainedSchedule(self.root/'retained.sqlite','max')
+        worker=Worker(self.store,{'max':provider})
+        first=await self.publish(to=['max'],delivery=self.scheduled())
+        await worker.run_once()
+        cancelled=await self.call('publication_update',{'publication_id':first['resource_id'],
+            'expected_revision':1,'change':{'kind':'cancel'}})
+        await worker.run_once()
+        for legacy in (False,True):
+            if legacy:
+                with self.store.tx() as db:
+                    row=db.execute('SELECT id,result FROM attempts WHERE operation_id=?',(cancelled['operation_id'],)).fetchone()
+                    result=json.loads(row['result']);result.update(requested_at=None,effective_at='2026-09-09T09:30:00Z',queue_ref='old-queue',scheduling_owner='provider')
+                    db.execute('UPDATE attempts SET result=? WHERE id=?',(canonical(result),row['id']))
+            result=await self.call('status',{'ids':[cancelled['operation_id']]})
+            receipt=result['receipts'][0]
+            self.assertEqual(receipt['state'],'cancelled')
+            self.assertTrue(receipt['operation_complete'])
+            delivery=receipt['deliveries'][0]
+            self.assertEqual(delivery['observed'],'cancelled')
+            self.assertNotIn('requested_at',delivery)
+            self.assertNotIn('queue_ref',delivery)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

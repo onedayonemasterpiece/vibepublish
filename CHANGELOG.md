@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed — native cancellation receipts
+
+- Do not serialize a cancelled native snapshot as a pending schedule with null
+  requested time; project old committed cancellation receipts without rewriting history.
+
+
 ### Added — native scheduled replacement evidence
 
 - Bind MAX reschedule native ID replacements to original fingerprint and exact

@@ -267,6 +267,11 @@ class Store:
                           "stage": child["stage"], "observed": child["observed"], "revision": op["revision"],
                           "media_check": "not_applicable", "retry_safe": False}
                 result.update(json.loads(child["result"]))
+                if child['observed'] in ('cancelled', 'deleted'):
+                    # Older committed native snapshots retained their original
+                    # schedule. A terminal removal is not a pending queue receipt.
+                    for key in ('queue_ref','effective_at','requested_at','scheduling_owner','navigate_hint'):
+                        result.pop(key, None)
                 deliveries.append(result)
             state = op["state"]
             next_action = ("review_outcome" if state == "outcome_unknown" else "approve" if state == "needs_approval"
