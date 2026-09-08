@@ -9,4 +9,3 @@ pytest>=8.1.1
 pytest-asyncio>=0.23.6
 playwright>=1.41.0
 
-regex>=2025.9.1
