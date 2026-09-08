@@ -2,7 +2,7 @@
 
 Updated: 2026-09-08. Branch: `work/vibepublish-max-web-20260904`, [PR #2](https://github.com/onedayonemasterpiece/vibepublish/pull/2).
 
-**Status:** Implementation Not done. Product target and current owner instructions are in [MAX product completion for Codex](../handoffs/max-product-completion-codex-20260908.md). That document supersedes older MAX/recovery handoffs as an execution instruction.
+**Status:** Product acceptance passed internally / Not confirmed by user. Product target and current owner instructions are in [MAX product completion for Codex](../handoffs/max-product-completion-codex-20260908.md). That document supersedes older MAX/recovery handoffs as an execution instruction.
 
 ## Product target
 
@@ -25,7 +25,7 @@ A green fixture suite is evidence, not acceptance. Live acceptance is required i
 PR #2 already contains substantial MAX work: real session/navigation/read paths, `RealMaxDriver`, browser regressions, crash/reconcile qualification, exact native-reference handling, scoped Gemini Lite visual assistance, and actual-core integration tests. Treat these as assets to continue, not as completion.
 
 The independently implemented shared-core recovery/finalization is now available in
-PR #1 (`f34ad34caf342966239209a171ef58b06b3bc201`). The MAX bridge accepts
+PR #1 (current required core: `87be8fcfca1229c419a5e0e47a8d68dacff5ea1f`). The MAX bridge accepts
 core-admitted immutable original-attempt evidence and releases only its matching
 profile fuse after durable core resolution. Missing/different admission never
 turns an observation-only recovery into a mutation or release.
@@ -49,7 +49,7 @@ Live evidence in the authorized Test Group (2026-09-08 local time):
   group heading is `Редактирование сообщения`, not the channel's heading; this is
   now replay-tested. A fresh exact `item_ref` was adopted through the public API
   for the successful edit after that pre-effect failure; no second Send occurred.
-- Media/native-scheduled/social completion is NOT claimed by these results.
+- This initial plain-text evidence is historical; the completed matrix below is current.
 
 Production wiring is explicit `existing_session(..., live_writes=True)` into the
 same `MaxAdapter`; no second driver, auth path, direct MAX API or local scheduler.
@@ -61,8 +61,9 @@ confirmation. The exact connected-row removal is persisted before fresh absence
 checks; absence alone cannot authorize deletion recovery or finalization.
 
 The dated acceptance entries below supersede this initial plain-text checkpoint.
-Remaining work is the full final matrix, fresh social cycles and controlled live
-failure/restart qualification; do not relabel completed media/scheduled checks as absent.
+The final matrix, fresh social cycles and controlled live failure/restart
+qualification are now complete; the older dated paragraphs record how defects
+were found and resolved, not outstanding acceptance work.
 
 Fresh-read actual PR HEAD/code/CI before changing anything; historical SHA values in old comments are checkpoints only.
 
@@ -155,25 +156,76 @@ Rules:
 
 A successful Gemini read is not product completion; continue to terminal operation resolution and lifecycle acceptance.
 
-## Acceptance matrix
+## Acceptance matrix — completed 2026-09-08 UTC
 
-Before declaring MAX ready, obtain real evidence through the normal MCP/worker path for at least:
+All effects below used **actual MCP ClientSession → application → worker → actual
+ProviderAdapter → RealMaxDriver → authorized MAX Web**. This table supersedes
+historical “in progress / Not done” checkpoint wording further below. Status is
+**Not confirmed by user**, as required by repository governance; no user sign-off
+is inferred from internal acceptance.
 
-| Case | Required proof |
+| Required case | Actual result and cleanup |
 |---|---|
-| plain publish | one native effect, exact readback |
-| media publish | exact media/content readback |
-| edit | same native object, new text, media preserved |
-| delete | exact own object absent after deletion |
-| native schedule | queued natively with exact timestamp |
-| reschedule | same own scheduled object/content/media, new timestamp |
-| cancel | exact own scheduled object removed |
-| native output | scheduled effect occurs while VibePublish is stopped |
-| crash after effect | restart resolves the same operation with no duplicate mutation |
-| original stuck operation | old object rebound to original attempt, terminally resolved and cleaned up |
-| supported reply/reaction/forward | native readback proving the supported operation |
+| Ordinary text | Publish → exact read → edit → exact read → delete, same native object |
+| Links / supported formatting | Fresh bold, italic, labeled-link and boundary/interior Unicode emoji cycles; native entities and target URLs read back; deleted |
+| One image | Captioned image publish/read/edit/read/delete; downloaded media identity unchanged by edit |
+| Album | Two-image publish/read/edit/read/delete; both downloaded media identities retained |
+| Video | Fresh MP4 publish/read/edit/read/delete without recovery; same video evidence |
+| Exact native reading | Copied native reference, including disambiguation of identical source/forward bodies; no positional chat or item identity |
+| Native schedule/read | Image queued by MAX itself, exact native object/time/media read back |
+| Native reschedule | Fresh cycle changed **2026-09-09 11:19 → 12:19 UTC**, preserved exact text/downloaded image; read back and cancelled without recovery |
+| Queued edit/cancel | Own queued image edited with original native ID, time and media preserved, then cancelled |
+| Native output with services stopped | MCP server/worker stopped **08:35:03 UTC**; independent **08:37:47** witness found zero publisher/browser processes; MAX published the image at **08:38**; exact later MCP read proved its bytes; now deleted |
+| Reply | Native reply → exact read → edit → exact read → delete; native REPLY source relationship verified |
+| Reaction | One native add and one remove; explicit own-state evidence. MCP `read(kind=reactions)` verified the empty set after removal; no missing metadata treated as empty |
+| Forward | Fresh native plain and image forwards → exact read → delete copy → unchanged-source read. Native source relationship and downloaded bytes verified, not re-uploaded copies |
+| Original stuck operation | Same original attempt reconciled through core; no repeat Send; normal finalization and same-object cleanup |
+| Controlled worker interruption | Actual worker stopped after durable native-reference checkpoint and **one trusted Send**; ordinary lease expired; new standard worker automatically reconciled the original operation/attempt, then exact read/delete completed |
+| Both authorized real channels | Own images queued two days ahead in **Ух ты, Калининград!** and **Полюбить Калининград Анонсы**, exact native reads, then verified cancellations; no immediate channel publication or changes to pre-existing queued posts |
 
-If MAX does not expose a listed capability for the tested surface, record live capability evidence and continue the rest.
+The cancelled receipt's terminal state is `cancelled`, not `verified`; both mean
+completed only when the actual observation and `operation_complete` agree.
+The first channel harness initially asserted only verified/scheduled and stopped
+after an already-successful cancellation; it did not repeat that effect.
+
+Final read-only ledger/profile audit after cleanup: **0 unresolved dispatched
+attempts, 0 pending finalizations, no MAX quarantine marker, no browser-owner
+lock**. Remaining source text/native-output image used by social tests were
+also deleted through MCP. The authorized profile is retained; no logout, QR,
+credential/session copying, deployment or image generation was performed.
+
+### Observed platform limitation
+
+An own **native forwarded group message has no Edit action** in actual MAX Web.
+The MAX capability reports unsupported for that object type; the shared existing
+forward lifecycle gate may reject the update earlier. Ordinary messages, images,
+albums, video and replies have verified editing. Do not hide this limitation by
+silently replacing a native forward with a copied/re-uploaded editable post.
+
+### Saved code and verification
+
+- Shared core PR #1: **`87be8fcfca1229c419a5e0e47a8d68dacff5ea1f`**.
+  [Exact core CI](https://github.com/onedayonemasterpiece/vibepublish/actions/runs/34218383901):
+  **250 tests + 202 subtests**, Python 3.12 and 3.13, relevant core jobs green.
+- MAX implementation PR #2: **`8f85629216f59424e7c16ec0cb3f2e6bfaeeb076`**.
+  [Exact MAX CI](https://github.com/onedayonemasterpiece/vibepublish/actions/runs/34219266338):
+  **269 MAX tests passed / 4 explicit missing-core skips**, plus **54 pinned
+  actual-core tests passed with no missing-core skips**. Later acceptance-only
+  documentation commits do not replace these implementation evidence boundaries.
+- Local assembled integration remains distinct from remote MAX-only CI: the
+  actual core port/worker is assembled locally and pinned independently in CI,
+  never copied into the MAX PR. Local broader reply/forward/core run: **134 passed**;
+  focused channel/group menu/cancellation: **8 passed**.
+- Full-core `verify` jobs remain red on the pre-existing missing
+  `adapters.codex_imagegen` collection dependency. The MAX and relevant shared-core
+  jobs above are green; this is **not** a claim of globally green core CI, a
+  VisualService rewrite, or permission to deploy.
+- Private receipts, UI evidence and test harnesses remain under
+  `artifacts/codex/max-product-20260908/`, not in Git. Key audit files:
+  `controlled-stop-public-proof.json`, `final-ledger-profile-audit.json`,
+  `native-output-stop-witness.json`, `fresh-reschedule-*-status.json`,
+  `channel-native-*-status.json`. Git contains sanitized observed-DOM regressions,
+  not browser auth data or private channel content.
 
 ## Tests and evidence
 
@@ -579,7 +631,7 @@ Test Group exposes **Отправить позже**. One shared MAX helper choo
 surface-specific label; neither path left-clicks immediate Send. The read-only
 probe used its own temporary composer text, then cleared only that text; existing
 drafts would have been preserved. Offline channel/group cancel and menu regression:
-**8 passed**. Live own queued-image acceptance is running through standard MCP.
+**8 passed**. Live own queued-image acceptance completed through standard MCP in both channels.
 
 Controlled live worker interruption also completed: the acceptance injector
 awaited the real durable `MAX_NATIVE_REFERENCE` checkpoint after one Send, then
