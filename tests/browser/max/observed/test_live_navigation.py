@@ -102,8 +102,10 @@ async def test_recipe_manifest_and_fixture_are_mandatory():
     assert manifest['recipe']==RECIPE
     assert manifest['not_covered']
     assert 'data-target=' not in HTML and 'data-account=' not in HTML
-    # The sole non-loopback literal is copied text, never a request URL.
-    assert HTML.count('https://') == 1
+    # Non-loopback literals are copied references and an observed link-dialog
+    # placeholder, never request URLs. The writer route also rejects all egress.
+    assert HTML.count('https://') == 2
+    assert 'placeholder="https://max.ru"' in HTML
     assert "const ref='https://max.ru/c/'" in HTML
 
 async def test_observed_title_whitespace_not_an_identity_change(replay):

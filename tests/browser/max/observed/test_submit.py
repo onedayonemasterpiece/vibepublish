@@ -23,6 +23,8 @@ async def writer(tmp_path):
                  orders=['-101', '-202', '-303'], checks=0)
     origin = 'http://127.0.0.1:18766'
     async with async_playwright() as pw:
+        from adapters.max.rich import register
+        await register(pw.selectors)
         browser = await pw.chromium.launch()
         context = await browser.new_context(service_workers='block')
         await context.grant_permissions(['clipboard-read', 'clipboard-write'])
@@ -41,9 +43,10 @@ async def writer(tmp_path):
                         matches=[m for m in state['messages'] if m['id']==event['existing'] and m.get('target')==event['target']]
                         assert len(matches)==1
                         matches[0]['text']=event['text']
+                        matches[0]['html']=event.get('html',event['text'])
                         if state['fault']=='replace_edit': matches[0]['id']='replacement'
                     else:
-                        message = dict(id='provider-item', target=event['target'], text=event['text'], outgoing=True)
+                        message = dict(id='provider-item', target=event['target'], text=event['text'], html=event.get('html',event['text']), outgoing=True)
                         if event.get('media'):message['media']=[('https://maxvd.example.okcdn.ru/replay/'+str(i)+'.mp4') if name.endswith('.mp4') else ('https://i.oneme.ru/replay/'+str(i)+'.png') for i,name in enumerate(event['media'])]
                         if state['fault'] == 'foreign': message['outgoing'] = False
                         state['messages'].append(message)
@@ -74,7 +77,7 @@ async def writer(tmp_path):
             driver = RealMaxDriver(page, lane, origin=origin, account_check=account,
                 targets=(Target('-101','Test Group','test_group'),
                          Target('-202','Channel A','scheduled_only'),
-                         Target('-303','Channel B','scheduled_only')), timeout=10)
+                         Target('-303','Channel B','scheduled_only')), timeout=10, semantic_selectors=True)
             async def checkpoint(name, raw):
                 if state.get('fail_checkpoint') == name: raise RuntimeError('fixture DB refusal')
                 data = json.loads(raw)

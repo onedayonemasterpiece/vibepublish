@@ -2,7 +2,20 @@
 
 ## [Unreleased]
 
+### Added — native queue lifecycle evidence
+
+- Read native scheduled IDs/time through passively correlated owned-browser
+  history replies; guarded image scheduling and media-preserving reschedule.
+- Recover native ID replacement without repeating Save; retain original attempt
+  and release quarantine only through committed core finalization.
+- Handle native dialog roles and distinct group/channel queue headings.
+
+
 ### Fixed
+- MAX rich DOM evidence preserves Unicode raster emoji and exact labeled links;
+  boundary-emoji font spans use the shared core MAX-only visual semantics.
+- Native queue evidence correlates only UI-issued delayed-history requests and
+  their replies; native IDs/times are checked against two fresh visible queues.
 - MAX native image lifecycle binds verified UI downloads instead of rotating CDN
   URLs; caption context menus, lazy media/history readiness and conditional menu
   dismissal preserve exact read/edit/delete. Actual MCP image recovery, edit,
@@ -25,6 +38,9 @@
   recovery path; this still does not constitute full lifecycle acceptance.
 
 ### Added
+- Real MAX bold/italic/labeled-link lifecycle and Unicode raster-emoji DOM
+  projection, semantic row rebinding and stable last-input guards; exact native
+  reference remains identity. Safe core retry resumes pre-dispatch failures.
 - Observed MAX video chooser/readback with durable copied reference, native video
   downloads and shared bounded decoder; direct tile identity excludes nested
   player controls. Live same-object recovery/read/edit/delete retains video bytes.

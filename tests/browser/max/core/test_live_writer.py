@@ -156,3 +156,31 @@ async def test_video_bridge_downloads_exact_native_tile_not_nested_controls(writ
         core_recovery=dict(operation_id=current.operation_id,attempt_id=current.attempt_id,plan_digest=current.plan_digest)))
     await adapter.finalize(current,final,h)
     assert not d.lane.marker.exists()
+
+
+@pytest.mark.parametrize('raster',[False,True])
+async def test_rich_production_bridge_exact_entities_and_plain_edit(writer,raster):
+    from dataclasses import replace
+    from social_operations.rich_text import compile_content, max_content, normalized_entities
+    d,page,state,h=writer
+    d.live_writes=True
+    adapter=MaxAdapter(d,connection_id='max')
+    if raster:await page.add_init_script('window.REPLAY_RASTER_EMOJI=true')
+    content=compile_content({'paragraphs':[[{'kind':'text','text':'😀 Bold','style':'bold'},
+        {'kind':'text','text':' italic','style':'italic'},{'kind':'text','text':' '},
+        {'kind':'link','label':'Exact link','url':'https://example.com/owned'}]]},lambda _:None,provider='max',max_native=True)
+    request=ProviderRequest('op','attempt','plan','max','max_web','VIBEPUBLISH_MAX_PROFILE',
+        'destination','-101','publish','post',json.dumps(content),(),None,time.time()+300)
+    result=await adapter.execute(await adapter.prepare(request,h),h)
+    item=result.items[0]
+    assert normalized_entities(item.text,json.loads(item.entities_json))==max_content(request.content_json,4000)[1]
+    assert len(effects(state))==1
+    latest=state['checkpoints'][-1][1]
+    await adapter.finalize(request,json.dumps(dict(remote=asdict(item),original_checkpoint=latest,
+        core_recovery=dict(operation_id='op',attempt_id='attempt',plan_digest='plan'))),h)
+    state['expected_dispatch']=('attempt-2','plan-2')
+    edit=replace(request,operation_id='op-2',attempt_id='attempt-2',plan_digest='plan-2',action='edit',
+        content_json=json.dumps({'text':'Edited plain text'}),existing=item)
+    result=await adapter.execute(await adapter.prepare(edit,h),h)
+    assert result.items[0].native_id==item.native_id and result.items[0].entities_json=='[]'
+    assert len(effects(state))==2

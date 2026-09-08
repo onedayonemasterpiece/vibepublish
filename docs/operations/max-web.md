@@ -254,7 +254,7 @@ own live checks. Requires the additive typed-download/read projection in PR #1.
 
 
 The additional **MAX with pinned actual core** CI job assembles only the MAX
-adapter/tests onto exact core `593da8363df50d017ef5b1a44cd21543da4e87c5`
+adapter/tests onto exact core `7deab3e92b3f97330b0fface39656980ed3332c1`
 from existing PR #1, and requires the genuine MCP/worker suites without missing-core
 skips. It does not merge or vendor core into PR #2. The original MAX-only job
 remains separate. Both jobs use offline provider replays, not live browser access.
@@ -284,6 +284,83 @@ Actual MCP/standard worker: original video publish was recovered read-only after
 the initial missing-video-reader result, without another Send. Exact read → edit
 → exact read with identical video evidence → same-object delete then all reached
 verified/complete. Private `video-*-status.json` receipts are in the same task
-artifact directory. This does not claim a fresh no-recovery video acceptance yet.
+artifact directory. A subsequent fresh video also completed publish → read → edit → read → delete
+without any recovery command; all five receipts were verified/complete. Runtime
+driver blob matched remote commit `346dff0b898b9cd4ef70811e1262915122189c11`.
 Offline MP4 replay uses a small locally generated geometric clip, not private
 MAX media. Video verification requires the shared core and ffmpeg/ffprobe.
+
+
+### Formatted text and Unicode DOM projection (2026-09-08)
+
+The real editor exposes Ctrl+B, Ctrl+I and Ctrl+K; the observed link dialog is
+**Ссылка**, input placeholder `https://max.ru`, **Добавить**. Ctrl+Backslash
+(**Обычный**) removes old styles and links before an edit. These are ordinary
+keyboard/dialog interactions, not Lexical editor-state or internal API calls.
+
+MAX converts ordinary Unicode emoji into non-editable raster DOM decorators:
+`textContent` omits their glyphs and includes loader whitespace. The shared MAX
+DOM projection reads the observed `data-lexical-emoji`/emoji image alternative,
+uses UTF-16 DOM ranges around whole decorators, and applies core MAX-only font
+semantics: exclude neutral emoji-presentation graphemes from bold/italic while
+retaining exact text and link spans/URLs. Adjacent same-style text spans coalesce.
+Boundary emoji and neutral interior glyphs have regressions; no font weight is
+asserted on raster emoji pixels. Telegram/VK semantics remain unchanged.
+A registered Playwright semantic selector re-evaluates actual DOM content; it
+never adds DOM IDs/attributes, and is not provider identity. Native identity
+still comes exclusively from the copied MAX reference. Emoji images in captions
+are not attachments. Last-input guards use stable semantic projections rather
+than loader-dependent HTML.
+
+Actual MCP/worker: a first rich attempt was blocked **before dispatch** by the
+missing emoji projection. The original operation was safely re-admitted through
+core `retry_failed` (not a new publish key). Publish → exact read → formatted
+edit (including a new link URL) → exact read → same-object delete all subsequently
+verified/complete. Unicode text, bold/italic UTF-16 spans and exact labeled link
+URLs were present in the real MCP read projections. Private `rich-*-status.json`
+receipts remain task artifacts. Only bold, italic and labeled-link recipes are
+currently qualified; other rich recipes remain explicitly unqualified rather
+than silently stripped. Native scheduling and social acceptance remain active.
+
+### Native queue evidence implementation (2026-09-08, acceptance in progress)
+
+The queue has no DOM item ID or copy-link menu. It is now read through normal
+MAX Web UI, passively correlating history response opcode 49 to the browser's
+original request by owned page/socket/sequence, exact chatId and itemType DELAYED.
+Opcode 71 is **not** a queue list (it reads selected feed items); it is ignored.
+Only the factory's own UI/account pages are observed; no recovered tab, auth
+frame, app store, direct MAX request or traffic mutation is used. Received
+native IDs/times are cross-checked against exact visible content/time and a
+second independent page-load/queue response. A full response page is not treated
+as a complete queue. Read-only live qualification matched four native queued
+objects twice on an authorized channel with zero social effects.
+
+Fresh boundary-emoji rich lifecycle also passed through MCP/native worker:
+publish → exact read → formatted edit → exact read → delete, all verified and
+complete. The same native object was deleted; this cycle needed no recovery.
+Core MAX font projection is in PR #1; Telegram/VK comparisons are unchanged.
+Native schedule publication, media-preserving changes/cancel and social cases
+remain under active acceptance; this section is not full product closure.
+
+Actual MCP/native worker scheduled an image once, then recovered its exact
+native queue ID/time/media without another Send. A pre-existing unversioned v0
+attempt was separately cancelled by checkpoint-bound proof that its explicit-role
+DIALOG guard made input unreachable, not by treating absence as publication.
+Core preserves historical dispatch and finalizes compensation durably.
+
+Actual reschedule changed the scheduled native item ID while retaining exact
+text/image bytes and moving the native time by two hours. The original operation
+was resolved read-only through MCP/worker as scheduled/complete; no repeated Save,
+no manual database write or fuse removal. Recovery requires the persisted trusted
+Save (or pre/post native correlation), a unique native queue replacement and two
+fresh exact time/content/download checks. Typed core replacement evidence keeps
+logical publication/attempt lineage and post-commit finalization releases only
+that attempt. Missing or ambiguous evidence does not authorize another effect.
+
+Native `<dialog>` has an implicit ARIA role: last-input guards must include the
+native tag, not only `[role=dialog]`. Group queue heading is **Отложенные сообщения**,
+not the channel heading. These observed distinctions have offline regressions.
+The shared dependency pin now includes native replacement/no-effect/finalization
+support. Local core validation: 233 tests + 202 subtests; focused replacement
+algorithm 5 tests. Broader MAX replay regression is running separately; native
+cancel/edit/output and social acceptance remain **Not done**.

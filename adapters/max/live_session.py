@@ -59,6 +59,8 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                 out.flush()
                 os.fsync(out.fileno())
             async with async_playwright() as pw:
+                from .rich import register
+                await register(pw.selectors)
                 try:
                     context = await pw.chromium.launch_persistent_context(str(profile),
                         executable_path=str(executable), headless=True, locale='ru-RU', timezone_id='Europe/Moscow')
@@ -74,7 +76,7 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                         field = identity_page.locator('aside .phone')
                         await field.wait_for(timeout=10000)
                         return await field.inner_text() == phone
-                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery, live_writes=live_writes)
+                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery, live_writes=live_writes, semantic_selectors=True, evidence_pages=(page,identity_page))
                 finally:
                     await context.close()
         finally:

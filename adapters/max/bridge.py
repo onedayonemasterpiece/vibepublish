@@ -48,6 +48,15 @@ class MaxAdapter:
         if request.connection_id != self.connection_id or request.native_target not in self.driver.targets:
             raise DomainError('max_connection_or_target_denied')
 
+    def _content(self, request):
+        if self.live_enabled:
+            from social_operations.rich_text import max_content
+            return max_content(request.content_json,4000)
+        return plain_text(request,limit=4000), []
+
+    def _text(self, request):
+        return self._content(request)[0]
+
     def _validate(self, request: ProviderRequest, *, check_time=True):
         self._binding(request)
         if self.recovery_only:
@@ -66,7 +75,11 @@ class MaxAdapter:
             raise DomainError('max_action_unsupported')
         if request.surface not in {'post', 'album'}:
             raise DomainError('max_surface_unsupported')
-        text = plain_text(request, limit=4000)
+        text = self._text(request)
+        if self.live_enabled:
+            from .rich import QUALIFIED
+            if any(e['type'] not in QUALIFIED for e in self._content(request)[1]):
+                raise DomainError('max_rich_recipe_not_qualified')
         verify_assets(request, allow_video=self.live_enabled)
         if any(a.mime not in ({'image/png', 'image/jpeg', 'video/mp4'} if self.live_enabled else {'image/png', 'image/jpeg'}) for a in request.assets):
             raise DomainError('max_media_unsupported')
@@ -111,9 +124,10 @@ class MaxAdapter:
     def _existing(remote):
         if remote is None:
             return None
+        from social_operations.rich_text import max_entities
         item = dict(id=remote.native_id, target=remote.native_target,
                     namespace='feed' if remote.namespace == 'published' else remote.namespace, url=remote.url,
-                    text=remote.text, media=list(remote.provider_media), observed_media=[asdict(x) for x in getattr(remote,'observed_media',())], scheduled_at=remote.scheduled_at)
+                    text=remote.text, entities=max_entities(remote.text,json.loads(remote.entities_json)), media=list(remote.provider_media), observed_media=[asdict(x) for x in getattr(remote,'observed_media',())], scheduled_at=remote.scheduled_at)
         return dict(item, fingerprint=fingerprint(item))
 
     @staticmethod
@@ -121,14 +135,16 @@ class MaxAdapter:
         remote = RemoteItem(native_id=item['id'], namespace='published' if item['namespace'] == 'feed' else item['namespace'],
                             native_target=item['target'], text=item['text'], fingerprint='', observed_at=item['observed_at'],
                             scheduled_at=item['scheduled_at'], provider_media=tuple(item['media']),
-                            url=item.get('url'), member_ids=tuple(item.get('member_ids',(item['id'],))), **({'observed_media':tuple(item['observed_media'])} if item.get('observed_media') else {}), media_check='download_binding' if item.get('observed_media') else 'provider_identity_only' if item['media'] else 'not_applicable')
+                            url=item.get('url'), entities_json=json.dumps(item.get('entities',[])), member_ids=tuple(item.get('member_ids',(item['id'],))), **({'observed_media':tuple(item['observed_media'])} if item.get('observed_media') else {}), media_check='download_binding' if item.get('observed_media') else 'provider_identity_only' if item['media'] else 'not_applicable')
         return replace(remote, fingerprint=identity(remote))
 
     def _state(self, request, checkpoint):
         state = load_checkpoint(request, checkpoint).get('driver')
+        from social_operations.rich_text import max_entities
         try:
             kind = ('feed' if request.existing.namespace == 'published' else request.existing.namespace) if request.existing else ('scheduled' if request.scheduled_at else 'feed')
-            if (state['target'] != request.native_target or state['text'] != plain_text(request, limit=4000)
+            if (state['target'] != request.native_target or state['text'] != self._text(request)
+                    or max_entities(state['text'],state.get('entities',[])) != self._content(request)[1]
                     or state['action'] != request.action or state['scheduled_at'] != request.scheduled_at
                     or state['kind'] != kind or state.get('media_slots',len(state['media'])) != (len(request.assets) if request.assets else (len(getattr(request.existing,'observed_media',())) or len(request.existing.provider_media)) if request.existing else 0)
                     or state['existing_id'] != (request.existing.native_id if request.existing else None)):
@@ -143,15 +159,23 @@ class MaxAdapter:
         item = self._remote(items[0])
         if item.native_target != request.native_target:
             raise OutcomeUnknown('max_wrong_target_readback')
+        replacement = None
+        if request.existing and item.native_id != request.existing.native_id:
+            from adapters.port import NativeReplacement
+            evidence = state.get('replacement_evidence')
+            if request.action != 'reschedule' or evidence not in {'trusted_ui_native_queue_replacement', 'stable_native_correlation'}:
+                raise OutcomeUnknown('max_native_replacement_unproven')
+            replacement = NativeReplacement(request.existing.native_id, item.native_id,
+                request.existing.fingerprint, evidence)
         # These SHA values describe the validated INPUT assets bound to observed
         # upload IDs, never hashes calculated from transcoded provider bytes.
         if getattr(item,'observed_media',()):
             from adapters.native import bind_download_media
-            item=bind_download_media(request,item,binding=state['download_binding'])
+            item=bind_download_media(request,item,binding=state['download_binding'],replacement=replacement)
         else:
             item = bind_media(request, item, state['media'])
         observed = 'deleted' if request.action == 'delete' else 'cancelled' if request.action == 'cancel' else 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
-        return Observation(observed, (item,))
+        return Observation(observed, (item,), replacement=replacement)
 
     @staticmethod
     def _download_binding(request,state):
@@ -203,6 +227,7 @@ class MaxAdapter:
                 scheduled_at=request.scheduled_at, action=request.action,
                 attempt_id=request.attempt_id, plan_digest=request.plan_digest,
                 existing=self._existing(request.existing),
+                **({'entities':self._content(request)[1]} if self.live_enabled else {}),
                 hooks=Hooks(progress, checkpoint, hooks.before_effect))
             return self._observation(request, items, state)
         except MaxBlocked as exc:
@@ -218,6 +243,24 @@ class MaxAdapter:
         if self.live_enabled:
             envelope = json.loads(checkpoint)
             admitted = envelope.get('core_recovery', {})
+            if state['kind']=='scheduled':
+                if any(admitted.get(k)!=v for k,v in {
+                    'operation_id':request.operation_id,'attempt_id':request.attempt_id,
+                    'plan_digest':request.plan_digest}.items()):
+                    raise OutcomeUnknown('max_core_recovery_binding_mismatch')
+                from .queue import legacy_unreachable_guard
+                evidence=await legacy_unreachable_guard(self.driver,state)
+                if evidence is not None:
+                    from adapters.port import NoEffectProof
+                    original={k:v for k,v in envelope.items() if k!='core_recovery'}
+                    return Observation('not_attempted',no_effect=NoEffectProof(
+                        digest(original),'trusted_preinput_guard',canonical(evidence)))
+                try:result=await self.driver.reconcile(state)
+                except MaxBlocked as exc:raise OutcomeUnknown('max_'+str(exc)) from None
+                state=self._download_binding(request,result['state'])
+                self._state(request,saved_checkpoint(request,driver=state))
+                await hooks.checkpoint('MAX_RECONCILED',saved_checkpoint(request,driver=state))
+                return self._observation(request,[result['item']],state)
             reference = state.get('recovery_reference') or admitted.get('native_reference')
             if not reference:
                 raise OutcomeUnknown('max_native_reference_required')
@@ -281,7 +324,7 @@ class MaxAdapter:
                 'plan_digest': request.plan_digest,
                 'native_reference': self.recovery.native_reference}.items()):
             raise OutcomeUnknown('max_core_recovery_binding_mismatch')
-        text = plain_text(request, limit=4000)
+        text = self._text(request)
         marker = self.recovery.task_marker
         if len(marker) != 32 or any(c not in '0123456789abcdef' for c in marker) or text.count(marker) != 1:
             raise OutcomeUnknown('max_original_marked_intent_required')
@@ -292,6 +335,22 @@ class MaxAdapter:
             return
         self._validate(request, check_time=False)
         envelope = json.loads(checkpoint)
+        if envelope.get('no_effect') is not None:
+            proof=envelope['no_effect'];original=envelope.get('original_checkpoint')
+            state=self._state(request,canonical(original))
+            admitted=envelope.get('core_recovery',{})
+            if (proof.get('reason')!='trusted_preinput_guard' or proof.get('checkpoint_sha256')!=digest(original)
+                    or any(admitted.get(k)!=v for k,v in {'operation_id':request.operation_id,
+                        'attempt_id':request.attempt_id,'plan_digest':request.plan_digest}.items())):
+                raise OutcomeUnknown('max_no_effect_finalize_binding')
+            self.driver._enter(request.native_target)
+            try:
+                import os
+                if os.path.lexists(self.driver.lane.marker):
+                    self.driver._check_attempt_fuse(request.attempt_id,request.plan_digest)
+                    self.driver.lane.resolve_observed()
+            finally:self.driver._busy=False
+            return
         remote = envelope.get('remote', {})
         admitted = envelope.get('core_recovery', {})
         if self.recovery_only:
@@ -310,10 +369,22 @@ class MaxAdapter:
                 raise OutcomeUnknown('max_terminal_download_mismatch')
             if all(x is not None for x in original_state['media']) and remote.get('provider_media',[]) != original_state['media']:
                 raise OutcomeUnknown('max_terminal_media_mismatch')
-        if (not expected_reference or remote.get('url') != expected_reference
-                or remote.get('native_target') != request.native_target
-                or remote.get('text') != plain_text(request, limit=4000)
-                or remote.get('namespace') != 'published'):
+        if not self.recovery_only and original_state['kind']=='scheduled':
+            native=original_state.get('native_id')
+            committed=envelope.get('committed_observation',{})
+            recovered_exact=(committed.get('items')==[remote] and committed.get('observed')=='provider_scheduled')
+            replacement=committed.get('replacement') or {}
+            replaced=(recovered_exact and request.action=='reschedule' and request.existing is not None
+                and replacement.get('previous_native_id')==request.existing.native_id
+                and replacement.get('native_id')==remote.get('native_id')
+                and replacement.get('previous_fingerprint')==request.existing.fingerprint
+                and replacement.get('evidence') in {'trusted_ui_native_queue_replacement','stable_native_correlation'})
+            exact=(((remote.get('native_id')==native or replaced) if native is not None else recovered_exact)
+                and remote.get('namespace')=='scheduled' and remote.get('scheduled_at')==request.scheduled_at
+                and remote.get('url') is None)
+        else:
+            exact=(bool(expected_reference) and remote.get('url')==expected_reference and remote.get('namespace')=='published')
+        if (not exact or remote.get('native_target')!=request.native_target or remote.get('text')!=self._text(request)):
             raise OutcomeUnknown('max_terminal_receipt_mismatch')
         self.driver._enter(request.native_target)
         try:
