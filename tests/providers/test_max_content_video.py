@@ -224,3 +224,102 @@ def test_owner_video_cli_imports_verified_asset(tmp_path,video_bytes,monkeypatch
     with store.connection() as db:
         row=db.execute('SELECT mime,source_sha256 FROM assets WHERE id=?',(ref,)).fetchone()
         assert tuple(row)==('video/mp4',hashlib.sha256(video_bytes).hexdigest())
+
+
+def download_record(slot=0, sha='d'*64):
+    return {'kind':'download_sha256','slot':slot,'sha256':sha,'mime':'image/jpeg','size':4650}
+
+
+def test_download_evidence_is_typed_immutable_serializable_and_distinct_from_native_ids():
+    from adapters.port import DownloadedMedia
+    plain=RemoteItem('native','published','text','',timestamp(1800000000),native_target='target')
+    observed=replace(plain,observed_media=[download_record()])
+    assert isinstance(observed.observed_media[0],DownloadedMedia)
+    assert observed.provider_media==() and observed.media_hashes==()
+    assert RemoteItem(**asdict(observed))==observed
+    assert identity(plain)!=identity(observed)
+    assert identity(observed)==identity(replace(observed,observed_at=timestamp(1800000100)))
+    assert identity(observed)!=identity(replace(observed,observed_media=[download_record(sha='e'*64)]))
+
+
+@pytest.mark.parametrize('records',[
+    [download_record(slot=1)], [download_record(),download_record()],
+    [{**download_record(),'sha256':'not-digest'}], [{**download_record(),'size':True}],
+    [{**download_record(),'kind':'native_id'}], [{**download_record(),'url':'https://signed.test'}],
+])
+def test_download_evidence_rejects_malformed_records_and_slots(records):
+    with pytest.raises(DomainError):
+        RemoteItem('n','published','','',timestamp(1800000000),observed_media=records)
+
+
+def test_download_binding_requires_original_intent_source_and_repeated_exact_native_slot():
+    from adapters.port import Asset, ProviderRequest
+    from adapters.native import bind_download_media
+    from social_operations.domain import OutcomeUnknown
+    asset=Asset('asset','a'*64,'image/png',10,data=b'not-used')
+    request=ProviderRequest('op','attempt','plan','connection','max_web','secret','dest','target','publish','post','{"text":"text"}',(asset,),None,1800000000)
+    item=RemoteItem('native','published','text','',timestamp(1800000000),native_target='target',observed_media=[download_record()])
+    binding={'operation_id':'op','attempt_id':'attempt','plan_digest':'plan','native_target':'target',
+             'native_id':'native','namespace':'published','source_hashes':['a'*64],'observed_media':[download_record()]}
+    with pytest.raises(DomainError):
+        bind_download_media(replace(request,account_type='mtproto_user'),item,binding=binding)
+    result=bind_download_media(request,item,binding=binding)
+    assert result.media_check=='download_binding' and result.media_hashes==('a'*64,)
+    assert result.observed_media[0].sha256=='d'*64 and result.provider_media==()
+    for change in ({'attempt_id':'other'},{'native_id':'other'},{'source_hashes':['d'*64]},
+                   {'observed_media':[download_record(sha='e'*64)]}):
+        with pytest.raises(OutcomeUnknown): bind_download_media(request,item,binding={**binding,**change})
+    with pytest.raises(OutcomeUnknown):
+        bind_download_media(request,replace(item,provider_media=('counterfeit',)),binding=binding)
+    adopted=replace(request,assets=(),existing=result,action='edit')
+    result=bind_download_media(adopted,item,binding={**binding,'source_hashes':[]})
+    assert result.media_hashes==() and result.media_check=='download_binding'
+    with pytest.raises(OutcomeUnknown):
+        bind_download_media(replace(adopted,existing=None),item,binding={**binding,'source_hashes':[]})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('changed',[False,True])
+async def test_max_download_evidence_survives_adoption_and_blocks_changed_media(tmp_path,changed):
+    from adapters.native import bind_download_media
+    from PIL import Image
+    import io
+    from social_operations.assets import import_image
+    store,actor,app=runtime(tmp_path)
+    image=io.BytesIO();Image.new('RGB',(4,4)).save(image,format='PNG')
+    asset=import_image(store,actor,image.getvalue(),'image/png')
+    class DownloadMax(SemanticMax):
+        changed=False
+        async def execute(self,prepared,hooks):
+            obs=await super().execute(prepared,hooks)
+            request=prepared.request
+            # Fixture models durable attribution supplied by the actual adapter.
+            item=replace(obs.items[0],provider_media=(),observed_media=[download_record(sha=('e' if self.changed else 'd')*64)])
+            binding={'operation_id':request.operation_id,'attempt_id':request.attempt_id,'plan_digest':request.plan_digest,
+                'native_target':request.native_target,'native_id':item.native_id,'namespace':item.namespace,
+                'source_hashes':[a.sha256 for a in request.assets],'observed_media':[asdict(x) for x in item.observed_media]}
+            if request.assets:
+                item=bind_download_media(request,item,binding=binding)
+            else:
+                # Intentionally bypass helper in faulty fixture to test core guard.
+                item=replace(item,media_check='download_binding')
+            self.remote=replace(item,fingerprint=identity(item))
+            return replace(obs,items=(self.remote,))
+    provider=DownloadMax();provider.requests=[]
+    worker=Worker(store,{'connection':provider})
+    first=await app.call(actor,'vibepublish_publish',{'to':['target'],'content':{'text':'first'},
+        'media':[{'source':{'kind':'asset','id':asset},'role':'image'}],'request_key':'download-first'})
+    await worker.run_once()
+    status=store.receipt(actor,first['operation_id'])
+    assert status['state']=='verified', status
+    ref=status['deliveries'][0]['item_ref']
+    edit=await app.call(actor,'vibepublish_publication_update',{'item_ref':ref,'change':{'kind':'edit','content':{'text':'edited'}},'request_key':'download-edit'})
+    provider.changed=changed
+    await worker.run_once()
+    status=store.receipt(actor,edit['operation_id'])
+    assert status['state']==('outcome_unknown' if changed else 'verified'), status
+    if changed:
+        assert status['deliveries'][0]['missing_checks']==['download_media_lifecycle_changed']
+    with store.connection() as db:
+        plan=json.loads(db.execute('SELECT plan FROM attempts WHERE operation_id=?',(edit['operation_id'],)).fetchone()[0])
+    assert plan['existing']['observed_media'][0]['sha256']=='d'*64

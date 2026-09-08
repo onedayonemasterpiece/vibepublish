@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added — exact native-slot download evidence
+
+- Added typed ordered downloaded-media evidence distinct from native attachment
+  IDs and uploaded source hashes, with explicit immutable-intent binding.
+- Added the `download_binding` receipt category and MAX lifecycle CAS checks;
+  existing provider fingerprints remain unchanged without the new evidence.
+- Added validation, serialization, mismatched binding and actual core adoption
+  regressions; authorized MAX browser downloads remain adapter-owned.
+
 ### Added — MAX-only semantic content and verified video ingress
 
 - Added opt-in MAX semantic styles/links with exact entity verification and

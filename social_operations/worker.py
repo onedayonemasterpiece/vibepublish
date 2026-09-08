@@ -308,6 +308,16 @@ class Worker:
                 actual = normalized_entities(remote.text, json.loads(remote.entities_json))
                 if actual != normalized_entities(remote.text, expected):
                     raise OutcomeUnknown('entities_readback_mismatch')
+            if plan['provider'] == 'max' and plan['account_type'] == 'max_web':
+                from adapters.port import downloaded_media
+                existing = plan.get('existing') or {}
+                preserved = existing.get('observed_media', ())
+                source_hashes = tuple(a['sha256'] for a in plan['assets'])
+                if preserved and (not source_hashes or source_hashes == tuple(existing.get('media_hashes', ()))):
+                    if remote.observed_media != downloaded_media(preserved):
+                        raise OutcomeUnknown('download_media_lifecycle_changed')
+                if remote.observed_media and (remote.provider_media or remote.media_check != 'download_binding'):
+                    raise OutcomeUnknown('download_media_binding_missing')
             if tuple(remote.media_hashes) != tuple(a['sha256'] for a in plan['assets']):
                 raise OutcomeUnknown('media_readback_mismatch')
         if observation.observed == 'provider_scheduled' and (remote.namespace != 'scheduled' or remote.scheduled_at != plan['scheduled_at']):

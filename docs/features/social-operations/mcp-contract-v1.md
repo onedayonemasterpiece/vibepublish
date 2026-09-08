@@ -252,6 +252,48 @@ CLI ingress, limits, sanitized metadata, provider-default isolation, immutable
 video roles, semantic readback and adoption. Its provider is an offline port
 fixture, not evidence of native MAX video/rich capability.
 
+### Exact native-slot downloaded-media evidence
+
+Implementation status: **Not confirmed by user**. Some MAX image surfaces expose
+only rotating signed download URLs, not native attachment IDs. Those URLs must
+not be normalized into counterfeit IDs, and provider-transcoded JPEG digests must
+not be described as equality with original uploaded PNG bytes.
+
+`RemoteItem.observed_media` is an additive ordered tuple of frozen
+`DownloadedMedia(slot: int, sha256: str, mime: str, size: int,
+kind="download_sha256")` records. Serialized dictionaries are validated and
+normalized on construction: consecutive zero-based slots (maximum ten), lowercase
+SHA-256, bounded positive byte size and supported image/MP4 MIME. The evidence is
+bound to its containing native target/namespace/post ID. It changes the content
+CAS only when present; existing Telegram/VK item fingerprints stay unchanged.
+`provider_media` remains empty unless genuine native attachment IDs exist.
+
+`adapters.native.bind_download_media(request, item, *, binding: dict)` verifies an
+adapter's **previously durably saved** exact binding with these closed fields:
+`operation_id`, `attempt_id`, `plan_digest`, `native_target`, `native_id`,
+`namespace`, `source_hashes`, `observed_media`. Request identity, original upload
+asset digests, exact native post and repeated ordered downloaded evidence must all
+match. The adapter must establish that binding from the original marked upload
+intent and its exact native post/slot UI observations, not invent it from an
+arbitrary current read or visual resemblance. Downloading bytes or observing a
+similar picture alone does not prove historical source attribution.
+
+The helper sets `media_check="download_binding"` and original input `media_hashes`
+only after the checks. Downloaded digests remain separate in `observed_media`;
+provider transcoding is permitted without a source-bytes equality claim. An
+adopted item with no owned source assets instead binds the immutable existing
+slot evidence and keeps input hashes empty. Core MAX edit/reschedule verification
+preserves and compares slot evidence when media are not replaced, and rejects
+missing download-binding status or invented native media IDs. Different native
+slot bytes are a CAS conflict/unknown result, never a verified caption-only edit.
+
+This is an additive typed port/public receipt evidence category, not a new public
+mutation API, URL fetch endpoint, provider-native-ID claim, or permission bypass.
+The MAX adapter owns authorized browser-download acquisition, exact-post checks,
+private checkpoint persistence and native live acceptance. Core tests exercise
+serialized round trips, old fingerprint compatibility, malformed evidence,
+source/native/attempt mismatches and preserved/changed-media adoption.
+
 ### Reads, queue, history and statistics
 
 `vibepublish_read` supports item, dialogs (owner only), feed, stories, scheduled, notifications, audience, editorial_sample, thread, reactions, search, history and analytics.

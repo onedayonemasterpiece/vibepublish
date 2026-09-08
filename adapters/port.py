@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Protocol
 
-from social_operations.domain import NativeSource, OutcomeUnknown
+from social_operations.domain import DomainError, NativeSource, OutcomeUnknown
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +24,34 @@ class Asset:
     caption: str = ""
     alt_text: str = ""
     data: bytes = field(default=b"", repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class DownloadedMedia:
+    """Observed downloaded bytes, never a native attachment ID or source digest."""
+    slot: int
+    sha256: str
+    mime: str
+    size: int
+    kind: str = "download_sha256"
+
+    def __post_init__(self):
+        import re
+        if (self.kind != 'download_sha256' or type(self.slot) is not int or not 0 <= self.slot < 10
+                or not isinstance(self.sha256, str) or not re.fullmatch(r'[0-9a-f]{64}', self.sha256)
+                or self.mime not in {'image/png', 'image/jpeg', 'image/webp', 'video/mp4'}
+                or type(self.size) is not int or not 0 < self.size <= 20*1024*1024):
+            raise DomainError('download_media_evidence_invalid')
+
+
+def downloaded_media(values):
+    try:
+        result = tuple(value if isinstance(value, DownloadedMedia) else DownloadedMedia(**value) for value in values)
+    except (TypeError, ValueError):
+        raise DomainError('download_media_evidence_invalid') from None
+    if len(result) > 10 or tuple(value.slot for value in result) != tuple(range(len(result))):
+        raise DomainError('download_media_order_invalid')
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +76,10 @@ class RemoteItem:
     entities_json: str = "[]"  # Additive immutable semantic entity observation (MAX compatible).
 
 
+    observed_media: tuple[DownloadedMedia, ...] = ()
+
     def __post_init__(self):
+        object.__setattr__(self, 'observed_media', downloaded_media(self.observed_media))
         for name in ('media_hashes', 'provider_media', 'member_ids'):
             object.__setattr__(self, name, tuple(getattr(self, name)))
         object.__setattr__(self, 'metrics', tuple(tuple(metric) for metric in self.metrics))

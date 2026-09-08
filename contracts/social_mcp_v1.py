@@ -92,7 +92,7 @@ DEFS = {
         "observed_at": DATE, "revision": REV, "requested_at": DATE, "effective_at": DATE,
         "stage": STAGE, "scheduling_owner": {"const": "provider"}, "item_ref": ID, "url": URL,
         "queue_ref": ID, "preview_ref": ID, "navigate_hint": string(500),
-        "evidence_ref": ID, "media_check": enum("not_applicable", "source_bytes", "provider_binding", "visual_correspondence", "incomplete"),
+        "evidence_ref": ID, "media_check": enum("not_applicable", "source_bytes", "provider_binding", "download_binding", "visual_correspondence", "incomplete"),
         "missing_checks": array(string(100), 0, 20), "retry_safe": {"type": "boolean"}},
         ("destination", "provider", "state", "stage", "observed", "revision", "media_check", "retry_safe")),
     "candidate": obj({"id": ID, "asset_ref": ID, "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
