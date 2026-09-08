@@ -2,6 +2,144 @@
 
 ## [Unreleased]
 
+- Added: exact own queued cancellation on approved scheduled-only MAX channels with the observed channel confirmation dialog.
+
+- Fixed: MAX exact reads establish copied native identity before downloading candidate media; duplicate bodies are enumerated once.
+
+- Added: native MAX replies/forwards with exact relationship proof and recovery; duplicate-body reads and handle-bound lifecycle preserve the other native object.
+
+- Added: MAX native social identity/own-reaction evidence, bounded shared-limiter canvas classification, and guarded reaction/recovery implementation (live acceptance in progress).
+
+### Added — native scheduled editing
+
+- Edit an exact queued MAX message while preserving native time and media, with
+  decoded-preview readiness and last-input mode/content/media guards.
+- Verify actual native output while MCP/worker/browser are stopped.
+
+
+### Added — verified native cancellation
+
+- Cancel the exact own queued object through its observed native confirmation,
+  with pre-input intent and durable trusted removal before read-only recovery.
+- Guard native scheduling previews and queued lifecycle media against last-input drift.
+
+
+### Added — native queue lifecycle evidence
+
+- Read native scheduled IDs/time through passively correlated owned-browser
+  history replies; guarded image scheduling and media-preserving reschedule.
+- Recover native ID replacement without repeating Save; retain original attempt
+  and release quarantine only through committed core finalization.
+- Handle native dialog roles and distinct group/channel queue headings.
+
+
+### Fixed
+- MAX rich DOM evidence preserves Unicode raster emoji and exact labeled links;
+  boundary-emoji font spans use the shared core MAX-only visual semantics.
+- Native queue evidence correlates only UI-issued delayed-history requests and
+  their replies; native IDs/times are checked against two fresh visible queues.
+- MAX native image lifecycle binds verified UI downloads instead of rotating CDN
+  URLs; caption context menus, lazy media/history readiness and conditional menu
+  dismissal preserve exact read/edit/delete. Actual MCP image recovery, edit,
+  unchanged-media readback and deletion verified without repeat Send.
+- MAX core-admitted original recovery now reaches durable verified resolution and
+  post-commit matching-fuse finalization through the actual worker. Live original
+  recovery and exact MCP deletion completed without a second Send.
+- Plain Send checks the composer attachment scope, not unrelated history media;
+  the observed MAX regression is covered alongside native all-participants delete.
+- MAX read-only native-link recovery reopens a disappeared context menu once,
+  preserves exact scope and clipboard freshness, and refuses an existing disabled
+  menu; regressions and two original-object live reads preserve unknown/quarantine.
+- MAX actual-core test subprocesses preserve the explicit Playwright browser
+  installation path while still scrubbing credentials; the early-progress
+  assertion deadline is unchanged.
+- MAX rejects unfinished live mutations before touching the composer or dispatching;
+  missing causal receipts cannot be enabled by an ad-hoc publishing flag.
+  Preserves unknown-attempt quarantine during read-only reconciliation.
+  Historical experimental-attempt quarantine is now resolved through the core
+  recovery path; this still does not constitute full lifecycle acceptance.
+
+### Added
+- Real MAX bold/italic/labeled-link lifecycle and Unicode raster-emoji DOM
+  projection, semantic row rebinding and stable last-input guards; exact native
+  reference remains identity. Safe core retry resumes pre-dispatch failures.
+- Observed MAX video chooser/readback with durable copied reference, native video
+  downloads and shared bounded decoder; direct tile identity excludes nested
+  player controls. Live same-object recovery/read/edit/delete retains video bytes.
+- Separate exact-core GitHub CI assembly for actual MCP/worker/MAX bridge tests,
+  in addition to the existing MAX-only regression job; no vendored shared core.
+- Explicit same-driver live plain mutation bridge with durable native-reference
+  transitions and idempotent core finalization; actual shared-port regression tests.
+- MAX optional scoped screenshot/Gemini Lite recovery through the strict shared
+  GoogleAIClient limiter, durable capture/interpretation and one complete native
+  recheck; no automatic success, mutation retry or quarantine release from a model.
+- MAX loopback-only same-driver exact plain edit and lost-response observation,
+  preserving native identity and quarantine; six-order and stale binding/mode
+  regressions. No live editor, core release, delete or media capability claimed.
+- Single-link ChatGPT handoff for the existing MAX/core recovery dependency, with
+  verified source gaps, acceptance criteria and GitHub delivery boundaries.
+- MAX same-RealMaxDriver loopback-only plain-submit qualification: pre-Send DOM/input
+  observation, awaited dispatch, native-reference checkpoint and fresh read;
+  original-text recovery without an injected marker, callback/response failures,
+  all six chat orders and real post-submit process-kill/restart with one Send.
+  Live mutate/bridge remain blocked; no attribution, release or lifecycle claim.
+- MAX exact-reference read-only recovery, explicitly bound to the original
+  attempt/digest through the actual core port. Repeated UI observation preserves
+  unknown state/quarantine; terminal resolution remains a core dependency.
+- Same-driver native-reference/order/drift replay (including reordering inside
+  awaited account callbacks) and real reader-process
+  crash/restart coverage, with no Send or profile unlock.
+- MAX observed-UI read/navigation subset, explicit existing-session read-only factory,
+  private structural export, and mandatory Chromium navigation/order-drift replay.
+  Live reads cover the three clarified destinations; publication/queue identity/
+  full lifecycle and real-driver core integration remain unimplemented.
+- MAX MCP test transport now aligns HTTPX read timeout with its explicit long-poll
+  budget; the separate first-event deadline and dispatch/crash assertions stay intact.
+
+
+### Task prepared — owner-authorized MAX live completion, 2026-09-05
+
+- Added docs/handoffs/max-web-live-completion-20260905.md for continuing PR #2
+  through real MAX implementation, live debugging and same-driver GitHub replay.
+- Recorded the owner's explicit scope: all social-operation scenarios in
+  «Тестовая группа»; feed/queue reads and task-owned scheduled probes only in
+  «Ух ты, Калининград!» and «Полюбить Калининград». Existing editorial content
+  remains read-only. Exact target binding, safe timing and cleanup are required.
+- Reuse the already authenticated MAX session; no login debugging now. Future
+  QR onboarding is documented separately, not implemented by this package.
+- Added L01–L16 acceptance cases, positive functional outcomes, all six target
+  permutations and mid-action reordering, DOM/media failures, protected replay
+  fixtures, no live MAX network/credentials in CI, and exact-SHA reproduction.
+- Updated the task route and MAX runbook so historical live prohibitions do not
+  contradict the new limited authorization. Prior offline evidence is retained
+  by pinned reference. No runtime code changed, no agent/live tests were launched.
+
+### Added — MAX canonical bridge and local core integration, 2026-09-05
+
+- Verified the supplied 103-source core ZIP/bundle/patch and moved it to local
+  artifacts; added a reproducible local-only MAX overlay assembler, no core upload.
+- Added MAX bridge importing the actual ProviderAdapter port/native helpers:
+  typed observations, scoped reads/cursors, proven input-media bindings and
+  recoverable attempt/plan checkpoints. Translates driver progress vocabulary to
+  core statuses without changing core dispatch/auth/ledger or the common port.
+- Added real MCP ClientSession/worker/SQLite + Chromium fixture integration for
+  early TG/VK progress, durable marker before effect, SIGKILL/restart without
+  duplicate sends, scoped external queue reads and preserved partial successes.
+  Original 37 tests and loopback guard remain; absent-core CI skips are explicit.
+- Live MAX factory/selectors, text-only attribution, cancel/delete evidence and
+  media-preserving reschedule remain unverified; no live actions or deployment.
+
+### Added — MAX-only offline checkpoint, 2026-09-05
+
+- Added a fixture-only deterministic MAX UI driver, process-exclusive profile
+  lock, persistent uncertainty quarantine, awaited hooks, native-time/CAS guards
+  and scoped saved-item readback. No live profile or runtime adapter is enabled.
+- Added real Chromium synthetic fixtures and process-kill/competition tests;
+  reused the canonical CI path for MAX checks. These do not prove live MAX.
+- Added canonical MAX runbook/capability/status matrix. Archived core ZIP is
+  missing in this environment: real port/worker/MCP integration remains blocked;
+  no substitute core contracts, live canaries or deployment were introduced.
+
 ### Development handoff — 2026-09-04, contract 1.2.0-design
 
 - Added canonical native Telegram/VK forwarding by exact post URL or authorized
@@ -72,7 +210,7 @@
 - Standalone scaffold, feature documentation routing, existing Google AI /
   Supabase limiter code/migrations and EventsBot donor map.
 
-### Verification boundary
+### Verification boundary of the earlier design checkpoint
 
 - This work changes requirements and executable design/tests, not social runtime,
   provider adapters, database migrations or deployment.
