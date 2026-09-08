@@ -30,9 +30,9 @@ class Provider:
     async def read(self,request,hooks):return ReadPage(tuple(self.items.values()))
 
 @pytest.fixture
-def runtime(tmp_path):
+def runtime(tmp_path,request):
     store=Store(tmp_path/'core.sqlite');token=store.create_principal('tenant','owner',owner=True)
-    actor=store.authenticate(token);store.add_connection(actor,'connection','max',account_type='fake')
+    actor=store.authenticate(token);store.add_connection(actor,'connection','max',account_type=getattr(request,'param','fake'))
     binding=store.bind(actor,'owner','max','connection','-101')
     provider=Provider();app=Application(store);worker=Worker(store,{'max':provider})
     return store,actor,binding,provider,app,worker
@@ -109,3 +109,25 @@ async def test_exact_own_reaction_reads_preserve_empty_vs_missing_evidence(runti
     await worker.run_once();result=store.receipt(actor,read['operation_id'])
     assert result['state']=='blocked' and result['error']['code']=='reaction_read_unverified'
     assert p.effects==3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime,budget',[('max_web',90),('fake',30)],indirect=['runtime'])
+@pytest.mark.parametrize('expire',[False,True])
+async def test_native_browser_read_budget_is_bounded_and_timeout_is_precise(runtime,budget,expire,monkeypatch):
+    from contextlib import asynccontextmanager
+    import social_operations.worker as module
+    store,actor,binding,p,app,worker=runtime;source=await publish(runtime)
+    seen=[]
+    @asynccontextmanager
+    async def timeout(seconds):
+        seen.append(seconds)
+        if expire:raise TimeoutError()
+        yield
+    monkeypatch.setattr(module.asyncio,'timeout',timeout)
+    admitted=await app.call(actor,'vibepublish_read',{'query':{'kind':'item','item_ref':source}})
+    await worker.run_once();result=store.receipt(actor,admitted['operation_id'])
+    assert seen==[budget]
+    if expire:assert result['error']['code']=='provider_read_deadline'
+    else:assert result['state']=='verified'
+    assert p.effects==1

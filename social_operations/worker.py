@@ -507,9 +507,16 @@ class Worker:
         query = args['query']
         request = ReadRequest(b['connection_id'], b['native_id'], query['kind'], args.get('limit', 25), args.get('_provider_cursor'),
                               args.get('_native_item'), args.get('_namespace'), query.get('text', ''))
-        async with self.lane(b['connection_id']):
-            async with asyncio.timeout(30):
-                page = await self.adapter(b['provider'], b['connection_id']).read(request, self.hooks(op))
+        # Browser reads include account verification, native history and exact
+        # media readback. Keep them bounded without applying the API-only 30s cap.
+        budget = 90 if b['provider']=='max' and b['account_type']=='max_web' else 30
+        budget = max(0.1, min(budget, op['deadline']-self.store.clock()))
+        try:
+            async with self.lane(b['connection_id']):
+                async with asyncio.timeout(budget):
+                    page = await self.adapter(b['provider'], b['connection_id']).read(request, self.hooks(op))
+        except TimeoutError:
+            raise DomainError('provider_read_deadline', 'Native read did not complete within the command deadline', 'refresh') from None
         if request.kind=='reactions' and (len(page.items)!=1 or not page.items[0].own_reactions_observed
                 or page.items[0].native_id!=request.native_item or page.items[0].namespace!='published'):
             raise DomainError('reaction_read_unverified')

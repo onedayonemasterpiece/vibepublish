@@ -178,3 +178,9 @@ read worker. It returns explicitly observed **own** reactions, including `[]` fo
 proved removal; it does not enumerate other participants. Missing metadata,
 multiple items or a different native ID cannot become verified empty reactions.
 Other providers and non-published namespaces are not implicitly enabled.
+
+Native `max_web` reads now receive a bounded 90-second browser budget (never past
+an operation's deadline), matching mutation/recovery's existing upper bound.
+The live exact-own-reaction read reproduced the old 30-second cutoff. API/fake
+provider reads retain 30 seconds. Expiry reports `provider_read_deadline` with
+refresh, not a generic worker failure, and authorizes no mutation or resend.

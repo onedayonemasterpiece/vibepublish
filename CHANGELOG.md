@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fixed: bounded native MAX browser read budget and precise read-deadline errors; API read limits unchanged.
+
 - Added: authenticated exact MAX own-reaction reads, distinguishing observed removal from missing metadata.
 
 - Added: exact authorized-source download binding for native MAX media forwards without re-uploading.
