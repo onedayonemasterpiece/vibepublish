@@ -184,3 +184,96 @@ async def test_rich_production_bridge_exact_entities_and_plain_edit(writer,raste
     result=await adapter.execute(await adapter.prepare(edit,h),h)
     assert result.items[0].native_id==item.native_id and result.items[0].entities_json=='[]'
     assert len(effects(state))==2
+
+
+@pytest.mark.parametrize('action',['reply','react','forward'])
+async def test_social_checkpoint_freezes_exact_subject_and_intent(writer,action):
+    from dataclasses import replace
+    from adapters.native import saved_checkpoint
+    from social_operations.domain import NativeSource,OutcomeUnknown
+    d,page,state,h=writer;d.live_writes=True;adapter=MaxAdapter(d,connection_id='max')
+    await d.open('-101')
+    subject=adapter._remote(dict(id='AAAAAAAAACo',target='-101',namespace='feed',text='Owned',entities=[],
+        media=[],scheduled_at=None,observed_at='2026-09-08T00:00:00Z',url='https://max.ru/c/-101/AAAAAAAAACo'))
+    request=ProviderRequest('op','attempt','plan','max','max_web','VIBEPUBLISH_MAX_PROFILE',
+        'destination','-101',action,'post',json.dumps({'text':'Reply' if action=='reply' else 'Owned'}),(),None,time.time()+300,
+        existing=subject if action=='react' else None,subject=subject,reaction='👍' if action=='react' else None,
+        reaction_mode='add' if action=='react' else None,
+        source=NativeSource('max','-101',subject.native_id,False,subject.url) if action=='forward' else None,source_authorized=action=='forward')
+    adapter._validate(request)
+    driver=dict(target='-101',text='Reply' if action=='reply' else 'Owned',entities=[],kind='feed',action=action,
+        scheduled_at=None,existing_id=subject.native_id if action=='react' else None,media=[],media_slots=0,
+        **({'reply_to':adapter._existing(subject)} if action=='reply' else {'subject':adapter._existing(subject),'baseline_ids':['42']} if action=='forward' else {'reaction':'👍','reaction_mode':'add'}))
+    assert adapter._state(request,saved_checkpoint(request,driver=driver))==driver
+    altered=dict(driver)
+    if action=='react':altered['reaction_mode']='remove'
+    else:
+        key='reply_to' if action=='reply' else 'subject';altered[key]=dict(driver[key],id='different')
+    with pytest.raises(OutcomeUnknown):adapter._state(request,saved_checkpoint(request,driver=altered))
+
+
+@pytest.mark.parametrize('proven',[False,True])
+async def test_forward_recovery_finalizes_only_committed_native_origin_proof(writer,proven):
+    from dataclasses import asdict
+    from adapters.native import saved_checkpoint
+    from adapters.port import Observation
+    from social_operations.domain import NativeSource,OutcomeUnknown
+    d,page,state,h=writer;d.live_writes=True;adapter=MaxAdapter(d,connection_id='max');await d.open('-101')
+    subject=adapter._remote(dict(id='AAAAAAAAACo',target='-101',namespace='feed',text='Owned',entities=[],
+        media=[],scheduled_at=None,observed_at='2026-09-08T00:00:00Z',url='https://max.ru/c/-101/AAAAAAAAACo'))
+    request=ProviderRequest('op','attempt','plan','max','max_web','VIBEPUBLISH_MAX_PROFILE','destination','-101',
+        'forward','post','{"text":"Owned"}',(),None,time.time()+300,subject=subject,
+        source=NativeSource('max','-101',subject.native_id,False,subject.url),source_authorized=True)
+    baseline=dict(target='-101',text='Owned',entities=[],kind='feed',action='forward',scheduled_at=None,existing_id=None,
+        media=[],media_slots=0,subject=adapter._existing(subject),baseline_ids=['42'])
+    remote=adapter._remote(dict(id='AAAAAAAAAGM',target='-101',namespace='feed',text='Owned',entities=[],media=[],
+        scheduled_at=None,observed_at='2026-09-08T00:00:00Z',url='https://max.ru/c/-101/AAAAAAAAAGM',origin=subject.url))
+    envelope=json.dumps(dict(remote=asdict(remote),original_checkpoint=json.loads(saved_checkpoint(request,driver=baseline)),
+        core_recovery=dict(operation_id='op',attempt_id='attempt',plan_digest='plan'),
+        committed_observation=asdict(Observation('published',(remote,),forward_origin_matched=proven))))
+    d.lane.arm('attempt','plan')
+    if proven:
+        await adapter.finalize(request,envelope,h);assert not d.lane.marker.exists()
+    else:
+        with pytest.raises(OutcomeUnknown):await adapter.finalize(request,envelope,h)
+        assert d.lane.marker.exists()
+
+
+async def test_observed_native_forward_edit_limit_is_precise_and_never_dispatches(writer):
+    d,page,state,h=writer;d.live_writes=True;adapter=MaxAdapter(d,connection_id='max')
+    source=adapter._remote(dict(id='forward',target='-101',namespace='feed',text='Owned',media=[],scheduled_at=None,
+        url='https://max.ru/c/-101/forward',origin='https://max.ru/c/-101/source',observed_at='2026-09-08T00:00:00Z'))
+    request=ProviderRequest('op','attempt','plan','max','max_web','VIBEPUBLISH_MAX_PROFILE','destination','-101',
+        'edit','post','{"text":"Changed"}',(),None,time.time()+300,existing=source)
+    capability=await adapter.inspect(request)
+    assert capability.status=='unsupported' and 'no Edit control' in capability.reason
+    assert not state['events'] and not d.lane.marker.exists()
+
+
+async def test_delete_native_forward_uses_existing_visible_body_not_empty_original_send_plan(writer):
+    d,page,state,h=writer;d.live_writes=True;adapter=MaxAdapter(d,connection_id='max')
+    state['messages']=[dict(id='source',target='-101',text='Forward body',outgoing=True),
+                       dict(id='forwarded',target='-101',text='Forward body',outgoing=True)]
+    existing=adapter._remote(dict(id='forwarded',target='-101',namespace='feed',text='Forward body',media=[],
+        scheduled_at=None,observed_at='2026-09-08T00:00:00Z',url='https://max.ru/c/-101/forwarded',origin='https://max.ru/c/-101/source'))
+    request=ProviderRequest('op','attempt','plan','max','max_web','VIBEPUBLISH_MAX_PROFILE','destination','-101',
+        'delete','post','{"text":""}',(),None,time.time()+300,existing=existing)
+    prepared=await adapter.prepare(request,h)
+    result=await adapter.execute(prepared,h)
+    assert result.observed=='deleted' and result.items[0].native_id=='forwarded'
+    assert state['checkpoints'][0][1]['driver']['text']=='Forward body'
+    assert [m['id'] for m in state['messages']]==['source']
+    assert len(effects(state))==1
+
+
+async def test_exact_reactions_read_crosses_actual_port_without_a_write(writer,monkeypatch):
+    from adapters.max import engagement
+    d,page,state,h=writer;d.live_writes=True;adapter=MaxAdapter(d,connection_id='max')
+    async def observe(driver,target,native):
+        assert driver is d and target=='-101' and native=='subject'
+        return dict(id=native,target=target,namespace='feed',text='Owned',media=[],scheduled_at=None,
+            url='https://max.ru/c/-101/subject',observed_at='2026-09-08T00:00:00Z',own_reactions_observed=True,own_reactions=[])
+    monkeypatch.setattr(engagement,'observe',observe)
+    result=await adapter.read(ReadRequest('max','-101','reactions',native_item='subject',namespace='published'),h)
+    assert result.items[0].own_reactions_observed and result.items[0].own_reactions==()
+    assert not state['events'] and not d.lane.marker.exists()

@@ -7,7 +7,7 @@ from adapters.max.profile import MaxBlocked
 from tests.browser.max.observed.test_submit import writer
 pytestmark=pytest.mark.asyncio
 
-@pytest.mark.parametrize('drift',[None,'row','palette','account','crash'])
+@pytest.mark.parametrize('drift',[None,'row','media','palette','account','crash'])
 async def test_one_native_reaction_click_or_guarded_zero_then_read_only_reconcile(writer,monkeypatch,drift):
     d,page,state,h=writer;d.live_writes=True
     state['messages']=[dict(id='own',target='-101',text='Owned source',outgoing=True)]
@@ -41,6 +41,7 @@ async def test_one_native_reaction_click_or_guarded_zero_then_read_only_reconcil
         await dispatch(*args)
         if drift=='row':await page.locator('.bubbleContent > .text').evaluate('e=>e.textContent="Foreign"')
         if drift=='account':state['revoked']=True
+        if drift=='media':await page.locator('.messageWrapper').evaluate('e=>e.insertAdjacentHTML("beforeend","<div class=media><img src=\"data:image/png;base64,AAAA\"></div>")')
     h.before_effect=before
     if drift=='crash':state['fail_checkpoint']='MAX_REACTION_CLICKED'
     if drift:

@@ -60,8 +60,9 @@ requires a native-copied own object, observed `Удалить сообщение
 confirmation. The exact connected-row removal is persisted before fresh absence
 checks; absence alone cannot authorize deletion recovery or finalization.
 
-Known unfinished product areas include complete production lifecycle qualification,
-media lifecycle, native scheduled lifecycle and remaining supported social operations.
+The dated acceptance entries below supersede this initial plain-text checkpoint.
+Remaining work is the full final matrix, fresh social cycles and controlled live
+failure/restart qualification; do not relabel completed media/scheduled checks as absent.
 
 Fresh-read actual PR HEAD/code/CI before changing anything; historical SHA values in old comments are checkpoints only.
 
@@ -464,3 +465,67 @@ visible/stable individually before capture; the parent being stable is
 insufficient. Its same original intent is being resumed through `retry_failed`,
 not recreated. Offline reaction guard/restart cases: 5 passed; passive identity
 and strict palette gateway cases: 35 passed. This is not full social acceptance.
+
+### Replies, native forwards, and identical bodies (2026-09-08)
+
+Actual MCP/worker **reply → exact read → edit → exact read → delete** completed on
+one native reply to a new own plain source. The shared existing Send path binds
+the exact copied subject and **Ответ для …** preview at trusted input; fresh
+native `REPLY.message.id` must match that subject before success. Removing or
+changing the preview is replay-tested. The original source stays available for
+forward tests.
+
+Native forward used the actual recipient dialog, a unique exact target name and
+one guarded Send, not a text/media re-upload. Its initial readback exposed a real
+projection defect: MAX stores the visible forwarded body under
+`link.message.text`, with an empty outer `text`. The driver now projects that
+native body and verifies `FORWARD` plus source chat/message coordinates. The
+original operation was recovered through MCP/core with **no second Send**;
+committed native-origin evidence gates normal finalization. No manual ledger or
+quarantine edit was used.
+
+Identical source/forward bodies are disambiguated by copying native references
+from retained DOM handles; row indexes are temporary enumeration mechanics, never
+identity. Edits/deletes bind the copied handle at input. A deletion's fresh check
+allows a remaining same-text object only after copying its *different* native ID;
+it still requires durable removal of the exact original handle. Native-forward
+read/delete/unchanged-source checks completed through MCP and the actual worker. Offline reply,
+duplicate-body lifecycle and passive projection cases: 38 passed.
+
+The actual own forwarded-message menu in **Тестовая группа** contains Reply,
+Forward, Copy link, Pin, Unread, Copy text, Select and Delete, but **no Edit**.
+This matches MAX Web's own `canEdit` rule rejecting native forwards in groups.
+Do not silently replace a native forward with a copied/re-uploaded editable post.
+This is a specific observed platform limitation, not a reason to stop the other
+lifecycle work.
+
+Reaction add and remove are both now MCP/worker verified/complete. Removal used
+its same never-dispatched original intent via core `retry_failed` after the
+cell-readiness fix. MAX `831ba71` remote CI: 244 passed/4 missing-core skips and
+46 pinned actual-core passes. Local assembled social/core regression: 114 passed.
+Core media-forward binding dependency is now `e7575a5`: 245 tests + 202 subtests
+passed locally; exact remote CI remains separate from live acceptance.
+
+The forwarded object's Delete preparation also exposed a MAX bridge contract bug:
+its original forward intent legitimately has empty `content_json.text`, while the
+frozen native `existing` snapshot has the visible source body. Comparing Delete's
+checkpoint against the empty send intent rejected it before dispatch. Delete and
+Cancel now bind their content to that exact existing snapshot; they do not render
+new content. The real-port regression reproduces deleting only the forwarded
+same-text copy while retaining its source. Focused actual-core bridge: 19 passed.
+Preparation diagnostics now report a bounded phase/error class rather than hiding
+checkpoint mismatches as unexplained UI failures. Read-only detached-row
+preparation may rebind once, but a Delete confirmation is never retried.
+
+The forwarded copy was deleted successfully after this snapshot fix; a fresh MCP
+read confirmed that its same-text source remains unchanged. Both original
+operations are verified/complete, without repeat Send or manual quarantine edits.
+Local assembled reply/forward/core regression: **134 passed**.
+
+Exact own reaction reads now use MCP `read(kind=reactions)` and the same worker,
+with explicit native observation required even for the empty set. The pinned
+actual core is `521a0b9dbec20f30fcadcf38b6bd20e89ae913f0`; its relevant core CI
+passes on Python 3.12/3.13 (246 tests plus 202 subtests locally). The separate
+full-core verify jobs still fail on the existing missing `adapters.codex_imagegen`
+collection dependency; they are not reported as green. This MAX task does not
+execute image generation or replace that dependency.

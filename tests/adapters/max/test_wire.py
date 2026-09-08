@@ -156,3 +156,39 @@ def test_history_only_explicit_reaction_info_proves_own_state(info,expected):
     o._received(social_event({'messages':[row]}))
     assert o.rows[0].get('own_reactions')==expected
     assert ('own_reactions' in o.rows[0])==(info is not None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bad',[None,'type','subject','content'])
+async def test_reply_needs_exact_native_relationship_and_unchanged_body(monkeypatch,bad):
+    from adapters.max import engagement
+    source_id=base64.urlsafe_b64encode((42).to_bytes(8,'big')).decode().rstrip('=')
+    subject={'id':source_id}
+    item=dict(id='new',target='-101',text='Reply',entities=[],observed_media=[],scheduled_at=None)
+    native=dict(item,native_link={'type':'REPLY','message':{'id':42}})
+    if bad=='type':native['native_link']['type']='FORWARD'
+    if bad=='subject':native['native_link']['message']['id']=99
+    if bad=='content':native['text']='Foreign'
+    async def observe(*a,**kw):return native
+    monkeypatch.setattr(engagement,'observe',observe)
+    if bad:
+        with pytest.raises(MaxBlocked,match='relationship'):await engagement.verify_reply(None,item,subject)
+    else:assert (await engagement.verify_reply(None,item,subject))['reply_to_native_id']==source_id
+
+
+def test_forward_relationship_checks_native_source_not_caption():
+    from adapters.max.engagement import forward_link_matches
+    copied=base64.urlsafe_b64encode((42).to_bytes(8,'big')).decode().rstrip('=')
+    subject=dict(id=copied,target='-101')
+    assert forward_link_matches({'type':'FORWARD','message':{'id':42},'chatId':-101},subject)
+    assert not forward_link_matches({'type':'REPLY','message':{'id':42}},subject)
+    assert not forward_link_matches({'type':'FORWARD','message':{'id':43}},subject)
+    assert not forward_link_matches({'type':'FORWARD','message':{'id':42},'chatId':-202},subject)
+
+
+def test_forward_visible_body_comes_from_native_embedded_message_not_empty_envelope():
+    o=social_observer('history');o._sent(social_event({'chatId':-101,'getMessages':True}))
+    o._received(social_event({'messages':[{'id':99,'text':'','link':{'type':'FORWARD','chatId':-101,
+        'message':{'id':42,'text':'Owned forwarded body','attaches':[{'private_url':'not projected'}]}}}]}))
+    assert o.rows[0]['id']=='99' and o.rows[0]['text']=='Owned forwarded body' and o.rows[0]['media_count']==1
+    assert 'private_url' not in str(o.rows)

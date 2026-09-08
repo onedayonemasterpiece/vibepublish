@@ -49,9 +49,10 @@ class MaxAdapter:
             raise DomainError('max_connection_or_target_denied')
 
     def _content(self, request):
-        if self.live_enabled and request.action=='react' and request.existing:
+        if self.live_enabled and request.action in {'react','forward','delete','cancel'} and (request.existing or request.subject):
             from social_operations.rich_text import max_entities
-            return request.existing.text,max_entities(request.existing.text,json.loads(request.existing.entities_json))
+            remote=request.existing or request.subject
+            return remote.text,max_entities(remote.text,json.loads(remote.entities_json))
         if self.live_enabled:
             from social_operations.rich_text import max_content
             return max_content(request.content_json,4000)
@@ -74,10 +75,17 @@ class MaxAdapter:
                 raise DomainError('max_live_binding_mismatch')
         elif request.account_type != 'fake' or request.secret_ref:
             raise DomainError('max_live_factory_not_implemented')
-        if request.action not in ({'publish', 'edit', 'reschedule', 'cancel', 'delete','react'} if self.live_enabled else {'publish', 'edit', 'reschedule', 'cancel', 'delete'}) or request.source:
+        if request.action not in ({'publish', 'edit', 'reschedule', 'cancel', 'delete','react','reply','forward'} if self.live_enabled else {'publish', 'edit', 'reschedule', 'cancel', 'delete'}) or (request.source and request.action!='forward'):
             raise DomainError('max_action_unsupported')
         if request.surface not in {'post', 'album'}:
             raise DomainError('max_surface_unsupported')
+        if self.live_enabled and request.action=='edit' and request.existing and request.existing.origin:
+            raise DomainError('max_native_forward_edit_unsupported')
+        if request.action=='forward' and (not request.subject or not request.source or not request.source_authorized
+                or request.source.canonical_url!=request.subject.url or request.subject.native_target!=request.native_target):
+            raise DomainError('max_exact_forward_source_required')
+        if request.action=='reply' and (not request.subject or request.subject.native_target!=request.native_target or request.subject.namespace!='published'):
+            raise DomainError('max_reply_subject_required')
         if request.action=='react' and (not request.subject or request.subject!=request.existing
                 or request.reaction_mode not in {'add','remove'} or not request.reaction):
             raise DomainError('max_reaction_subject_required')
@@ -91,7 +99,7 @@ class MaxAdapter:
             raise DomainError('max_media_unsupported')
         if check_time:
             schedule_guard(request, time.time(), lead=self.driver.min_lead)
-        if request.action != 'publish':
+        if request.action not in {'publish','reply','forward'}:
             if not request.existing or request.existing.native_target != request.native_target:
                 raise DomainError('max_exact_existing_required')
         elif request.existing:
@@ -110,7 +118,9 @@ class MaxAdapter:
             else:
                 await self.driver.read(request.native_target, 'scheduled' if request.scheduled_at else 'feed')
                 await self.driver._scope(request.native_target, write=True)
-        except (DomainError, MaxBlocked):
+        except (DomainError, MaxBlocked) as exc:
+            if isinstance(exc,DomainError) and exc.code=='max_native_forward_edit_unsupported':
+                return Capability('unsupported','MAX group native forwards have no Edit control',evidence='max_web_dom')
             return Capability('needs_review', 'MAX request/profile capability not verified', evidence='offline_fixture',
                               min_lead_seconds=self.driver.min_lead)
         return Capability('supported', 'Native UI receipt path' if self.live_enabled else 'Explicit loopback fixture only; NOT live MAX evidence',
@@ -138,9 +148,10 @@ class MaxAdapter:
 
     @staticmethod
     def _remote(item):
-        remote = RemoteItem(native_id=item['id'], namespace='published' if item['namespace'] == 'feed' else item['namespace'],
+        remote = RemoteItem(origin=item.get('origin'),native_id=item['id'], namespace='published' if item['namespace'] == 'feed' else item['namespace'],
                             native_target=item['target'], text=item['text'], fingerprint='', observed_at=item['observed_at'],
                             scheduled_at=item['scheduled_at'], provider_media=tuple(item['media']),
+                            **({'reply_to_native_id':item['reply_to_native_id']} if item.get('reply_to_native_id') else {}),
                             **({'own_reactions':tuple(item['own_reactions']),'own_reactions_observed':True} if item.get('own_reactions_observed') else {}),
                             url=item.get('url'), entities_json=json.dumps(item.get('entities',[])), member_ids=tuple(item.get('member_ids',(item['id'],))), **({'observed_media':tuple(item['observed_media'])} if item.get('observed_media') else {}), media_check='download_binding' if item.get('observed_media') else 'provider_identity_only' if item['media'] else 'not_applicable')
         return replace(remote, fingerprint=identity(remote))
@@ -149,11 +160,15 @@ class MaxAdapter:
         state = load_checkpoint(request, checkpoint).get('driver')
         from social_operations.rich_text import max_entities
         try:
+            media_subject=request.existing or (request.subject if request.action=='forward' else None)
+            expected_slots=len(request.assets) if request.assets else ((len(getattr(media_subject,'observed_media',())) or len(media_subject.provider_media)) if media_subject else 0)
             kind = ('feed' if request.existing.namespace == 'published' else request.existing.namespace) if request.existing else ('scheduled' if request.scheduled_at else 'feed')
             if (state['target'] != request.native_target or state['text'] != self._text(request)
                     or max_entities(state['text'],state.get('entities',[])) != self._content(request)[1]
                     or state['action'] != request.action or state['scheduled_at'] != request.scheduled_at
-                    or state['kind'] != kind or state.get('media_slots',len(state['media'])) != (len(request.assets) if request.assets else (len(getattr(request.existing,'observed_media',())) or len(request.existing.provider_media)) if request.existing else 0)
+                    or state['kind'] != kind or state.get('media_slots',len(state['media'])) != expected_slots
+                    or (request.action=='forward' and state.get('subject')!=self._existing(request.subject))
+                    or (request.action=='reply' and state.get('reply_to')!=self._existing(request.subject))
                     or (request.action=='react' and (state.get('reaction')!=request.reaction or state.get('reaction_mode')!=request.reaction_mode))
                     or state['existing_id'] != (request.existing.native_id if request.existing else None)):
                 raise ValueError()
@@ -183,7 +198,7 @@ class MaxAdapter:
         else:
             item = bind_media(request, item, state['media'])
         observed = 'reacted' if request.action=='react' else 'deleted' if request.action == 'delete' else 'cancelled' if request.action == 'cancel' else 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
-        return Observation(observed, (item,), replacement=replacement)
+        return Observation(observed, (item,), replacement=replacement,forward_origin_matched=items[0].get('forward_origin_matched') is True)
 
     @staticmethod
     def _download_binding(request,state):
@@ -236,6 +251,7 @@ class MaxAdapter:
                 attempt_id=request.attempt_id, plan_digest=request.plan_digest,
                 existing=self._existing(request.existing),
                 **({'entities':self._content(request)[1]} if self.live_enabled else {}),
+                **({'subject':self._existing(request.subject)} if request.action in {'reply','forward'} else {}),
                 **({'reaction':request.reaction,'reaction_mode':request.reaction_mode} if request.action=='react' else {}),
                 hooks=Hooks(progress, checkpoint, hooks.before_effect))
             return self._observation(request, items, state)
@@ -252,6 +268,14 @@ class MaxAdapter:
         if self.live_enabled:
             envelope = json.loads(checkpoint)
             admitted = envelope.get('core_recovery', {})
+            if request.action=='forward':
+                if any(admitted.get(k)!=v for k,v in {'operation_id':request.operation_id,'attempt_id':request.attempt_id,'plan_digest':request.plan_digest}.items()):
+                    raise OutcomeUnknown('max_core_recovery_binding_mismatch')
+                result=await self.driver.reconcile(state)
+                state.update(native_id=result['item']['id'],recovery_reference=result['item']['url'],observed_media=result['item'].get('observed_media',[]))
+                state=self._download_binding(request,state)
+                await hooks.checkpoint('MAX_FORWARD_RECONCILED',saved_checkpoint(request,driver=state))
+                return self._observation(request,[result['item']],state)
             if state['kind']=='scheduled':
                 if any(admitted.get(k)!=v for k,v in {
                     'operation_id':request.operation_id,'attempt_id':request.attempt_id,
@@ -378,7 +402,15 @@ class MaxAdapter:
                 raise OutcomeUnknown('max_terminal_download_mismatch')
             if all(x is not None for x in original_state['media']) and remote.get('provider_media',[]) != original_state['media']:
                 raise OutcomeUnknown('max_terminal_media_mismatch')
-        if not self.recovery_only and original_state['kind']=='scheduled':
+        if not self.recovery_only and request.action=='forward':
+            from .wire import published_wire_id
+            committed=envelope.get('committed_observation',{})
+            exact=(committed.get('items')==[remote] and committed.get('observed')=='published'
+                and committed.get('forward_origin_matched') is True
+                and remote.get('origin')==request.source.canonical_url
+                and remote.get('namespace')=='published'
+                and published_wire_id(remote.get('native_id')) not in original_state['baseline_ids'])
+        elif not self.recovery_only and original_state['kind']=='scheduled':
             native=original_state.get('native_id')
             committed=envelope.get('committed_observation',{})
             recovered_exact=(committed.get('items')==[remote] and committed.get('observed')=='provider_scheduled')
@@ -413,6 +445,14 @@ class MaxAdapter:
         if not 1 <= request.limit <= 100:
             raise DomainError('max_read_limit')
         kind = request.kind
+        if kind=='reactions':
+            if not self.live_enabled or not request.native_item or request.namespace!='published' or request.cursor:
+                raise DomainError('max_exact_reaction_read_required')
+            from .engagement import observe
+            await hooks.emit_progress('reading_back','started','Reading exact native MAX own-reaction state')
+            try:item=await observe(self.driver,request.native_target,request.native_item)
+            except MaxBlocked as exc:raise DomainError('max_'+str(exc)) from None
+            return ReadPage((self._remote(item),))
         if kind == 'item':
             if not request.native_item or request.namespace not in {'published', 'scheduled'}:
                 raise DomainError('max_exact_item_required')

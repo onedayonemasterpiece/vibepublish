@@ -179,8 +179,16 @@ class HistoryObserver(QueueObserver):
                         or not isinstance(row.get('attaches',[]),list)):
                     raise MaxBlocked('native_history_schema')
                 ids.add(row['id'])
-                result.append(dict(id=str(row['id']),text=row.get('text',''),time_ms=row.get('time'),
-                    link=native_link(row.get('link')),media_count=len(row.get('attaches',[])),
+                content=row
+                link=row.get('link')
+                if isinstance(link,dict) and link.get('type')=='FORWARD':
+                    content=link.get('message')
+                    if (not isinstance(content,dict) or not isinstance(content.get('text',''),str)
+                            or not isinstance(content.get('attaches',[]),list)
+                            or row.get('text') or row.get('attaches')):
+                        raise MaxBlocked('native_forward_body_unverified')
+                result.append(dict(id=str(row['id']),text=content.get('text',''),time_ms=row.get('time'),
+                    link=native_link(row.get('link')),media_count=len(content.get('attaches',[])),
                     **({'own_reactions':own_reactions(row['reactionInfo'])} if 'reactionInfo' in row else {})))
             self.rows=result
         except (TypeError,ValueError,MaxBlocked):self.error=MaxBlocked('native_history_unverified')

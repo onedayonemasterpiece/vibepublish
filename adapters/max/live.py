@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
-from playwright.async_api import expect, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import ElementHandle, Error as PlaywrightError, expect, TimeoutError as PlaywrightTimeoutError
 
 from .profile import MaxBlocked, ProfileLane
 from . import rich
@@ -212,12 +212,15 @@ class RealMaxDriver:
             wanted=datetime.fromisoformat(scheduled_at.replace('Z','+00:00'))
             if wanted.second or wanted.microsecond:raise MaxBlocked('native_schedule_minute_precision')
             return
-        if action not in {'publish', 'edit', 'delete', 'react'} or scheduled_at is not None:
+        if action not in {'publish', 'edit', 'delete', 'react','reply','forward'} or scheduled_at is not None:
             raise MaxBlocked('live_surface_not_implemented')
 
     async def mutate(self, *, target, text, media, scheduled_at, action,
-                     attempt_id, plan_digest, hooks, existing=None, entities=(), reaction=None, reaction_mode=None):
+                     attempt_id, plan_digest, hooks, existing=None, entities=(), reaction=None, reaction_mode=None, subject=None):
         await self.mutation_preflight(target, action, media=media, scheduled_at=scheduled_at)
+        if action=='forward':
+            from .engagement import forward
+            return await forward(self,subject=subject,target=target,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
         if action=='react':
             from . import engagement
             return await engagement.react(self,existing=existing,reaction=reaction,reaction_mode=reaction_mode,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
@@ -233,9 +236,9 @@ class RealMaxDriver:
         if action == 'publish' and scheduled_at is not None:
             from . import queue
             return await queue.publish(self,target=target,text=text,media=media,entities=entities,scheduled_at=scheduled_at,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
-        if action == 'publish':
+        if action in {'publish','reply'}:
             result = await self.submit_plain_candidate(target=target,text=text,
-                attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks,media=media,entities=entities)
+                attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks,media=media,entities=entities,reply_to=subject if action=='reply' else None)
         elif action == 'delete':
             result = await self.delete_plain(existing=existing,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
         else:
@@ -266,7 +269,7 @@ class RealMaxDriver:
         await rich.fill(self.page,composer,text,entities)
         return composer,previews
 
-    async def submit_plain_candidate(self, *, target, text, attempt_id, plan_digest, hooks, media=(), entities=()):
+    async def submit_plain_candidate(self, *, target, text, attempt_id, plan_digest, hooks, media=(), entities=(), reply_to=None):
         """Single trusted plain Send with durable native receipt, no effect retry.
 
         Runs observed composer/Send/native-copy selectors. Captures
@@ -277,6 +280,11 @@ class RealMaxDriver:
         import json
         if not self.live_writes and not re.fullmatch(r'http://127\.0\.0\.1:[0-9]+', self.origin):
             raise MaxBlocked('writer_live_qualification_pending')
+        if reply_to is not None:
+            from .engagement import same_content
+            if reply_to['target']!=target or reply_to['namespace']!='feed':raise MaxBlocked('reply_subject_scope')
+            source=(await self.read(target,'feed',native_item=reply_to['id']))[0]
+            if not same_content(source,reply_to):raise MaxBlocked('reply_source_changed')
         self._enter(target)
         armed = False
         observer = None
@@ -293,6 +301,17 @@ class RealMaxDriver:
                 main = await self._scope(target)
                 if await self._rows(main,text).count():
                     raise MaxBlocked('preexisting_content_candidate')
+                reply_node=None
+                if reply_to is not None:
+                    source_row=self._rows(main,reply_to['text'],outgoing=True)
+                    if await self._copy_native_reference(source_row,target)!=(reply_to['url'],reply_to['id']):
+                        raise MaxBlocked('reply_native_reference_changed')
+                    reply_node=await source_row.element_handle()
+                    await self._open_message_menu(source_row)
+                    await self.page.get_by_role('menu').get_by_role('menuitem',name='Ответить',exact=True).click()
+                    await expect(main.locator('.composer .action > .text.title')).to_contain_text('Ответ для')
+                    if (await main.locator('.composer .action > .text.content').text_content()).strip()!=reply_to['text']:
+                        raise MaxBlocked('reply_preview_unverified')
                 composer,previews=await self._compose(main,text,media,entities)
                 observer = await main.evaluate_handle("(main, intent) => {" + rich.SNAPSHOT_JS + """
                     const content = '.bubbleContent > .text';
@@ -316,6 +335,11 @@ class RealMaxDriver:
                         if(!main.isConnected || !main.contains(send) || !e.isTrusted ||
                            location.href!==intent.route || !header ||
                            editors.length!==1 || semanticText(editors[0])!==intent.text || JSON.stringify(semanticSnapshot(editors[0]))!==intent.snapshot ||
+                           (intent.reply && (!intent.replyNode?.isConnected ||
+                             semanticText(intent.replyNode.querySelector(content))!==intent.reply.text ||
+                             !shell?.querySelector('.action > .text.title')?.textContent.includes('Ответ для') ||
+                             shell?.querySelector('.action > .text.content')?.textContent.trim()!==intent.reply.text)) ||
+                           (!intent.reply && shell?.querySelector('.action')) ||
                            !shell || shell===main || shell.querySelector('.messageWrapper,video,audio') ||
                            JSON.stringify(previews)!==JSON.stringify(intent.previews) ||
                            shell.querySelectorAll('.attaches img').length!==intent.previews.length ||
@@ -327,9 +351,9 @@ class RealMaxDriver:
                     document.addEventListener('click',guard,true);
                     return {state, ready:()=>main.isConnected && location.href===intent.route && !state.clicks && !state.blocked,
                         stop:()=>{watch.disconnect();document.removeEventListener('click',guard,true);}};
-                }""", dict(text=text, snapshot=await composer.evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'), previews=previews, composer=COMPOSER, route=self.origin+'/'+target,
+                }""", dict(text=text, reply=reply_to,replyNode=reply_node, snapshot=await composer.evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'), previews=previews, composer=COMPOSER, route=self.origin+'/'+target,
                             header='Открыть профиль '+self.targets[target].alias))
-                state = dict(target=target, text=text, entities=list(entities), kind='feed', action='publish',
+                state = dict(target=target, text=text, entities=list(entities), kind='feed', action='reply' if reply_to is not None else 'publish',reply_to=reply_to,
                              media=[None]*len(media), source_hashes=[__import__('hashlib').sha256(m['buffer']).hexdigest() for m in media], media_slots=len(media), upload_previews=previews, scheduled_at=None, existing_id=None,
                              attempt_id=attempt_id, plan_digest=plan_digest,
                              observer_installed=True, baseline_scope='loaded_target_rows_only')
@@ -355,7 +379,7 @@ class RealMaxDriver:
                 transition = await observer.evaluate('(o)=>o.state')
                 if transition != dict(clicks=1, changed=True, blocked=False):
                     raise MaxBlocked('submit_transition_unverified')
-                if entities or any(m['mimeType']=='video/mp4' for m in media):
+                if reply_to is not None or entities or any(m['mimeType']=='video/mp4' for m in media):
                     # Preserve the actual native reference before media inspection;
                     # a lost download/readback must never require another Send.
                     if 'messageWrapper--isOut' not in (await rows.get_attribute('class') or '').split():
@@ -385,6 +409,10 @@ class RealMaxDriver:
                 final = await self._plain_candidate(target, text, rows, media_count=len(media))
                 if final['url'] != item['url'] or final.get('observed_media',[]) != item.get('observed_media',[]):
                     raise MaxBlocked('native_reference_changed')
+                if reply_to is not None:
+                    from .engagement import verify_reply
+                    self._busy=False
+                    final=await verify_reply(self,final,reply_to)
                 self._check_attempt_fuse(attempt_id, plan_digest)
                 await hooks.checkpoint('MAX_CANDIDATE_OBSERVED', json.dumps(dict(state, item=final)))
                 return dict(item=final, transition=transition, quarantine_released=False,
@@ -443,11 +471,18 @@ class RealMaxDriver:
                 if await composer.evaluate(rich.TEXT_JS):
                     raise MaxBlocked('existing_draft')
                 rows = self._rows(main,old)
+                if await rows.count()!=1:rows=await self._find_native_row(main,old,existing['id'])
+                source_handle=await rows.element_handle()
                 observed = await self._plain_candidate(target, old, rows,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
                 if observed['url'] != reference or not rich.same_entities(observed.get('entities',[]),existing.get('entities',[])) or observed.get('observed_media',[]) != existing.get('observed_media',[]):
                     raise MaxBlocked('existing_reference_changed')
-                await self._open_message_menu(rows)
-                await self.page.get_by_role('menu').get_by_role('menuitem', name='Редактировать', exact=True).click()
+                if await self._copy_native_reference(source_handle,target)!=(reference,existing['id']):raise MaxBlocked('existing_reference_changed')
+                await self._open_message_menu(source_handle)
+                menu=self.page.get_by_role('menu')
+                await expect(menu).to_be_visible()
+                if await menu.get_by_role('menuitem',name='Редактировать',exact=True).count()!=1:
+                    raise MaxBlocked('native_edit_not_available')
+                await menu.get_by_role('menuitem',name='Редактировать',exact=True).click()
                 await expect(main.get_by_text(re.compile(r'^Редактирование (?:поста|сообщения)$'))).to_have_count(1)
                 if await composer.evaluate(rich.TEXT_JS) != old:
                     raise MaxBlocked('edit_draft_mismatch')
@@ -457,8 +492,7 @@ class RealMaxDriver:
                 guard = await main.evaluate_handle("(main, x)=>{" + rich.SNAPSHOT_JS + r"""
                     let clicks=0, blocked=false;
                     const ready=()=>{
-                        const rows=[...main.querySelectorAll('.messageWrapper')]
-                            .filter(e=>semanticText(e.querySelector('.bubbleContent > .text'))===x.old);
+                        const rows=x.row?.isConnected && main.contains(x.row) ? [x.row] : [];
                         return main.isConnected && location.href===x.route &&
                             [...main.querySelectorAll('button')].some(e=>e.getAttribute('aria-label')===x.header) &&
                             [...main.querySelectorAll('*')].some(e=>e.children.length===0 && ['Редактирование поста','Редактирование сообщения'].includes(e.textContent)) &&
@@ -477,7 +511,7 @@ class RealMaxDriver:
                     };
                     document.addEventListener('click',check,true);
                     return {ready, result:()=>({clicks,blocked}),stop:()=>document.removeEventListener('click',check,true)};
-                }""", dict(route=self.origin+'/'+target, composer=COMPOSER,text=text,old=old,snapshot=await composer.evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),oldSnapshot=await rows.locator('.bubbleContent > .text').evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),mediaContainers=await rows.locator('.media').count(),videos=await rows.locator('.media video source').evaluate_all('(es)=>es.map(e=>e.src)'),media=await rows.locator('.media img').evaluate_all('(es)=>es.map(e=>e.currentSrc||e.src)'),
+                }""", dict(row=source_handle,route=self.origin+'/'+target, composer=COMPOSER,text=text,old=old,snapshot=await composer.evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),oldSnapshot=await rows.locator('.bubbleContent > .text').evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),mediaContainers=await rows.locator('.media').count(),videos=await rows.locator('.media video source').evaluate_all('(es)=>es.map(e=>e.src)'),media=await rows.locator('.media img').evaluate_all('(es)=>es.map(e=>e.currentSrc||e.src)'),
                             header='Открыть профиль '+self.targets[target].alias))
                 state = dict(target=target,text=text,entities=list(entities),old_text=old,old_entities=existing.get('entities',[]),kind='feed',action='edit',
                     media=list(existing['media']),observed_media=list(existing.get('observed_media',[])),media_slots=len(existing.get('observed_media',[])) or len(existing['media']),scheduled_at=None,existing_id=existing['id'],
@@ -570,7 +604,9 @@ class RealMaxDriver:
                     if not text:continue
                     row=self._rows(main,text,outgoing=True)
                     try:
-                        if await row.count()!=1:raise MaxBlocked('ambiguous_read_candidate')
+                        if await row.count()!=1:
+                            if not native_item:raise MaxBlocked('ambiguous_read_candidate')
+                            row=await self._find_native_row(main,text,native_item)
                         if await row.locator('audio').count():
                             incomplete=True;continue
                         await self.page.bring_to_front()
@@ -578,7 +614,7 @@ class RealMaxDriver:
                         count=await row.locator('[aria-label="Прикрепленные фото"] > button').count()
                         item=await self._plain_candidate(target,text,row,media_count=count)
                     except MaxBlocked as exc:
-                        if not native_item or str(exc) not in {'ambiguous_read_candidate','nonexact_plain_candidate','rich_link_not_verified','native_copy_menu_unavailable'}:raise
+                        if not native_item or str(exc) not in {'ambiguous_read_candidate','native_candidate_not_matching','nonexact_plain_candidate','rich_link_not_verified','native_copy_menu_unavailable'}:raise
                         incomplete=True
                         if await self.page.get_by_role('menu').count():await self.page.keyboard.press('Escape')
                         await self._scope(target)
@@ -596,7 +632,7 @@ class RealMaxDriver:
         finally:
             self._busy=False
 
-    async def delete_plain(self, *, existing, attempt_id, plan_digest, hooks):
+    async def delete_plain(self, *, existing, attempt_id, plan_digest, hooks, _preparation_retry=False):
         """Delete the copied own native object for everyone, never a text-only match."""
         import json
         if not self.live_writes:
@@ -609,6 +645,7 @@ class RealMaxDriver:
             raise MaxBlocked('exact_plain_existing_required') from None
         self._enter(target)
         armed, guard = False, None
+        phase="scope"
         try:
             self.lane.assert_clear()
             if self.targets[target].policy != 'test_group':
@@ -617,18 +654,27 @@ class RealMaxDriver:
                 await self._account()
                 await self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded')
                 main = await self._scope(target)
+                phase='native_read'
                 row = self._rows(main,text)
+                if await row.count()!=1:row=await self._find_native_row(main,text,existing['id'])
+                handle=await row.element_handle()
                 observed = await self._plain_candidate(target,text,row,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
                 if observed['url'] != reference or observed['id'] != existing['id'] or observed.get('observed_media',[]) != existing.get('observed_media',[]):
                     raise MaxBlocked('existing_reference_changed')
-                await self._open_message_menu(row)
+                phase='native_handle_recheck'
+                if await self._copy_native_reference(handle,target)!=(reference,existing['id']):raise MaxBlocked('existing_reference_changed')
+                phase='open_menu'
+                await self._open_message_menu(handle)
+                phase='delete_choice'
                 await self.page.get_by_role('menu').get_by_role('menuitem',name='Удалить',exact=True).click()
+                phase='dialog'
                 dialog = self.page.get_by_role('dialog')
                 await expect(dialog.get_by_text('Удалить сообщение',exact=True)).to_have_count(1)
+                phase='everyone_checkbox'
                 checkbox = dialog.get_by_role('checkbox',name='Удалить для всех?',exact=True)
                 await checkbox.check()
                 # Bind the actual connected row, not whichever row later matches text.
-                handle = await row.element_handle()
+                phase='guard_capture'
                 guard = await dialog.evaluate_handle("(dialog,x)=>{" + rich.SNAPSHOT_JS + """
                     const row=x.row, main=row.closest('main');
                     let clicks=0,removed=false,blocked=false;
@@ -660,7 +706,7 @@ class RealMaxDriver:
                 if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('delete_binding_changed')
                 await dialog.get_by_role('button',name='Удалить',exact=True).click()
                 await expect(dialog).to_have_count(0)
-                await expect(row).to_have_count(0)
+                await handle.wait_for_element_state('hidden')
                 transition=await guard.evaluate('(g)=>g.result()')
                 if transition!=dict(clicks=1,removed=True,blocked=False):raise MaxBlocked('delete_transition_unverified')
                 state.update(transition=transition,item=observed)
@@ -669,7 +715,7 @@ class RealMaxDriver:
                 await self._account()
                 await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
                 main=await self._scope(target)
-                await expect(self._rows(main,text)).to_have_count(0)
+                await self._remaining_rows_exclude(main,text,existing['id'])
                 self._check_attempt_fuse(attempt_id,plan_digest)
                 observed['observed_at']=datetime.now(timezone.utc).isoformat()
                 await hooks.checkpoint('MAX_DELETE_OBSERVED',json.dumps(dict(state,item=observed)))
@@ -678,7 +724,14 @@ class RealMaxDriver:
             if isinstance(exc,(asyncio.CancelledError,KeyboardInterrupt,SystemExit)):raise
             if armed:raise MaxBlocked('outcome_unknown') from None
             if isinstance(exc,MaxBlocked):raise
-            raise MaxBlocked('delete_prepare_unavailable') from None
+            if (isinstance(exc,PlaywrightError) and not _preparation_retry
+                    and phase in {'native_read','native_handle_recheck','open_menu'}):
+                # Read-only preparation can lose a native row during rerender.
+                # Reacquire once by copied ID, never retry a Delete confirmation.
+                self._busy=False
+                return await self.delete_plain(existing=existing,attempt_id=attempt_id,
+                    plan_digest=plan_digest,hooks=hooks,_preparation_retry=True)
+            raise MaxBlocked('delete_prepare_unavailable_'+phase+'_'+type(exc).__name__.lower()) from None
         finally:
             if guard is not None:
                 try:await guard.evaluate('(g)=>g.stop()');await guard.dispose()
@@ -771,15 +824,53 @@ class RealMaxDriver:
     async def _open_message_menu(self, row):
         # A media row's centre is the image viewer, not the message menu.
         # Use the verified caption surface; never infer identity from coordinates.
-        caption=row.locator('.bubbleContent > .text')
-        await expect(caption).to_have_count(1)
+        if isinstance(row,ElementHandle):
+            captions=await row.query_selector_all('.bubbleContent > .text')
+            if len(captions)!=1 or not await row.evaluate('e=>e.isConnected'):raise MaxBlocked('native_row_detached')
+            caption=captions[0]
+        else:
+            caption=row.locator('.bubbleContent > .text')
+            await expect(caption).to_have_count(1)
         await caption.click(button='right',timeout=self.timeout*1000)
+
+    async def _remaining_rows_exclude(self,main,text,native_id):
+        """After durable trusted removal only; not standalone absence proof."""
+        rows=self._rows(main,text)
+        handles=await rows.element_handles()
+        if len(handles)>100:raise MaxBlocked('bounded_native_candidates')
+        for handle in handles:
+            _url,copied=await self._copy_native_reference(handle,self.page.url.rsplit('/',1)[-1])
+            if copied==native_id:raise MaxBlocked('deleted_native_item_still_present')
+
+    async def _connected_row(self,row):
+        if isinstance(row,ElementHandle):
+            if not await row.evaluate('e=>e.isConnected'):raise MaxBlocked('native_row_detached')
+        else:await expect(row).to_have_count(1)
+
+    async def _find_native_row(self,main,text,native_id):
+        """Enumerate candidates read-only; only copied native IDs select a row.
+
+        Indexes are temporary locator mechanics, never object identities. A
+        retained DOM handle is rechecked after each copy and before return.
+        """
+        rows=self._rows(main,text,outgoing=True)
+        handles=await rows.element_handles()
+        if not 1<=len(handles)<=100:raise MaxBlocked('bounded_native_candidates')
+        for handle in handles:
+            _url,copied=await self._copy_native_reference(handle,self.page.url.rsplit('/',1)[-1])
+            if copied!=native_id:continue
+            index=await rows.evaluate_all('(es,h)=>es.indexOf(h)',handle)
+            if index<0:raise MaxBlocked('native_row_detached')
+            candidate=rows.nth(index)
+            if not await candidate.evaluate('(e,h)=>e===h',handle):raise MaxBlocked('native_row_reordered')
+            return candidate
+        raise MaxBlocked('native_candidate_not_matching')
 
     async def _copy_native_reference(self, row, target):
         """Observed message-menu recipe; never infer an ID from row position."""
         import uuid
         await self._scope(target)
-        await expect(row).to_have_count(1)
+        await self._connected_row(row)
         # Identity validation uses another page; activate our own message page
         # before clipboard and pointer interactions (never a recovered user tab).
         await self.page.bring_to_front()
@@ -791,7 +882,7 @@ class RealMaxDriver:
         # this read-only menu is safe; never reuse this loop around Send/Save.
         for opening in range(2):
             await self._scope(target)
-            await expect(row).to_have_count(1)
+            await self._connected_row(row)
             await self._open_message_menu(row)
             menu = self.page.get_by_role('menu')
             try:
@@ -834,6 +925,15 @@ class RealMaxDriver:
         Neither the model nor its screenshot replaces native-reference checks.
         Identity/content/quarantine failures never enter model-assisted recovery.
         """
+        if state.get('action')=='forward':
+            from .engagement import forward_candidate
+            self._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
+            item=await forward_candidate(self,state)
+            return dict(item=item,quarantine_released=False)
+        if state.get('action')=='reply':
+            from .engagement import verify_reply
+            result=await self._reconcile_dom(state)
+            return dict(result,item=await verify_reply(self,result['item'],state['reply_to']))
         if state.get('action')=='react':
             from .engagement import reconcile_reaction
             return await reconcile_reaction(self,state)
@@ -884,8 +984,7 @@ class RealMaxDriver:
                     await self._account()
                     await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
                     main=await self._scope(target)
-                    await expect(main.locator('.messageWrapper').filter(
-                        has=self.page.locator('.bubbleContent > .text').filter(has_text=state['text']))).to_have_count(0)
+                    await self._remaining_rows_exclude(main,state['text'],state['existing_id'])
                 return dict(item=dict(item,observed_at=datetime.now(timezone.utc).isoformat()),quarantine_released=False)
         finally:self._busy=False
 
@@ -904,7 +1003,7 @@ class RealMaxDriver:
             reference = state['recovery_reference']
             marker = state.get('task_marker', text)
             attempt, plan = state['attempt_id'], state['plan_digest']
-            if (state['kind'] != 'feed' or state['action'] not in {'publish', 'edit'}
+            if (state['kind'] != 'feed' or state['action'] not in {'publish', 'edit','reply'}
                     or not isinstance(state['media'],list) or len(state['media'])>10 or state['scheduled_at'] is not None
                     or not isinstance(text, str) or not text or len(text) > 4000
                     or not isinstance(marker, str) or not marker
