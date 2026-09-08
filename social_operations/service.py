@@ -541,7 +541,11 @@ class Application:
         if publication and db.execute('SELECT 1 FROM publications WHERE id=? AND tenant_id=? AND principal_id=?',
                                       (publication, actor.tenant_id, actor.principal_id)).fetchone():
             item['publication_id'] = publication
-        if remote.get('media_hashes'):
+        if remote.get('observed_media'):
+            from dataclasses import asdict
+            from adapters.port import downloaded_media
+            item['media_evidence'] = [asdict(value) for value in downloaded_media(remote['observed_media'])]
+        elif remote.get('media_hashes'):
             item['error'] = {'code': 'media_projection_not_enabled', 'message': 'This checkpoint returns text and timing; provider media downloads are not exposed'}
         if remote.get('metrics'):
             item['metrics'] = [{'name': n, 'value': v, 'unit': u} for n,v,u in remote['metrics']]

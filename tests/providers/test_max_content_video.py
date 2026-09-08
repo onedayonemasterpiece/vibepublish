@@ -323,3 +323,34 @@ async def test_max_download_evidence_survives_adoption_and_blocks_changed_media(
     with store.connection() as db:
         plan=json.loads(db.execute('SELECT plan FROM attempts WHERE operation_id=?',(edit['operation_id'],)).fetchone()[0])
     assert plan['existing']['observed_media'][0]['sha256']=='d'*64
+
+
+@pytest.mark.asyncio
+async def test_downloaded_media_read_projection_is_safe_metadata_not_upload_attribution(tmp_path):
+    from contracts.social_mcp_v1 import catalog
+    from jsonschema import Draft202012Validator
+    store,actor,app=runtime(tmp_path)
+    provider=SemanticMax()
+    provider.remote=RemoteItem('native','published','caption','',timestamp(store.clock()),native_target='native-target',
+        media_hashes=('a'*64,),observed_media=[download_record()],media_check='download_binding')
+    provider.remote=replace(provider.remote,fingerprint=identity(provider.remote))
+    read=await app.call(actor,'vibepublish_read',{'query':{'kind':'feed','destination':'target'}})
+    await Worker(store,{'connection':provider}).run_once()
+    receipt=store.receipt(actor,read['operation_id'])
+    assert receipt['state']=='verified',receipt
+    projected=receipt['items'][0]
+    assert projected['media_evidence']==[download_record()]
+    assert 'error' not in projected and 'media' not in projected
+    assert 'a'*64 not in canonical(projected) and 'provider_media' not in projected
+    assert 'native' not in canonical(projected) and 'url' not in projected
+    output=next(tool['outputSchema'] for tool in catalog()['tools'] if tool['name']=='vibepublish_read')
+    Draft202012Validator(output).validate(receipt)
+    with store.connection() as db:
+        saved=app.resolve_item(db,actor,projected['ref'])
+        assert json.loads(saved['snapshot'])['observed_media']==[download_record()]
+    # Current authority still guards access to both metadata and its item handle.
+    with store.connection() as db:
+        binding=db.execute('SELECT id FROM bindings').fetchone()[0]
+    store.revoke_binding(actor,binding)
+    denied=await app.call(actor,'vibepublish_read',{'query':{'kind':'item','item_ref':projected['ref']}})
+    assert 'error' in denied

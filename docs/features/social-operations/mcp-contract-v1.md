@@ -287,6 +287,14 @@ preserves and compares slot evidence when media are not replaced, and rejects
 missing download-binding status or invented native media IDs. Different native
 slot bytes are a CAS conflict/unknown result, never a verified caption-only edit.
 
+Authorized read items expose a closed `media_evidence` array with the same
+`kind`, `slot`, `sha256`, `mime`, `size` records. This is observed-download metadata,
+not a source asset ref, downloadable URL or claim of original upload attribution.
+Signed URLs, native attachment IDs and private input hashes are not projected.
+When this evidence exists, reads do not emit the previous text-only media error.
+Existing item handles and current binding/tenant/private-scope checks still apply;
+actual bytes are not exposed by this metadata addition.
+
 This is an additive typed port/public receipt evidence category, not a new public
 mutation API, URL fetch endpoint, provider-native-ID claim, or permission bypass.
 The MAX adapter owns authorized browser-download acquisition, exact-post checks,

@@ -8,6 +8,8 @@
   IDs and uploaded source hashes, with explicit immutable-intent binding.
 - Added the `download_binding` receipt category and MAX lifecycle CAS checks;
   existing provider fingerprints remain unchanged without the new evidence.
+- Read receipts now expose safe downloaded-media evidence metadata instead of
+  falsely reporting text-only output, without signed URLs or private input hashes.
 - Added validation, serialization, mismatched binding and actual core adoption
   regressions; authorized MAX browser downloads remain adapter-owned.
 

@@ -130,6 +130,12 @@ DEFS["event"] = obj({"seq": REV, "operation_id": ID, "destination": ALIAS,
     ("seq", "operation_id", "at", "stage", "status", "message"))
 DEFS["progress"] = obj({"events": array(ref("event"), 0, 50),
     "cursor": string(512), "has_more": {"type": "boolean"}}, ("events", "cursor", "has_more"))
+DEFS["downloaded_media"] = obj({
+    "kind": {"const": "download_sha256"}, "slot": {"type": "integer", "minimum": 0, "maximum": 9},
+    "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+    "mime": enum("image/png", "image/jpeg", "image/webp", "video/mp4"),
+    "size": {"type": "integer", "minimum": 1, "maximum": 20*1024*1024}},
+    ("kind", "slot", "sha256", "mime", "size"))
 DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url": URL,
     "publication_id": ID, "revision": REV, "destination": ALIAS,
     "publication_kind": enum("original", "forward"), "forward_origin": ref("forward_origin"),
@@ -138,7 +144,8 @@ DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url":
     "origin": enum("vibepublish", "provider_client", "imported"),
     "observed_state": enum("provider_scheduled", "provider_processing", "published", "deleted", "cancelled", "unknown"),
     "queue_ref": ID, "preview_ref": ID, "navigate_hint": string(500),
-    "media": array(ref("media"), 0, 20), "metrics_observed_at": DATE, "error": ref("error"),
+    "media": array(ref("media"), 0, 20), "media_evidence": array(ref("downloaded_media"), 1, 10),
+    "metrics_observed_at": DATE, "error": ref("error"),
     "metrics": array(obj({"name": string(100), "value": {"type": "number"}, "unit": string(40)},
                          ("name", "value")), 0, 100)}, ("ref", "kind", "observed_at", "source", "freshness"))
 DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
