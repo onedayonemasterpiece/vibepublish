@@ -219,3 +219,38 @@ absolute `profile`, `executable`, `allowlist` paths, `live_writes: true`, and op
 credential borrowing occurs. The existing allowlist/account checks and exclusive
 profile lifetime remain mandatory. Core must include the additive native-factory
 seam in PR #1; older core intentionally leaves MAX unwired.
+
+
+### Native image evidence and current live verification (2026-09-08)
+
+Image Send uses the observed **Загрузить файл → Фото или видео** file chooser
+and binds ordered filename/blob previews and input digests before dispatch.
+The native message menu must be opened on the caption, not the centre of an
+image tile. History readiness and lazy photo mounting are distinct from header
+readiness; photo tiles determine expected media count. Candidate rejection must
+not press Escape without an open menu (MAX otherwise leaves the chat).
+
+Rendered `i.oneme.ru` URLs rotate between navigations and are **not** attachment
+identity. The driver opens each exact message's ordered photo tiles and uses the
+native viewer's **Скачать** action. Bounded decoded-image validation and SHA-256
+of actual downloaded bytes yield typed `DownloadedMedia` evidence. These hashes
+are not claimed equal to original uploaded PNG hashes (MAX may transcode JPEG).
+The real core `bind_download_media` validates the durable original-intent/native
+reference/ordered-download binding. No fake provider IDs, direct CDN requests,
+second idempotency ledger or manual quarantine reset are introduced.
+
+Live through actual MCP and standard `worker --native --once`: the initial image
+operation recovered without another Send, then exact read → edit → exact read →
+delete of that same object all reached `verified` with `operation_complete=true`.
+The downloaded image evidence before/after edit was identical. Private receipts:
+`artifacts/codex/max-product-20260908/image-{recovery,read,edit,read-edited,delete}-status.json`.
+This is image lifecycle evidence, **not** completion of album/video/native
+schedule/social acceptance. Those requirements remain Not done pending their
+own live checks. Requires the additive typed-download/read projection in PR #1.
+
+
+The additional **MAX with pinned actual core** CI job assembles only the MAX
+adapter/tests onto exact core `593da8363df50d017ef5b1a44cd21543da4e87c5`
+from existing PR #1, and requires the genuine MCP/worker suites without missing-core
+skips. It does not merge or vendor core into PR #2. The original MAX-only job
+remains separate. Both jobs use offline provider replays, not live browser access.

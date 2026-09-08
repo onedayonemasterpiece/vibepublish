@@ -1,8 +1,8 @@
 """Observed MAX Web read/navigation recipe, not a publishing-capability claim.
 
 Read/recovery code runs unchanged against MAX and sanitized loopback replay.
-The same class supports explicitly wired plain Test Group effects and observed
-replay. Media/scheduling capabilities remain refused until implemented.
+The same class supports explicitly wired text/image Test Group effects and
+observed replay. Scheduling/video capabilities remain refused until implemented.
 No API, storage-state reads, account-wide message search or synthetic selectors.
 """
 from __future__ import annotations
@@ -195,7 +195,7 @@ class RealMaxDriver:
             raise MaxBlocked('causal_receipt_recipe_unverified')
         if target not in self.targets or self.targets[target].policy != 'test_group':
             raise MaxBlocked('immediate_publication_denied')
-        if action not in {'publish', 'edit', 'delete'} or media or scheduled_at is not None:
+        if action not in {'publish', 'edit', 'delete'} or scheduled_at is not None:
             raise MaxBlocked('live_surface_not_implemented')
 
     async def mutate(self, *, target, text, media, scheduled_at, action,
@@ -203,7 +203,7 @@ class RealMaxDriver:
         await self.mutation_preflight(target, action, media=media, scheduled_at=scheduled_at)
         if action == 'publish':
             result = await self.submit_plain_candidate(target=target,text=text,
-                attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
+                attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks,media=media)
         elif action == 'delete':
             result = await self.delete_plain(existing=existing,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
         else:
@@ -211,7 +211,7 @@ class RealMaxDriver:
                 attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
         return [result['item']]
 
-    async def submit_plain_candidate(self, *, target, text, attempt_id, plan_digest, hooks):
+    async def submit_plain_candidate(self, *, target, text, attempt_id, plan_digest, hooks, media=()):
         """Single trusted plain Send with durable native receipt, no effect retry.
 
         Runs observed composer/Send/native-copy selectors. Captures
@@ -243,6 +243,20 @@ class RealMaxDriver:
                 if await main.locator('.messageWrapper').filter(
                         has=self.page.locator('.bubbleContent > .text').filter(has_text=text)).count():
                     raise MaxBlocked('preexisting_content_candidate')
+                if len(media)>10 or any(m['mimeType'] not in {'image/png','image/jpeg'} for m in media):
+                    raise MaxBlocked('unsupported_media')
+                if await main.locator('.attaches .attach').count():raise MaxBlocked('existing_attachments')
+                previews=[]
+                if media:
+                    await main.get_by_role('button',name='Загрузить файл',exact=True).click()
+                    async with self.page.expect_file_chooser() as chooser:
+                        await self.page.get_by_role('menu').get_by_role('menuitem',name='Фото или видео',exact=True).click()
+                    await (await chooser.value).set_files(list(media))
+                    attached=main.locator('.attaches .attach img')
+                    await expect(attached).to_have_count(len(media))
+                    previews=await attached.evaluate_all('(es)=>es.map(e=>({src:e.src,name:e.alt}))')
+                    if [p['name'] for p in previews]!=[m['name'] for m in media] or any(not p['src'].startswith('blob:') for p in previews):
+                        raise MaxBlocked('upload_preview_mismatch')
                 await composer.fill(text)
                 # Page-local observation of DOM and trusted input only. No app
                 # internals, cookies, network interception, IDs or test selectors.
@@ -262,12 +276,15 @@ class RealMaxDriver:
                         let shell=editors[0]?.parentElement;
                         while(shell && shell!==main && !shell.querySelector('button[aria-label="Отправить сообщение"]')) shell=shell.parentElement;
                         while(shell?.parentElement?.classList.contains('composer')) shell=shell.parentElement;
+                        const previews=[...(shell?.querySelectorAll('.attaches .attach img')||[])].map(e=>({src:e.src,name:e.alt}));
                         const header=[...main.querySelectorAll('button')]
                             .some(b=>b.getAttribute('aria-label')===intent.header);
                         if(!main.isConnected || !main.contains(send) || !e.isTrusted ||
                            location.href!==intent.route || !header ||
                            editors.length!==1 || editors[0].textContent!==intent.text ||
-                           !shell || shell===main || shell.querySelector('.messageWrapper,.media,img,video,audio') ||
+                           !shell || shell===main || shell.querySelector('.messageWrapper,video,audio') ||
+                           JSON.stringify(previews)!==JSON.stringify(intent.previews) ||
+                           shell.querySelectorAll('img').length!==intent.previews.length ||
                            candidates().length || state.clicks) {
                             state.blocked=true;e.preventDefault();e.stopImmediatePropagation();return;
                         }
@@ -276,10 +293,10 @@ class RealMaxDriver:
                     document.addEventListener('click',guard,true);
                     return {state, ready:()=>main.isConnected && location.href===intent.route && !state.clicks && !state.blocked,
                         stop:()=>{watch.disconnect();document.removeEventListener('click',guard,true);}};
-                }""", dict(text=text, composer=COMPOSER, route=self.origin+'/'+target,
+                }""", dict(text=text, previews=previews, composer=COMPOSER, route=self.origin+'/'+target,
                             header='Открыть профиль '+self.targets[target].alias))
                 state = dict(target=target, text=text, kind='feed', action='publish',
-                             media=[], scheduled_at=None, existing_id=None,
+                             media=[None]*len(media), source_hashes=[__import__('hashlib').sha256(m['buffer']).hexdigest() for m in media], media_slots=len(media), upload_previews=previews, scheduled_at=None, existing_id=None,
                              attempt_id=attempt_id, plan_digest=plan_digest,
                              observer_installed=True, baseline_scope='loaded_target_rows_only')
                 await hooks.checkpoint('MAX_PREPARED', json.dumps(state))
@@ -305,8 +322,8 @@ class RealMaxDriver:
                 transition = await observer.evaluate('(o)=>o.state')
                 if transition != dict(clicks=1, changed=True, blocked=False):
                     raise MaxBlocked('submit_transition_unverified')
-                item = await self._plain_candidate(target, text, rows)
-                state.update(recovery_reference=item['url'], transition=transition)
+                item = await self._plain_candidate(target, text, rows, media_count=len(media))
+                state.update(recovery_reference=item['url'],native_id=item['id'],transition=transition,media=item['media'],observed_media=item.get('observed_media',[]))
                 await hooks.checkpoint('MAX_NATIVE_REFERENCE', json.dumps(state))
                 # The checkpoint is awaited BEFORE navigation destroys the observer.
                 await self._account()
@@ -319,14 +336,14 @@ class RealMaxDriver:
                 rows = main.locator('.messageWrapper').filter(
                     has=self.page.locator('.bubbleContent > .text').filter(has_text=text))
                 await expect(rows).to_have_count(1, timeout=self.timeout*1000)
-                fresh = await self._plain_candidate(target, text, rows)
-                if fresh['url'] != item['url']:
+                fresh = await self._plain_candidate(target, text, rows, media_count=len(media))
+                if fresh['url'] != item['url'] or fresh.get('observed_media',[]) != item.get('observed_media',[]):
                     raise MaxBlocked('native_reference_changed')
                 await self._account()
                 await self._scope(target)
                 # Account callback may rerender the list: do not return old data.
-                final = await self._plain_candidate(target, text, rows)
-                if final['url'] != item['url']:
+                final = await self._plain_candidate(target, text, rows, media_count=len(media))
+                if final['url'] != item['url'] or final.get('observed_media',[]) != item.get('observed_media',[]):
                     raise MaxBlocked('native_reference_changed')
                 self._check_attempt_fuse(attempt_id, plan_digest)
                 await hooks.checkpoint('MAX_CANDIDATE_OBSERVED', json.dumps(dict(state, item=final)))
@@ -364,7 +381,7 @@ class RealMaxDriver:
             target, old, reference = existing['target'], existing['text'], existing['url']
             match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', reference)
             if (not match or match[1] != target or match[2] != existing['id']
-                    or existing['namespace'] != 'feed' or existing['media']
+                    or existing['namespace'] != 'feed'
                     or existing['scheduled_at'] is not None or not old
                     or not isinstance(text, str) or not text.strip() or len(text) > 4000
                     or old == text or not attempt_id or not plan_digest or hooks is None):
@@ -387,10 +404,10 @@ class RealMaxDriver:
                     raise MaxBlocked('existing_draft')
                 rows = main.locator('.messageWrapper').filter(
                     has=self.page.locator('.bubbleContent > .text').filter(has_text=old))
-                observed = await self._plain_candidate(target, old, rows)
-                if observed['url'] != reference:
+                observed = await self._plain_candidate(target, old, rows,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
+                if observed['url'] != reference or observed.get('observed_media',[]) != existing.get('observed_media',[]):
                     raise MaxBlocked('existing_reference_changed')
-                await rows.click(button='right')
+                await self._open_message_menu(rows)
                 await self.page.get_by_role('menu').get_by_role('menuitem', name='Редактировать', exact=True).click()
                 await expect(main.get_by_text(re.compile(r'^Редактирование (?:поста|сообщения)$'))).to_have_count(1)
                 if await composer.text_content() != old:
@@ -398,7 +415,7 @@ class RealMaxDriver:
                 await composer.fill(text)
                 # Guard the actual trusted Save click, including a mode closure
                 # during pointerdown. No synthetic ID or provider state access.
-                guard = await main.evaluate_handle("""(main, x)=>{
+                guard = await main.evaluate_handle(r"""(main, x)=>{
                     let clicks=0, blocked=false;
                     const ready=()=>{
                         const rows=[...main.querySelectorAll('.messageWrapper')]
@@ -408,7 +425,10 @@ class RealMaxDriver:
                             [...main.querySelectorAll('*')].some(e=>e.children.length===0 && ['Редактирование поста','Редактирование сообщения'].includes(e.textContent)) &&
                             main.querySelector(x.composer)?.textContent===x.text && rows.length===1 &&
                             rows[0].classList.contains('messageWrapper--isOut') &&
-                            !rows[0].querySelector('.media, img, video, audio, .bubbleContent a');
+                            !rows[0].querySelector('video, audio') &&
+                            rows[0].querySelectorAll('.media').length===x.mediaContainers &&
+                            [...rows[0].querySelectorAll('.bubbleContent a')].every(a=>/^https?:\/\//.test(a.href)&&a.href.replace(/\/$/,'')===a.textContent.replace(/\/$/,'')) &&
+                            JSON.stringify([...rows[0].querySelectorAll('img')].map(e=>e.currentSrc||e.src))===JSON.stringify(x.media);
                     };
                     const check=e=>{
                         if(!e.target.closest('button[aria-label="Отправить сообщение"]'))return;
@@ -417,10 +437,10 @@ class RealMaxDriver:
                     };
                     document.addEventListener('click',check,true);
                     return {ready, result:()=>({clicks,blocked}),stop:()=>document.removeEventListener('click',check,true)};
-                }""", dict(route=self.origin+'/'+target, composer=COMPOSER,text=text,old=old,
+                }""", dict(route=self.origin+'/'+target, composer=COMPOSER,text=text,old=old,mediaContainers=await rows.locator('.media').count(),media=await rows.locator('img').evaluate_all('(es)=>es.map(e=>e.currentSrc||e.src)'),
                             header='Открыть профиль '+self.targets[target].alias))
                 state = dict(target=target,text=text,old_text=old,kind='feed',action='edit',
-                    media=[],scheduled_at=None,existing_id=existing['id'],
+                    media=list(existing['media']),observed_media=list(existing.get('observed_media',[])),media_slots=len(existing.get('observed_media',[])) or len(existing['media']),scheduled_at=None,existing_id=existing['id'],
                     recovery_reference=reference,attempt_id=attempt_id,plan_digest=plan_digest)
                 await hooks.checkpoint('MAX_EDIT_PREPARED', json.dumps(state))
                 await hooks.emit_progress('submitting','running','{}')
@@ -432,8 +452,8 @@ class RealMaxDriver:
                 await self._account()
                 self._check_attempt_fuse(attempt_id,plan_digest)
                 main = await self._scope(target)
-                current = await self._plain_candidate(target,old,rows)
-                if current['url'] != reference or not await guard.evaluate('(g)=>g.ready()'):
+                current = await self._plain_candidate(target,old,rows,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
+                if current['url'] != reference or current.get('observed_media',[]) != existing.get('observed_media',[]) or not await guard.evaluate('(g)=>g.ready()'):
                     raise MaxBlocked('edit_binding_or_mode_changed')
                 await main.get_by_role('button',name='Отправить сообщение',exact=True).click()
                 transition = await guard.evaluate('(g)=>g.result()')
@@ -445,8 +465,8 @@ class RealMaxDriver:
                 updated = main.locator('.messageWrapper').filter(
                     has=self.page.locator('.bubbleContent > .text').filter(has_text=text))
                 await expect(updated).to_have_count(1,timeout=self.timeout*1000)
-                item = await self._plain_candidate(target,text,updated)
-                if item['url'] != reference:
+                item = await self._plain_candidate(target,text,updated,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
+                if item['url'] != reference or item.get('observed_media',[]) != existing.get('observed_media',[]):
                     raise MaxBlocked('edit_created_other_object')
                 await hooks.checkpoint('MAX_EDIT_REFERENCE',json.dumps(dict(state,item=item)))
                 await guard.evaluate('(g)=>g.stop()');await guard.dispose();guard=None
@@ -455,11 +475,11 @@ class RealMaxDriver:
                 main = await self._scope(target)
                 updated = main.locator('.messageWrapper').filter(
                     has=self.page.locator('.bubbleContent > .text').filter(has_text=text))
-                item = await self._plain_candidate(target,text,updated)
+                item = await self._plain_candidate(target,text,updated,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
                 await self._account()
                 self._check_attempt_fuse(attempt_id,plan_digest)
-                final = await self._plain_candidate(target,text,updated)
-                if item['url'] != reference or final['url'] != reference:
+                final = await self._plain_candidate(target,text,updated,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
+                if item['url'] != reference or final['url'] != reference or item.get('observed_media',[]) != existing.get('observed_media',[]) or final.get('observed_media',[]) != existing.get('observed_media',[]):
                     raise MaxBlocked('edit_created_other_object')
                 await hooks.checkpoint('MAX_EDIT_OBSERVED',json.dumps(dict(state,item=final)))
                 return dict(item=final,quarantine_released=False,history_complete=False,
@@ -481,7 +501,7 @@ class RealMaxDriver:
             self._busy=False
 
     async def read(self, target, namespace='feed', *, native_item=None):
-        """Bounded own plain objects with copied native identity; no fabricated IDs."""
+        """Bounded own text/image objects with native identity; no fabricated IDs."""
         if namespace != 'feed':
             raise MaxBlocked('native_queue_read_not_implemented')
         self._enter(target)
@@ -491,6 +511,10 @@ class RealMaxDriver:
                 await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
                 main=await self._scope(target)
                 rows=main.locator('.messageWrapper--isOut')
+                # Header readiness is not history readiness: MAX loads message rows
+                # asynchronously after navigation. This is a readiness wait only,
+                # never positional item identity or authoritative empty history.
+                await rows.locator('.bubbleContent > .text').first.wait_for(timeout=self.timeout*1000)
                 texts=await rows.locator('.bubbleContent > .text').all_text_contents()
                 if len(texts)>100:raise MaxBlocked('bounded_read_limit')
                 items=[];incomplete=False
@@ -502,17 +526,23 @@ class RealMaxDriver:
                         has=self.page.locator('.bubbleContent > .text').filter(has_text=re.compile('^'+re.escape(text)+'$')))
                     try:
                         if await row.count()!=1:raise MaxBlocked('ambiguous_read_candidate')
-                        if await row.locator('.media,img,video,audio,.bubbleContent a').count():
+                        if await row.locator('video,audio').count():
                             incomplete=True;continue
-                        item=await self._plain_candidate(target,text,row)
-                    except MaxBlocked:
-                        if not native_item:raise
-                        incomplete=True;await self.page.keyboard.press('Escape');continue
+                        await self.page.bring_to_front()
+                        await row.scroll_into_view_if_needed()
+                        count=await row.locator('[aria-label="Прикрепленные фото"] button').count()
+                        item=await self._plain_candidate(target,text,row,media_count=count)
+                    except MaxBlocked as exc:
+                        if not native_item or str(exc) not in {'ambiguous_read_candidate','nonexact_plain_candidate','rich_link_not_verified','native_copy_menu_unavailable'}:raise
+                        incomplete=True
+                        if await self.page.get_by_role('menu').count():await self.page.keyboard.press('Escape')
+                        await self._scope(target)
+                        continue
                     if native_item:
                         if item['id']==native_item:
                             await self._account();await self._scope(target)
-                            fresh=await self._plain_candidate(target,text,row)
-                            if fresh['url']!=item['url']:raise MaxBlocked('native_reference_changed')
+                            fresh=await self._plain_candidate(target,text,row,media_count=len(item.get('observed_media',[])) or len(item['media']))
+                            if fresh['url']!=item['url'] or fresh.get('observed_media',[])!=item.get('observed_media',[]):raise MaxBlocked('native_reference_changed')
                             return [fresh]
                     else:items.append(item)
                 await self._account();await self._scope(target)
@@ -528,7 +558,7 @@ class RealMaxDriver:
             raise MaxBlocked('writer_live_qualification_pending')
         try:
             target, text, reference = existing['target'], existing['text'], existing['url']
-            if existing['namespace'] != 'feed' or existing['media'] or not text:
+            if existing['namespace'] != 'feed' or not text:
                 raise ValueError()
         except (KeyError, TypeError, ValueError):
             raise MaxBlocked('exact_plain_existing_required') from None
@@ -544,10 +574,10 @@ class RealMaxDriver:
                 main = await self._scope(target)
                 row = main.locator('.messageWrapper').filter(
                     has=self.page.locator('.bubbleContent > .text').filter(has_text=text))
-                observed = await self._plain_candidate(target,text,row)
-                if observed['url'] != reference or observed['id'] != existing['id']:
+                observed = await self._plain_candidate(target,text,row,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
+                if observed['url'] != reference or observed['id'] != existing['id'] or observed.get('observed_media',[]) != existing.get('observed_media',[]):
                     raise MaxBlocked('existing_reference_changed')
-                await row.click(button='right')
+                await self._open_message_menu(row)
                 await self.page.get_by_role('menu').get_by_role('menuitem',name='Удалить',exact=True).click()
                 dialog = self.page.get_by_role('dialog')
                 await expect(dialog.get_by_text('Удалить сообщение',exact=True)).to_have_count(1)
@@ -561,6 +591,7 @@ class RealMaxDriver:
                     const ready=()=>dialog.isConnected && main.isConnected && row.isConnected &&
                         location.href===x.route && [...main.querySelectorAll('button')].some(b=>b.getAttribute('aria-label')===x.header) && row.querySelector('.bubbleContent > .text')?.textContent===x.text &&
                         row.classList.contains('messageWrapper--isOut') &&
+                        JSON.stringify([...row.querySelectorAll('img')].map(e=>e.currentSrc||e.src))===JSON.stringify(x.media) &&
                         dialog.querySelector('input[type=checkbox]')?.checked &&
                         [...dialog.querySelectorAll('*')].some(e=>!e.children.length&&e.textContent==='Удалить сообщение');
                     const watch=new MutationObserver(()=>{if(clicks===1&&!row.isConnected)removed=true;});
@@ -571,8 +602,8 @@ class RealMaxDriver:
                     };
                     document.addEventListener('click',check,true);
                     return {ready,result:()=>({clicks,removed,blocked}),stop:()=>{watch.disconnect();document.removeEventListener('click',check,true);}};
-                }""", dict(row=handle,route=self.origin+'/'+target,text=text,header='Открыть профиль '+self.targets[target].alias))
-                state=dict(target=target,text=text,kind='feed',action='delete',media=[],scheduled_at=None,
+                }""", dict(row=handle,route=self.origin+'/'+target,text=text,media=await row.locator('img').evaluate_all('(es)=>es.map(e=>e.currentSrc||e.src)'),header='Открыть профиль '+self.targets[target].alias))
+                state=dict(target=target,text=text,kind='feed',action='delete',media=list(existing['media']),observed_media=list(existing.get('observed_media',[])),media_slots=len(existing.get('observed_media',[])) or len(existing['media']),scheduled_at=None,
                     existing_id=existing['id'],recovery_reference=reference,attempt_id=attempt_id,plan_digest=plan_digest)
                 await hooks.checkpoint('MAX_DELETE_PREPARED',json.dumps(state))
                 await self._account();await self._scope(target)
@@ -610,22 +641,82 @@ class RealMaxDriver:
                 except Exception:pass
             self._busy=False
 
-    async def _plain_candidate(self, target, text, row):
+    async def _download_media(self, row, target, count):
+        """Actual UI downloads, not rotating CDN URLs or invented native IDs."""
+        import hashlib
+        import io
+        from pathlib import Path
+        from PIL import Image
+        result=[]
+        for slot in range(count):
+            await self._scope(target);await self.page.bring_to_front()
+            tiles=row.locator('[aria-label="Прикрепленные фото"] button')
+            await expect(tiles).to_have_count(count)
+            await tiles.nth(slot).click()
+            dialog=self.page.get_by_role('dialog')
+            await expect(dialog).to_have_count(1)
+            download=None
+            try:
+                async with self.page.expect_download(timeout=self.timeout*1000) as pending:
+                    await dialog.get_by_role('button',name='Скачать',exact=True).click()
+                download=await pending.value
+                if await download.failure():raise MaxBlocked('media_download_failed')
+                path=await download.path()
+                with Path(path).open('rb') as stream:data=stream.read(20*1024*1024+1)
+                if not data or len(data)>20*1024*1024:raise MaxBlocked('media_download_size')
+                with Image.open(io.BytesIO(data)) as image:
+                    mime={'PNG':'image/png','JPEG':'image/jpeg','WEBP':'image/webp'}.get(image.format)
+                    if not mime or image.width*image.height>25_000_000:raise MaxBlocked('media_download_format')
+                    image.verify()
+                result.append(dict(kind='download_sha256',slot=slot,sha256=hashlib.sha256(data).hexdigest(),mime=mime,size=len(data)))
+            finally:
+                if download is not None:await download.delete()
+                await dialog.get_by_role('button',name='Закрыть',exact=True).click()
+            await self._scope(target)
+        return result
+
+    async def _plain_candidate(self, target, text, row, *, media_count=0):
         await self._scope(target)
         await expect(row).to_have_count(1)
-        if ('messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()
-                or await row.locator('.bubbleContent > .text').text_content() != text
-                or await row.locator('.media, img, video, audio, .bubbleContent a').count()):
-            raise MaxBlocked('nonexact_plain_candidate')
-        reference, native_id = await self._copy_native_reference(row, target)
-        # Copy awaits UI work, so content/ownership must still match afterward.
-        if ('messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()
-                or await row.locator('.bubbleContent > .text').text_content() != text
-                or await row.locator('.media, img, video, audio, .bubbleContent a').count()):
-            raise MaxBlocked('candidate_changed_during_copy')
-        return dict(id=native_id, url=reference, target=target, namespace='feed',
-                    text=text, media=[], scheduled_at=None,
-                    observed_at=datetime.now(timezone.utc).isoformat())
+        await self.page.bring_to_front()
+        await row.scroll_into_view_if_needed()
+        async def content():
+            if ('messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()
+                    or await row.locator('.bubbleContent > .text').text_content()!=text
+                    or await row.locator('video,audio').count()
+                    or (not media_count and await row.locator('.media').count())):
+                raise MaxBlocked('nonexact_plain_candidate')
+            links=await row.locator('.bubbleContent a').evaluate_all('(es)=>es.map(e=>({href:e.href,text:e.textContent}))')
+            if any(not link['href'].startswith(('https://','http://')) or link['href'].rstrip('/')!=link['text'].rstrip('/') for link in links):
+                raise MaxBlocked('rich_link_not_verified')
+            await expect(row.locator('img')).to_have_count(media_count,timeout=self.timeout*1000)
+            for index in range(media_count):
+                await expect(row.locator('img').nth(index)).to_have_attribute('src',re.compile(r'^https://i\.oneme\.ru/'),timeout=self.timeout*1000)
+            images=await row.locator('img').evaluate_all('(es)=>es.map(e=>e.currentSrc||e.src)')
+            if len(images)!=media_count:
+                raise MaxBlocked('nonexact_plain_candidate')
+            # Observed rendered media origin. Blob previews are never provider IDs.
+            if any(not re.fullmatch(r'https://i\.oneme\.ru/[^\s]+',value) for value in images):
+                raise MaxBlocked('media_identity_unavailable')
+            return images
+        media=await content()
+        reference,native_id=await self._copy_native_reference(row,target)
+        if await content()!=media:raise MaxBlocked('candidate_changed_during_copy')
+        downloaded=await self._download_media(row,target,media_count) if media_count else []
+        await self._scope(target)
+        if media_count:
+            await content()
+            repeated,_=await self._copy_native_reference(row,target)
+            if repeated!=reference:raise MaxBlocked('media_post_reference_changed')
+        return dict(id=native_id,url=reference,target=target,namespace='feed',text=text,
+            media=[],observed_media=downloaded,scheduled_at=None,observed_at=datetime.now(timezone.utc).isoformat())
+
+    async def _open_message_menu(self, row):
+        # A media row's centre is the image viewer, not the message menu.
+        # Use the verified caption surface; never infer identity from coordinates.
+        caption=row.locator('.bubbleContent > .text')
+        await expect(caption).to_have_count(1)
+        await caption.click(button='right',timeout=self.timeout*1000)
 
     async def _copy_native_reference(self, row, target):
         """Observed message-menu recipe; never infer an ID from row position."""
@@ -644,7 +735,7 @@ class RealMaxDriver:
         for opening in range(2):
             await self._scope(target)
             await expect(row).to_have_count(1)
-            await row.click(button='right', timeout=self.timeout*1000)
+            await self._open_message_menu(row)
             menu = self.page.get_by_role('menu')
             try:
                 await menu.get_by_role('menuitem', name='Скопировать ссылку на сообщение', exact=True).click(
@@ -720,7 +811,7 @@ class RealMaxDriver:
                 or item.get('url') != state.get('recovery_reference')
                 or item.get('id') != state.get('existing_id')
                 or item.get('text') != state.get('text')
-                or item.get('target') != state.get('target') or item.get('media')):
+                or item.get('target') != state.get('target') or item.get('observed_media',[]) != state.get('observed_media',[])):
             raise MaxBlocked('delete_confirmation_evidence_required')
         target=state['target'];self._enter(target)
         try:
@@ -751,7 +842,7 @@ class RealMaxDriver:
             marker = state.get('task_marker', text)
             attempt, plan = state['attempt_id'], state['plan_digest']
             if (state['kind'] != 'feed' or state['action'] not in {'publish', 'edit'}
-                    or state['media'] or state['scheduled_at'] is not None
+                    or not isinstance(state['media'],list) or len(state['media'])>10 or state['scheduled_at'] is not None
                     or not isinstance(text, str) or not text or len(text) > 4000
                     or not isinstance(marker, str) or not marker
                     or ('task_marker' in state and len(marker) < 16)
@@ -789,9 +880,10 @@ class RealMaxDriver:
                     await expect(content).to_have_count(1)
                     if await content.text_content() != text:
                         raise MaxBlocked('recovery_content_changed')
-                    if await row.locator('.media, img, video, audio, .bubbleContent a').count():
+                    first=await self._plain_candidate(target,text,row,media_count=state.get('media_slots',len(state['media'])))
+                    if state.get('observed_media') and first.get('observed_media',[])!=state['observed_media']:
                         raise MaxBlocked('recovery_media_not_verified')
-                    value, native_id = await self._copy_native_reference(row, target)
+                    value,native_id=first['url'],first['id']
                     if value != reference:
                         raise MaxBlocked('recovery_native_reference_mismatch')
                     await self._account()
@@ -802,14 +894,15 @@ class RealMaxDriver:
                         raise MaxBlocked('recovery_content_changed')
                     if 'messageWrapper--isOut' not in (await candidates.get_attribute('class') or '').split():
                         raise MaxBlocked('recovery_not_outgoing')
-                    if await candidates.locator('.media, img, video, audio, .bubbleContent a').count():
+                    fresh=await self._plain_candidate(target,text,candidates,media_count=state.get('media_slots',len(state['media'])))
+                    if fresh.get('observed_media',[])!=first.get('observed_media',[]) or (observations and fresh.get('observed_media',[])!=observations[-1].get('observed_media',[])):
                         raise MaxBlocked('recovery_media_not_verified')
-                    second, _ = await self._copy_native_reference(candidates, target)
+                    second=fresh['url']
                     if second != reference:
                         raise MaxBlocked('recovery_native_reference_mismatch')
                     check_fuse()
                     observations.append(dict(id=native_id, url=reference, target=target,
-                        namespace='feed', text=text, media=[], scheduled_at=None,
+                        namespace='feed',text=text,media=[],observed_media=fresh.get('observed_media',[]),scheduled_at=None,
                         observed_at=datetime.now(timezone.utc).isoformat()))
                 return dict(item=observations[-1], observations=observations,
                     attempt_id=attempt, plan_digest=plan, observation_only=True,

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 
 from adapters.native import bind_media, identity, load_checkpoint, plain_text, saved_checkpoint, schedule_guard, verify_assets
 from adapters.port import Capability, Hooks, Observation, Prepared, ProviderRequest, ReadPage, ReadRequest, RemoteItem
@@ -113,7 +113,7 @@ class MaxAdapter:
             return None
         item = dict(id=remote.native_id, target=remote.native_target,
                     namespace='feed' if remote.namespace == 'published' else remote.namespace, url=remote.url,
-                    text=remote.text, media=list(remote.provider_media), scheduled_at=remote.scheduled_at)
+                    text=remote.text, media=list(remote.provider_media), observed_media=[asdict(x) for x in getattr(remote,'observed_media',())], scheduled_at=remote.scheduled_at)
         return dict(item, fingerprint=fingerprint(item))
 
     @staticmethod
@@ -121,7 +121,7 @@ class MaxAdapter:
         remote = RemoteItem(native_id=item['id'], namespace='published' if item['namespace'] == 'feed' else item['namespace'],
                             native_target=item['target'], text=item['text'], fingerprint='', observed_at=item['observed_at'],
                             scheduled_at=item['scheduled_at'], provider_media=tuple(item['media']),
-                            url=item.get('url'), member_ids=(item['id'],), media_check='provider_identity_only' if item['media'] else 'not_applicable')
+                            url=item.get('url'), member_ids=tuple(item.get('member_ids',(item['id'],))), **({'observed_media':tuple(item['observed_media'])} if item.get('observed_media') else {}), media_check='download_binding' if item.get('observed_media') else 'provider_identity_only' if item['media'] else 'not_applicable')
         return replace(remote, fingerprint=identity(remote))
 
     def _state(self, request, checkpoint):
@@ -130,7 +130,7 @@ class MaxAdapter:
             kind = ('feed' if request.existing.namespace == 'published' else request.existing.namespace) if request.existing else ('scheduled' if request.scheduled_at else 'feed')
             if (state['target'] != request.native_target or state['text'] != plain_text(request, limit=4000)
                     or state['action'] != request.action or state['scheduled_at'] != request.scheduled_at
-                    or state['kind'] != kind or len(state['media']) != len(request.assets)
+                    or state['kind'] != kind or state.get('media_slots',len(state['media'])) != (len(request.assets) if request.assets else (len(getattr(request.existing,'observed_media',())) or len(request.existing.provider_media)) if request.existing else 0)
                     or state['existing_id'] != (request.existing.native_id if request.existing else None)):
                 raise ValueError()
         except (TypeError, KeyError, ValueError):
@@ -145,9 +145,27 @@ class MaxAdapter:
             raise OutcomeUnknown('max_wrong_target_readback')
         # These SHA values describe the validated INPUT assets bound to observed
         # upload IDs, never hashes calculated from transcoded provider bytes.
-        item = bind_media(request, item, state['media'])
+        if getattr(item,'observed_media',()):
+            from adapters.native import bind_download_media
+            item=bind_download_media(request,item,binding=state['download_binding'])
+        else:
+            item = bind_media(request, item, state['media'])
         observed = 'deleted' if request.action == 'delete' else 'cancelled' if request.action == 'cancel' else 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
         return Observation(observed, (item,))
+
+    @staticmethod
+    def _download_binding(request,state):
+        observed=state.get('observed_media',[])
+        if not observed:return state
+        source_hashes=[a.sha256 for a in request.assets]
+        if request.action=='publish' and state.get('source_hashes')!=source_hashes:
+            raise OutcomeUnknown('max_uploaded_source_digest_mismatch')
+        binding=dict(operation_id=request.operation_id,attempt_id=request.attempt_id,
+            plan_digest=request.plan_digest,native_target=request.native_target,
+            native_id=state.get('native_id') or state.get('existing_id'),
+            namespace='published' if state['kind']=='feed' else state['kind'],
+            source_hashes=source_hashes,observed_media=observed)
+        return dict(state,download_binding=binding)
 
     async def execute(self, prepared: Prepared, hooks: Hooks) -> Observation:
         if self.recovery_only:
@@ -165,6 +183,7 @@ class MaxAdapter:
                 state = json.loads(raw)
             if state is None:
                 raise DomainError('max_missing_prepare_checkpoint')
+            if self.live_enabled:state=self._download_binding(request,state)
             envelope = saved_checkpoint(request, driver=state)
             self._state(request, envelope)
             # Preserve the reconcile baseline even after observation and before
@@ -205,8 +224,22 @@ class MaxAdapter:
             try:
                 result = await self.driver.reconcile(dict(state, recovery_reference=reference,
                     attempt_id=request.attempt_id, plan_digest=request.plan_digest))
-            except MaxBlocked:
-                raise OutcomeUnknown('max_recovery_observation_unavailable') from None
+            except MaxBlocked as exc:
+                raise OutcomeUnknown('max_'+str(exc)) from None
+            if state['media'] and any(x is None for x in state['media']):
+                # The original uploaded input intent is immutable. A core-admitted
+                # exact native observation may bind previously missing provider IDs;
+                # it never uploads/sends again or rewrites the historical checkpoint.
+                names=[f'{i}.png' if asset.mime=='image/png' else f'{i}.jpg' for i,asset in enumerate(request.assets)]
+                if (request.action!='publish' or any(x is not None for x in state['media'])
+                        or [p.get('name') for p in state.get('upload_previews',[])]!=names
+                        or not names or any(admitted.get(k)!=v for k,v in {
+                            'operation_id':request.operation_id,'attempt_id':request.attempt_id,
+                            'plan_digest':request.plan_digest}.items())):
+                    raise OutcomeUnknown('max_original_upload_binding_required')
+                state=dict(state,media=result['item']['media'],observed_media=result['item'].get('observed_media',[]),native_id=result['item']['id'],media_slots=len(request.assets),source_hashes=[a.sha256 for a in request.assets],recovery_reference=reference)
+                state=self._download_binding(request,state)
+                await hooks.checkpoint('MAX_RECOVERY_MEDIA_BOUND',saved_checkpoint(request,driver=state))
             return self._observation(request, [result['item']], state)
         if self.recovery_only:
             try:
@@ -273,6 +306,10 @@ class MaxAdapter:
             if isinstance(original, str): original = json.loads(original)
             original_state = self._state(request, json.dumps(original))
             expected_reference = original_state.get('recovery_reference') or admitted.get('native_reference')
+            if original_state.get('observed_media') and remote.get('observed_media',[]) != original_state['observed_media']:
+                raise OutcomeUnknown('max_terminal_download_mismatch')
+            if all(x is not None for x in original_state['media']) and remote.get('provider_media',[]) != original_state['media']:
+                raise OutcomeUnknown('max_terminal_media_mismatch')
         if (not expected_reference or remote.get('url') != expected_reference
                 or remote.get('native_target') != request.native_target
                 or remote.get('text') != plain_text(request, limit=4000)
@@ -315,8 +352,8 @@ class MaxAdapter:
         await hooks.emit_progress('reading_back', 'started', 'Reading the bound MAX native target' if self.live_enabled else 'Reading the bound MAX fixture channel')
         try:
             rows = await self.driver.read(request.native_target, kind, **({'native_item':request.native_item} if self.live_enabled else {}))
-        except MaxBlocked:
-            raise DomainError('max_read_unavailable') from None
+        except MaxBlocked as exc:
+            raise DomainError('max_'+str(exc)) from None
         items = [self._remote(row) for row in rows]
         if request.kind == 'item':
             items = [x for x in items if x.native_id == request.native_item]

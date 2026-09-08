@@ -56,3 +56,34 @@ jobs:
           name: verification-${{ github.sha }}
           path: artifacts/verification/
           retention-days: 7
+  max-actual-core:
+    name: MAX with pinned actual core
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: max
+      - uses: actions/checkout@v4
+        with:
+          # Existing PR #1, actual ProviderAdapter/worker, never a vendored port.
+          ref: 593da8363df50d017ef5b1a44cd21543da4e87c5
+          path: core
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Assemble scoped MAX delta on exact core
+        run: |
+          test "$(git -C core rev-parse HEAD)" = 593da8363df50d017ef5b1a44cd21543da4e87c5
+          cp -a max/adapters/max core/adapters/max
+          mkdir -p core/tests/browser core/tests/adapters
+          cp -a max/tests/browser/max core/tests/browser/max
+          cp -a max/tests/adapters/max core/tests/adapters/max
+          python -m pip install -r core/requirements.in
+          python -m pip install -r max/adapters/max/requirements-test.txt
+          python -m playwright install --with-deps chromium
+      - name: Actual MCP worker and native bridge regressions (no missing-core skips)
+        working-directory: core
+        env:
+          VIBEPUBLISH_MAX_CORE_REQUIRED: '1'
+        run: python -m pytest tests/browser/max/core -q -ra --asyncio-mode=auto

@@ -44,6 +44,7 @@ async def writer(tmp_path):
                         if state['fault']=='replace_edit': matches[0]['id']='replacement'
                     else:
                         message = dict(id='provider-item', target=event['target'], text=event['text'], outgoing=True)
+                        if event.get('media'):message['media']=['https://i.oneme.ru/replay/'+str(i)+'.png' for i,_ in enumerate(event['media'])]
                         if state['fault'] == 'foreign': message['outgoing'] = False
                         state['messages'].append(message)
                         if state['fault'] == 'duplicate':
@@ -51,6 +52,9 @@ async def writer(tmp_path):
                     if state['fault'] == 'lost_response':
                         await r.abort(); return
                 await r.fulfill(body=json.dumps(dict(messages=state['messages'])), content_type='application/json')
+            elif r.request.url.startswith('https://i.oneme.ru/replay/'):
+                import base64
+                await r.fulfill(body=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='),content_type='image/png',headers={'Content-Disposition':'attachment; filename=photo.png'} if 'download=1' in r.request.url else {})
             elif r.request.url.startswith(origin+'/'):
                 body = '<script>window.REPLAY_MESSAGES='+json.dumps(state['messages'])+';window.REPLAY_ORDER='+json.dumps(state['orders'])+'</script>'+HTML
                 await r.fulfill(body=body, content_type='text/html')
@@ -335,8 +339,11 @@ async def test_edit_live_origin_still_denied(writer):
 
 async def test_edit_lost_response_reconcile_same_object_without_resave(writer):
     d,page,state,_=writer
-    existing=edit_seed(writer);state['fault']='lost_response';d.timeout=3
+    existing=edit_seed(writer);state['fault']='lost_response'
+    # Keep the normal preflight budget: inject failure at the provider response,
+    # not a machine-load-dependent timeout before the trusted Save.
     with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
+    assert len(effects(state))==1
     saved=state['checkpoints'][0][1]
     assert saved['action']=='edit'
     d.timeout=10
@@ -407,3 +414,42 @@ async def test_observed_group_edit_heading(writer):
     existing=dict(id='owned',target='-101',text=TEXT,url='https://max.ru/c/-101/owned',namespace='feed',media=[],scheduled_at=None)
     result=await d.edit_plain_candidate(existing=existing,text=TEXT+' edited',attempt_id='attempt',plan_digest='plan',hooks=h)
     assert result['item']['id']=='owned' and len(effects(state))==1
+
+
+async def test_observed_image_chooser_bound_before_one_send(writer):
+    d,page,state,h=writer
+    import base64
+    data=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
+    result=await d.submit_plain_candidate(target='-101',text=TEXT,attempt_id='attempt',plan_digest='plan',hooks=h,
+        media=(dict(name='0.png',mimeType='image/png',buffer=data),))
+    assert result['item']['media']==[] and len(result['item']['observed_media'])==1 and len(effects(state))==1
+    assert state['checkpoints'][0][1]['upload_previews'][0]['name']=='0.png'
+    assert state['checkpoints'][-1][1]['observed_media']==result['item']['observed_media']
+
+
+async def test_exact_read_waits_for_history_not_only_header(writer):
+    d,page,state,h=writer
+    state['messages']=[dict(id='owned',target='-101',text=TEXT,outgoing=True)]
+    await page.add_init_script('window.REPLAY_HISTORY_DELAY=500')
+    result=await d.read('-101',native_item='owned')
+    assert result[0]['id']=='owned' and not effects(state)
+
+
+async def test_exact_image_read_waits_for_lazy_tile_image(writer):
+    d,page,state,h=writer
+    state['messages']=[dict(id='owned',target='-101',text=TEXT,outgoing=True,
+        media=['https://i.oneme.ru/replay/0.png'])]
+    await page.add_init_script('window.REPLAY_LAZY_MEDIA=600;window.REPLAY_ESCAPE_LEAVES_CHAT=true')
+    result=await d.read('-101',native_item='owned')
+    assert result[0]['id']=='owned' and len(result[0]['observed_media'])==1
+    assert page.url.endswith('/-101') and not effects(state)
+
+
+async def test_read_skips_unsupported_candidate_without_leaving_chat(writer):
+    d,page,state,h=writer
+    state['messages']=[dict(id='owned',target='-101',text=TEXT,outgoing=True),
+        dict(id='unsupported',target='-101',text='Unsupported attachment',outgoing=True,media=True)]
+    await page.add_init_script('window.REPLAY_ESCAPE_LEAVES_CHAT=true')
+    result=await d.read('-101',native_item='owned')
+    assert result[0]['id']=='owned' and page.url.endswith('/-101')
+    assert not effects(state)

@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Fixed
+- MAX native image lifecycle binds verified UI downloads instead of rotating CDN
+  URLs; caption context menus, lazy media/history readiness and conditional menu
+  dismissal preserve exact read/edit/delete. Actual MCP image recovery, edit,
+  unchanged-media readback and deletion verified without repeat Send.
 - MAX core-admitted original recovery now reaches durable verified resolution and
   post-commit matching-fuse finalization through the actual worker. Live original
   recovery and exact MCP deletion completed without a second Send.
@@ -21,6 +25,8 @@
   recovery path; this still does not constitute full lifecycle acceptance.
 
 ### Added
+- Separate exact-core GitHub CI assembly for actual MCP/worker/MAX bridge tests,
+  in addition to the existing MAX-only regression job; no vendored shared core.
 - Explicit same-driver live plain mutation bridge with durable native-reference
   transitions and idempotent core finalization; actual shared-port regression tests.
 - MAX optional scoped screenshot/Gemini Lite recovery through the strict shared

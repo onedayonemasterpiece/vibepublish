@@ -82,3 +82,32 @@ async def test_standard_factory_owns_session_and_exact_connection(writer,monkeyp
     async with live_session.configured_adapter(connection_id='only-this-connection',env={'VIBEPUBLISH_MAX_PROFILE':json.dumps(config)}) as adapter:
         assert adapter.connection_id=='only-this-connection' and adapter.driver is d and adapter.live_enabled
     assert calls[0]['explicit_live'] is True and calls[0]['live_writes'] is True and calls[-1]=='closed'
+
+
+async def test_image_bridge_binds_native_downloads_and_reconciles_without_resend(writer):
+    import base64
+    import hashlib
+    from adapters.port import Asset
+    d,page,state,h=writer
+    d.live_writes=True
+    adapter=MaxAdapter(d,connection_id='max')
+    data=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
+    asset=Asset('asset',hashlib.sha256(data).hexdigest(),'image/png',len(data),data=data)
+    request=ProviderRequest('op','attempt','plan','max','max_web','VIBEPUBLISH_MAX_PROFILE',
+        'destination','-101','publish','post',json.dumps({'text':TEXT}),(asset,),None,time.time()+300)
+    observed=await adapter.execute(await adapter.prepare(request,h),h)
+    item=observed.items[0]
+    assert item.provider_media==() and len(item.observed_media)==1
+    assert item.media_hashes==(asset.sha256,) and item.media_check=='download_binding'
+    latest=state['checkpoints'][-1][1]
+    binding=latest['driver']['download_binding']
+    assert binding['native_id']==item.native_id
+    assert binding['source_hashes']==[asset.sha256]
+    assert binding['observed_media']==[asdict(value) for value in item.observed_media]
+    recovered=await adapter.reconcile(request,json.dumps(latest),h)
+    assert recovered.items[0].observed_media==item.observed_media and len(effects(state))==1
+    assert d.lane.marker.exists()
+    final=json.dumps(dict(remote=asdict(recovered.items[0]),original_checkpoint=latest,
+        core_recovery=dict(operation_id='op',attempt_id='attempt',plan_digest='plan')))
+    await adapter.finalize(request,final,h)
+    assert not d.lane.marker.exists() and len(effects(state))==1
