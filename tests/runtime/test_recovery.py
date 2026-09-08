@@ -266,3 +266,90 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.provider.count('execute'), 1)
         with self.store.connection() as db:
             self.assertEqual(db.execute("SELECT count(*) FROM request_keys WHERE key='recover'").fetchone()[0], 1)
+
+
+class NoInputProvider(RecoveringProvider):
+    invalid_proof = None
+    async def execute(self,prepared,hooks):
+        from adapters.port import NoEffectProof,Observation
+        from social_operations.domain import canonical,digest
+        request=prepared.request
+        await hooks.checkpoint('guard',canonical({'attempt':request.attempt_id,'plan':request.plan_digest,'trusted_clicks':0}))
+        await hooks.before_effect(request.attempt_id,request.plan_digest)
+        raise OutcomeUnknown('preinput_guard_interrupted')
+
+    async def reconcile(self,request,checkpoint,hooks):
+        from adapters.port import NoEffectProof,Observation
+        from social_operations.domain import canonical,digest
+        original={k:v for k,v in json.loads(checkpoint).items() if k!='core_recovery'}
+        proof=NoEffectProof(digest(original),'trusted_preinput_guard',canonical(dict(trusted_clicks=0,input_unreachable=True,absence_only=False)))
+        if self.invalid_proof=='checkpoint':proof=replace(proof,checkpoint_sha256='0'*64)
+        if self.invalid_proof=='absence':proof=replace(proof,evidence_json=canonical(dict(trusted_clicks=0,input_unreachable=True,absence_only=True)))
+        if self.invalid_proof=='click':proof=replace(proof,evidence_json=canonical(dict(trusted_clicks=1,input_unreachable=True,absence_only=False)))
+        return Observation('not_attempted',no_effect=proof)
+
+    async def finalize(self,request,checkpoint,hooks):
+        saved=json.loads(checkpoint)
+        assert 'remote' not in saved and saved['no_effect']['reason']=='trusted_preinput_guard'
+        with self.core.connection() as db:
+            row=db.execute('SELECT * FROM attempts WHERE id=?',(request.attempt_id,)).fetchone()
+            assert row['state']=='cancelled' and row['dispatched']==1 and row['observed']=='not_attempted'
+        if self.release_failures:
+            self.release_failures-=1
+            raise RuntimeError('release deferred')
+        self.record('released',request.attempt_id)
+
+
+class NoInputRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    call=RecoveryTests.call
+    stuck=RecoveryTests.stuck
+    args=RecoveryTests.args
+    # Reuse setup/helpers, not unrelated inherited effect-based acceptance cases.
+    def setUp(self):
+        RecoveryTests.setUp(self)
+        self.provider=NoInputProvider(self.root/'no-input.sqlite','max',clock=lambda:self.now)
+        self.provider.core=self.store
+        self.worker=Worker(self.store,{'max':self.provider})
+
+    async def test_no_input_cancels_intent_without_fake_item_or_dispatch_reset(self):
+        receipt=await self.stuck()
+        await self.call('publication_update',self.args(receipt))
+        await self.worker.run_once()
+        result=self.store.receipt(self.actor,receipt['operation_id'])
+        self.assertEqual(result['state'],'cancelled')
+        self.assertTrue(result['operation_complete'])
+        with self.store.connection() as db:
+            row=db.execute('SELECT * FROM attempts WHERE operation_id=?',(receipt['operation_id'],)).fetchone()
+            self.assertEqual(row['dispatched'],1)
+            self.assertNotIn('remote',json.loads(row['checkpoint']))
+            self.assertEqual(db.execute('SELECT finalize_state FROM attempt_recovery WHERE attempt_id=?',(row['id'],)).fetchone()[0],'done')
+
+
+    async def test_invalid_no_effect_proof_never_releases_uncertainty(self):
+        for kind in ('checkpoint','absence','click'):
+            with self.subTest(kind=kind):
+                self.provider.invalid_proof=kind
+                receipt=await self.call('publish',{'to':['max'],'content':{'text':'Guard '+kind}})
+                await self.worker.run_once()
+                self.assertEqual(self.store.receipt(self.actor,receipt['operation_id'])['state'],'outcome_unknown')
+                await self.call('publication_update',dict(self.args(receipt),request_key='reject-'+kind))
+                await self.worker.run_once()
+                self.assertEqual(self.store.receipt(self.actor,receipt['operation_id'])['state'],'outcome_unknown')
+                # Resolve this original test guard before admitting the next
+                # independent case; never manually reset connection quarantine.
+                self.provider.invalid_proof=None
+                await self.call('publication_update',dict(self.args(receipt),request_key='resolve-'+kind))
+                await self.worker.run_once()
+
+    async def test_no_effect_release_is_durable_across_worker_restart(self):
+        receipt=await self.stuck()
+        self.provider.release_failures=1
+        await self.call('publication_update',self.args(receipt))
+        await self.worker.run_once()
+        result=self.store.receipt(self.actor,receipt['operation_id'])
+        self.assertFalse(result['operation_complete'])
+        self.now+=31
+        await Worker(self.store,{'max':self.provider}).run_once()
+        result=self.store.receipt(self.actor,receipt['operation_id'])
+        self.assertEqual(result['state'],'cancelled')
+        self.assertTrue(result['operation_complete'])

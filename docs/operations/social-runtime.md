@@ -107,3 +107,21 @@ Telegram/VK and non-font entity validation are unchanged. `regex` grapheme and
 Unicode properties follow [UTS #51](https://unicode.org/reports/tr51/); plain
 digits, text-presentation selectors and ordinary copyright symbols are not
 neutralized. Malformed spans still fail before projection.
+
+### Unreachable-input compensation, not fabricated publication
+
+The additive trusted `NoEffectProof` port value is an adapter control-flow proof,
+not a conclusion from an empty feed or a model answer. Core verifies its binding
+to the immutable original checkpoint, current actor/binding/plan/fence and a
+zero-input proof before recording **cancelled / observed not_attempted**. No
+native item is created, no successful publication is claimed, and historical
+`dispatched=1` is preserved. The original command remains cancelled under all
+idempotency keys; a new, different intent is not an automatic effect retry.
+
+The existing durable finalization outbox releases only the matching quarantine
+**after** that outcome commits; a failed release is retried across worker restart.
+Public delivery results may expose the additive compensation enum
+`intent_cancelled_without_effect` and its reason. Absence-only, nonzero-click and
+wrong-checkpoint proofs remain unresolved and cannot release the connection.
+Read-only reconciliation has a bounded 90-second observation window (separate
+from the expired original effect deadline), to allow repeated native UI checks.

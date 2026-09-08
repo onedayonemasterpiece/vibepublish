@@ -204,7 +204,7 @@ class Worker:
                         recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
                         hint = {**json.loads(recovery['hint']), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
                         checkpoint = canonical({**json.loads(checkpoint), 'core_recovery': hint})
-                timeout = max(0.1, min(90, op['deadline']-self.store.clock())) if not current['dispatched'] else 30
+                timeout = max(0.1, min(90, op['deadline']-self.store.clock())) if not current['dispatched'] else 90
                 async with asyncio.timeout(timeout):
                     observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
                                    await adapter.execute(prepared, hooks))
@@ -275,7 +275,42 @@ class Worker:
             self.store.fence(db, op['id'], self.id, op['fence'])
             self.store.event(db, op['id'], 'verifying', 'blocked', 'Effect is durably resolved; provider quarantine finalization will retry without an effect', child['alias'])
 
+    def finish_no_effect(self,op,child,actor,observation,*,needs_finalize):
+        from adapters.port import NoEffectProof
+        proof=observation.no_effect
+        if (not isinstance(proof,NoEffectProof) or observation.observed!='not_attempted'
+                or observation.items or observation.missing_checks
+                or proof.reason!='trusted_preinput_guard' or not needs_finalize):
+            raise OutcomeUnknown('no_effect_proof_invalid')
+        evidence=json.loads(proof.evidence_json)
+        if (not isinstance(evidence,dict) or evidence.get('trusted_clicks')!=0
+                or type(evidence.get('trusted_clicks')) is not int
+                or evidence.get('input_unreachable') is not True
+                or evidence.get('absence_only') is not False):
+            raise OutcomeUnknown('no_effect_proof_invalid')
+        with self.store.tx() as db:
+            self.store.fence(db,op['id'],self.id,op['fence'])
+            self.recovery_authority(db,op,child,actor)
+            current=db.execute('SELECT * FROM attempts WHERE id=?',(child['id'],)).fetchone()
+            recovery=db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?',(child['id'],)).fetchone()
+            original=recovery['original_checkpoint'] if recovery else current['checkpoint']
+            if not current['dispatched'] or digest(json.loads(original))!=proof.checkpoint_sha256:
+                raise OutcomeUnknown('no_effect_checkpoint_mismatch')
+            hint=dict(operation_id=op['id'],attempt_id=child['id'],plan_digest=child['plan_digest'])
+            db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,hint,created) VALUES(?,?,?,?,?)',
+                (child['id'],child['plan_digest'],original,canonical(hint),self.store.clock()))
+            db.execute("UPDATE attempt_recovery SET observation=?,finalize_state='pending',resolved=? WHERE attempt_id=?",
+                (canonical(asdict(observation)),self.store.clock(),child['id']))
+            final=canonical(dict(no_effect=asdict(proof),original_checkpoint=json.loads(original),core_recovery=hint))
+            result=canonical(dict(compensation='intent_cancelled_without_effect',reason=proof.reason))
+            # Preserve historical dispatch=1. This intent is cancelled, never
+            # re-admitted as a never-dispatched retry or projected as a fake item.
+            db.execute("UPDATE attempts SET state='cancelled',stage='finished',observed='not_attempted',result=?,checkpoint=? WHERE id=?",(result,final,child['id']))
+            self.store.event(db,op['id'],'finished','completed','Original intent cancelled: trusted input guard proves no effect; no item fabricated',child['alias'])
+
     def finish_child(self, op, child, actor, observation, *, needs_finalize=False):
+        if getattr(observation,'no_effect',None) is not None:
+            return self.finish_no_effect(op,child,actor,observation,needs_finalize=needs_finalize)
         if not observation.items or observation.missing_checks:
             raise OutcomeUnknown('incomplete_readback')
         plan = json.loads(child['plan'])

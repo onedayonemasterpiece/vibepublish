@@ -124,11 +124,24 @@ class Prepared:
 
 
 @dataclass(frozen=True, slots=True)
+class NoEffectProof:
+    """Trusted adapter proof of unreachable input, never provider absence alone.
+
+    Cancels the original intent without an item or a claim of successful publish.
+    Binding is to the immutable original adapter checkpoint retained by core.
+    """
+    checkpoint_sha256: str
+    reason: str
+    evidence_json: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     observed: str
     items: tuple[RemoteItem, ...] = ()
     missing_checks: tuple[str, ...] = ()
     forward_origin_matched: bool = False
+    no_effect: NoEffectProof | None = None
 
 
 @dataclass(frozen=True, slots=True)

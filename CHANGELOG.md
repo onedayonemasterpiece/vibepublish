@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added — guarded no-effect compensation
+
+- Trusted, checkpoint-bound no-input proofs can cancel an original intent without
+  fabricating a remote item or resetting dispatch history; existing durable
+  post-commit finalization releases its exact quarantine across restart.
+- Delivery receipts expose the explicit additive compensation outcome.
+
 ### Fixed — MAX visual font semantics
 
 - Canonicalize MAX bold/italic spans around neutral raster emoji graphemes,
