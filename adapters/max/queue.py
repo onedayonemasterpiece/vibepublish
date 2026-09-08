@@ -99,6 +99,13 @@ async def set_time(driver,scheduled_at):
     return dialog,dict(month=desired,day=str(wanted.day),hour=str(wanted.hour),minute=str(wanted.minute))
 
 
+async def open_schedule_dialog(driver,target,main):
+    """Observed group/channel menu labels, never immediate Send."""
+    await main.get_by_role('button',name='Отправить сообщение',exact=True).click(button='right')
+    label='Запланировать пост' if driver.targets[target].policy=='scheduled_only' else 'Отправить позже'
+    await driver.page.get_by_role('menu').get_by_role('menuitem',name=label,exact=True).click()
+
+
 async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,plan_digest,hooks):
     import asyncio,json,hashlib,re
     from .live import COMPOSER
@@ -123,8 +130,7 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
             when=int(datetime.fromisoformat(scheduled_at.replace('Z','+00:00')).timestamp()*1000)
             if any(x['text']==text and x['time_ms']==when for x in baseline):raise MaxBlocked('preexisting_scheduled_candidate')
             composer,previews=await driver._compose(main,text,media,entities)
-            await main.get_by_role('button',name='Отправить сообщение',exact=True).click(button='right')
-            await driver.page.get_by_role('menu').get_by_role('menuitem',name='Отправить позже',exact=True).click()
+            await open_schedule_dialog(driver,target,main)
             dialog,date=await set_time(driver,scheduled_at)
             confirm=dialog.get_by_role('button',name=re.compile(r'^Отправить .+ в '+datetime.fromtimestamp(when/1000,MOSCOW).strftime('%H:%M')+'$'))
             await expect(confirm).to_have_count(1)
@@ -259,8 +265,7 @@ async def legacy_unreachable_guard(driver,state):
                 draft='VibePublish read-only guard inspection (not submitted)'
                 await driver.page.bring_to_front();await c.fill(draft)
                 try:
-                    await main.get_by_role('button',name='Отправить сообщение',exact=True).click(button='right')
-                    await driver.page.get_by_role('menu').get_by_role('menuitem',name='Отправить позже',exact=True).click()
+                    await open_schedule_dialog(driver,target,main)
                     dialog,_=await set_time(driver,state['scheduled_at'])
                     impossible=await dialog.evaluate('e=>e.tagName==="DIALOG"&&!e.hasAttribute("role")&&e.querySelector("button")?.closest("[role=dialog]")===null')
                     if not impossible:return None
@@ -411,7 +416,7 @@ async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
     target=existing['target'];driver._enter(target);guard=None;armed=False
     try:
         driver.lane.assert_clear()
-        if driver.targets[target].policy!='test_group' or existing['namespace']!='scheduled':
+        if driver.targets[target].policy not in {'test_group','scheduled_only'} or existing['namespace']!='scheduled':
             raise MaxBlocked('native_cancel_scope_unqualified')
         async with asyncio.timeout(driver.timeout):
             original=(await read(driver,target,existing['id'],passes=1))[0]
@@ -424,7 +429,8 @@ async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
             # the only provider deletion is its guarded primary button below.
             await driver.page.get_by_role('menu').get_by_role('menuitem',name='Удалить',exact=True).click()
             dialog=driver.page.get_by_role('dialog')
-            await expect(dialog.get_by_text('Удалить сообщение',exact=True)).to_have_count(1)
+            title='Удалить пост' if driver.targets[target].policy=='scheduled_only' else 'Удалить сообщение'
+            await expect(dialog.get_by_text(title,exact=True)).to_have_count(1)
             await expect(dialog.get_by_role('checkbox')).to_have_count(0)
             button=dialog.get_by_role('button',name='Удалить',exact=True)
             await expect(button).to_have_count(1)

@@ -563,3 +563,30 @@ Local core validation covered 250 tests + 202 subtests: 249 tests passed in the
 full run; the SDK subprocess test initially lacked `PYTHONPATH=.` in the reused
 venv and passed its focused rerun with the correct repository path. No SDK code
 was changed. Exact MAX read/reply/duplicate-body regression: **8 passed**.
+
+### Scheduled-only channel surface qualification
+
+Read-only UI inspection in both authorized real channels confirmed the same native
+queue heading/menu and a channel-specific **Удалить пост** dialog (zero checkboxes),
+not the group's **Удалить сообщение** title. The inspection cancelled each dialog
+without deleting an existing queued object. The MAX cancellation path now accepts
+an exact core-bound scheduled snapshot on `scheduled_only` targets, with this
+observed title; immediate publication/edit/delete in those channels remains denied.
+No existing channel draft or queued content was modified by qualification.
+
+Both channels' composer context menus expose **Запланировать пост**, whereas the
+Test Group exposes **Отправить позже**. One shared MAX helper chooses the observed
+surface-specific label; neither path left-clicks immediate Send. The read-only
+probe used its own temporary composer text, then cleared only that text; existing
+drafts would have been preserved. Offline channel/group cancel and menu regression:
+**8 passed**. Live own queued-image acceptance is running through standard MCP.
+
+Controlled live worker interruption also completed: the acceptance injector
+awaited the real durable `MAX_NATIVE_REFERENCE` checkpoint after one Send, then
+cancelled the actual worker process before observation/receipt completion. It did
+not replace any adapter, mutate the ledger or clear a fuse. After the ordinary
+30-second lease expired, a new standard CLI worker automatically reclaimed and
+reconciled the **same original operation/attempt**, finalized it, and released its
+quarantine without Send. Exact MCP read and Delete then both verified. Read-only
+ledger audit: one original attempt, verified; zero unresolved dispatched attempts
+and zero pending finalizations. The native session/profile remains intact.

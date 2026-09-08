@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added: exact own queued cancellation on approved scheduled-only MAX channels with the observed channel confirmation dialog.
+
 - Fixed: MAX exact reads establish copied native identity before downloading candidate media; duplicate bodies are enumerated once.
 
 - Added: native MAX replies/forwards with exact relationship proof and recovery; duplicate-body reads and handle-bound lifecycle preserve the other native object.

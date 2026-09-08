@@ -205,9 +205,13 @@ class RealMaxDriver:
         self.lane.assert_clear()
         if not self.live_writes:
             raise MaxBlocked('causal_receipt_recipe_unverified')
-        if target not in self.targets or (self.targets[target].policy != 'test_group' and scheduled_at is None):
+        if target not in self.targets:
             raise MaxBlocked('immediate_publication_denied')
-        if action=='cancel' and self.targets[target].policy=='test_group':return
+        # Cancel is not immediate publication. The queued native snapshot and
+        # exact bound object are mandatory in queue.cancel before any input.
+        if action=='cancel':return
+        if self.targets[target].policy != 'test_group' and scheduled_at is None:
+            raise MaxBlocked('immediate_publication_denied')
         if scheduled_at is not None and action in {'publish','reschedule','edit'}:
             wanted=datetime.fromisoformat(scheduled_at.replace('Z','+00:00'))
             if wanted.second or wanted.microsecond:raise MaxBlocked('native_schedule_minute_precision')
