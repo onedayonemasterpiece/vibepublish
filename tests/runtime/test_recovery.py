@@ -32,6 +32,7 @@ class RecoveringProvider(FakeProvider):
     async def finalize(self, request, checkpoint, hooks):
         self.record('finalize', request.attempt_id)
         saved = json.loads(checkpoint)
+        assert saved['committed_observation']['items']==[saved['remote']]
         assert saved['core_recovery']['attempt_id'] == request.attempt_id
         assert saved['core_recovery']['plan_digest'] == request.plan_digest
         with self.core.connection() as db:
@@ -291,6 +292,7 @@ class NoInputProvider(RecoveringProvider):
     async def finalize(self,request,checkpoint,hooks):
         saved=json.loads(checkpoint)
         assert 'remote' not in saved and saved['no_effect']['reason']=='trusted_preinput_guard'
+        assert saved['committed_observation']['no_effect']==saved['no_effect']
         with self.core.connection() as db:
             row=db.execute('SELECT * FROM attempts WHERE id=?',(request.attempt_id,)).fetchone()
             assert row['state']=='cancelled' and row['dispatched']==1 and row['observed']=='not_attempted'

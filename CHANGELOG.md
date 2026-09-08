@@ -4,6 +4,9 @@
 
 ### Added — guarded no-effect compensation
 
+- Finalization carries the committed observation separately from immutable
+  pre-effect evidence, including native IDs first learned during recovery.
+
 - Trusted, checkpoint-bound no-input proofs can cancel an original intent without
   fabricating a remote item or resetting dispatch history; existing durable
   post-commit finalization releases its exact quarantine across restart.

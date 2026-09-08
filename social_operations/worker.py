@@ -246,8 +246,14 @@ class Worker:
                         self.recovery_authority(db, op, child, actor)
                     if not callable(finalize):
                         raise DomainError('provider_finalize_unavailable')
+                    # The adapter may learn a native ID only during recovery;
+                    # do not overwrite the immutable pre-effect checkpoint to
+                    # carry it. Supply the already committed observation instead.
+                    with self.store.connection() as db:
+                        committed=db.execute('SELECT observation FROM attempt_recovery WHERE attempt_id=?',(child['id'],)).fetchone()[0]
+                    final=canonical({**json.loads(child['checkpoint']),'committed_observation':json.loads(committed)})
                     async with asyncio.timeout(30):
-                        await finalize(request, child['checkpoint'], self.finalization_hooks(op, child))
+                        await finalize(request, final, self.finalization_hooks(op, child))
                     with self.store.tx() as db:
                         self.store.fence(db, op['id'], self.id, op['fence'])
                         self.recovery_authority(db, op, child, actor)

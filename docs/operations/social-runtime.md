@@ -125,3 +125,8 @@ Public delivery results may expose the additive compensation enum
 wrong-checkpoint proofs remain unresolved and cannot release the connection.
 Read-only reconciliation has a bounded 90-second observation window (separate
 from the expired original effect deadline), to allow repeated native UI checks.
+
+Finalization receives the already committed observation from the recovery journal
+without overwriting its immutable original checkpoint. Thus a native ID first
+learned during read-only recovery can be validated during post-commit release;
+no caller-supplied reference or fake scheduled URL is required.
