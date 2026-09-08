@@ -207,7 +207,7 @@ class RealMaxDriver:
         if target not in self.targets or (self.targets[target].policy != 'test_group' and scheduled_at is None):
             raise MaxBlocked('immediate_publication_denied')
         if action=='cancel' and self.targets[target].policy=='test_group':return
-        if scheduled_at is not None and action in {'publish','reschedule'}:
+        if scheduled_at is not None and action in {'publish','reschedule','edit'}:
             wanted=datetime.fromisoformat(scheduled_at.replace('Z','+00:00'))
             if wanted.second or wanted.microsecond:raise MaxBlocked('native_schedule_minute_precision')
             return
@@ -223,6 +223,9 @@ class RealMaxDriver:
         if action=='reschedule':
             from . import queue
             return await queue.reschedule(self,existing=existing,scheduled_at=scheduled_at,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
+        if action=='edit' and scheduled_at is not None:
+            from . import queue
+            return await queue.edit(self,existing=existing,text=text,entities=entities,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
         if action == 'publish' and scheduled_at is not None:
             from . import queue
             return await queue.publish(self,target=target,text=text,media=media,entities=entities,scheduled_at=scheduled_at,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)

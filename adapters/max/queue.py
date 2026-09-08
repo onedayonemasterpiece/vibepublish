@@ -477,3 +477,92 @@ async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
             try:await guard.evaluate('(g)=>g.stop()');await guard.dispose()
             except Exception:pass
         driver._busy=False
+
+
+async def edit(driver,*,existing,text,entities,attempt_id,plan_digest,hooks):
+    """Observed queued-message editor; retain native time and all media."""
+    import asyncio,json,re
+    from .live import COMPOSER
+    target=existing['target'];driver._enter(target);armed=False;guard=None
+    try:
+        driver.lane.assert_clear()
+        if driver.targets[target].policy!='test_group' or existing['namespace']!='scheduled':
+            raise MaxBlocked('native_edit_scope_unqualified')
+        async with asyncio.timeout(driver.timeout):
+            original=(await read(driver,target,existing['id'],passes=1))[0]
+            if (any(original[k]!=existing[k] for k in ('text','scheduled_at','observed_media'))
+                    or not rich.same_entities(original['entities'],existing['entities'])):
+                raise MaxBlocked('native_edit_existing_changed')
+            main=await driver._scope(target,'scheduled');row=driver._rows(main,original['text'])
+            await driver._open_message_menu(row)
+            await driver.page.get_by_role('menu').get_by_role('menuitem',name='Редактировать',exact=True).click()
+            heading=main.get_by_text('Редактирование сообщения',exact=True)
+            await expect(heading).to_have_count(1)
+            composer=main.locator(COMPOSER)
+            if await composer.evaluate(rich.TEXT_JS)!=original['text']:raise MaxBlocked('native_edit_draft_changed')
+            attached=main.locator('.attaches .attach img')
+            await expect(main.locator('.attaches .attach')).to_have_count(len(original['observed_media']))
+            await expect(attached).to_have_count(len(original['observed_media']))
+            for image in await attached.element_handles():
+                await driver.page.wait_for_function('(e)=>e.isConnected&&e.complete&&e.naturalWidth>0',arg=image,timeout=driver.timeout*1000)
+            previews=await attached.evaluate_all('(es)=>es.map(e=>({src:e.src,name:e.alt}))')
+            await rich.fill(driver.page,composer,text,entities)
+            button=main.get_by_role('button',name='Отправить сообщение',exact=True)
+            guard=await button.evaluate_handle('(button,x)=>{'+rich.SNAPSHOT_JS+r'''
+                let clicks=0,blocked=false;const row=x.row,main=row.closest('main');
+                const checks=()=>({
+                    connected:button.isConnected&&row.isConnected,route:location.href===x.route,
+                    mode:[...main.querySelectorAll('*')].some(e=>!e.children.length&&e.textContent==='Редактирование сообщения'),
+                    text:semanticText(main.querySelector(x.composer))===x.text,
+                    rich:JSON.stringify(semanticSnapshot(main.querySelector(x.composer)))===x.snapshot,
+                    old_text:semanticText(row.querySelector('.bubbleContent > .text'))===x.old,
+                    old_rich:JSON.stringify(semanticSnapshot(row.querySelector('.bubbleContent > .text')))===x.old_snapshot,
+                    time:row.querySelector('.meta .text')?.textContent.trim()===x.time,
+                    media:JSON.stringify([...row.querySelectorAll('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source')].map(e=>e.currentSrc||e.src))===x.media,
+                    previews:JSON.stringify([...main.querySelectorAll('.attaches .attach img')].map(e=>({src:e.src,name:e.alt})))===JSON.stringify(x.previews)
+                });
+                const ready=()=>Object.values(checks()).every(Boolean);
+                const check=e=>{if(!button.contains(e.target))return;
+                    if(!e.isTrusted||clicks||!ready()){blocked=true;e.preventDefault();e.stopImmediatePropagation();return;}clicks++;};
+                document.addEventListener('click',check,true);
+                return {ready,checks,result:()=>({clicks,blocked}),stop:()=>document.removeEventListener('click',check,true)};
+            }''',dict(row=await row.element_handle(),route=driver.origin+'/'+target,composer=COMPOSER,text=text,old=original['text'],previews=previews,
+                media=await row.locator('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source').evaluate_all('(es)=>JSON.stringify(es.map(e=>e.currentSrc||e.src))'),
+                snapshot=await composer.evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),
+                old_snapshot=await row.locator('.bubbleContent > .text').evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),
+                time=datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).astimezone(MOSCOW).strftime('%H:%M')))
+            if not await guard.evaluate('(g)=>g.ready()'):
+                await hooks.emit_progress('validating','failed',__import__('json').dumps(await guard.evaluate('(g)=>g.checks()')))
+                raise MaxBlocked('native_edit_guard_changed')
+            state=dict(recipe='max-native-schedule-v1',target=target,text=text,entities=list(entities),kind='scheduled',action='edit',
+                scheduled_at=original['scheduled_at'],media=original['media'],observed_media=original['observed_media'],
+                media_slots=len(original['observed_media']),existing_id=original['id'],native_id=original['id'],attempt_id=attempt_id,plan_digest=plan_digest)
+            await hooks.checkpoint('MAX_NATIVE_EDIT_PREPARED',json.dumps(state))
+            await driver._account();await driver._scope(target,'scheduled')
+            driver.lane.arm(attempt_id,plan_digest);armed=True
+            await hooks.before_effect(attempt_id,plan_digest)
+            await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
+            if not await guard.evaluate('(g)=>g.ready()'):
+                await hooks.emit_progress('validating','failed',__import__('json').dumps(await guard.evaluate('(g)=>g.checks()')))
+                raise MaxBlocked('native_edit_guard_changed')
+            await button.click();state['transition']=await guard.evaluate('(g)=>g.result()')
+            if state['transition']!=dict(clicks=1,blocked=False):raise MaxBlocked('native_edit_click_unverified')
+            await hooks.checkpoint('MAX_NATIVE_EDIT_CONFIRMED',json.dumps(state))
+            await expect(heading).to_have_count(0)
+            await guard.evaluate('(g)=>g.stop()');await guard.dispose();guard=None
+            result=(await read(driver,target,original['id']))[0]
+            if (result['text']!=text or not rich.same_entities(result['entities'],entities)
+                    or result['scheduled_at']!=original['scheduled_at'] or result['observed_media']!=original['observed_media']):
+                raise MaxBlocked('native_edit_readback_changed')
+            await hooks.checkpoint('MAX_NATIVE_EDIT_OBSERVED',json.dumps(dict(state,item=result)))
+            return [result]
+    except BaseException as exc:
+        if isinstance(exc,(asyncio.CancelledError,KeyboardInterrupt,SystemExit)):raise
+        if armed:raise MaxBlocked('outcome_unknown') from None
+        if isinstance(exc,MaxBlocked):raise
+        raise MaxBlocked('native_edit_prepare_unavailable') from None
+    finally:
+        if guard is not None:
+            try:await guard.evaluate('(g)=>g.stop()');await guard.dispose()
+            except Exception:pass
+        driver._busy=False

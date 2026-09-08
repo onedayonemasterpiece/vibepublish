@@ -392,3 +392,29 @@ its unrelated full `verify` still fails collection on missing
 A fresh native image output probe was queued through MCP and exactly read as
 scheduled; its MCP server/worker/browser stopped before native due time. Native
 output and remaining social acceptance are still under verification, not closed.
+
+### Native output and queued editing (2026-09-08)
+
+Actual MCP/worker queued an image for 08:38 UTC. MCP server, native worker and
+browser were stopped at 08:35:03; an independent pre-due process check found no
+publisher/browser. After native due time, a new MCP/native-worker feed read found
+exactly one matching published object with identical downloaded image evidence.
+No VibePublish scheduler or delayed local Send was running. Private stop witnesses,
+queue/feed receipts and exact native item remain under task artifacts.
+
+A second own queued image was edited through its actual **Редактирование
+сообщения** panel and **Отправить сообщение** Save control. The first attempt
+was blocked before dispatch: attachment thumbnails load asynchronously after the
+editor becomes actionable. Boolean-only guard diagnostics isolated preview
+readiness, not identity/content/time/media mismatch. The driver now waits for
+expected attachment count and decoded images before freezing previews; it still
+rejects subsequent changes. This follows Playwright's distinction between input
+[actionability](https://playwright.dev/python/docs/actionability) and image load
+completion. No fixed sleep or force-click is used.
+
+Core `retry_failed` resumed the exact original never-dispatched edit operation.
+Native Save then completed once; MCP exact queued read verified changed caption,
+same native item, original time and identical downloaded image. Four offline
+queued-editor cases cover success, closed edit mode, changed media, and delayed
+preview. Durable guarded input precedes fresh native readback; recovery stays
+read-only. Reply/reaction/forwarding acceptance is still **Not done**.

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added — native scheduled editing
+
+- Edit an exact queued MAX message while preserving native time and media, with
+  decoded-preview readiness and last-input mode/content/media guards.
+- Verify actual native output while MCP/worker/browser are stopped.
+
+
 ### Added — verified native cancellation
 
 - Cancel the exact own queued object through its observed native confirmation,
