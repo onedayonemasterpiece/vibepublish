@@ -303,10 +303,11 @@ class Worker:
             if remote.text != json.loads(plan['content_json'])['text']:
                 raise OutcomeUnknown('content_readback_mismatch')
             if plan['provider'] == 'telegram' or (plan['provider'] == 'max' and plan['account_type'] == 'max_web'):
-                from .rich_text import normalized_entities
+                from .rich_text import normalized_entities, max_entities
+                normalize = max_entities if plan['provider'] == 'max' else normalized_entities
                 expected = json.loads(plan['content_json']).get('entities', [])
-                actual = normalized_entities(remote.text, json.loads(remote.entities_json))
-                if actual != normalized_entities(remote.text, expected):
+                actual = normalize(remote.text, json.loads(remote.entities_json))
+                if actual != normalize(remote.text, expected):
                     raise OutcomeUnknown('entities_readback_mismatch')
             if plan['provider'] == 'max' and plan['account_type'] == 'max_web':
                 from adapters.port import downloaded_media

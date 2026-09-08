@@ -47,7 +47,7 @@ def test_max_rich_compiler_preserves_unicode_links_and_does_not_widen_defaults()
     result=compile_content(RICH,lambda _:None,provider='max',max_native=True)
     text,entities=max_content(canonical(result),4000)
     assert result['format']=='max_entities' and text=='😀 Bold Exact link'
-    assert entities==[{'type':'bold','offset':0,'length':7},
+    assert entities==[{'type':'bold','offset':2,'length':5},
                       {'type':'text_link','offset':8,'length':10,'url':'https://example.test/owned'}]
     assert compile_content(result,lambda _:None,provider='max',max_native=True)==result
     for provider in ('max','vk'):
@@ -354,3 +354,23 @@ async def test_downloaded_media_read_projection_is_safe_metadata_not_upload_attr
     store.revoke_binding(actor,binding)
     denied=await app.call(actor,'vibepublish_read',{'query':{'kind':'item','item_ref':projected['ref']}})
     assert 'error' in denied
+
+
+@pytest.mark.parametrize('glyph',['😀','👩🏽‍💻','🇷🇺','1️⃣','❤️'])
+def test_max_font_spans_exclude_only_neutral_emoji_graphemes(glyph):
+    from social_operations.rich_text import max_entities,normalized_entities,utf16
+    text=glyph+'Bold'+glyph
+    original=[dict(type='bold',offset=0,length=utf16(text))]
+    assert max_entities(text,original)==[dict(type='bold',offset=utf16(glyph),length=4)]
+    assert normalized_entities(text,original)==original  # Telegram unchanged
+    links=[dict(type='text_link',offset=0,length=utf16(text),url='https://example.com/owned')]
+    assert max_entities(text,links)==links
+
+
+def test_max_font_semantics_retain_symbols_digits_and_style_gaps():
+    from social_operations.rich_text import max_entities
+    for text in ['123','©x','❤︎x']:
+        e=[dict(type='italic',offset=0,length=len(text))]
+        assert max_entities(text,e)==e
+    assert max_entities('AB',[dict(type='bold',offset=0,length=1),dict(type='bold',offset=1,length=1)])==[dict(type='bold',offset=0,length=2)]
+    assert max_entities('A B',[dict(type='bold',offset=0,length=1),dict(type='bold',offset=2,length=1)])==[dict(type='bold',offset=0,length=1),dict(type='bold',offset=2,length=1)]

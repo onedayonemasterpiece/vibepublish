@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed — MAX visual font semantics
+
+- Canonicalize MAX bold/italic spans around neutral raster emoji graphemes,
+  preserving exact text/link evidence and unchanged Telegram/VK semantics.
+
 ### Added — exact native-slot download evidence
 
 - Added typed ordered downloaded-media evidence distinct from native attachment

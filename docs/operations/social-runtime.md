@@ -94,3 +94,16 @@ rewrite of Telegram/VK or a new MAX task. Keep the current request-safety outcom
 and [delivery proof rule](repository-workflow.md#proof-of-github-delivery).
 Full remote CI, actual DevCoveer host evidence and authorized live/owner acceptance
 remain separate requirements.
+
+### MAX raster emoji font evidence (2026-09-08)
+
+Observed MAX Web renders Unicode emoji as neutral non-editable raster decorators.
+Font weight/slant cannot be inferred from a boundary emoji. `max_entities`
+therefore excludes Unicode emoji-presentation graphemes from bold/italic spans
+and joins only adjacent same-style text spans. Exact text and link spans/URLs
+are unchanged. The immutable caller intent is retained; MAX verification uses
+this visual semantic projection for both expected and observed entities.
+Telegram/VK and non-font entity validation are unchanged. `regex` grapheme and
+Unicode properties follow [UTS #51](https://unicode.org/reports/tr51/); plain
+digits, text-presentation selectors and ordinary copyright symbols are not
+neutralized. Malformed spans still fail before projection.
