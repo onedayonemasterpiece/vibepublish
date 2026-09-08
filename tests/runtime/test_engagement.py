@@ -92,3 +92,20 @@ async def test_missing_reaction_observation_is_not_proof_of_removal(runtime):
     admitted=await app.call(actor,'vibepublish_engage',{'command':{'kind':'react','item_ref':source,'reaction':'👍','mode':'remove'}})
     await worker.run_once();result=store.receipt(actor,admitted['operation_id'])
     assert result['state']=='outcome_unknown' and result['error']['code']=='reaction_subject_or_state_mismatch'
+
+
+@pytest.mark.asyncio
+async def test_exact_own_reaction_reads_preserve_empty_vs_missing_evidence(runtime):
+    store,actor,binding,p,app,worker=runtime;ref=await publish(runtime)
+    store.grant_binding_rights(actor,binding,['react'])
+    for mode,expected in [('add',['👍']),('remove',[])]:
+        admitted=await app.call(actor,'vibepublish_engage',{'command':{'kind':'react','item_ref':ref,'reaction':'👍','mode':mode}})
+        await worker.run_once();done=store.receipt(actor,admitted['operation_id']);ref=done['deliveries'][0]['item_ref']
+        read=await app.call(actor,'vibepublish_read',{'query':{'kind':'reactions','item_ref':ref}})
+        await worker.run_once();result=store.receipt(actor,read['operation_id'])
+        assert result['state']=='verified' and result['items'][0]['own_reactions']==expected
+    p.items={k:replace(v,own_reactions_observed=False) for k,v in p.items.items()}
+    read=await app.call(actor,'vibepublish_read',{'query':{'kind':'reactions','item_ref':ref}})
+    await worker.run_once();result=store.receipt(actor,read['operation_id'])
+    assert result['state']=='blocked' and result['error']['code']=='reaction_read_unverified'
+    assert p.effects==3

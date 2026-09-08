@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added: authenticated exact MAX own-reaction reads, distinguishing observed removal from missing metadata.
+
 - Added: exact authorized-source download binding for native MAX media forwards without re-uploading.
 
 ### Added — MAX engagement proof contract

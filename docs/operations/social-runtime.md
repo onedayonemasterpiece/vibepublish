@@ -172,3 +172,9 @@ item coordinates and matching downloaded bytes; it does not accept arbitrary
 provider observations as upload evidence. Core still separately requires native
 forward-origin proof and exact source body/entities/media before committing the
 result. Existing publish/edit bindings and other providers remain unchanged.
+
+MAX `read(kind=reactions, item_ref=…)` uses the same authorized exact-reference
+read worker. It returns explicitly observed **own** reactions, including `[]` for
+proved removal; it does not enumerate other participants. Missing metadata,
+multiple items or a different native ID cannot become verified empty reactions.
+Other providers and non-published namespaces are not implicitly enabled.

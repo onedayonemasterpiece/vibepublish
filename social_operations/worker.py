@@ -510,6 +510,9 @@ class Worker:
         async with self.lane(b['connection_id']):
             async with asyncio.timeout(30):
                 page = await self.adapter(b['provider'], b['connection_id']).read(request, self.hooks(op))
+        if request.kind=='reactions' and (len(page.items)!=1 or not page.items[0].own_reactions_observed
+                or page.items[0].native_id!=request.native_item or page.items[0].namespace!='published'):
+            raise DomainError('reaction_read_unverified')
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
             self.store.current(db, actor)

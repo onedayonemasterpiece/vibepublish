@@ -487,7 +487,7 @@ class Application:
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             kind = query['kind']
-            if kind not in ('scheduled', 'feed', 'search', 'item', 'history', 'analytics'):
+            if kind not in ('scheduled', 'feed', 'search', 'item', 'history', 'analytics','reactions'):
                 raise DomainError('capability_not_implemented', next_action='contact_owner')
             if kind in ('history', 'analytics'):
                 if args.get('cursor'):
@@ -521,11 +521,13 @@ class Application:
                 op = self._new_operation(db, actor, 'read', args, complete=True, result={'items': items[:limit], 'truncated': len(items)>limit})
             else:
                 intent = json.loads(canonical(args))
-                if kind == 'item':
+                if kind in {'item','reactions'}:
                     ref = self.resolve_item(db, actor, query['item_ref'])
                     b = self.store.binding(db, actor, binding_id=ref['binding_id'])
                     intent['_native_item'] = ref['native_id']
                     intent['_namespace'] = ref['namespace']
+                    if kind=='reactions' and (b['provider']!='max' or ref['namespace']!='published'):
+                        raise DomainError('reaction_read_surface_not_enabled')
                 else:
                     b = self.store.binding(db, actor, alias=query['destination'])
                 if 'publish' not in json.loads(b['rights']) and not actor.owner:
