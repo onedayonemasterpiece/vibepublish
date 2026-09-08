@@ -206,6 +206,7 @@ class RealMaxDriver:
             raise MaxBlocked('causal_receipt_recipe_unverified')
         if target not in self.targets or (self.targets[target].policy != 'test_group' and scheduled_at is None):
             raise MaxBlocked('immediate_publication_denied')
+        if action=='cancel' and self.targets[target].policy=='test_group':return
         if scheduled_at is not None and action in {'publish','reschedule'}:
             wanted=datetime.fromisoformat(scheduled_at.replace('Z','+00:00'))
             if wanted.second or wanted.microsecond:raise MaxBlocked('native_schedule_minute_precision')
@@ -216,6 +217,9 @@ class RealMaxDriver:
     async def mutate(self, *, target, text, media, scheduled_at, action,
                      attempt_id, plan_digest, hooks, existing=None, entities=()):
         await self.mutation_preflight(target, action, media=media, scheduled_at=scheduled_at)
+        if action=='cancel':
+            from . import queue
+            return await queue.cancel(self,existing=existing,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)
         if action=='reschedule':
             from . import queue
             return await queue.reschedule(self,existing=existing,scheduled_at=scheduled_at,attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks)

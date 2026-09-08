@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added — verified native cancellation
+
+- Cancel the exact own queued object through its observed native confirmation,
+  with pre-input intent and durable trusted removal before read-only recovery.
+- Guard native scheduling previews and queued lifecycle media against last-input drift.
+
+
 ### Added — native queue lifecycle evidence
 
 - Read native scheduled IDs/time through passively correlated owned-browser

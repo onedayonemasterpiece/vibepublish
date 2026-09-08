@@ -364,3 +364,31 @@ The shared dependency pin now includes native replacement/no-effect/finalization
 support. Local core validation: 233 tests + 202 subtests; focused replacement
 algorithm 5 tests. Broader MAX replay regression is running separately; native
 cancel/edit/output and social acceptance remain **Not done**.
+
+### Native cancellation (2026-09-08)
+
+The own group queued-item **Удалить** menu opens native `<dialog>` titled
+**Удалить сообщение**, buttons **Удалить / Отменить**, with no "for everyone"
+checkbox. This is a separate observed recipe from published-message deletion.
+The driver checks exact native ID/time/text/rich/downloaded media before opening
+it, then guards the trusted primary click against row/content/media/time drift.
+Durable trusted row removal precedes two fresh queue-absence checks. Recovery
+requires that original removal evidence; absence alone never grants cancellation
+or a repeated delete. Core owns the post-commit fuse release.
+
+Actual MCP/worker: rescheduled image exact read retained its downloaded media;
+then cancel removed that same native object with one guarded primary delete.
+The original cancel operation is cancelled/complete, historical dispatch=1 and
+finalization=done. A core receipt projection defect (`requested_at: null` on a
+cancelled scheduled snapshot) was corrected without repeating deletion or SQL
+repair; the same original status subsequently validated through MCP.
+Offline native confirmation/drift/recovery: 3 passed. Previous complete assembled
+MAX observed/actual-core/unit run: 215 passed. Remote MAX commit `4511f37` had
+203 passed/4 explicit missing-core skips in MAX-only CI and 46 actual-core passes.
+Core native-replacement jobs passed on Python 3.12/3.13 (233 tests/202 subtests);
+its unrelated full `verify` still fails collection on missing
+`adapters.codex_imagegen`, not on MAX lifecycle. No imagegen was executed.
+
+A fresh native image output probe was queued through MCP and exactly read as
+scheduled; its MCP server/worker/browser stopped before native due time. Native
+output and remaining social acceptance are still under verification, not closed.

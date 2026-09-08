@@ -67,14 +67,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # Existing PR #1, actual ProviderAdapter/worker, never a vendored port.
-          ref: 234af35047e64cf4e69aab19cdd8e87b9bb3481c
+          ref: 6df84604a51089eb631357c7230b4f38a1da76c4
           path: core
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Assemble scoped MAX delta on exact core
         run: |
-          test "$(git -C core rev-parse HEAD)" = 234af35047e64cf4e69aab19cdd8e87b9bb3481c
+          test "$(git -C core rev-parse HEAD)" = 6df84604a51089eb631357c7230b4f38a1da76c4
           cp -a max/adapters/max core/adapters/max
           mkdir -p core/tests/browser core/tests/adapters
           cp -a max/tests/browser/max core/tests/browser/max

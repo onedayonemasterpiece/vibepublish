@@ -380,7 +380,7 @@ class MaxAdapter:
                 and replacement.get('previous_fingerprint')==request.existing.fingerprint
                 and replacement.get('evidence') in {'trusted_ui_native_queue_replacement','stable_native_correlation'})
             exact=(((remote.get('native_id')==native or replaced) if native is not None else recovered_exact)
-                and remote.get('namespace')=='scheduled' and remote.get('scheduled_at')==request.scheduled_at
+                and remote.get('namespace')=='scheduled' and remote.get('scheduled_at')==(request.existing.scheduled_at if request.action=='cancel' else request.scheduled_at)
                 and remote.get('url') is None)
         else:
             exact=(bool(expected_reference) and remote.get('url')==expected_reference and remote.get('namespace')=='published')

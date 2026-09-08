@@ -134,6 +134,7 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
                     const dialog=button.closest('dialog,[role="dialog"]'),editor=document.querySelector(x.composer);
                     return button.isConnected&&location.href===x.route&&dialog&&editor&&
                         semanticText(editor)===x.text&&JSON.stringify(semanticSnapshot(editor))===x.snapshot&&
+                        JSON.stringify([...editor.closest('main').querySelectorAll('.attaches .attach img')].map(e=>({src:e.src,name:e.alt})))===JSON.stringify(x.previews)&&
                         dialog.querySelector('.calendar .header .title')?.textContent.trim().toLowerCase().replace(/\s+/g,' ')===x.date.month&&
                         dialog.querySelector('.days > button.day--selected')?.textContent.trim()===x.date.day&&
                         dialog.querySelector('[role="spinbutton"][aria-label="Часы"]')?.getAttribute('aria-valuenow')===x.date.hour&&
@@ -198,6 +199,10 @@ async def reconcile(driver,state):
     try:
         async with asyncio.timeout(driver.timeout):
             driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
+            if state['action']=='cancel':
+                result=await cancelled_item(driver,state)
+                driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
+                return dict(item=result,state=state)
             native=state.get('native_id')
             if native is None:
                 async with QueueObserver(driver.page,target,driver.origin,driver.evidence_pages) as observer:
@@ -294,6 +299,7 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
                         semanticText(row.querySelector('.bubbleContent > .text'))===x.text&&
                         JSON.stringify(semanticSnapshot(row.querySelector('.bubbleContent > .text')))===x.snapshot&&
                         row.querySelectorAll('[aria-label="Прикрепленные фото"] > button').length===x.media_count&&
+                        JSON.stringify([...row.querySelectorAll('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source')].map(e=>e.currentSrc||e.src))===x.media&&
                         row.querySelector('.meta .text')?.textContent.trim()===x.old_time&&
                         dialog.querySelector('.calendar .header .title')?.textContent.trim().toLowerCase().replace(/\s+/g,' ')===x.date.month&&
                         dialog.querySelector('.days > button.day--selected')?.textContent.trim()===x.date.day&&
@@ -305,6 +311,7 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
                 document.addEventListener('click',check,true);
                 return {ready:()=>ready()&&!clicks&&!blocked,result:()=>({clicks,blocked}),stop:()=>document.removeEventListener('click',check,true)};
             }''',dict(row=await row.element_handle(),route=driver.origin+'/'+target,text=original['text'],
+                media=await row.locator('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source').evaluate_all('(es)=>JSON.stringify(es.map(e=>e.currentSrc||e.src))'),
                 snapshot=await row.locator('.bubbleContent > .text').evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),
                 media_count=len(original['observed_media']),old_time=datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).astimezone(MOSCOW).strftime('%H:%M'),date=date))
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_reschedule_form_changed')
@@ -374,3 +381,99 @@ async def rescheduled_item(driver,state):
     if any(first[k]!=fresh[k] for k in ('id','text','entities','scheduled_at','observed_media','correlation_id')):
         raise MaxBlocked('native_replacement_changed')
     return fresh
+
+
+async def cancelled_item(driver,state):
+    """A persisted trusted removal plus fresh native absence, never absence alone."""
+    if state.get('transition')!=dict(clicks=1,removed=True,blocked=False):
+        raise MaxBlocked('native_cancel_removal_proof_missing')
+    original=state.get('item',{})
+    if (original.get('id')!=state['existing_id'] or original.get('target')!=state['target']
+            or original.get('scheduled_at')!=state['old_scheduled_at']):
+        raise MaxBlocked('native_cancel_binding_changed')
+    for _ in range(2):
+        async with QueueObserver(driver.page,state['target'],driver.origin,driver.evidence_pages) as observer:
+            await driver._account()
+            await driver.page.goto(driver.origin+'/'+state['target'],wait_until='domcontentloaded')
+            main=await driver._scope(state['target'])
+            entry=main.get_by_role('button',name='Открыть отложенные сообщения',exact=True)
+            if await entry.count():
+                natives=await open_queue(driver,state['target'],observer)
+                if any(n['id']==state['existing_id'] for n in natives):raise MaxBlocked('native_cancel_item_still_present')
+            # A last-item deletion removes the queue entry. The persisted causal
+            # removal, not this empty UI alone, proves cancellation vs publication.
+            await driver._account()
+    return dict(original,observed_at=datetime.now(timezone.utc).isoformat().replace('+00:00','Z'))
+
+
+async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
+    import asyncio,json
+    target=existing['target'];driver._enter(target);guard=None;armed=False
+    try:
+        driver.lane.assert_clear()
+        if driver.targets[target].policy!='test_group' or existing['namespace']!='scheduled':
+            raise MaxBlocked('native_cancel_scope_unqualified')
+        async with asyncio.timeout(driver.timeout):
+            original=(await read(driver,target,existing['id'],passes=1))[0]
+            if (any(original[k]!=existing[k] for k in ('text','scheduled_at','observed_media'))
+                    or not rich.same_entities(original['entities'],existing['entities'])):
+                raise MaxBlocked('native_cancel_existing_changed')
+            main=await driver._scope(target,'scheduled');row=driver._rows(main,original['text'])
+            await driver._open_message_menu(row)
+            # The observed delayed-item menu opens a native confirmation dialog;
+            # the only provider deletion is its guarded primary button below.
+            await driver.page.get_by_role('menu').get_by_role('menuitem',name='Удалить',exact=True).click()
+            dialog=driver.page.get_by_role('dialog')
+            await expect(dialog.get_by_text('Удалить сообщение',exact=True)).to_have_count(1)
+            await expect(dialog.get_by_role('checkbox')).to_have_count(0)
+            button=dialog.get_by_role('button',name='Удалить',exact=True)
+            await expect(button).to_have_count(1)
+            guard=await button.evaluate_handle('(button,x)=>{'+rich.SNAPSHOT_JS+r'''
+                let clicks=0,removed=false,blocked=false;const row=x.row,main=row.closest('main');
+                const ready=()=>button.isConnected&&row.isConnected&&location.href===x.route&&
+                    semanticText(row.querySelector('.bubbleContent > .text'))===x.text&&
+                    JSON.stringify(semanticSnapshot(row.querySelector('.bubbleContent > .text')))===x.snapshot&&
+                    row.querySelector('.meta .text')?.textContent.trim()===x.time&&
+                    row.querySelectorAll('[aria-label="Прикрепленные фото"] > button').length===x.media_count&&
+                        JSON.stringify([...row.querySelectorAll('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source')].map(e=>e.currentSrc||e.src))===x.media&&Date.now()<x.at;
+                const watcher=new MutationObserver(()=>{if(clicks===1&&!row.isConnected)removed=true;});
+                watcher.observe(main,{childList:true,subtree:true});
+                const check=e=>{if(!button.contains(e.target))return;
+                    if(!e.isTrusted||clicks||!ready()){blocked=true;e.preventDefault();e.stopImmediatePropagation();return;}clicks++;};
+                document.addEventListener('click',check,true);
+                return {ready,result:()=>({clicks,removed,blocked}),stop:()=>{watcher.disconnect();document.removeEventListener('click',check,true);}};
+            }''',dict(row=await row.element_handle(),route=driver.origin+'/'+target,text=original['text'],
+                media=await row.locator('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source').evaluate_all('(es)=>JSON.stringify(es.map(e=>e.currentSrc||e.src))'),
+                snapshot=await row.locator('.bubbleContent > .text').evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),
+                time=datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).astimezone(MOSCOW).strftime('%H:%M'),
+                at=int(datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).timestamp()*1000),media_count=len(original['observed_media'])))
+            if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_cancel_guard_changed')
+            state=dict(recipe='max-native-schedule-v1',target=target,text=original['text'],entities=original['entities'],
+                kind='scheduled',action='cancel',scheduled_at=None,old_scheduled_at=original['scheduled_at'],
+                media=original['media'],observed_media=original['observed_media'],media_slots=len(original['observed_media']),
+                existing_id=original['id'],native_id=original['id'],item=original,attempt_id=attempt_id,plan_digest=plan_digest)
+            await hooks.checkpoint('MAX_CANCEL_PREPARED',json.dumps(state))
+            await driver._account();await driver._scope(target,'scheduled')
+            driver.lane.arm(attempt_id,plan_digest);armed=True
+            await hooks.before_effect(attempt_id,plan_digest)
+            await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
+            if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_cancel_guard_changed')
+            await button.click();await expect(dialog).to_have_count(0);await expect(row).to_have_count(0)
+            transition=await guard.evaluate('(g)=>g.result()')
+            if transition!=dict(clicks=1,removed=True,blocked=False):raise MaxBlocked('native_cancel_transition_unverified')
+            state['transition']=transition
+            await hooks.checkpoint('MAX_CANCEL_CONFIRMED',json.dumps(state))
+            await guard.evaluate('(g)=>g.stop()');await guard.dispose();guard=None
+            result=await cancelled_item(driver,state)
+            await hooks.checkpoint('MAX_CANCEL_OBSERVED',json.dumps(dict(state,item=result)))
+            return [result]
+    except BaseException as exc:
+        if isinstance(exc,(asyncio.CancelledError,KeyboardInterrupt,SystemExit)):raise
+        if armed:raise MaxBlocked('outcome_unknown') from None
+        if isinstance(exc,MaxBlocked):raise
+        raise MaxBlocked('native_cancel_prepare_unavailable') from None
+    finally:
+        if guard is not None:
+            try:await guard.evaluate('(g)=>g.stop()');await guard.dispose()
+            except Exception:pass
+        driver._busy=False
