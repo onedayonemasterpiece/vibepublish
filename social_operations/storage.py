@@ -149,6 +149,21 @@ class Store:
             db.execute("UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?", (principal,))
         return binding_id
 
+    def grant_binding_rights(self, owner: Actor, binding_id: str, rights):
+        """Owner-only additive grant; never revokes epochs or clears quarantine."""
+        allowed={'publish','edit','reschedule','cancel','delete','forward','reply','react'}
+        if not isinstance(rights,(list,tuple)) or not rights or any(r not in allowed for r in rights):
+            raise DomainError('invalid_binding_rights')
+        with self.tx() as db:
+            self.current(db,owner)
+            row=db.execute('SELECT * FROM bindings WHERE id=? AND tenant_id=? AND active=1',(binding_id,owner.tenant_id)).fetchone()
+            if not owner.owner or not row:raise DomainError('access_denied')
+            old=json.loads(row['rights']);updated=list(dict.fromkeys(old+list(rights)))
+            if updated!=old:
+                db.execute('UPDATE bindings SET rights=? WHERE id=?',(canonical(updated),binding_id))
+                db.execute('UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?',(row['principal_id'],))
+            return updated
+
     def revoke_binding(self, owner: Actor, binding_id: str):
         with self.tx() as db:
             self.current(db, owner)

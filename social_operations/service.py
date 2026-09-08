@@ -221,14 +221,14 @@ class Application:
                 if fixture and fixture[0]:
                     raise DomainError('fixture_asset_native_publish_forbidden', next_action='contact_owner')
         admission_error = None
-        if action not in ('forward', 'cancel', 'delete'):
+        if action not in ('forward', 'cancel', 'delete', 'react'):
             try:
                 content = self.emojis.compile(db, actor, content, binding, target)
             except DomainError as exc:
                 if exc.code not in {'emoji_fallback_required', 'rich_fallback_needs_review'} or action != 'publish':
                     raise
                 admission_error, content = exc.code, {'text': ''}
-        if action not in ('forward', 'cancel', 'delete') and not assets and not content.get('text', '').strip() and not pending_visual and not admission_error:
+        if action not in ('forward', 'cancel', 'delete', 'react') and not assets and not content.get('text', '').strip() and not pending_visual and not admission_error:
             raise DomainError('empty_publication')
         delivery = target.get('delivery', {'kind': 'now'})
         scheduled = timestamp(parse_time(delivery['at'])) if delivery.get('at') else None
@@ -265,9 +265,22 @@ class Application:
                 else:
                     target = intent if action == 'publish' else intent['command']
                     actual = 'publish' if action == 'publish' else target['kind']
-                    if actual not in ('publish', 'forward'):
+                    if actual not in ('publish', 'forward', 'reply', 'react'):
                         raise DomainError('capability_not_implemented', next_action='contact_owner')
-                    plans = [self._plan(db, actor, b, target, actual, pending_visual=bool(target.get('visual'))) for b in self._targets(db, actor, target['to'])]
+                    if actual in ('reply','react'):
+                        reference=self.resolve_item(db,actor,target['item_ref'])
+                        binding=self.store.binding(db,actor,binding_id=reference['binding_id'])
+                        if binding['provider']!='max' or binding['account_type'] not in ('max_web','fake'):
+                            raise DomainError('engagement_provider_not_enabled')
+                        subject=json.loads(reference['snapshot']);subject['media_hashes']=[]
+                        if subject['namespace']!='published':raise DomainError('engagement_requires_published_subject')
+                        body=target.get('content',{'text':subject['text']})
+                        intent_target={'content':body,'delivery':{'kind':'now'}}
+                        plan=self._plan(db,actor,binding,intent_target,actual,subject if actual=='react' else None)
+                        plan.update(subject=subject,subject_ref=target['item_ref'],reaction=target.get('reaction'),reaction_mode=target.get('mode'))
+                        plans=[plan]
+                    else:
+                        plans = [self._plan(db, actor, b, target, actual, pending_visual=bool(target.get('visual'))) for b in self._targets(db, actor, target['to'])]
                     if actual == 'forward':
                         from dataclasses import asdict
                         item = target['item_ref']
@@ -284,6 +297,14 @@ class Application:
                                 if not channel.lstrip('-').isdigit() or int(channel) >= -1_000_000_000_000:
                                     raise DomainError('forward_source_kind_needs_review')
                                 url = f'https://t.me/c/{-int(channel)-1_000_000_000_000}/{native_id}'
+                            elif source_binding['provider']=='max' and source_binding['account_type'] in ('max_web','fake'):
+                                import re
+                                snapshot=json.loads(source_ref['snapshot'])
+                                url=snapshot.get('url','')
+                                if not re.fullmatch(r'https://max\.ru/c/-[1-9][0-9]*/[A-Za-z0-9_-]+',url) or url!=f'https://max.ru/c/{channel}/{native_id}':
+                                    raise DomainError('max_forward_native_reference_required')
+                                for plan in plans:
+                                    plan['subject']={**snapshot,'media_hashes':[]}
                             elif source_binding['provider'] == 'vk':
                                 url = f'https://vk.ru/wall{channel}_{native_id}'
                             else:
@@ -547,6 +568,8 @@ class Application:
             item['media_evidence'] = [asdict(value) for value in downloaded_media(remote['observed_media'])]
         elif remote.get('media_hashes'):
             item['error'] = {'code': 'media_projection_not_enabled', 'message': 'This checkpoint returns text and timing; provider media downloads are not exposed'}
+        if remote.get('own_reactions_observed'):
+            item['own_reactions']=list(remote['own_reactions'])
         if remote.get('metrics'):
             item['metrics'] = [{'name': n, 'value': v, 'unit': u} for n,v,u in remote['metrics']]
             item['metrics_observed_at'] = remote['observed_at']

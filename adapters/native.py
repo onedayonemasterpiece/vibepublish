@@ -56,6 +56,8 @@ def identity(item: RemoteItem) -> str:
     if item.observed_media:
         from dataclasses import asdict
         fields.append({'observed_media': [asdict(value) for value in item.observed_media]})
+    if item.reply_to_native_id or item.own_reactions:
+        fields.append({'reply_to':item.reply_to_native_id,'own_reactions':sorted(item.own_reactions)})
     if item.entities_json != '[]':
         from social_operations.rich_text import normalized_entities
         fields.append(normalized_entities(item.text, json.loads(item.entities_json)))

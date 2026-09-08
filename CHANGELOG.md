@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added — MAX engagement proof contract
+
+- Admit bound-subject replies/reactions through the existing worker with explicit
+  additive owner-granted rights and exact relationship/own-reaction verification.
+- Retain authorized MAX forward source refs and check native attribution/content/media.
+
+
 ### Fixed — native cancellation receipts
 
 - Do not serialize a cancelled native snapshot as a pending schedule with null

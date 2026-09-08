@@ -146,3 +146,22 @@ including projection of older committed results retaining a native scheduled
 snapshot. That historical snapshot remains immutable; status serialization does
 not manufacture a new schedule or require a repeated deletion. The regression
 covers both fresh cancellation and legacy nullable requested-time results.
+
+### MAX engagement core contract (implementation in progress)
+
+Reply/react admission resolves an existing authorized published `item_ref`, freezes
+its native subject, and uses the same operation/attempt/worker pipeline. It requires
+explicit `reply`/`react` binding rights; existing bindings do not silently acquire
+them. Owner CLI `grant-rights --binding-id … --right reply --right react` adds rights
+without removing prior grants, changing target/account identity, invalidating old
+binding epochs, or altering any attempt/quarantine. Revocation remains separate.
+
+Reply verification requires the exact native subject relationship and new native
+item plus unchanged requested content. Reaction verification requires explicit
+observed own-reaction state (not another user's count or missing metadata), exact
+subject and requested add/remove outcome. `reacted` and reaction result fields are
+additive receipt metadata. Other provider adapters are not enabled implicitly.
+MAX forwarding from a bound read ref preserves its verified native permalink,
+subject content/entities/download evidence and native attribution. External MAX
+URL ingress remains disabled; no URL becomes a grant. These core tests do not
+claim live MAX social acceptance; the real driver qualification is in PR #2.

@@ -106,7 +106,9 @@ class Worker:
         return ProviderRequest(op['id'], child['id'], child['plan_digest'], plan['connection_id'], plan['account_type'], plan['secret_ref'],
                                plan['destination_id'], plan['native_target'], plan['action'], plan['surface'], plan['content_json'], tuple(assets),
                                plan['scheduled_at'], op['deadline'], RemoteItem(**plan['existing']) if plan['existing'] else None,
-                               NativeSource(**plan['source']) if plan['source'] else None, plan['source_authorized'], plan['selection'])
+                               NativeSource(**plan['source']) if plan['source'] else None, plan['source_authorized'], plan['selection'],
+                               subject=RemoteItem(**plan['subject']) if plan.get('subject') else None,
+                               reaction=plan.get('reaction'),reaction_mode=plan.get('reaction_mode'))
 
     async def heartbeat(self, op):
         while True:
@@ -331,6 +333,8 @@ class Worker:
             expected = 'cancelled' if action == 'cancel' else 'deleted'
             if observation.observed != expected:
                 raise OutcomeUnknown('lifecycle_outcome_mismatch')
+        elif action=='react':
+            if observation.observed!='reacted':raise OutcomeUnknown('reaction_outcome_mismatch')
         elif plan['scheduled_at']:
             if observation.observed != 'provider_scheduled':
                 raise OutcomeUnknown('native_schedule_not_observed')
@@ -338,6 +342,18 @@ class Worker:
             raise OutcomeUnknown('publication_outcome_mismatch')
         elif remote.namespace != 'published':
             raise OutcomeUnknown('published_namespace_mismatch')
+        if action in ('reply','react'):
+            subject=plan.get('subject')
+            if not subject or plan['provider']!='max' or remote.namespace!='published':
+                raise OutcomeUnknown('engagement_subject_missing')
+            if action=='reply':
+                if remote.reply_to_native_id!=subject['native_id'] or remote.native_id==subject['native_id']:
+                    raise OutcomeUnknown('reply_subject_mismatch')
+            else:
+                if (not remote.own_reactions_observed or remote.native_id!=subject['native_id'] or remote.text!=subject['text']
+                        or remote.observed_media!=RemoteItem(**subject).observed_media
+                        or (plan['reaction'] in remote.own_reactions)!=(plan['reaction_mode']=='add')):
+                    raise OutcomeUnknown('reaction_subject_or_state_mismatch')
         if plan['existing'] and remote.native_id != plan['existing']['native_id']:
             from adapters.port import NativeReplacement
             proof=observation.replacement
@@ -351,7 +367,7 @@ class Worker:
                 raise OutcomeUnknown('lifecycle_identity_changed')
         elif observation.replacement is not None:
             raise OutcomeUnknown('unexpected_native_replacement')
-        if plan['action'] in ('publish', 'edit', 'reschedule'):
+        if plan['action'] in ('publish', 'edit', 'reschedule', 'reply'):
             if remote.text != json.loads(plan['content_json'])['text']:
                 raise OutcomeUnknown('content_readback_mismatch')
             if plan['provider'] == 'telegram' or (plan['provider'] == 'max' and plan['account_type'] == 'max_web'):
@@ -377,6 +393,13 @@ class Worker:
             raise OutcomeUnknown('native_time_mismatch')
         if plan['action'] == 'forward' and (not observation.forward_origin_matched or remote.origin != plan['source']['canonical_url']):
             raise OutcomeUnknown('forward_attribution_incomplete')
+        if action=='forward' and plan['provider']=='max':
+            from .rich_text import max_entities
+            subject=RemoteItem(**plan['subject']) if plan.get('subject') else None
+            if (not subject or not plan['source_authorized'] or remote.text!=subject.text
+                    or remote.observed_media!=subject.observed_media
+                    or max_entities(remote.text,json.loads(remote.entities_json))!=max_entities(subject.text,json.loads(subject.entities_json))):
+                raise OutcomeUnknown('max_forward_content_or_media_mismatch')
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
             current_child = db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone()
@@ -401,6 +424,9 @@ class Worker:
             if observation.observed == 'provider_scheduled' and remote.scheduled_at:
                 result.update(queue_ref=item['ref'], effective_at=remote.scheduled_at, requested_at=plan['scheduled_at'], scheduling_owner='provider',
                               navigate_hint='Open the authorized channel native scheduled queue')
+            if action=='react':
+                result.update(reaction=plan['reaction'],reaction_mode=plan['reaction_mode'])
+            if action=='reply':result['reply_to_ref']=plan['subject_ref']
             if plan['source']:
                 result['forward_origin'] = {'source_ref': new_id('source'), 'provider': child['provider'], 'mode': 'native', 'origin_check': 'matched', 'original_url': remote.origin}
             state = 'scheduled' if observation.observed == 'provider_scheduled' else 'cancelled' if observation.observed == 'cancelled' else 'verified'

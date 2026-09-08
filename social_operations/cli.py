@@ -23,6 +23,7 @@ def parser():
     bind = sub.add_parser('bind'); bind.add_argument('--principal', required=True); bind.add_argument('--alias', required=True)
     bind.add_argument('--connection', required=True); bind.add_argument('--native-id', required=True); bind.add_argument('--label', required=True)
     partner = sub.add_parser('principal'); partner.add_argument('--tenant', required=True); partner.add_argument('--principal', required=True)
+    grant = sub.add_parser('grant-rights'); grant.add_argument('--binding-id', required=True); grant.add_argument('--right', action='append', required=True)
     revoke = sub.add_parser('revoke'); revoke.add_argument('--binding-id', required=True)
     asset = sub.add_parser('image'); asset.add_argument('--file', required=True, type=Path); asset.add_argument('--mime', required=True)
     video = sub.add_parser('video'); video.add_argument('--file', required=True, type=Path); video.add_argument('--mime', required=True, choices=('video/mp4',))
@@ -91,6 +92,8 @@ def main():
         elif args.command == 'principal':
             print(json.dumps({'service_token': store.create_principal(args.tenant, args.principal,
                 scopes={'bootstrap','publish','publication.manage','visual','status','forward','destination.profile'})}))
+        elif args.command == 'grant-rights':
+            print(json.dumps({'rights':store.grant_binding_rights(actor,args.binding_id,args.right)}))
         elif args.command == 'revoke':
             store.revoke_binding(actor, args.binding_id)
             print('Binding revoked. Existing provider-queued posts were NOT cancelled.')

@@ -77,12 +77,19 @@ class RemoteItem:
 
 
     observed_media: tuple[DownloadedMedia, ...] = ()
+    reply_to_native_id: str | None = field(default=None, repr=False)
+    own_reactions: tuple[str, ...] = ()
+    own_reactions_observed: bool = False
 
     def __post_init__(self):
         object.__setattr__(self, 'observed_media', downloaded_media(self.observed_media))
-        for name in ('media_hashes', 'provider_media', 'member_ids'):
+        for name in ('media_hashes', 'provider_media', 'member_ids', 'own_reactions'):
             object.__setattr__(self, name, tuple(getattr(self, name)))
         object.__setattr__(self, 'metrics', tuple(tuple(metric) for metric in self.metrics))
+        if type(self.own_reactions_observed) is not bool or (self.own_reactions and not self.own_reactions_observed):
+            raise DomainError('reaction_evidence_invalid')
+        if len(self.own_reactions)>100 or any(not isinstance(value,str) or not 1<=len(value)<=100 for value in self.own_reactions) or len(set(self.own_reactions))!=len(self.own_reactions):
+            raise DomainError('reaction_evidence_invalid')
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +112,9 @@ class ProviderRequest:
     source: NativeSource | None = None
     source_authorized: bool = False
     selection: str = "post"
+    subject: RemoteItem | None = None
+    reaction: str | None = None
+    reaction_mode: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
