@@ -12,5 +12,5 @@ CREATE TABLE IF NOT EXISTS attempt_recovery(
 CREATE TRIGGER IF NOT EXISTS immutable_recovery_origin
  BEFORE UPDATE OF attempt_id,plan_digest,original_checkpoint ON attempt_recovery
  BEGIN SELECT RAISE(ABORT,'immutable recovery origin'); END;
-PRAGMA user_version=4;
+PRAGMA user_version=5;
 COMMIT;
