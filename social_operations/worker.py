@@ -415,7 +415,6 @@ class Worker:
                 self.recovery_authority(db, op, child, actor)
             original = recovery['original_checkpoint'] if recovery else current_child['checkpoint']
             hint = {**(json.loads(recovery['hint']) if recovery else {}), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
-            saved_checkpoint = canonical({'remote': asdict(remote), 'original_checkpoint': json.loads(original), 'core_recovery': hint})
             if recovery or needs_finalize:
                 db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,hint,created) VALUES(?,?,?,?,?)',
                            (child['id'], child['plan_digest'], original, canonical(hint), self.store.clock()))
@@ -437,13 +436,13 @@ class Worker:
             if plan['source']:
                 result['forward_origin'] = {'source_ref': new_id('source'), 'provider': child['provider'], 'mode': 'native', 'origin_check': 'matched', 'original_url': remote.origin}
             state = 'scheduled' if observation.observed == 'provider_scheduled' else 'cancelled' if observation.observed == 'cancelled' else 'verified'
-            final_checkpoint = {'remote': asdict(remote)}
             current_checkpoint = db.execute('SELECT checkpoint FROM attempts WHERE id=?', (child['id'],)).fetchone()[0]
             evidence = self.vk_copy_evidence(child, plan, remote, current_checkpoint)
+            final_checkpoint = {'remote': asdict(remote), 'core_recovery': hint}
             if evidence is not None:
                 final_checkpoint['provider_evidence'] = evidence
             db.execute('UPDATE attempts SET state=?,stage=\'finished\',observed=?,result=?,checkpoint=? WHERE id=?',
-                       (state, observation.observed, canonical(result), saved_checkpoint, child['id']))
+                       (state, observation.observed, canonical(result), canonical(final_checkpoint), child['id']))
             self.store.event(db, op['id'], 'finished', 'completed', 'Exact provider item observed: '+observation.observed, child['alias'])
 
     @staticmethod

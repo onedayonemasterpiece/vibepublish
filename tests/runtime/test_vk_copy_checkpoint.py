@@ -61,7 +61,7 @@ class CopyCheckpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(proof['current'],'photo-241261191_789')
         self.assertEqual(proof['rendition']['sha256'],'a'*64)
         self.assertNotIn('must-not-persist',canonical(cp))
-        self.assertEqual(set(cp),{'remote','provider_evidence'})
+        self.assertEqual(set(cp),{'remote','provider_evidence','core_recovery'})
 
     async def test_wrong_copy_binding_cannot_finish_verified(self):
         receipt,cp=await self.run_case(True)

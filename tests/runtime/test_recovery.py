@@ -245,7 +245,7 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         restored = Store(self.store.path, clock=lambda: self.now)
         with restored.connection() as db:
             self.assertEqual(dict(db.execute('SELECT * FROM attempts').fetchone()), before)
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 4)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 5)
         self.provider.unknown = False
         await self.call('publication_update', self.args(receipt))
         await Worker(restored, {'max': self.provider}).run_once()
