@@ -1,0 +1,80 @@
+name: Apply staged VibePublish patch
+
+on:
+  push:
+    branches: [converge/core-max-integration-20260910]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify source base and reconstruct exact patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code 8f2f4c970ac38d0b06d1a87c41a86b15b74886c4 -- . \
+            ':(exclude).chatgpt-staging/**' \
+            ':(exclude).github/workflows/apply-staged-vp.yml'
+          cat .chatgpt-staging/vp-final.b64.00 \
+              .chatgpt-staging/vp-final.b64.01 \
+              .chatgpt-staging/vp-final.b64.02 \
+              .chatgpt-staging/vp-final.b64.03 > "$RUNNER_TEMP/vp-final.patch.gz.b64"
+          base64 --decode "$RUNNER_TEMP/vp-final.patch.gz.b64" > "$RUNNER_TEMP/vp-final.patch.gz"
+          gzip -dc "$RUNNER_TEMP/vp-final.patch.gz" > "$RUNNER_TEMP/vp-final.patch"
+          echo 'f4da0e0145ae98a4572cac03ceeeafa6ca31c17f7256f1829c14acc1e6f42e22  '"$RUNNER_TEMP/vp-final.patch" | sha256sum -c -
+          echo '16b26c2cff9af55af4265eb15142289ba10c00aa4e7220717458d5158192ba53  .chatgpt-staging/vp-followup.patch' | sha256sum -c -
+          git apply --check "$RUNNER_TEMP/vp-final.patch"
+          git apply "$RUNNER_TEMP/vp-final.patch"
+          git apply --check .chatgpt-staging/vp-followup.patch
+          git apply .chatgpt-staging/vp-followup.patch
+          rm -rf .chatgpt-staging
+          rm -f .github/workflows/apply-staged-vp.yml
+          git diff --check
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install locked application and qualification dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements.lock
+          python -m pip install --no-deps --no-build-isolation -e .
+          python -m pip check
+          python scripts/verify/dependencies.py requirements.lock --inputs requirements.verification.in > /tmp/dependency-inputs.json
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libcairo2 fonts-dejavu-core ffmpeg
+          python -m playwright install --with-deps chromium
+      - name: Imagegen quota and recovery acceptance
+        run: |
+          python -m pytest \
+            tests/visuals/test_codex_quota_semantics.py \
+            tests/visuals/test_codex_task_imagegen.py \
+            tests/visuals/test_recovery.py \
+            tests/visuals/test_visual_service.py \
+            tests/visuals/test_native_schedule_prompt.py \
+            tests/contracts/test_social_mcp_design.py -q
+      - name: Core recovery provider and SDK acceptance
+        run: |
+          python scripts/verify/telegram_sdk.py > /tmp/core-sdk.json
+          python -m pytest tests/runtime tests/contracts tests/providers tests/sdk -q
+      - name: Complete repository regression and compile
+        run: |
+          python -m pytest tests -q
+          python -m compileall -q social_operations adapters scripts/verify
+      - name: Commit exact qualified source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'core: finalize bounded reconciliation and imagegen quota semantics'
+          git push origin HEAD:converge/core-max-integration-20260910
