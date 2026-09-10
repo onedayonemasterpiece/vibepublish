@@ -14,18 +14,36 @@ from urllib.parse import parse_qs, urlsplit
 class DomainError(Exception):
     """Only deliberately sanitized messages cross the application boundary."""
 
-    def __init__(self, code: str, message: str | None = None, next_action: str = "fix_input"):
+    def __init__(self, code: str, message: str | None = None, next_action: str = "fix_input",
+                 *, retry_safe: bool = False, retry_at: str | None = None):
         self.code = code
         self.message = message or code.replace("_", " ")
         self.next_action = next_action
+        self.retry_safe = bool(retry_safe)
+        self.retry_at = retry_at
         super().__init__(self.message)
 
     def output(self) -> dict[str, Any]:
-        return {"error": {"code": self.code, "message": self.message},
-                "message": self.message, "next_action": self.next_action, "retry_safe": False}
+        result = {"error": {"code": self.code, "message": self.message},
+                  "message": self.message, "next_action": self.next_action,
+                  "retry_safe": self.retry_safe}
+        if self.retry_at:
+            result["retry_at"] = self.retry_at
+        return result
+
+
+class ReconciliationPending(DomainError):
+    """An external effect may exist; observation is required and mutation replay is forbidden."""
+
+    def __init__(self, code: str = "reconciling"):
+        super().__init__(code,
+            "External effect is being reconciled; do not repeat the command",
+            "check_status", retry_safe=False)
 
 
 class OutcomeUnknown(DomainError):
+    """Legacy terminal vocabulary retained only for historical durable records."""
+
     def __init__(self, code: str = "outcome_unknown"):
         super().__init__(code, "Provider outcome requires observation; do not repeat the command", "review_outcome")
 
