@@ -65,9 +65,25 @@ jobs:
           python scripts/verify/telegram_sdk.py > /tmp/core-sdk.json
           python -m pytest tests/runtime tests/contracts tests/providers tests/sdk -q
       - name: Complete repository regression and compile
+        id: full_regression
+        shell: bash
         run: |
-          python -m pytest tests -q
-          python -m compileall -q social_operations adapters scripts/verify
+          set +e
+          python -m pytest tests -q --tb=short > /tmp/full-tests.log 2>&1
+          rc=$?
+          tail -n 300 /tmp/full-tests.log
+          if [ "$rc" -eq 0 ]; then
+            python -m compileall -q social_operations adapters scripts/verify
+            rc=$?
+          fi
+          exit "$rc"
+      - name: Upload full regression diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-regression-${{ github.sha }}
+          path: /tmp/full-tests.log
+          retention-days: 2
       - name: Commit exact qualified source tree
         shell: bash
         run: |
