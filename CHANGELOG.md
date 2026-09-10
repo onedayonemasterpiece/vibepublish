@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Core+MAX convergence — 2026-09-10
+
+- Merge accepted core `87be8fc` into acceptance runtime: unified finish paths,
+  reconcile/reconcile_removed/retry_failed routing, engagement read budget,
+  pending_release gate, VK photo copy evidence, and recovery schema v5.
+- Port accepted MAX adapter package `15164cd` (13 files, ~3600 lines):
+  profiles, native v6, wire protocol, palette/vision, content/video, safety.
+- Fix worker crash loop: log real exceptions before wrapping as native_connection_failed;
+  pass VIBEPUBLISH_MAX_PROFILE to bundles; systemd Restart=always + StartLimitBurst.
+- Fix recovery_schema.sql version 4→5 to trigger migration correctly.
+- Preserve effective_at for cancelled scheduled items in receipt projection.
+- Test convergence: version assertions updated to v5, VK copy checkpoint includes
+  core_recovery, regex+lz4 dependencies installed, browser fixtures ported.
+- 344 tests pass, 0 failures; 9 pre-existing errors (FFmpeg not installed).
+
 ### ChatGPT OAuth and unattended TLS readiness — 2026-09-06
 
 - Add opt-in MCP SDK OAuth2.1/DCR/PKCE owner consent, resource-bound expiring
