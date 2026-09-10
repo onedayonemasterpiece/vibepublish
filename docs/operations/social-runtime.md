@@ -102,3 +102,93 @@ rewrite of Telegram/VK or a new MAX task. Keep the current request-safety outcom
 and [delivery proof rule](repository-workflow.md#proof-of-github-delivery).
 Full remote CI, actual DevCoveer host evidence and authorized live/owner acceptance
 remain separate requirements.
+
+### MAX raster emoji font evidence (2026-09-08)
+
+Observed MAX Web renders Unicode emoji as neutral non-editable raster decorators.
+Font weight/slant cannot be inferred from a boundary emoji. `max_entities`
+therefore excludes Unicode emoji-presentation graphemes from bold/italic spans
+and joins only adjacent same-style text spans. Exact text and link spans/URLs
+are unchanged. The immutable caller intent is retained; MAX verification uses
+this visual semantic projection for both expected and observed entities.
+Telegram/VK and non-font entity validation are unchanged. `regex` grapheme and
+Unicode properties follow [UTS #51](https://unicode.org/reports/tr51/); plain
+digits, text-presentation selectors and ordinary copyright symbols are not
+neutralized. Malformed spans still fail before projection.
+
+### Unreachable-input compensation, not fabricated publication
+
+The additive trusted `NoEffectProof` port value is an adapter control-flow proof,
+not a conclusion from an empty feed or a model answer. Core verifies its binding
+to the immutable original checkpoint, current actor/binding/plan/fence and a
+zero-input proof before recording **cancelled / observed not_attempted**. No
+native item is created, no successful publication is claimed, and historical
+`dispatched=1` is preserved. The original command remains cancelled under all
+idempotency keys; a new, different intent is not an automatic effect retry.
+
+The existing durable finalization outbox releases only the matching quarantine
+**after** that outcome commits; a failed release is retried across worker restart.
+Public delivery results may expose the additive compensation enum
+`intent_cancelled_without_effect` and its reason. Absence-only, nonzero-click and
+wrong-checkpoint proofs remain unresolved and cannot release the connection.
+Read-only reconciliation has a bounded 90-second observation window (separate
+from the expired original effect deadline), to allow repeated native UI checks.
+
+Finalization receives the already committed observation from the recovery journal
+without overwriting its immutable original checkpoint. Thus a native ID first
+learned during read-only recovery can be validated during post-commit release;
+no caller-supplied reference or fake scheduled URL is required.
+
+MAX Web may replace a native queued item ID when changing its native time.
+`Observation.replacement` carries typed `NativeReplacement` evidence binding the
+old fingerprint/ID to the new ID. Core accepts this only for MAX Web scheduled
+reschedule, with exact target/content, requested time and unchanged downloaded
+media. Other providers/actions and missing/incorrect proofs retain strict native
+identity checks. Download binding accepts the same explicit proof; it does not
+pretend the old and new native IDs are equal. Logical publication/revision and
+original attempt remain unchanged. Post-commit finalization receives the durable
+replacement observation, including across restart; it never repeats Save.
+
+Cancelled/deleted receipts omit pending-queue navigation/requested-time fields,
+including projection of older committed results retaining a native scheduled
+snapshot. That historical snapshot remains immutable; status serialization does
+not manufacture a new schedule or require a repeated deletion. The regression
+covers both fresh cancellation and legacy nullable requested-time results.
+
+### MAX engagement core contract (implementation in progress)
+
+Reply/react admission resolves an existing authorized published `item_ref`, freezes
+its native subject, and uses the same operation/attempt/worker pipeline. It requires
+explicit `reply`/`react` binding rights; existing bindings do not silently acquire
+them. Owner CLI `grant-rights --binding-id … --right reply --right react` adds rights
+without removing prior grants, changing target/account identity, invalidating old
+binding epochs, or altering any attempt/quarantine. Revocation remains separate.
+
+Reply verification requires the exact native subject relationship and new native
+item plus unchanged requested content. Reaction verification requires explicit
+observed own-reaction state (not another user's count or missing metadata), exact
+subject and requested add/remove outcome. `reacted` and reaction result fields are
+additive receipt metadata. Other provider adapters are not enabled implicitly.
+MAX forwarding from a bound read ref preserves its verified native permalink,
+subject content/entities/download evidence and native attribution. External MAX
+URL ingress remains disabled; no URL becomes a grant. These core tests do not
+claim live MAX social acceptance; the real driver qualification is in PR #2.
+
+Native MAX forwarded downloads may bind to the already authorized, frozen source
+subject without re-uploading media. This requires exact provider/source URL/chat/
+item coordinates and matching downloaded bytes; it does not accept arbitrary
+provider observations as upload evidence. Core still separately requires native
+forward-origin proof and exact source body/entities/media before committing the
+result. Existing publish/edit bindings and other providers remain unchanged.
+
+MAX `read(kind=reactions, item_ref=…)` uses the same authorized exact-reference
+read worker. It returns explicitly observed **own** reactions, including `[]` for
+proved removal; it does not enumerate other participants. Missing metadata,
+multiple items or a different native ID cannot become verified empty reactions.
+Other providers and non-published namespaces are not implicitly enabled.
+
+Native `max_web` reads now receive a bounded 90-second browser budget (never past
+an operation's deadline), matching mutation/recovery's existing upper bound.
+The live exact-own-reaction read reproduced the old 30-second cutoff. API/fake
+provider reads retain 30 seconds. Expiry reports `provider_read_deadline` with
+refresh, not a generic worker failure, and authorizes no mutation or resend.

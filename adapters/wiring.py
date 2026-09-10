@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from .telegram import TelegramAdapter, TelethonTypes
 from .vk import VKAdapter
 from .vk_transport import VKHTTPTransport, VKToken
@@ -58,44 +58,67 @@ def vk_credentials(bundle):
 
 
 @asynccontextmanager
-async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk_factory=VKHTTPTransport):
-    """A worker-only lifetime; caller must explicitly enable native connections."""
+async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk_factory=VKHTTPTransport, max_factory=None):
+    """A worker-only lifetime; caller must explicitly enable native connections.
+
+    max_factory is an async context manager callable accepting keyword-only
+    connection_id and env. The optional MAX package owns explicit profile config
+    validation and browser/profile lifetime; core owns the connection allowlist.
+    """
     env = os.environ if env is None else env
     clients, adapters = [], {}
     with store.connection() as db:
         connections = [dict(row) for row in db.execute('SELECT * FROM connections WHERE active=1')]
     try:
-        for connection in connections:
-            account = connection['account_type']
-            if account in {'unconfigured', 'fake'} or connection['provider'] == 'max':
-                continue
-            bundle = _bundle(connection['secret_ref'], env)
-            if connection['provider'] == 'telegram' and account in {'mtproto_user', 'mtproto_bot'}:
-                credentials = telegram_credentials(bundle)
-                compiler = tl or TelethonTypes()  # Version check before any connection.
-                if telegram_factory is None:
-                    from telethon import TelegramClient
-                    from telethon.sessions import StringSession
-                    client = TelegramClient(StringSession(credentials['session']), credentials['api_id'], credentials['api_hash'],
-                        request_retries=0, connection_retries=0, flood_sleep_threshold=0,
-                        auto_reconnect=False, receive_updates=False, raise_last_call_error=True)
+        async with AsyncExitStack() as resources:
+            for connection in connections:
+                account = connection['account_type']
+                if account in {'unconfigured', 'fake'}:
+                    continue
+                if connection['provider'] == 'max':
+                    if account != 'max_web':
+                        raise DomainError('native_account_type_needs_review', next_action='contact_owner')
+                    if connection['secret_ref'] != 'VIBEPUBLISH_MAX_PROFILE':
+                        raise DomainError('native_secret_reference_invalid', next_action='contact_owner')
+                    factory = max_factory
+                    if factory is None:
+                        try:
+                            from adapters.max.live_session import configured_adapter
+                        except ModuleNotFoundError as exc:
+                            if exc.name in {'adapters.max', 'adapters.max.live_session'}:
+                                raise DomainError('max_adapter_not_installed', next_action='contact_owner') from None
+                            raise
+                        factory = configured_adapter
+                    adapters[connection['id']] = await resources.enter_async_context(
+                        factory(connection_id=connection['id'], env=env))
+                    continue
+                bundle = _bundle(connection['secret_ref'], env)
+                if connection['provider'] == 'telegram' and account in {'mtproto_user', 'mtproto_bot'}:
+                    credentials = telegram_credentials(bundle)
+                    compiler = tl or TelethonTypes()  # Version check before any connection.
+                    if telegram_factory is None:
+                        from telethon import TelegramClient
+                        from telethon.sessions import StringSession
+                        client = TelegramClient(StringSession(credentials['session']), credentials['api_id'], credentials['api_hash'],
+                            request_retries=0, connection_retries=0, flood_sleep_threshold=0,
+                            auto_reconnect=False, receive_updates=False, raise_last_call_error=True)
+                    else:
+                        client = telegram_factory(credentials, request_retries=0, connection_retries=0,
+                            flood_sleep_threshold=0, auto_reconnect=False, receive_updates=False, raise_last_call_error=True)
+                    clients.append(client)
+                    await client.connect()
+                    if not await client.is_user_authorized():
+                        # Do not call start(), send_code_request(), bot login or interactive auth.
+                        raise DomainError('telegram_session_needs_auth', next_action='reauthorize')
+                    adapters[connection['id']] = TelegramAdapter(client, connection_id=connection['id'], account_type=account, tl=compiler, clock=store.clock)
+                elif connection['provider'] == 'vk' and account in {'vk_user', 'vk_group'}:
+                    tokens = vk_credentials(bundle)
+                    if 'vk_' + tokens['editor'].kind != account:
+                        raise DomainError('vk_account_type_mismatch')
+                    adapters[connection['id']] = VKAdapter(vk_factory(tokens=tokens), connection_id=connection['id'], account_type=account, clock=store.clock)
                 else:
-                    client = telegram_factory(credentials, request_retries=0, connection_retries=0,
-                        flood_sleep_threshold=0, auto_reconnect=False, receive_updates=False, raise_last_call_error=True)
-                clients.append(client)
-                await client.connect()
-                if not await client.is_user_authorized():
-                    # Do not call start(), send_code_request(), bot login or interactive auth.
-                    raise DomainError('telegram_session_needs_auth', next_action='reauthorize')
-                adapters[connection['id']] = TelegramAdapter(client, connection_id=connection['id'], account_type=account, tl=compiler, clock=store.clock)
-            elif connection['provider'] == 'vk' and account in {'vk_user', 'vk_group'}:
-                tokens = vk_credentials(bundle)
-                if 'vk_' + tokens['editor'].kind != account:
-                    raise DomainError('vk_account_type_mismatch')
-                adapters[connection['id']] = VKAdapter(vk_factory(tokens=tokens), connection_id=connection['id'], account_type=account, clock=store.clock)
-            else:
-                raise DomainError('native_account_type_needs_review', next_action='contact_owner')
-        yield adapters
+                    raise DomainError('native_account_type_needs_review', next_action='contact_owner')
+            yield adapters
     except DomainError:
         raise
     except Exception:

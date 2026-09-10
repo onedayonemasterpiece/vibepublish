@@ -87,13 +87,15 @@ DEFS = {
         "surface": string(80), "status": enum("supported", "unsupported", "needs_auth", "needs_review", "temporarily_unavailable"),
         "observed_at": DATE, "reason": string(500)},
         ("destination", "operation", "surface", "status", "observed_at")),
-    "delivery_result": obj({"destination": ALIAS, "provider": PROVIDER,
-        "state": STATE, "observed": enum("not_attempted", "provider_scheduled", "provider_processing", "published", "edited", "deleted", "cancelled", "absent", "unknown"),
+    "delivery_result": obj({"destination": ALIAS, "provider": PROVIDER, "attempt_id": ID,
+        "state": STATE, "observed": enum("not_attempted", "provider_scheduled", "provider_processing", "published", "edited", "reacted", "deleted", "cancelled", "absent", "unknown"),
         "observed_at": DATE, "revision": REV, "requested_at": DATE, "effective_at": DATE,
         "stage": STAGE, "scheduling_owner": {"const": "provider"}, "item_ref": ID, "url": URL,
         "queue_ref": ID, "preview_ref": ID, "navigate_hint": string(500),
-        "evidence_ref": ID, "media_check": enum("not_applicable", "source_bytes", "provider_binding", "visual_correspondence", "incomplete"),
-        "missing_checks": array(string(100), 0, 20), "retry_safe": {"type": "boolean"}},
+        "evidence_ref": ID, "media_check": enum("not_applicable", "source_bytes", "provider_binding", "download_binding", "visual_correspondence", "incomplete"),
+        "missing_checks": array(string(100), 0, 20), "retry_safe": {"type": "boolean"},
+        "compensation": enum("intent_cancelled_without_effect"), "reason": string(100),
+        "reply_to_ref": ID, "reaction": string(100), "reaction_mode": enum("add", "remove")},
         ("destination", "provider", "state", "stage", "observed", "revision", "media_check", "retry_safe")),
     "candidate": obj({"id": ID, "asset_ref": ID, "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
         "preview_url": URL, "width": {"type": "integer", "minimum": 1},
@@ -135,15 +137,22 @@ DEFS["event"] = obj({"seq": REV, "operation_id": ID, "destination": ALIAS,
     ("seq", "operation_id", "at", "stage", "status", "message"))
 DEFS["progress"] = obj({"events": array(ref("event"), 0, 50),
     "cursor": string(512), "has_more": {"type": "boolean"}}, ("events", "cursor", "has_more"))
+DEFS["downloaded_media"] = obj({
+    "kind": {"const": "download_sha256"}, "slot": {"type": "integer", "minimum": 0, "maximum": 9},
+    "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+    "mime": enum("image/png", "image/jpeg", "image/webp", "video/mp4"),
+    "size": {"type": "integer", "minimum": 1, "maximum": 20*1024*1024}},
+    ("kind", "slot", "sha256", "mime", "size"))
 DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url": URL,
-    "publication_id": ID, "revision": REV, "destination": ALIAS,
+    "publication_id": ID, "revision": REV, "destination": ALIAS, "own_reactions": array(string(100),0,100),
     "publication_kind": enum("original", "forward"), "forward_origin": ref("forward_origin"),
     "scheduled_at": DATE, "published_at": DATE, "observed_at": DATE,
     "source": enum("provider", "local_history"), "freshness": enum("current", "cached", "unknown"),
     "origin": enum("vibepublish", "provider_client", "imported"),
     "observed_state": enum("provider_scheduled", "provider_processing", "published", "deleted", "cancelled", "unknown"),
     "queue_ref": ID, "preview_ref": ID, "navigate_hint": string(500),
-    "media": array(ref("media"), 0, 20), "metrics_observed_at": DATE, "error": ref("error"),
+    "media": array(ref("media"), 0, 20), "media_evidence": array(ref("downloaded_media"), 1, 10),
+    "metrics_observed_at": DATE, "error": ref("error"),
     "metrics": array(obj({"name": string(100), "value": {"type": "number"}, "unit": string(40)},
                          ("name", "value")), 0, 100)}, ("ref", "kind", "observed_at", "source", "freshness"))
 DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
@@ -202,9 +211,10 @@ change = {"oneOf": [
     arm("reschedule", {"delivery": DEFS["delivery"]["oneOf"][1]}, ("delivery",)),
     arm("cancel"), arm("delete"),
     arm("reconcile_removed", {"attempt_id": ID}, ("attempt_id",)),
+    arm("reconcile", {"operation_id": ID, "attempt_id": ID, "native_reference": string(2048)}, ("operation_id",)),
     arm("retry_failed", {"destinations": array(ALIAS, 1, 20)}, ("destinations",))]}
 change["oneOf"][1]["anyOf"] = [{"required": [p]} for p in ("content", "media", "renderings")]
-tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication.",
+tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication. Reconcile observes the original uncertain operation without repeating its effect.",
     obj({"publication_id": ID, "expected_revision": REV, "item_ref": ID, "change": change, "request_key": KEY},
         ("change",)), ref("receipt"), "publication.manage")
 # Existing private publication CAS or one exact immutable observed native item.

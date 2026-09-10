@@ -81,7 +81,10 @@ class Worker:
                 restore = db.execute("SELECT value FROM settings WHERE key='restore_guard'").fetchone()
                 if restore and restore[0] == '1':
                     raise DomainError('restore_requires_reconciliation', next_action='contact_owner')
-                unresolved = db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND NOT EXISTS (SELECT 1 FROM attempt_resolutions z WHERE z.attempt_id=a.id) AND a.state NOT IN ('verified','scheduled','cancelled') LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
+                unresolved = db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
+                pending_release = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND r.finalize_state='pending' LIMIT 1", (plan['connection_id'],)).fetchone()
+                if pending_release:
+                    raise DomainError('connection_finalization_pending', next_action='check_status')
                 if unresolved:
                     raise DomainError('connection_outcome_unknown', next_action='review_outcome')
                 if attempt_id != child['id'] or plan_digest != child['plan_digest']:
@@ -104,7 +107,9 @@ class Worker:
         return ProviderRequest(op['id'], child['id'], child['plan_digest'], plan['connection_id'], plan['account_type'], plan['secret_ref'],
                                plan['destination_id'], plan['native_target'], plan['action'], plan['surface'], plan['content_json'], tuple(assets),
                                plan['scheduled_at'], op['deadline'], RemoteItem(**plan['existing']) if plan['existing'] else None,
-                               NativeSource(**plan['source']) if plan['source'] else None, plan['source_authorized'], plan['selection'])
+                               NativeSource(**plan['source']) if plan['source'] else None, plan['source_authorized'], plan['selection'],
+                               subject=RemoteItem(**plan['subject']) if plan.get('subject') else None,
+                               reaction=plan.get('reaction'),reaction_mode=plan.get('reaction_mode'))
 
     async def heartbeat(self, op):
         while True:
@@ -170,6 +175,7 @@ class Worker:
                 return True
             else:
                 await asyncio.gather(*(self.run_child(op, c, actor, prepared.get(c['id'])) for c in pending))
+            await self.finalize_pending(op, actor)
             self.aggregate(op)
         except asyncio.CancelledError:
             # A stopped worker leaves its durable claim for observation-only recovery.
@@ -194,11 +200,22 @@ class Worker:
                 with self.store.connection() as db:
                     self.store.fence(db, op['id'], self.id, op['fence'])
                     current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
-                timeout = max(0.1, min(90, op['deadline']-self.store.clock())) if not current['dispatched'] else 30
+                    if current['dispatched']:
+                        self.recovery_authority(db, op, child, actor)
+                checkpoint = current['checkpoint']
+                if current['dispatched']:
+                    with self.store.tx() as db:
+                        self.store.fence(db, op['id'], self.id, op['fence'])
+                        db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,created) VALUES(?,?,?,?)',
+                                   (child['id'], child['plan_digest'], checkpoint, self.store.clock()))
+                        recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
+                        hint = {**json.loads(recovery['hint']), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
+                        checkpoint = canonical({**json.loads(checkpoint), 'core_recovery': hint})
+                timeout = max(0.1, min(90, op['deadline']-self.store.clock())) if not current['dispatched'] else 90
                 async with asyncio.timeout(timeout):
-                    observation = (await adapter.reconcile(request, current['checkpoint'], hooks) if current['dispatched'] else
+                    observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
                                    await adapter.execute(prepared, hooks))
-                self.finish_child(op, child, actor, observation)
+                self.finish_child(op, child, actor, observation, needs_finalize=callable(getattr(adapter, 'finalize', None)))
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -208,7 +225,105 @@ class Worker:
                 if stale.code != 'stale_worker':
                     raise
 
-    def finish_child(self, op, child, actor, observation):
+    def recovery_authority(self, db, op, child, actor):
+        self.store.current(db, actor)
+        if op['actor_epoch'] != actor.epoch:
+            raise DomainError('access_revoked', next_action='reauthorize')
+        b = self.store.binding(db, actor, binding_id=child['binding_id'])
+        plan = json.loads(child['plan'])
+        if b['epoch'] != child['binding_epoch'] or plan['action'] not in json.loads(b['rights']):
+            raise DomainError('access_revoked', next_action='reauthorize')
+        if any(b[key] != plan[key] for key in ('connection_id', 'destination_id', 'account_type', 'secret_ref')) or b['native_id'] != plan['native_target']:
+            raise DomainError('recovery_binding_changed', next_action='reauthorize')
+        if digest(plan) != child['plan_digest']:
+            raise DomainError('plan_mismatch')
+
+    async def finalize_pending(self, op, actor):
+        with self.store.connection() as db:
+            children = [dict(r) for r in db.execute("SELECT a.* FROM attempts a JOIN attempt_recovery r ON r.attempt_id=a.id WHERE a.operation_id=? AND r.finalize_state='pending'", (op['id'],))]
+        for child in children:
+            request = self.request(op, child, actor)
+            adapter = self.adapter(child['provider'], request.connection_id)
+            # Missing hook after restart is not evidence that quarantine was released.
+            finalize = getattr(adapter, 'finalize', None)
+            try:
+                async with self.lane(request.connection_id):
+                    with self.store.connection() as db:
+                        self.store.fence(db, op['id'], self.id, op['fence'])
+                        self.recovery_authority(db, op, child, actor)
+                    if not callable(finalize):
+                        raise DomainError('provider_finalize_unavailable')
+                    # The adapter may learn a native ID only during recovery;
+                    # do not overwrite the immutable pre-effect checkpoint to
+                    # carry it. Supply the already committed observation instead.
+                    with self.store.connection() as db:
+                        committed=db.execute('SELECT observation FROM attempt_recovery WHERE attempt_id=?',(child['id'],)).fetchone()[0]
+                    final=canonical({**json.loads(child['checkpoint']),'committed_observation':json.loads(committed)})
+                    async with asyncio.timeout(30):
+                        await finalize(request, final, self.finalization_hooks(op, child))
+                    with self.store.tx() as db:
+                        self.store.fence(db, op['id'], self.id, op['fence'])
+                        self.recovery_authority(db, op, child, actor)
+                        db.execute("UPDATE attempt_recovery SET finalize_state='done',finalized=? WHERE attempt_id=? AND finalize_state='pending'", (self.store.clock(), child['id']))
+                        self.store.event(db, op['id'], 'finished', 'completed', 'Provider quarantine finalization acknowledged', child['alias'])
+            except asyncio.CancelledError:
+                raise
+            except DomainError as exc:
+                if exc.code == 'stale_worker':
+                    raise
+                self.finalization_deferred(op, child)
+            except Exception:
+                self.finalization_deferred(op, child)
+
+    def finalization_hooks(self, op, child):
+        hooks = self.hooks(op, child)
+        async def no_checkpoint(*args):
+            raise DomainError('resolved_checkpoint_immutable')
+        async def no_effect(*args):
+            raise DomainError('finalization_effect_forbidden')
+        return Hooks(hooks.emit_progress, no_checkpoint, no_effect)
+
+    def finalization_deferred(self, op, child):
+        with self.store.tx() as db:
+            self.store.fence(db, op['id'], self.id, op['fence'])
+            self.store.event(db, op['id'], 'verifying', 'blocked', 'Effect is durably resolved; provider quarantine finalization will retry without an effect', child['alias'])
+
+    def finish_no_effect(self,op,child,actor,observation,*,needs_finalize):
+        from adapters.port import NoEffectProof
+        proof=observation.no_effect
+        if (not isinstance(proof,NoEffectProof) or observation.observed!='not_attempted'
+                or observation.items or observation.missing_checks
+                or proof.reason!='trusted_preinput_guard' or not needs_finalize):
+            raise OutcomeUnknown('no_effect_proof_invalid')
+        evidence=json.loads(proof.evidence_json)
+        if (not isinstance(evidence,dict) or evidence.get('trusted_clicks')!=0
+                or type(evidence.get('trusted_clicks')) is not int
+                or evidence.get('input_unreachable') is not True
+                or evidence.get('absence_only') is not False):
+            raise OutcomeUnknown('no_effect_proof_invalid')
+        with self.store.tx() as db:
+            self.store.fence(db,op['id'],self.id,op['fence'])
+            self.recovery_authority(db,op,child,actor)
+            current=db.execute('SELECT * FROM attempts WHERE id=?',(child['id'],)).fetchone()
+            recovery=db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?',(child['id'],)).fetchone()
+            original=recovery['original_checkpoint'] if recovery else current['checkpoint']
+            if not current['dispatched'] or digest(json.loads(original))!=proof.checkpoint_sha256:
+                raise OutcomeUnknown('no_effect_checkpoint_mismatch')
+            hint=dict(operation_id=op['id'],attempt_id=child['id'],plan_digest=child['plan_digest'])
+            db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,hint,created) VALUES(?,?,?,?,?)',
+                (child['id'],child['plan_digest'],original,canonical(hint),self.store.clock()))
+            db.execute("UPDATE attempt_recovery SET observation=?,finalize_state='pending',resolved=? WHERE attempt_id=?",
+                (canonical(asdict(observation)),self.store.clock(),child['id']))
+            final=canonical(dict(no_effect=asdict(proof),original_checkpoint=json.loads(original),core_recovery=hint))
+            result=canonical(dict(compensation='intent_cancelled_without_effect',reason=proof.reason))
+            # Preserve historical dispatch=1. This intent is cancelled, never
+            # re-admitted as a never-dispatched retry or projected as a fake item.
+            db.execute("UPDATE attempts SET state='cancelled',stage='finished',observed='not_attempted',result=?,checkpoint=? WHERE id=?",(result,final,child['id']))
+            self.store.event(db,op['id'],'finished','completed','Original intent cancelled: trusted input guard proves no effect; no item fabricated',child['alias'])
+
+    def finish_child(self, op, child, actor, observation, *, needs_finalize=False):
+        if getattr(observation,'no_effect',None) is not None:
+            return self.finish_no_effect(op,child,actor,observation,needs_finalize=needs_finalize)
         if not observation.items or observation.missing_checks:
             raise OutcomeUnknown('incomplete_readback')
         plan = json.loads(child['plan'])
@@ -223,6 +338,8 @@ class Worker:
             expected = 'cancelled' if action == 'cancel' else 'deleted'
             if observation.observed != expected:
                 raise OutcomeUnknown('lifecycle_outcome_mismatch')
+        elif action=='react':
+            if observation.observed!='reacted':raise OutcomeUnknown('reaction_outcome_mismatch')
         elif plan['scheduled_at']:
             if observation.observed != 'provider_scheduled':
                 raise OutcomeUnknown('native_schedule_not_observed')
@@ -230,35 +347,91 @@ class Worker:
             raise OutcomeUnknown('publication_outcome_mismatch')
         elif remote.namespace != 'published':
             raise OutcomeUnknown('published_namespace_mismatch')
+        if action in ('reply','react'):
+            subject=plan.get('subject')
+            if not subject or plan['provider']!='max' or remote.namespace!='published':
+                raise OutcomeUnknown('engagement_subject_missing')
+            if action=='reply':
+                if remote.reply_to_native_id!=subject['native_id'] or remote.native_id==subject['native_id']:
+                    raise OutcomeUnknown('reply_subject_mismatch')
+            else:
+                if (not remote.own_reactions_observed or remote.native_id!=subject['native_id'] or remote.text!=subject['text']
+                        or remote.observed_media!=RemoteItem(**subject).observed_media
+                        or (plan['reaction'] in remote.own_reactions)!=(plan['reaction_mode']=='add')):
+                    raise OutcomeUnknown('reaction_subject_or_state_mismatch')
         if plan['existing'] and remote.native_id != plan['existing']['native_id']:
-            raise OutcomeUnknown('lifecycle_identity_changed')
-        if plan['action'] in ('publish', 'edit', 'reschedule'):
+            from adapters.port import NativeReplacement
+            proof=observation.replacement
+            old=plan['existing']
+            if (not isinstance(proof,NativeReplacement) or plan['provider']!='max' or plan['account_type']!='max_web'
+                    or action!='reschedule' or old['namespace']!='scheduled' or remote.namespace!='scheduled'
+                    or proof.previous_native_id!=old['native_id'] or proof.native_id!=remote.native_id
+                    or proof.previous_fingerprint!=old['fingerprint']
+                    or proof.evidence not in {'trusted_ui_native_queue_replacement','stable_native_correlation'}
+                    or remote.text!=old['text']):
+                raise OutcomeUnknown('lifecycle_identity_changed')
+        elif observation.replacement is not None:
+            raise OutcomeUnknown('unexpected_native_replacement')
+        if plan['action'] in ('publish', 'edit', 'reschedule', 'reply'):
             if remote.text != json.loads(plan['content_json'])['text']:
                 raise OutcomeUnknown('content_readback_mismatch')
-            if plan['provider'] == 'telegram':
-                from .rich_text import normalized_entities
+            if plan['provider'] == 'telegram' or (plan['provider'] == 'max' and plan['account_type'] == 'max_web'):
+                from .rich_text import normalized_entities, max_entities
+                normalize = max_entities if plan['provider'] == 'max' else normalized_entities
                 expected = json.loads(plan['content_json']).get('entities', [])
-                actual = normalized_entities(remote.text, json.loads(remote.entities_json))
-                if actual != normalized_entities(remote.text, expected):
+                actual = normalize(remote.text, json.loads(remote.entities_json))
+                if actual != normalize(remote.text, expected):
                     raise OutcomeUnknown('entities_readback_mismatch')
+            if plan['provider'] == 'max' and plan['account_type'] == 'max_web':
+                from adapters.port import downloaded_media
+                existing = plan.get('existing') or {}
+                preserved = existing.get('observed_media', ())
+                source_hashes = tuple(a['sha256'] for a in plan['assets'])
+                if preserved and (not source_hashes or source_hashes == tuple(existing.get('media_hashes', ()))):
+                    if remote.observed_media != downloaded_media(preserved):
+                        raise OutcomeUnknown('download_media_lifecycle_changed')
+                if remote.observed_media and (remote.provider_media or remote.media_check != 'download_binding'):
+                    raise OutcomeUnknown('download_media_binding_missing')
             if tuple(remote.media_hashes) != tuple(a['sha256'] for a in plan['assets']):
                 raise OutcomeUnknown('media_readback_mismatch')
         if observation.observed == 'provider_scheduled' and (remote.namespace != 'scheduled' or remote.scheduled_at != plan['scheduled_at']):
             raise OutcomeUnknown('native_time_mismatch')
         if plan['action'] == 'forward' and (not observation.forward_origin_matched or remote.origin != plan['source']['canonical_url']):
             raise OutcomeUnknown('forward_attribution_incomplete')
+        if action=='forward' and plan['provider']=='max':
+            from .rich_text import max_entities
+            subject=RemoteItem(**plan['subject']) if plan.get('subject') else None
+            if (not subject or not plan['source_authorized'] or remote.text!=subject.text
+                    or remote.observed_media!=subject.observed_media
+                    or max_entities(remote.text,json.loads(remote.entities_json))!=max_entities(subject.text,json.loads(subject.entities_json))):
+                raise OutcomeUnknown('max_forward_content_or_media_mismatch')
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
+            current_child = db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone()
+            if not current_child['dispatched']:
+                raise OutcomeUnknown('dispatch_not_recorded')
+            recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
+            if recovery:
+                self.recovery_authority(db, op, child, actor)
+            original = recovery['original_checkpoint'] if recovery else current_child['checkpoint']
+            hint = {**(json.loads(recovery['hint']) if recovery else {}), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
+            saved_checkpoint = canonical({'remote': asdict(remote), 'original_checkpoint': json.loads(original), 'core_recovery': hint})
+            if recovery or needs_finalize:
+                db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,hint,created) VALUES(?,?,?,?,?)',
+                           (child['id'], child['plan_digest'], original, canonical(hint), self.store.clock()))
+                db.execute('UPDATE attempt_recovery SET observation=?,finalize_state=?,resolved=? WHERE attempt_id=?',
+                           (canonical(asdict(observation)), 'pending' if needs_finalize else 'done', self.store.clock(), child['id']))
             b = db.execute('SELECT * FROM bindings WHERE id=?', (child['binding_id'],)).fetchone()
             # Internal outcome persistence survives revocation; private receipt access still denies it.
             item = self.app.project_item(db, actor, b, asdict(remote), publication=op['publication_id'])
             self.save_fact(db, plan['destination_id'], remote, actor.principal_id, op['publication_id'])
             result = {'item_ref': item['ref'], 'observed_at': remote.observed_at, 'media_check': remote.media_check}
-            if remote.scheduled_at:
-                result.update(queue_ref=item['ref'], effective_at=remote.scheduled_at, scheduling_owner='provider',
+            if observation.observed == 'provider_scheduled' and remote.scheduled_at:
+                result.update(queue_ref=item['ref'], effective_at=remote.scheduled_at, requested_at=plan['scheduled_at'], scheduling_owner='provider',
                               navigate_hint='Open the authorized channel native scheduled queue')
-                if plan['scheduled_at'] is not None:
-                    result['requested_at'] = plan['scheduled_at']
+            if action=='react':
+                result.update(reaction=plan['reaction'],reaction_mode=plan['reaction_mode'])
+            if action=='reply':result['reply_to_ref']=plan['subject_ref']
             if plan['source']:
                 result['forward_origin'] = {'source_ref': new_id('source'), 'provider': child['provider'], 'mode': 'native', 'origin_check': 'matched', 'original_url': remote.origin}
             state = 'scheduled' if observation.observed == 'provider_scheduled' else 'cancelled' if observation.observed == 'cancelled' else 'verified'
@@ -268,7 +441,7 @@ class Worker:
             if evidence is not None:
                 final_checkpoint['provider_evidence'] = evidence
             db.execute('UPDATE attempts SET state=?,stage=\'finished\',observed=?,result=?,checkpoint=? WHERE id=?',
-                       (state, observation.observed, canonical(result), canonical(final_checkpoint), child['id']))
+                       (state, observation.observed, canonical(result), saved_checkpoint, child['id']))
             self.store.event(db, op['id'], 'finished', 'completed', 'Exact provider item observed: '+observation.observed, child['alias'])
 
     @staticmethod
@@ -356,8 +529,14 @@ class Worker:
                 state = 'partial' if any(s in ('verified', 'scheduled') for s in states) else 'blocked'
             else:
                 state = 'blocked' if error else 'verified'
+            pending_finalize = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id WHERE a.operation_id=? AND r.finalize_state='pending'", (op['id'],)).fetchone()
+            if pending_finalize:
+                state = 'running'
+                db.execute('UPDATE operations SET lease_until=? WHERE id=?', (self.store.clock()+30, op['id']))
             complete = state != 'running'
             db.execute('UPDATE operations SET state=?,complete=?,work_state=? WHERE id=?', (state, int(complete), 'done' if complete else 'working', op['id']))
+            if state in ('verified', 'scheduled', 'cancelled'):
+                db.execute('UPDATE operations SET error=NULL WHERE id=?', (op['id'],))
             if error:
                 db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(error.output()), op['id']))
             self.store.event(db, op['id'], 'finished', 'completed', 'Automatic command work ended; future delivery remains provider-owned')
@@ -381,9 +560,19 @@ class Worker:
         query = args['query']
         request = ReadRequest(b['connection_id'], b['native_id'], query['kind'], args.get('limit', 25), args.get('_provider_cursor'),
                               args.get('_native_item'), args.get('_namespace'), query.get('text', ''))
-        async with self.lane(b['connection_id']):
-            async with asyncio.timeout(30):
-                page = await self.adapter(b['provider'], b['connection_id']).read(request, self.hooks(op))
+        # Browser reads include account verification, native history and exact
+        # media readback. Keep them bounded without applying the API-only 30s cap.
+        budget = 90 if b['provider']=='max' and b['account_type']=='max_web' else 30
+        budget = max(0.1, min(budget, op['deadline']-self.store.clock()))
+        try:
+            async with self.lane(b['connection_id']):
+                async with asyncio.timeout(budget):
+                    page = await self.adapter(b['provider'], b['connection_id']).read(request, self.hooks(op))
+        except TimeoutError:
+            raise DomainError('provider_read_deadline', 'Native read did not complete within the command deadline', 'refresh') from None
+        if request.kind=='reactions' and (len(page.items)!=1 or not page.items[0].own_reactions_observed
+                or page.items[0].native_id!=request.native_item or page.items[0].namespace!='published'):
+            raise DomainError('reaction_read_unverified')
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
             self.store.current(db, actor)

@@ -73,6 +73,48 @@
 - Record unresolved automatic imagegen, VK destination and shared-ingress
   regeneration durability rather than claiming complete acceptance.
 
+### Core convergence: MAX lifecycle and recovery — 2026-09-10
+
+- Fixed: bounded native MAX browser read budget and precise read-deadline errors; API read limits unchanged.
+- Added: authenticated exact MAX own-reaction reads, distinguishing observed removal from missing metadata.
+- Added: exact authorized-source download binding for native MAX media forwards without re-uploading.
+- Admit bound-subject replies/reactions through the existing worker with explicit
+  additive owner-granted rights and exact relationship/own-reaction verification.
+- Retain authorized MAX forward source refs and check native attribution/content/media.
+- Do not serialize a cancelled native snapshot as a pending schedule with null
+  requested time; project old committed cancellation receipts without rewriting history.
+- Bind MAX reschedule native ID replacements to original fingerprint and exact
+  observed time/content/media without retrying Save or widening other providers.
+- Finalization carries the committed observation separately from immutable
+  pre-effect evidence, including native IDs first learned during recovery.
+- Trusted, checkpoint-bound no-input proofs can cancel an original intent without
+  fabricating a remote item or resetting dispatch history; existing durable
+  post-commit finalization releases its exact quarantine across restart.
+- Delivery receipts expose the explicit additive compensation outcome.
+- Canonicalize MAX bold/italic spans around neutral raster emoji graphemes,
+  preserving exact text/link evidence and unchanged Telegram/VK semantics.
+- Added typed ordered downloaded-media evidence distinct from native attachment
+  IDs and uploaded source hashes, with explicit immutable-intent binding.
+- Added opt-in MAX semantic styles/links with exact entity verification and
+  immutable edit/adoption preservation; Telegram/VK defaults remain unchanged.
+- Added owner-only bounded local MP4 ingress with actual decode, metadata removal,
+  source lineage, quota checks and preserved video roles; native adapters opt in
+  explicitly. FFmpeg is now a CI fixture prerequisite, not a social capability.
+- `retry_failed` now re-admits selected original blocked attempts only while
+  durable dispatch remains zero, preserving publication revision, immutable
+  native CAS and successful siblings; dispatched/unknown effects remain forbidden.
+- Standard `worker --native` now lazily selects the optional MAX context factory
+  only for approved `max_web` connections; CLI connection provisioning accepts
+  that account type. Explicit MAX configuration remains owned by its adapter.
+- Added authenticated `publication_update.change.kind=reconcile` for original
+  dispatched unknown attempts, preserving operation/revision/plan identity,
+  request-key replay (including observation-only re-admission after transient
+  unknown evidence), scoped authority and successful sibling receipts.
+- Added schema-4 durable evidence/resolution journal and optional idempotent
+  provider finalization hook. Quarantine release follows durable resolution;
+  pending release blocks connection effects and resumes after worker restart
+  without repeating execute. Existing providers remain compatible.
+
 ### Owner correction: full Codex rollout includes real Imagegen — 2026-09-05
 
 - Replaced the rejected Telegram/VK-only handoff with a single-link task for local

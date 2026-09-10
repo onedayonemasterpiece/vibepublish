@@ -19,12 +19,14 @@ def parser():
     connect = sub.add_parser('connection'); connect.add_argument('--id', required=True)
     connect.add_argument('--provider', choices=('telegram','vk','max'), required=True)
     connect.add_argument('--shared', action='store_true'); connect.add_argument('--secret-ref', default='')
-    connect.add_argument('--account-type', choices=('unconfigured','fake','mtproto_user','mtproto_bot','vk_user','vk_group'), default='unconfigured')
+    connect.add_argument('--account-type', choices=('unconfigured','fake','mtproto_user','mtproto_bot','vk_user','vk_group','max_web'), default='unconfigured')
     bind = sub.add_parser('bind'); bind.add_argument('--principal', required=True); bind.add_argument('--alias', required=True)
     bind.add_argument('--connection', required=True); bind.add_argument('--native-id', required=True); bind.add_argument('--label', required=True)
     partner = sub.add_parser('principal'); partner.add_argument('--tenant', required=True); partner.add_argument('--principal', required=True)
+    grant = sub.add_parser('grant-rights'); grant.add_argument('--binding-id', required=True); grant.add_argument('--right', action='append', required=True)
     revoke = sub.add_parser('revoke'); revoke.add_argument('--binding-id', required=True)
     asset = sub.add_parser('image'); asset.add_argument('--file', required=True, type=Path); asset.add_argument('--mime', required=True)
+    video = sub.add_parser('video'); video.add_argument('--file', required=True, type=Path); video.add_argument('--mime', required=True, choices=('video/mp4',))
     backup = sub.add_parser('backup'); backup.add_argument('--output', required=True, type=Path)
     serve = sub.add_parser('serve'); serve.add_argument('--port', type=int, default=8765)
     work = sub.add_parser('worker'); work.add_argument('--once', action='store_true'); work.add_argument('--fake-remote', type=Path)
@@ -90,6 +92,8 @@ def main():
         elif args.command == 'principal':
             print(json.dumps({'service_token': store.create_principal(args.tenant, args.principal,
                 scopes={'bootstrap','publish','publication.manage','visual','status','forward','destination.profile'})}))
+        elif args.command == 'grant-rights':
+            print(json.dumps({'rights':store.grant_binding_rights(actor,args.binding_id,args.right)}))
         elif args.command == 'revoke':
             store.revoke_binding(actor, args.binding_id)
             print('Binding revoked. Existing provider-queued posts were NOT cancelled.')
@@ -98,6 +102,9 @@ def main():
             with args.file.open('rb') as source:
                 data = source.read(20*1024*1024+1)
             print(import_image(store, actor, data, args.mime))
+        elif args.command == 'video':
+            from .video_assets import import_video, read_video_file
+            print(import_video(store, actor, read_video_file(args.file), args.mime))
         elif args.command == 'backup':
             store.backup(args.output)
     except DomainError as exc:

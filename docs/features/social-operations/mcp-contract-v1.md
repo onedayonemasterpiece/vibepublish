@@ -36,7 +36,271 @@ Scheduled delivery has exactly `kind` and `at`. `backend`, `late`, service fallb
 
 `mode: preview` never submits to a provider. Approval/visual selection do not imply that a pending preview was already scheduled. Recheck timing and rights before its native submission. Default surface remains post; supported story/message/album/video/short_video map to actual capabilities. Native scheduling unavailable for a surface means explicit rejection/review, not local emulation.
 
-`publication_update` still requires publication_id and expected_revision. Its change kinds are approve/edit/reschedule/cancel/delete/retry_failed. Reschedule modifies the existing provider queue item; cancel removes that item and verifies removal; delete acts on a published item. A never-dispatched intent can be cancelled locally, clearly distinguished from a native queue cancellation. No silent delete/re-create or automatic deletion after a cancel/publication race.
+`publication_update` still requires publication_id and expected_revision. Its change kinds are approve/edit/reschedule/cancel/delete/retry_failed/reconcile. Reschedule modifies the existing provider queue item; cancel removes that item and verifies removal; delete acts on a published item. A never-dispatched intent can be cancelled locally, clearly distinguished from a native queue cancellation. No silent delete/re-create or automatic deletion after a cancel/publication race.
+
+### Original-terminal recovery (owner MAX completion correction, 2026-09-08)
+
+Requirements: **Fixed** by the active owner MAX completion task in PR #2,
+`docs/handoffs/max-product-completion-codex-20260908.md`. Implementation:
+**Not confirmed by user**; automated checks are not live MAX acceptance.
+
+```json
+{
+  "publication_id": "pub_original",
+  "expected_revision": 1,
+  "change": {
+    "kind": "reconcile",
+    "operation_id": "op_original",
+    "attempt_id": "attempt_original",
+    "native_reference": "https://max.ru/exact-task-owned-reference"
+  },
+  "request_key": "observe-original-once"
+}
+```
+
+`reconcile` is an additive branch of `publication_update`, not a retry/send tool.
+It returns the **original** operation and revision. No new operation, attempt,
+publication, frozen plan, or dispatch marker is created. `operation_id` must be
+an exact private operation belonging to the supplied publication and its current
+revision; `item_ref` adoption is forbidden. The optional exact reference requires
+an explicit original attempt (private receipt deliveries now expose `attempt_id`). It is untrusted evidence input, not permission to
+navigate arbitrary targets, nor proof of a publication by itself.
+
+Admission rechecks the authenticated principal, `publication.manage` tool scope,
+original actor epoch, all original binding epochs, current binding access and
+mutation rights. Worker observation and resolution recheck active authority,
+connection/target/secret-reference identity, the original plan digest and the
+worker fence. A revoked original epoch requires an explicit owner remediation;
+it is never rewritten to the new epoch. Native-reference hints are durably tied
+to the original attempt/plan/checkpoint; an already admitted different reference
+is rejected. Repeated request keys join running work or replay a resolved receipt. After a
+transient observation ends unknown, the same matching key may re-admit observation
+of the original attempt; no new key or effect is needed. A running operation
+is joined rather than concurrently reopened. Successful siblings remain untouched.
+
+Only originally dispatched `outcome_unknown` children are reopened. The worker
+uses **reconcile only**, never prepare/execute/before_effect for these children.
+The old send deadline does not prohibit read-only recovery. Provider reconciliation
+receives the original checkpoint plus top-level `core_recovery` containing
+`operation_id`, `attempt_id`, `plan_digest`, and optional `native_reference`.
+Providers independently check original durable intent and native attribution;
+MAX must verify its original marker and fresh exact native item. A positive exact
+identity need not prove completeness of unrelated history. Missing checks,
+wrong content/target/media/time/identity, or an unknown observation remain unknown;
+core does not convert an uncertainty enum into a success.
+
+SQLite schema 4 adds `attempt_recovery`: immutable original checkpoint and plan
+identity, admitted hints, full native observation, resolution and finalization
+state/timestamps. Exact observation, child receipt and history fact, and any
+pending finalization are committed atomically. The resolved child checkpoint
+contains `remote`, `original_checkpoint`, and `core_recovery`; historical evidence
+is preserved instead of overwritten by a bare success snapshot. Recovery metadata
+is private; raw hints/checkpoints are not added to public receipts.
+
+Providers may implement the additive optional
+`finalize(request, checkpoint, hooks) -> None` hook. It runs only **after** durable
+child resolution and receives that resolved checkpoint envelope. It must release
+only quarantine matching the original attempt/digest; absent quarantine is
+idempotent success, different quarantine is an error. It must never perform a
+social effect. Old Telegram/VK/provider implementations without the hook remain
+compatible. A pending hook does not relabel a verified child as unknown, but keeps
+the operation incomplete and blocks new effects on its connection. The worker
+retries finalization after a 30-second lease interval or process restart. A crash
+before release or after release but before acknowledgement replays only this
+idempotent hook, never execute or an already successful child's readback. Successful
+resolution removes stale uncertainty errors from the original receipt.
+
+Offline regression lives in `tests/runtime/test_recovery.py`; the transport suite
+also exercises authenticated MCP `ClientSession` admission, disconnect/reconnect,
+and independent worker processes against the durable provider simulator. These
+prove core wiring/no duplicate effect in the simulator, **not** MAX live behavior.
+The independent CI `core-recovery` job runs runtime/contract/provider/SDK tests on
+Python 3.12 and 3.13, uploads JUnit/SDK/source-SHA receipts, and stays runnable when
+an unrelated full-suite collection problem exists. The original strict `verify`
+matrix is unchanged and remains mandatory: a green focused job must not be reported
+as green full CI. The pre-existing missing `adapters.codex_imagegen` is reported
+separately, never hidden or skipped in that strict gate.
+
+### Explicit safe retry before dispatch
+
+`publication_update` also implements its existing `retry_failed` branch:
+
+```json
+{
+  "publication_id": "pub_original",
+  "expected_revision": 2,
+  "change": {"kind": "retry_failed", "destinations": ["max"]},
+  "request_key": "retry-blocked-edit"
+}
+```
+
+This explicitly re-admits the **same operation, revision and selected attempts**
+only when they are completed blocked/failed attempts with `dispatched=0`. It is
+not a new publication or revision and does not depend on a successful checkpoint:
+the original immutable plan already contains the existing native item/CAS for an
+edit, reschedule, cancel or delete. Current actor/binding epochs and rights,
+connection/target identity, frozen emoji access and asset integrity are rechecked.
+Successful siblings and their receipts remain untouched. Unknown outcomes anywhere
+in the operation, or any selected previously dispatched child, reject retry;
+uncertain effects must use observation-only reconciliation instead.
+
+Authorized retry renews only the 120-second immediate command deadline, then uses
+the normal prepare → before_effect dispatch CAS → execute path. Original content,
+assets, native identity and requested schedule remain frozen. Provider preflight
+must still prove the native object unchanged; an expired native time blocks rather
+than falling back to immediate publication. Exactly one dispatch transition is
+possible for the selected original attempt, including across retries and restarts.
+
+The same matching request key joins in-flight work or replays successful results.
+If another attempt stops before dispatch, that same key may explicitly re-admit
+it again. A retry that crosses dispatch and becomes unknown cannot be submitted
+again. Durable events distinguish retry admission from the preceding failure.
+The original failed operation's publication revision remains usable for later
+lifecycle changes after successful retry; private item adoption is not required.
+Tests include authenticated MCP ClientSession and independent worker processes,
+expired command/native deadlines, external changes, epochs and partial successes.
+Implementation status: **Not confirmed by user**; offline checks are not live MAX
+acceptance.
+
+### Opt-in native MAX worker wiring
+
+The ordinary owner CLI accepts `connection --provider max --account-type max_web
+--secret-ref VIBEPUBLISH_MAX_PROFILE`. `worker --native` selects this exact active
+connection family; `serve`/MCP admission never launches a browser. Fake or
+unconfigured connections are still skipped. Wrong MAX account types or secret
+references fail closed before importing or opening any MAX session.
+
+`adapters.wiring.native_adapters(..., max_factory=None)` lazily imports the optional
+`adapters.max.live_session.configured_adapter` only when a configured MAX connection
+is selected. A missing optional MAX package returns `max_adapter_not_installed`.
+Telegram/VK need no MAX installation when MAX is not selected; their credential
+validation, retry disabling and cleanup remain unchanged.
+
+The callable contract is an async context manager:
+`configured_adapter(*, connection_id: str, env: Mapping[str, str])`, yielding the
+actual provider adapter. Its context owns profile/browser startup and cleanup;
+core's `AsyncExitStack` closes entered contexts on completion, errors or cancellation.
+The MAX package validates explicit `VIBEPUBLISH_MAX_PROFILE` configuration and
+requires approved profile/executable/allowlist and write opt-in; core does not
+parse or guess MAX profile paths, copy sessions, or borrow credentials. The same
+callable can be injected through `max_factory` for offline tests. There is no
+custom provider worker or alternate social dispatch path.
+
+Implementation status: **Not confirmed by user**. The core seam has offline
+factory-lifetime and standard CLI worker tests; MAX configuration, actual browser
+capability and live acceptance remain in PR #2. The focused core CI includes these
+tests, while the strict full-suite gate remains separate and unchanged.
+
+### Opt-in MAX semantic content and bounded local video
+
+Implementation status: **Not confirmed by user**. This is the shared-core part of
+the active MAX completion task; browser capability and live readback remain PR #2.
+Only a `max` / `max_web` binding enables these additions. Telegram/VK and fake-MAX
+defaults are not widened; unsupported provider content still fails closed.
+
+The existing public semantic `paragraphs` input supports labeled links and
+`bold`, `italic`, `code`, `spoiler` text styles. For example:
+
+```json
+{"content":{"paragraphs":[[{"kind":"text","text":"Important","style":"bold"},{"kind":"link","label":"Details","url":"https://example.org/details"}]]}}
+```
+
+The frozen internal content is `{text, format:"max_entities", entities:[...]}`.
+`social_operations.rich_text.max_content(content_json: str, limit: int)` returns
+`(text, normalized_entities)`, validating UTF-16 offsets/lengths and the caller's
+UTF-16 text limit. Supported internal entity types are `bold`, `italic`, `code`,
+`spoiler`, `text_link`, `url`; link records include `url`. Raw provider entities
+are not accepted as public mutation input. Custom Telegram emoji are not MAX
+entities. Publication verification compares exact normalized entities as well as
+text. Existing-item adoption preserves their native CAS; edits/reschedules preserve
+frozen media roles instead of coercing video to image. A missing style/link in
+provider evidence cannot become verified plain-text success.
+
+The owner CLI adds `vibepublish --db PRIVATE_LEDGER video --file LOCAL_FILE
+--mime video/mp4`, returning a private derivative asset ref. Use that ref in the
+existing media shape `{"source":{"kind":"asset","id":"asset_ref"},"role":"video"}`
+(or `role:"auto"`). `adapters.native.verify_assets(request, *, allow_video=True)`
+is the explicit adapter opt-in; its default still accepts images only. Existing
+PNG/JPEG/WebP ingress is unchanged. MAX adapters must independently qualify their
+actual upload surface and native readback, not infer capability from admission.
+
+Initial ingress accepts only a regular non-symlink local MP4 file, up to 20 MiB,
+one H.264 video stream plus at most one AAC audio stream, duration at most 120
+seconds, and dimensions up to 1920×1080 (portrait orientation allowed). FFmpeg and
+FFprobe must be installed locally. Fixed arguments force the MOV/MP4 demuxer,
+file-only protocol, disabled external data references/absolute track paths, and
+H.264/AAC codec whitelist. Header probing, full decode and metadata-stripping
+container remux are time bounded; the derivative is re-probed for matching
+size/duration/packet counts. Temporary files stay under the private ledger's
+`artifacts/video-processing` directory and are removed, including on failure.
+No source URL or network protocol is accepted, and no shell, browser, credential,
+image-generation call or social action is part of video import.
+
+Original and sanitized derivative bytes remain private owned assets; both count
+against tenant storage and retain original SHA-256 lineage. Source/derivative
+limits and current authority are rechecked before storage. Unsupported codecs,
+corruption, timeout, unavailable tools or quota failure produce explicit errors,
+not a video-to-image fallback. Both CI matrices install FFmpeg as a local fixture
+prerequisite; the mandatory strict full-suite gate is not weakened or skipped.
+
+The command contract follows official [FFprobe options](https://ffmpeg.org/ffprobe.html),
+[protocol whitelist](https://ffmpeg.org/ffmpeg-protocols.html),
+[MOV demuxer data-reference controls](https://ffmpeg.org/ffmpeg-formats.html), and
+[FFmpeg metadata mapping and error options](https://ffmpeg.org/ffmpeg.html).
+`tests/providers/test_max_content_video.py` proves actual local decode/remux and
+CLI ingress, limits, sanitized metadata, provider-default isolation, immutable
+video roles, semantic readback and adoption. Its provider is an offline port
+fixture, not evidence of native MAX video/rich capability.
+
+### Exact native-slot downloaded-media evidence
+
+Implementation status: **Not confirmed by user**. Some MAX image surfaces expose
+only rotating signed download URLs, not native attachment IDs. Those URLs must
+not be normalized into counterfeit IDs, and provider-transcoded JPEG digests must
+not be described as equality with original uploaded PNG bytes.
+
+`RemoteItem.observed_media` is an additive ordered tuple of frozen
+`DownloadedMedia(slot: int, sha256: str, mime: str, size: int,
+kind="download_sha256")` records. Serialized dictionaries are validated and
+normalized on construction: consecutive zero-based slots (maximum ten), lowercase
+SHA-256, bounded positive byte size and supported image/MP4 MIME. The evidence is
+bound to its containing native target/namespace/post ID. It changes the content
+CAS only when present; existing Telegram/VK item fingerprints stay unchanged.
+`provider_media` remains empty unless genuine native attachment IDs exist.
+
+`adapters.native.bind_download_media(request, item, *, binding: dict)` verifies an
+adapter's **previously durably saved** exact binding with these closed fields:
+`operation_id`, `attempt_id`, `plan_digest`, `native_target`, `native_id`,
+`namespace`, `source_hashes`, `observed_media`. Request identity, original upload
+asset digests, exact native post and repeated ordered downloaded evidence must all
+match. The adapter must establish that binding from the original marked upload
+intent and its exact native post/slot UI observations, not invent it from an
+arbitrary current read or visual resemblance. Downloading bytes or observing a
+similar picture alone does not prove historical source attribution.
+
+The helper sets `media_check="download_binding"` and original input `media_hashes`
+only after the checks. Downloaded digests remain separate in `observed_media`;
+provider transcoding is permitted without a source-bytes equality claim. An
+adopted item with no owned source assets instead binds the immutable existing
+slot evidence and keeps input hashes empty. Core MAX edit/reschedule verification
+preserves and compares slot evidence when media are not replaced, and rejects
+missing download-binding status or invented native media IDs. Different native
+slot bytes are a CAS conflict/unknown result, never a verified caption-only edit.
+
+Authorized read items expose a closed `media_evidence` array with the same
+`kind`, `slot`, `sha256`, `mime`, `size` records. This is observed-download metadata,
+not a source asset ref, downloadable URL or claim of original upload attribution.
+Signed URLs, native attachment IDs and private input hashes are not projected.
+When this evidence exists, reads do not emit the previous text-only media error.
+Existing item handles and current binding/tenant/private-scope checks still apply;
+actual bytes are not exposed by this metadata addition.
+
+This is an additive typed port/public receipt evidence category, not a new public
+mutation API, URL fetch endpoint, provider-native-ID claim, or permission bypass.
+The MAX adapter owns authorized browser-download acquisition, exact-post checks,
+private checkpoint persistence and native live acceptance. Core tests exercise
+serialized round trips, old fingerprint compatibility, malformed evidence,
+source/native/attempt mismatches and preserved/changed-media adoption.
 
 ### Reads, queue, history and statistics
 

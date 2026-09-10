@@ -185,7 +185,7 @@ class Application:
             raise DomainError('too_many_destinations')
         return list(result.values())
 
-    def _media(self, db, actor, items):
+    def _media(self, db, actor, items, *, allow_video=False):
         output = []
         for entry in items:
             if entry['source']['kind'] != 'asset':
@@ -200,10 +200,15 @@ class Application:
             if emoji_origin:
                 self.emojis.catalog(db, actor, emoji_origin['catalog_id'], latest=True)
             role = entry.get('role', 'image')
-            if role not in ('image', 'auto'):
+            if role == 'auto':
+                role = 'video' if row['mime'] == 'video/mp4' else 'image'
+            if role == 'video':
+                if not allow_video or row['mime'] != 'video/mp4':
+                    raise DomainError('media_role_not_enabled')
+            elif role != 'image' or not row['mime'].startswith('image/'):
                 raise DomainError('media_role_not_enabled')
             output.append({'ref': row['id'], 'sha256': row['sha256'], 'mime': row['mime'], 'size': len(row['bytes']),
-                           'role': 'image', 'caption': entry.get('caption', ''), 'alt_text': entry.get('alt_text', '')})
+                           'role': role, 'caption': entry.get('caption', ''), 'alt_text': entry.get('alt_text', '')})
         return output
 
     def _plan(self, db, actor, binding, target, action, existing=None, *, pending_visual=False):
@@ -213,21 +218,21 @@ class Application:
         if target.get('visual') and not pending_visual:
             raise DomainError('visual_requires_visual_service')
         content = target.get('renderings', {}).get(binding['provider'], target.get('content', {'text': ''}))
-        assets = self._media(db, actor, target.get('media', []))
+        assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] == 'max' and binding['account_type'] == 'max_web')
         if binding['account_type'] != 'fake':
             for asset in assets:
                 fixture = db.execute('SELECT fixture FROM visual_asset_origins WHERE asset_id=?', (asset['ref'],)).fetchone()
                 if fixture and fixture[0]:
                     raise DomainError('fixture_asset_native_publish_forbidden', next_action='contact_owner')
         admission_error = None
-        if action not in ('forward', 'cancel', 'delete'):
+        if action not in ('forward', 'cancel', 'delete', 'react'):
             try:
                 content = self.emojis.compile(db, actor, content, binding, target)
             except DomainError as exc:
                 if exc.code not in {'emoji_fallback_required', 'rich_fallback_needs_review'} or action != 'publish':
                     raise
                 admission_error, content = exc.code, {'text': ''}
-        if action not in ('forward', 'cancel', 'delete') and not assets and not content.get('text', '').strip() and not pending_visual and not admission_error:
+        if action not in ('forward', 'cancel', 'delete', 'react') and not assets and not content.get('text', '').strip() and not pending_visual and not admission_error:
             raise DomainError('empty_publication')
         delivery = target.get('delivery', {'kind': 'now'})
         scheduled = timestamp(parse_time(delivery['at'])) if delivery.get('at') else None
@@ -245,6 +250,12 @@ class Application:
         if action == 'publication_update' and args['change']['kind'] == 'reconcile_removed':
             from .unknown_resolution import accept_resolution
             return accept_resolution(self, actor, args)
+        if action == 'publication_update' and args['change']['kind'] == 'retry_failed':
+            from .recovery import retry_failed
+            return retry_failed(self, actor, args)
+        if action == 'publication_update' and args['change']['kind'] == 'reconcile':
+            from .recovery import admit
+            return admit(self, actor, args)
         intent = normalize_intent(action, args)
         if action == 'publish' and intent.get('visual'):
             intent['visual'] = self.visuals.normalize_spec(intent['visual'])
@@ -263,9 +274,22 @@ class Application:
                 else:
                     target = intent if action == 'publish' else intent['command']
                     actual = 'publish' if action == 'publish' else target['kind']
-                    if actual not in ('publish', 'forward'):
+                    if actual not in ('publish', 'forward', 'reply', 'react'):
                         raise DomainError('capability_not_implemented', next_action='contact_owner')
-                    plans = [self._plan(db, actor, b, target, actual, pending_visual=bool(target.get('visual'))) for b in self._targets(db, actor, target['to'])]
+                    if actual in ('reply','react'):
+                        reference=self.resolve_item(db,actor,target['item_ref'])
+                        binding=self.store.binding(db,actor,binding_id=reference['binding_id'])
+                        if binding['provider']!='max' or binding['account_type'] not in ('max_web','fake'):
+                            raise DomainError('engagement_provider_not_enabled')
+                        subject=json.loads(reference['snapshot']);subject['media_hashes']=[]
+                        if subject['namespace']!='published':raise DomainError('engagement_requires_published_subject')
+                        body=target.get('content',{'text':subject['text']})
+                        intent_target={'content':body,'delivery':{'kind':'now'}}
+                        plan=self._plan(db,actor,binding,intent_target,actual,subject if actual=='react' else None)
+                        plan.update(subject=subject,subject_ref=target['item_ref'],reaction=target.get('reaction'),reaction_mode=target.get('mode'))
+                        plans=[plan]
+                    else:
+                        plans = [self._plan(db, actor, b, target, actual, pending_visual=bool(target.get('visual'))) for b in self._targets(db, actor, target['to'])]
                     if actual == 'forward':
                         from dataclasses import asdict
                         item = target['item_ref']
@@ -282,6 +306,14 @@ class Application:
                                 if not channel.lstrip('-').isdigit() or int(channel) >= -1_000_000_000_000:
                                     raise DomainError('forward_source_kind_needs_review')
                                 url = f'https://t.me/c/{-int(channel)-1_000_000_000_000}/{native_id}'
+                            elif source_binding['provider']=='max' and source_binding['account_type'] in ('max_web','fake'):
+                                import re
+                                snapshot=json.loads(source_ref['snapshot'])
+                                url=snapshot.get('url','')
+                                if not re.fullmatch(r'https://max\.ru/c/-[1-9][0-9]*/[A-Za-z0-9_-]+',url) or url!=f'https://max.ru/c/{channel}/{native_id}':
+                                    raise DomainError('max_forward_native_reference_required')
+                                for plan in plans:
+                                    plan['subject']={**snapshot,'media_hashes':[]}
                             elif source_binding['provider'] == 'vk':
                                 url = f'https://vk.ru/wall{channel}_{native_id}'
                             else:
@@ -331,8 +363,8 @@ class Application:
             raise DomainError('external_media_replace_needs_review', next_action='contact_owner')
         target = {'content': {'text': remote['text']}, 'media': [], 'surface': 'post',
                   'delivery': {'kind': 'at', 'at': remote['scheduled_at']} if remote.get('scheduled_at') else {'kind': 'now'}}
-        if b['provider'] == 'telegram' and remote.get('entities_json', '[]') != '[]':
-            target['content'] = {'text': remote['text'], 'format': 'telegram_entities', 'entities': json.loads(remote['entities_json'])}
+        if (b['provider'] == 'telegram' or (b['provider'] == 'max' and b['account_type'] == 'max_web')) and remote.get('entities_json', '[]') != '[]':
+            target['content'] = {'text': remote['text'], 'format': 'telegram_entities' if b['provider'] == 'telegram' else 'max_entities', 'entities': json.loads(remote['entities_json'])}
         if kind == 'edit':
             target.update({k: v for k, v in change.items() if k != 'kind'})
         elif kind == 'reschedule':
@@ -377,7 +409,7 @@ class Application:
             if kind in ('edit', 'reschedule') and old['action'] == 'forward':
                 raise DomainError('forward_lifecycle_not_enabled', next_action='contact_owner')
             b = self.store.binding(db, actor, binding_id=child['binding_id'])
-            target = {'content': json.loads(old['content_json']), 'media': [{'source': {'kind': 'asset', 'id': a['ref']}, 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']],
+            target = {'content': json.loads(old['content_json']), 'media': [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']],
                       'surface': old['surface'], 'delivery': {'kind': 'at', 'at': old['scheduled_at']} if old['scheduled_at'] else {'kind': 'now'}, 'mode': 'execute'}
             if kind == 'edit':
                 target.update({k: v for k, v in change.items() if k != 'kind'})
@@ -466,7 +498,7 @@ class Application:
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             kind = query['kind']
-            if kind not in ('scheduled', 'feed', 'search', 'item', 'history', 'analytics'):
+            if kind not in ('scheduled', 'feed', 'search', 'item', 'history', 'analytics','reactions'):
                 raise DomainError('capability_not_implemented', next_action='contact_owner')
             if kind in ('history', 'analytics'):
                 if args.get('cursor'):
@@ -500,11 +532,13 @@ class Application:
                 op = self._new_operation(db, actor, 'read', args, complete=True, result={'items': items[:limit], 'truncated': len(items)>limit})
             else:
                 intent = json.loads(canonical(args))
-                if kind == 'item':
+                if kind in {'item','reactions'}:
                     ref = self.resolve_item(db, actor, query['item_ref'])
                     b = self.store.binding(db, actor, binding_id=ref['binding_id'])
                     intent['_native_item'] = ref['native_id']
                     intent['_namespace'] = ref['namespace']
+                    if kind=='reactions' and (b['provider']!='max' or ref['namespace']!='published'):
+                        raise DomainError('reaction_read_surface_not_enabled')
                 else:
                     b = self.store.binding(db, actor, alias=query['destination'])
                 if 'publish' not in json.loads(b['rights']) and not actor.owner:
@@ -541,8 +575,14 @@ class Application:
         if publication and db.execute('SELECT 1 FROM publications WHERE id=? AND tenant_id=? AND principal_id=?',
                                       (publication, actor.tenant_id, actor.principal_id)).fetchone():
             item['publication_id'] = publication
-        if remote.get('media_hashes'):
+        if remote.get('observed_media'):
+            from dataclasses import asdict
+            from adapters.port import downloaded_media
+            item['media_evidence'] = [asdict(value) for value in downloaded_media(remote['observed_media'])]
+        elif remote.get('media_hashes'):
             item['error'] = {'code': 'media_projection_not_enabled', 'message': 'This checkpoint returns text and timing; provider media downloads are not exposed'}
+        if remote.get('own_reactions_observed'):
+            item['own_reactions']=list(remote['own_reactions'])
         if remote.get('metrics'):
             item['metrics'] = [{'name': n, 'value': v, 'unit': u} for n,v,u in remote['metrics']]
             item['metrics_observed_at'] = remote['observed_at']

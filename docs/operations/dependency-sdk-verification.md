@@ -6,7 +6,7 @@ No credentials, model calls, provider RPCs, MAX changes or deployment are needed
 
 ## One pinned environment
 
-`requirements.lock` is the exact 70-package Linux CPython 3.12/3.13 verification
+`requirements.lock` is the exact 71-package Linux CPython 3.12/3.13 verification
 environment. It includes runtime, optional Telegram/VK SDKs, browser and build/test
 dependencies; this is not a minimal production image. The direct requirements
 remain in `requirements.verification.in` including `requirements.in`.
@@ -77,3 +77,7 @@ version successfully. Initial failures are retained in transfer-package logs.
 The full protected core upload was not retried/routed through CI or MAX. Only
 new independent dependency/SDK tooling and its qualification results are remote.
 DevCoveer imagegen activation and live provider/deployment gates remain separate.
+
+MAX visual font evidence adds the pinned `regex==2026.9.3` Unicode/grapheme
+dependency to both canonical input and lock. The earlier 70-package
+qualification is historical; fresh exact-SHA CI qualifies the additive graph.

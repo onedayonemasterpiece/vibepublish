@@ -29,7 +29,7 @@ class Store:
         os.chmod(self.path, 0o600)
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4):
+            if version not in (0, 1, 2, 3, 4, 5):
                 raise RuntimeError("Unsupported VibePublish database version")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -42,6 +42,9 @@ class Store:
 
             if version < 4:
                 db.executescript(Path(__file__).with_name("resolution_schema.sql").read_text())
+
+            if version < 5:
+                db.executescript(Path(__file__).with_name("recovery_schema.sql").read_text())
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -148,6 +151,21 @@ class Store:
                        (binding_id, target["tenant_id"], principal, alias, dest_id, canonical(list(rights))))
             db.execute("UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?", (principal,))
         return binding_id
+
+    def grant_binding_rights(self, owner: Actor, binding_id: str, rights):
+        """Owner-only additive grant; never revokes epochs or clears quarantine."""
+        allowed={'publish','edit','reschedule','cancel','delete','forward','reply','react'}
+        if not isinstance(rights,(list,tuple)) or not rights or any(r not in allowed for r in rights):
+            raise DomainError('invalid_binding_rights')
+        with self.tx() as db:
+            self.current(db,owner)
+            row=db.execute('SELECT * FROM bindings WHERE id=? AND tenant_id=? AND active=1',(binding_id,owner.tenant_id)).fetchone()
+            if not owner.owner or not row:raise DomainError('access_denied')
+            old=json.loads(row['rights']);updated=list(dict.fromkeys(old+list(rights)))
+            if updated!=old:
+                db.execute('UPDATE bindings SET rights=? WHERE id=?',(canonical(updated),binding_id))
+                db.execute('UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?',(row['principal_id'],))
+            return updated
 
     def revoke_binding(self, owner: Actor, binding_id: str):
         with self.tx() as db:
@@ -263,13 +281,18 @@ class Store:
             page = rows[:event_limit]
             deliveries = []
             for child in db.execute("SELECT * FROM attempts WHERE operation_id=? ORDER BY rowid", (op["id"],)):
-                result = {"destination": child["alias"], "provider": child["provider"], "state": child["state"],
+                result = {"destination": child["alias"], "provider": child["provider"], "attempt_id": child["id"], "state": child["state"],
                           "stage": child["stage"], "observed": child["observed"], "revision": op["revision"],
                           "media_check": "not_applicable", "retry_safe": False}
                 result.update(json.loads(child["result"]))
-                # Legacy cancel receipts persisted an absent optional timestamp as
-                # null. Project it as absent without rewriting durable evidence.
-                if result.get("requested_at") is None:
+                if child['observed'] in ('cancelled', 'deleted'):
+                    # Older committed native snapshots retained their original
+                    # schedule. A terminal removal is not a pending queue receipt.
+                    for key in ('queue_ref','effective_at','requested_at','scheduling_owner','navigate_hint'):
+                        result.pop(key, None)
+                elif result.get("requested_at") is None:
+                    # Legacy cancel receipts persisted an absent optional timestamp as
+                    # null. Project it as absent without rewriting durable evidence.
                     result.pop("requested_at", None)
                 deliveries.append(result)
             state = op["state"]

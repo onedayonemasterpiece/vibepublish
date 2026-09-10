@@ -38,7 +38,7 @@ async def test_independent_process_crashes_recover_without_second_executor_submi
         assert len((executor.artifact_root/'submit.log').read_text().splitlines())==1
 
 
-def test_v1_to_v3_migration_preserves_existing_rows_and_is_concurrent_idempotent(tmp_path):
+def test_v1_to_v4_migration_preserves_existing_rows_and_is_concurrent_idempotent(tmp_path):
     path=tmp_path/'ledger.sqlite'
     old_schema=Path(__file__).resolve().parents[2]/'social_operations/schema.sql'
     db=sqlite3.connect(path)
