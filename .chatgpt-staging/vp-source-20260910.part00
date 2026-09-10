@@ -1,0 +1,267 @@
+--- a/adapters/codex_task_imagegen.py
++++ b/adapters/codex_task_imagegen.py
+@@ -314,7 +314,7 @@
+ 
+     async def _preflight(self):
+         try:
+-            payload = await self.transport.request('account/rateLimits/read')
++            payload = await self.transport.request('account/rateLimits/read', {})
+         except AppServerRPCError as exc:
+             failure = classify_rpc_error(exc)
+             if failure:
+@@ -355,9 +355,10 @@
+                 if old['input_digest'] != request.input_digest:
+                     raise DomainError('imagegen_idempotency_conflict')
+                 return request.job_key
++            # Validate trusted local execution prerequisites before touching app-server.
++            developer_instructions, skill_snapshot = self._skill_context()
+             # Structured read-only capacity check happens before any thread/turn mutation.
+             await self._preflight()
+-            developer_instructions, skill_snapshot = self._skill_context()
+             work = directory / 'work'; _private(work)
+             source_inputs = []
+             for index, source in enumerate(request.sources):
+@@ -477,9 +478,20 @@
+         if not (directory / 'receipt.json').exists(): return None
+         return await self.inspect(job_key)
+ 
+-    async def _read_thread(self, record):
+-        return await asyncio.wait_for(self.transport.request('thread/read', {
+-            'threadId': record['thread_id'], 'includeTurns': True}), THREAD_READ_TIMEOUT)
++    async def _read_thread(self, directory, record):
++        # Only immutable-identity observation is retried. Never retry thread/start,
++        # turn/start, interruption or any other mutation after transport uncertainty.
++        for attempt in range(1 + len(THREAD_READ_BACKOFF)):
++            record['last_thread_read_attempts'] = attempt + 1
++            try:
++                return await asyncio.wait_for(self.transport.request('thread/read', {
++                    'threadId': record['thread_id'], 'includeTurns': True}), THREAD_READ_TIMEOUT)
++            except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
++                record['last_thread_read_error'] = _exception_frames(exc)
++                self._record(directory, record)
++                if attempt == len(THREAD_READ_BACKOFF):
++                    raise
++                await asyncio.sleep(THREAD_READ_BACKOFF[attempt])
+ 
+     async def _recover_thread(self, directory, record):
+         work = directory / 'work'
+@@ -508,8 +520,10 @@
+         if not record.get('thread_id'):
+             await self._recover_thread(directory, record)
+             return
+-        response = await self._read_thread(record)
+-        thread = response['thread']
++        response = await self._read_thread(directory, record)
++        thread = response.get('thread') if isinstance(response, dict) else None
++        if not isinstance(thread, dict):
++            raise ValueError('thread shape invalid')
+         if thread.get('id') != record['thread_id']:
+             raise ValueError('thread mismatch')
+         turns = thread.get('turns', [])
+--- a/contracts/social_mcp_v1.py
++++ b/contracts/social_mcp_v1.py
+@@ -45,8 +45,8 @@
+ LIMIT = {"type": "integer", "minimum": 1, "maximum": 50}
+ PROVIDER = enum("telegram", "vk", "max")
+ NEXT = enum("none", "check_status", "approve", "select_visual", "fix_input",
+-            "refresh", "reauthorize", "review_outcome", "contact_owner")
+-STATE = enum("accepted", "running", "needs_approval", "needs_selection", "scheduled",
++            "refresh", "reauthorize", "retry_later", "review_outcome", "contact_owner")
++STATE = enum("accepted", "running", "reconciling", "needs_approval", "needs_selection", "scheduled",
+              "verified", "partial", "failed", "outcome_unknown", "cancelled", "blocked")
+ STAGE = enum("accepted", "validating", "importing_media", "rendering", "awaiting_approval",
+              "awaiting_selection", "waiting_connection", "resolving_source", "checking_forward_rights", "uploading", "submitting",
+@@ -169,7 +169,7 @@
+     "deliveries": array(ref("delivery_result"), 0, 100),
+     "candidates": array(ref("candidate"), 0, 4), "destinations": array(ref("destination"), 0, 100),
+     "review_token": string(512), "poll_after_seconds": {"type": "integer", "minimum": 1},
+-    "error": ref("error"), "dry_run": {"type": "boolean"}},
++    "retry_at": DATE, "error": ref("error"), "dry_run": {"type": "boolean"}},
+     ("operation_id", "action", "state", "message", "operation_complete", "progress", "next_action", "retry_safe", "receipt_ref", "deliveries"))
+ 
+ TOOLS = []
+--- a/social_operations/storage.py
++++ b/social_operations/storage.py
+@@ -315,7 +315,20 @@
+             if op["error"]:
+                 error = json.loads(op["error"])
+                 result["error"] = error["error"]
+-                result["next_action"] = "review_outcome" if state == "outcome_unknown" else error["next_action"]
++                # Historical terminal uncertainty remains readable, but never becomes
++                # retryable. New uncertainty is non-terminal reconciliation and likewise
++                # forbids replay. Known no-effect failures may expose explicit retry data.
++                if state == "outcome_unknown":
++                    result["next_action"] = "review_outcome"
++                    result["retry_safe"] = False
++                elif state == "reconciling":
++                    result["next_action"] = "check_status"
++                    result["retry_safe"] = False
++                else:
++                    result["next_action"] = error.get("next_action", result["next_action"])
++                    result["retry_safe"] = bool(error.get("retry_safe", False))
++                    if error.get("retry_at"):
++                        result["retry_at"] = error["retry_at"]
+             return result
+ 
+     def backup(self, path: str | Path):
+--- a/requirements.lock
++++ b/requirements.lock
+@@ -30,7 +30,9 @@
+ jsonpointer==3.1.1
+ jsonschema==4.26.0
+ jsonschema-specifications==2025.9.1
++lz4==4.4.5
+ mcp==1.29.0
++msgpack==1.2.2
+ multidict==6.7.1
+ packaging==26.3
+ pillow==12.3.0
+--- a/requirements.verification.in
++++ b/requirements.verification.in
+@@ -7,3 +7,5 @@
+ playwright==1.57.0
+ setuptools==82.0.1
+ wheel==0.45.1
++msgpack==1.2.2
++lz4==4.4.5
+--- a/tests/providers/test_core_integration.py
++++ b/tests/providers/test_core_integration.py
+@@ -163,7 +163,7 @@
+         'delivery': {'kind': 'at', 'at': timestamp(NOW+3600)}})
+     await worker.run_once()
+     done = result(store, actor, receipt)
+-    assert done['state'] == 'outcome_unknown', done
++    assert done['state'] == 'reconciling', done
+     assert done['error']['code'] == 'native_schedule_not_observed'
+     assert transports['telegram'].effects == 1
+     assert not await worker.run_once()
+@@ -178,6 +178,6 @@
+     receipt = await call(app, actor, 'publish', {'to': ['telegram', 'vk'], 'content': {'text': 'Independent children'}})
+     await worker.run_once()
+     done = result(store, actor, receipt)
+-    assert [d['state'] for d in done['deliveries']] == ['outcome_unknown', 'verified']
++    assert [d['state'] for d in done['deliveries']] == ['reconciling', 'verified']
+     assert all(t.effects == 1 for t in transports.values())
+     assert not await worker.run_once()
+--- a/tests/providers/test_max_content_video.py
++++ b/tests/providers/test_max_content_video.py
+@@ -185,7 +185,7 @@
+     accepted=await app.call(actor,'vibepublish_publish',{'to':['target'],'content':RICH})
+     await Worker(store,{'connection':provider}).run_once()
+     result=store.receipt(actor,accepted['operation_id'])
+-    assert result['state']=='outcome_unknown'
++    assert result['state']=='reconciling'
+     assert result['deliveries'][0]['missing_checks']==['entities_readback_mismatch']
+ 
+ 
+@@ -317,7 +317,7 @@
+     provider.changed=changed
+     await worker.run_once()
+     status=store.receipt(actor,edit['operation_id'])
+-    assert status['state']==('outcome_unknown' if changed else 'verified'), status
++    assert status['state']==('reconciling' if changed else 'verified'), status
+     if changed:
+         assert status['deliveries'][0]['missing_checks']==['download_media_lifecycle_changed']
+     with store.connection() as db:
+--- a/tests/runtime/test_engagement.py
++++ b/tests/runtime/test_engagement.py
+@@ -69,7 +69,7 @@
+     command={'kind':kind,'item_ref':source,**({'content':{'text':'Reply'}} if kind=='reply' else {'reaction':'👍','mode':'add'})}
+     admitted=await app.call(actor,'vibepublish_engage',{'command':command})
+     await worker.run_once();result=store.receipt(actor,admitted['operation_id'])
+-    assert result['state']=='outcome_unknown' and result['error']['code']==code
++    assert result['state']=='reconciling' and result['error']['code']==code
+     assert p.effects==2
+ 
+ 
+@@ -91,7 +91,7 @@
+     store.grant_binding_rights(actor,binding,['react']);p.missing=True
+     admitted=await app.call(actor,'vibepublish_engage',{'command':{'kind':'react','item_ref':source,'reaction':'👍','mode':'remove'}})
+     await worker.run_once();result=store.receipt(actor,admitted['operation_id'])
+-    assert result['state']=='outcome_unknown' and result['error']['code']=='reaction_subject_or_state_mismatch'
++    assert result['state']=='reconciling' and result['error']['code']=='reaction_subject_or_state_mismatch'
+ 
+ 
+ @pytest.mark.asyncio
+--- a/tests/runtime/test_recovery.py
++++ b/tests/runtime/test_recovery.py
+@@ -7,7 +7,7 @@
+ from pathlib import Path
+ 
+ from adapters.fake import FakeProvider
+-from social_operations.domain import OutcomeUnknown
++from social_operations.domain import OutcomeUnknown, canonical
+ from social_operations.service import Application
+ from social_operations.storage import Store
+ from social_operations.worker import Worker
+@@ -70,9 +70,29 @@
+         return await self.app.call(actor or self.actor, 'vibepublish_'+method, args)
+ 
+     async def stuck(self, targets=None):
++        """Create a new post-dispatch uncertainty; new operations must reconcile, never terminal-unknown."""
+         receipt = await self.call('publish', {'to': targets or ['max'], 'content': {'text': 'Original'}})
+         await self.worker.run_once()
+-        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
++        current = self.store.receipt(self.actor, receipt['operation_id'])
++        self.assertEqual(current['state'], 'reconciling', current)
++        self.assertFalse(current['operation_complete'])
++        self.assertFalse(current['retry_safe'])
++        self.assertEqual(current['next_action'], 'check_status')
++        return receipt
++
++    async def legacy_stuck(self, targets=None):
++        """Model an already-persisted pre-migration terminal record without rewriting production history."""
++        receipt = await self.stuck(targets)
++        legacy = OutcomeUnknown('receipt_lost').output()
++        with self.store.tx() as db:
++            db.execute("UPDATE attempts SET state='outcome_unknown',stage='outcome_unknown',observed='unknown' WHERE operation_id=? AND state='reconciling'",
++                       (receipt['operation_id'],))
++            db.execute("UPDATE operations SET state='outcome_unknown',complete=1,work_state='done',lease_until=0,error=? WHERE id=?",
++                       (canonical(legacy), receipt['operation_id']))
++        projected = self.store.receipt(self.actor, receipt['operation_id'])
++        self.assertEqual(projected['state'], 'outcome_unknown')
++        self.assertEqual(projected['next_action'], 'review_outcome')
++        self.assertFalse(projected['retry_safe'])
+         return receipt
+ 
+     def args(self, receipt, **change):
+@@ -80,7 +100,7 @@
+                 'change': {'kind': 'reconcile', 'operation_id': receipt['operation_id'], **change}, 'request_key': 'recover'}
+ 
+     async def test_terminal_resolution_original_identity_and_durable_hint(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         with self.store.connection() as db:
+             attempt = dict(db.execute('SELECT * FROM attempts').fetchone())
+         self.now += 9999  # An expired send deadline never prevents observation.
+@@ -108,15 +128,17 @@
+             self.assertTrue(row['observation'])
+ 
+     async def test_insufficient_or_mismatched_evidence_never_releases(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         await self.call('publication_update', self.args(receipt))
+         await self.worker.run_once()
+-        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
++        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'reconciling')
+         self.provider.unknown, self.provider.wrong_target = False, True
+-        args = self.args(receipt); args['request_key'] = 'fresh-observation'
+-        await self.call('publication_update', args)
++        self.now += 6
+         await self.worker.run_once()
+-        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
++        current = self.store.receipt(self.actor, receipt['operation_id'])
++        self.assertEqual(current['state'], 'reconciling')
++        self.assertFalse(current['retry_safe'])
++        self.assertEqual(current['next_action'], 'check_status')
+         self.assertEqual(self.provider.count('finalize'), 0)
+         self.assertEqual(self.provider.count('effect'), 1)
+ 
+@@ -125,7 +147,7 @@
+         self.store.bind(self.actor, 'owner', 'telegram', 'telegram', 'other')
+         other = FakeProvider(self.root/'remote.sqlite', 'telegram', clock=lambda: self.now)
+         self.worker.adapters['telegram'] = other
+-        receipt = await self.stuck(['max', 'telegram'])
++        receipt = await self.legacy_stuck(['max', 'telegram'])
+         before = self.store.receipt(self.actor, receipt['operation_id'])['deliveries'][1]
+         self.provider.unknown = Fa
