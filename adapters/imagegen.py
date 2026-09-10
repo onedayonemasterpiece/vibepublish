@@ -61,12 +61,16 @@ class ImagegenObservation:
     job_key: str
     input_digest: str
     execution_ref: str
-    state: Literal['queued', 'running', 'succeeded', 'failed', 'unknown']
+    state: Literal['queued', 'running', 'reconciling', 'succeeded', 'failed']
     artifacts: tuple[ImagegenArtifact, ...] = ()
     actual_executor: str | None = None
     actual_model: str | None = None
     usage_json: str = '{}'
     fixture: bool = False
+    error_code: str | None = None
+    retry_safe: bool = False
+    next_action: str | None = None
+    retry_at: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, 'artifacts', tuple(self.artifacts))
