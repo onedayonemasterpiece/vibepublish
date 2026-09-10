@@ -13,11 +13,12 @@ from dataclasses import asdict
 from adapters.imagegen import ImagegenRequest, ImagegenSource, UnavailableImagegen
 from .assets import insert_verified_image, verify_image
 from .compositor import PRESET, FORMATS, render
-from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time
+from .domain import DomainError, OutcomeUnknown, ReconciliationPending, canonical, digest, new_id, parse_time
 from .visual_artifacts import verified_artifact
 
 REQUESTED_ROUTE = 'gpt-5.6-luna'
 VISUAL_EXECUTION_SECONDS = 600
+MAX_VISUAL_RECONCILIATIONS = 6
 
 
 class VisualService:
@@ -34,8 +35,6 @@ class VisualService:
         return spec
 
     def _native_execute_authorized(self, plans):
-        # This is authority for choosing an image, not a provider capability claim.
-        # Actual destination/delivery support is still checked before the provider effect.
         return bool(plans) and all(
             p['action'] == 'publish' and p['mode'] == 'execute'
             and p['account_type'] != 'fake' and not p.get('admission_error')
@@ -45,8 +44,6 @@ class VisualService:
     def _automatic_context(self, plans, fixture):
         if self._native_execute_authorized(plans):
             return True
-        # Preserve existing fixture standalone/preview and scheduled-test semantics.
-        # Real execute authority comes from the frozen native plans above.
         return fixture and all(p['mode'] == 'preview' or p['scheduled_at'] for p in plans)
 
     def _spec(self, spec, plans):
@@ -93,8 +90,6 @@ class VisualService:
         result = {'visual_job_id': job, 'visual_revision': 1}
         if not publication:
             result['resource_id'] = job
-        # This runs only at admission, before any dispatch or replay. The job's
-        # immutable deadline is not renewed when the parent later resumes.
         db.execute('UPDATE operations SET result=?,deadline=? WHERE id=?', (canonical(result), deadline, op))
         return job
 
@@ -205,7 +200,6 @@ class VisualService:
             for plan in plans:
                 db.execute('INSERT INTO attempts(id,operation_id,binding_id,binding_epoch,alias,provider,plan,plan_digest) VALUES(?,?,?,?,?,?,?,?)',
                            (new_id('attempt'), job['operation_id'], plan['binding_id'], plan['binding_epoch'], plan['alias'], plan['provider'], canonical(plan), digest(plan)))
-            # Resume the SAME original operation exactly once, not a hidden publish call.
             db.execute("UPDATE operations SET revision=?,state='accepted',complete=0,work_state='ready',lease_owner=NULL,lease_until=0,deadline=?,error=NULL WHERE id=?",
                        (revision, self.store.clock()+120, job['operation_id']))
         else:
@@ -241,6 +235,42 @@ class VisualService:
         return ImagegenRequest(job['id'], job['input_digest'], spec['kind'], brief, tuple(sources),
                                spec['preset'], REQUESTED_ROUTE, budget, job['deadline'])
 
+    def _terminal_error(self, worker, op, job, error):
+        state = 'failed' if error.retry_safe else 'blocked'
+        with self.store.tx() as db:
+            self.store.fence(db, op['id'], worker.id, op['fence'])
+            db.execute('UPDATE visual_jobs SET state=? WHERE id=?', (state, job['id']))
+            db.execute("UPDATE operations SET state=?,complete=1,work_state='done',error=? WHERE id=?",
+                       (state, canonical(error.output()), op['id']))
+            self.store.event(db, op['id'], 'blocked', 'failed' if state == 'failed' else 'blocked', error.message)
+
+    def _defer_reconciliation(self, worker, op, job, code='imagegen_reconciling'):
+        with self.store.tx() as db:
+            self.store.fence(db, op['id'], worker.id, op['fence'])
+            current = db.execute('SELECT observation,deadline FROM visual_jobs WHERE id=?', (job['id'],)).fetchone()
+            try:
+                observation = json.loads(current['observation'])
+            except (TypeError, ValueError):
+                observation = {}
+            recovery = observation.get('recovery') if isinstance(observation.get('recovery'), dict) else {}
+            count = int(recovery.get('observations', 0)) + 1
+            observation['recovery'] = {'observations': count, 'last_code': code}
+            if count >= MAX_VISUAL_RECONCILIATIONS or self.store.clock() >= current['deadline']:
+                error = DomainError('recovery_exhausted',
+                    'Generation effect could not be proven after bounded read-only reconciliation',
+                    'contact_owner', retry_safe=False)
+                db.execute("UPDATE visual_jobs SET state='failed',observation=? WHERE id=?", (canonical(observation), job['id']))
+                db.execute("UPDATE operations SET state='blocked',complete=1,work_state='done',error=? WHERE id=?",
+                           (canonical(error.output()), op['id']))
+                self.store.event(db, op['id'], 'blocked', 'blocked', error.message)
+                return
+            error = ReconciliationPending(code)
+            db.execute("UPDATE visual_jobs SET state='reconciling',observation=? WHERE id=?", (canonical(observation), job['id']))
+            db.execute("UPDATE operations SET state='reconciling',complete=0,work_state='working',lease_until=?,error=? WHERE id=?",
+                       (self.store.clock()+1, canonical(error.output()), op['id']))
+            self.store.event(db, op['id'], 'verifying', 'started',
+                             'Read-only generation reconciliation deferred; no generation mutation will be replayed')
+
     async def process(self, worker, op, actor, executor=None):
         executor = executor or UnavailableImagegen()
         with self.store.connection() as db:
@@ -250,6 +280,7 @@ class VisualService:
             job = dict(found)
         try:
             request = self._request(job, actor)
+            execution_ref = job['execution_ref']
             if not job['dispatched']:
                 if isinstance(executor, UnavailableImagegen):
                     raise DomainError('imagegen_not_configured', 'No real $imagegen executor is configured; no substitution', 'contact_owner')
@@ -264,51 +295,61 @@ class VisualService:
                         raise DomainError('restore_requires_reconciliation', next_action='contact_owner')
                     changed = db.execute("UPDATE visual_jobs SET dispatched=1,state='running' WHERE id=? AND dispatched=0", (job['id'],)).rowcount
                     if changed != 1:
-                        raise OutcomeUnknown('imagegen_already_dispatched')
+                        raise ReconciliationPending('imagegen_dispatch_race')
                     self.store.event(db, op['id'], 'submitting', 'started', 'Core image-work dispatch marker committed before executor submit')
                 try:
                     async with asyncio.timeout(max(.1, job['deadline']-self.store.clock())):
                         execution_ref = await executor.submit(request)
+                except asyncio.CancelledError:
+                    raise
+                except DomainError:
+                    raise
+                except Exception:
+                    execution_ref = None
+                if execution_ref:
                     with self.store.tx() as db:
                         self.store.fence(db, op['id'], worker.id, op['fence'])
                         db.execute('UPDATE visual_jobs SET execution_ref=? WHERE id=?', (execution_ref, job['id']))
-                except asyncio.CancelledError:
-                    raise
-                except DomainError as exc:
-                    if exc.code == 'stale_worker':
-                        raise
-                    execution_ref = None
-                except Exception:
-                    execution_ref = None
-            else:
-                execution_ref = job['execution_ref']
-            # Durable key lookup is a READ. Never submit again after a lost response.
             async def inspect(ref=None):
                 async with asyncio.timeout(15):
                     return await executor.inspect(ref) if ref else await executor.find(job['id'])
-            read_deadline = asyncio.get_running_loop().time()+max(.1, min(VISUAL_EXECUTION_SECONDS, job['deadline']-self.store.clock()))
             observation = await inspect(execution_ref)
             if observation is None:
-                raise OutcomeUnknown('imagegen_submit_outcome_unknown')
+                self._defer_reconciliation(worker, op, job, 'imagegen_submit_not_observed')
+                return True
+            read_deadline = asyncio.get_running_loop().time()+max(.1, min(VISUAL_EXECUTION_SECONDS, job['deadline']-self.store.clock()))
             while observation.state in {'queued','running'}:
-                if self.store.clock() >= job['deadline'] or asyncio.get_running_loop().time() >= read_deadline:
-                    raise OutcomeUnknown('imagegen_deadline_unknown')
+                if asyncio.get_running_loop().time() >= read_deadline:
+                    self._defer_reconciliation(worker, op, job, 'imagegen_observation_window_elapsed')
+                    return True
                 await asyncio.sleep(.1)
                 observation = await inspect(observation.execution_ref)
             if observation.job_key != job['id'] or observation.input_digest != job['input_digest']:
-                raise OutcomeUnknown('imagegen_observation_binding_mismatch')
+                self._defer_reconciliation(worker, op, job, 'imagegen_observation_binding_mismatch')
+                return True
             if (type(observation.fixture) is not bool or not isinstance(observation.execution_ref, str)
                     or not 1 <= len(observation.execution_ref) <= 512 or len(observation.usage_json) > 8192
                     or any(value is not None and (not isinstance(value, str) or not 1 <= len(value) <= 160)
-                           for value in (observation.actual_executor, observation.actual_model))):
+                           for value in (observation.actual_executor, observation.actual_model, observation.error_code, observation.next_action))
+                    or (observation.retry_at is not None and (not isinstance(observation.retry_at, str) or len(observation.retry_at) > 80))
+                    or type(observation.retry_safe) is not bool):
                 raise DomainError('imagegen_metadata_invalid')
             usage = json.loads(observation.usage_json)
             if not isinstance(usage, dict) or any(not isinstance(k,str) or len(k)>80 or type(v) not in (int,float) or v < 0 for k,v in usage.items()):
                 raise DomainError('imagegen_usage_invalid')
-            if observation.state == 'unknown':
-                raise OutcomeUnknown('imagegen_submit_outcome_unknown')
+            if observation.state == 'reconciling':
+                self._defer_reconciliation(worker, op, job, observation.error_code or 'imagegen_reconciling')
+                return True
+            if observation.state == 'failed':
+                code = observation.error_code or 'imagegen_failed'
+                action = observation.next_action or ('retry_later' if observation.retry_safe else 'contact_owner')
+                error = DomainError(code, 'Image generation did not produce an importable candidate', action,
+                                    retry_safe=observation.retry_safe, retry_at=observation.retry_at)
+                self._terminal_error(worker, op, job, error)
+                return True
             if observation.state != 'succeeded':
-                raise DomainError('imagegen_failed', 'The executor reported failure; no publication was created')
+                self._defer_reconciliation(worker, op, job, 'imagegen_observation_state_unrecognized')
+                return True
             if not 1 <= len(observation.artifacts) <= request.candidate_budget:
                 raise DomainError('imagegen_artifact_budget_mismatch')
             spec = json.loads(job['spec'])
@@ -349,7 +390,7 @@ class VisualService:
                     db.execute('INSERT INTO visual_asset_origins VALUES(?,?,?,?)', (asset_ref, job['id'], int(observation.fixture), 'final'))
                     sha = hashlib.sha256(final.data).hexdigest()
                     token, candidate_id = secrets.token_urlsafe(32), new_id('candidate')
-                    requires_review = not observation.fixture  # Quality is unverified even when explicit execute selection is authorized.
+                    requires_review = not observation.fixture
                     candidate_provenance = {**provenance, 'executor_artifact_sha256': manifest.sha256,
                                              'choice_binding': digest([job['input_digest'], candidate_id, sha, format, row['revision']]),
                                              'typography_evidence': 'explicit_copy_compositor_only' if spec['copy'] else 'prompt_text_unverified'}
@@ -375,14 +416,22 @@ class VisualService:
             return True
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
-            if isinstance(exc, DomainError) and exc.code == 'stale_worker':
+        except ReconciliationPending as exc:
+            self._defer_reconciliation(worker, op, job, exc.code)
+            return True
+        except OutcomeUnknown as exc:
+            # Legacy executor vocabulary is interpreted as internal reconciliation for new work.
+            self._defer_reconciliation(worker, op, job, exc.code)
+            return True
+        except DomainError as exc:
+            if exc.code == 'stale_worker':
                 raise
-            error = exc if isinstance(exc, DomainError) else OutcomeUnknown('imagegen_processing_unresolved')
-            with self.store.tx() as db:
-                self.store.fence(db, op['id'], worker.id, op['fence'])
-                state = 'outcome_unknown' if isinstance(error, OutcomeUnknown) else 'blocked'
-                db.execute('UPDATE visual_jobs SET state=? WHERE id=?', (state, job['id']))
-                db.execute("UPDATE operations SET state=?,complete=1,work_state='done',error=? WHERE id=?", (state, canonical(error.output()), op['id']))
-                self.store.event(db, op['id'], state, 'unknown' if state == 'outcome_unknown' else 'blocked', error.message)
+            self._terminal_error(worker, op, job, exc)
+            return True
+        except Exception:
+            if job['dispatched']:
+                self._defer_reconciliation(worker, op, job, 'imagegen_processing_unresolved')
+            else:
+                self._terminal_error(worker, op, job,
+                    DomainError('imagegen_processing_failed', 'Image generation failed before dispatch', 'contact_owner'))
             return True
