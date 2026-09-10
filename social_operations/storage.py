@@ -286,14 +286,16 @@ class Store:
                           "media_check": "not_applicable", "retry_safe": False}
                 result.update(json.loads(child["result"]))
                 if child['observed'] in ('cancelled', 'deleted'):
-                    # Older committed native snapshots retained their original
-                    # schedule. A terminal removal is not a pending queue receipt.
-                    for key in ('queue_ref','effective_at','requested_at','scheduling_owner','navigate_hint'):
+                    # Terminal removal: strip queue ownership metadata but
+                    # preserve effective_at as historical schedule evidence.
+                    for key in ('queue_ref', 'scheduling_owner', 'navigate_hint'):
                         result.pop(key, None)
-                elif result.get("requested_at") is None:
+                    result.pop('requested_at', None)
+                else:
                     # Legacy cancel receipts persisted an absent optional timestamp as
                     # null. Project it as absent without rewriting durable evidence.
-                    result.pop("requested_at", None)
+                    if result.get("requested_at") is None:
+                        result.pop("requested_at", None)
                 deliveries.append(result)
             state = op["state"]
             next_action = ("review_outcome" if state == "outcome_unknown" else "approve" if state == "needs_approval"

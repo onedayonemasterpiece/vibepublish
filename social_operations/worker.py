@@ -426,8 +426,10 @@ class Worker:
             item = self.app.project_item(db, actor, b, asdict(remote), publication=op['publication_id'])
             self.save_fact(db, plan['destination_id'], remote, actor.principal_id, op['publication_id'])
             result = {'item_ref': item['ref'], 'observed_at': remote.observed_at, 'media_check': remote.media_check}
+            if remote.scheduled_at:
+                result['effective_at'] = remote.scheduled_at
             if observation.observed == 'provider_scheduled' and remote.scheduled_at:
-                result.update(queue_ref=item['ref'], effective_at=remote.scheduled_at, requested_at=plan['scheduled_at'], scheduling_owner='provider',
+                result.update(queue_ref=item['ref'], requested_at=plan['scheduled_at'], scheduling_owner='provider',
                               navigate_hint='Open the authorized channel native scheduled queue')
             if action=='react':
                 result.update(reaction=plan['reaction'],reaction_mode=plan['reaction_mode'])
