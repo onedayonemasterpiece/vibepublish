@@ -11,10 +11,15 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from adapters.port import Asset, Hooks, NativeSource, Observation, ProviderRequest, ReadRequest, RemoteItem, UnavailableAdapter
-from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time
+from .domain import DomainError, OutcomeUnknown, ReconciliationPending, canonical, digest, new_id, parse_time
 from .service import Application
 
+# outcome_unknown is retained only so historical rows remain readable/terminal.
+# New dispatched uncertainty is represented by non-terminal reconciling.
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled'}
+MAX_PROVIDER_RECONCILIATIONS = 6
+PROVIDER_RECONCILIATION_DELAY = 5
+PROVIDER_RECONCILIATION_WINDOW = 120
 
 
 class Worker:
@@ -32,7 +37,6 @@ class Worker:
 
     @asynccontextmanager
     async def lane(self, connection):
-        # Cross-process AND cross-task lock; never release a lane while an effect is in flight.
         name = hashlib.sha256(connection.encode()).hexdigest()+'.lock'
         fd = os.open(self.lock_root/name, os.O_CREAT | os.O_RDWR, 0o600)
         try:
@@ -86,12 +90,12 @@ class Worker:
                 if pending_release:
                     raise DomainError('connection_finalization_pending', next_action='check_status')
                 if unresolved:
-                    raise DomainError('connection_outcome_unknown', next_action='review_outcome')
+                    raise DomainError('connection_reconciliation_required', next_action='check_status')
                 if attempt_id != child['id'] or plan_digest != child['plan_digest']:
                     raise DomainError('plan_mismatch')
                 changed = db.execute('UPDATE attempts SET dispatched=1,dispatch_at=?,state=\'running\',stage=\'submitting\' WHERE id=? AND dispatched=0', (self.store.clock(), attempt_id)).rowcount
                 if changed != 1:
-                    raise OutcomeUnknown('already_dispatched')
+                    raise ReconciliationPending('already_dispatched')
                 self.store.event(db, op['id'], 'submitting', 'started', 'Durable dispatch marker committed before external effect', child['alias'])
         return Hooks(emit, checkpoint, before_effect)
 
@@ -158,14 +162,12 @@ class Worker:
             outcomes = await asyncio.gather(*(preflight(c) for c in pending), return_exceptions=True)
             errors = [e for e in outcomes if isinstance(e, BaseException)]
             if errors and all(isinstance(e, DomainError) and e.code in {'emoji_fallback_required', 'rich_fallback_needs_review'} for e in errors) and all(json.loads(c['plan'])['mode'] == 'execute' for c in pending):
-                # Only explicit per-target rendering gates are independent; preserve existing global preflight policy for other failures.
                 for child, outcome in zip(pending, outcomes):
                     if isinstance(outcome, BaseException):
                         self.fail(op, child, outcome)
                 await asyncio.gather(*(self.run_child(op, c, actor, prepared.get(c['id'])) for c, outcome in zip(pending, outcomes) if not isinstance(outcome, BaseException)))
             elif errors:
                 error = errors[0] if isinstance(errors[0], DomainError) else DomainError('provider_preflight_failed', next_action='contact_owner')
-                # Already-attempted children must still be observed, not called "not attempted".
                 for child in pending:
                     if not child['dispatched']:
                         self.fail(op, child, error)
@@ -178,13 +180,12 @@ class Worker:
             await self.finalize_pending(op, actor)
             self.aggregate(op)
         except asyncio.CancelledError:
-            # A stopped worker leaves its durable claim for observation-only recovery.
             raise
         except DomainError as exc:
             if exc.code != 'stale_worker':
                 self.fail_operation(op, exc)
         except Exception:
-            self.fail_operation(op, DomainError('worker_failure', 'Worker failed; inspect the durable operation', 'review_outcome'))
+            self.fail_operation(op, DomainError('worker_failure', 'Worker failed; inspect the durable operation', 'contact_owner'))
         finally:
             pulse.cancel()
             await asyncio.gather(pulse, return_exceptions=True)
@@ -196,7 +197,6 @@ class Worker:
             hooks = self.hooks(op, child, prepared.capability.min_lead_seconds if prepared else 60)
             adapter = self.adapter(child['provider'], request.connection_id)
             async with self.lane(request.connection_id):
-                # A lease fence is NOT proof that an old remote request is gone.
                 with self.store.connection() as db:
                     self.store.fence(db, op['id'], self.id, op['fence'])
                     current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
@@ -244,7 +244,6 @@ class Worker:
         for child in children:
             request = self.request(op, child, actor)
             adapter = self.adapter(child['provider'], request.connection_id)
-            # Missing hook after restart is not evidence that quarantine was released.
             finalize = getattr(adapter, 'finalize', None)
             try:
                 async with self.lane(request.connection_id):
@@ -253,9 +252,6 @@ class Worker:
                         self.recovery_authority(db, op, child, actor)
                     if not callable(finalize):
                         raise DomainError('provider_finalize_unavailable')
-                    # The adapter may learn a native ID only during recovery;
-                    # do not overwrite the immutable pre-effect checkpoint to
-                    # carry it. Supply the already committed observation instead.
                     with self.store.connection() as db:
                         committed=db.execute('SELECT observation FROM attempt_recovery WHERE attempt_id=?',(child['id'],)).fetchone()[0]
                     final=canonical({**json.loads(child['checkpoint']),'committed_observation':json.loads(committed)})
@@ -316,8 +312,6 @@ class Worker:
                 (canonical(asdict(observation)),self.store.clock(),child['id']))
             final=canonical(dict(no_effect=asdict(proof),original_checkpoint=json.loads(original),core_recovery=hint))
             result=canonical(dict(compensation='intent_cancelled_without_effect',reason=proof.reason))
-            # Preserve historical dispatch=1. This intent is cancelled, never
-            # re-admitted as a never-dispatched retry or projected as a fake item.
             db.execute("UPDATE attempts SET state='cancelled',stage='finished',observed='not_attempted',result=?,checkpoint=? WHERE id=?",(result,final,child['id']))
             self.store.event(db,op['id'],'finished','completed','Original intent cancelled: trusted input guard proves no effect; no item fabricated',child['alias'])
 
@@ -327,7 +321,6 @@ class Worker:
         if not observation.items or observation.missing_checks:
             raise OutcomeUnknown('incomplete_readback')
         plan = json.loads(child['plan'])
-        # The first core slice has single logical remote items. Never silently drop album members.
         if len(observation.items) != 1:
             raise OutcomeUnknown('multi_item_mapping_not_enabled')
         remote = observation.items[0]
@@ -421,7 +414,6 @@ class Worker:
                 db.execute('UPDATE attempt_recovery SET observation=?,finalize_state=?,resolved=? WHERE attempt_id=?',
                            (canonical(asdict(observation)), 'pending' if needs_finalize else 'done', self.store.clock(), child['id']))
             b = db.execute('SELECT * FROM bindings WHERE id=?', (child['binding_id'],)).fetchone()
-            # Internal outcome persistence survives revocation; private receipt access still denies it.
             item = self.app.project_item(db, actor, b, asdict(remote), publication=op['publication_id'])
             self.save_fact(db, plan['destination_id'], remote, actor.principal_id, op['publication_id'])
             result = {'item_ref': item['ref'], 'observed_at': remote.observed_at, 'media_check': remote.media_check}
@@ -447,7 +439,6 @@ class Worker:
 
     @staticmethod
     def vk_copy_evidence(child, plan, remote, checkpoint):
-        """Persist only validated scalar copy evidence, never adapter URLs/secrets."""
         if plan['provider'] != 'vk':
             return None
         payload = json.loads(checkpoint)
@@ -495,16 +486,45 @@ class Worker:
     def fail(self, op, child, error):
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
-            row = db.execute('SELECT dispatched FROM attempts WHERE id=?', (child['id'],)).fetchone()
-            uncertain = bool(row['dispatched'])
-            state = 'outcome_unknown' if uncertain else 'blocked'
-            db.execute('UPDATE attempts SET state=?,stage=?,observed=? WHERE id=?', (state, state, 'unknown' if uncertain else 'not_attempted', child['id']))
-            if uncertain:
-                db.execute("UPDATE operations SET state='outcome_unknown' WHERE id=?", (op['id'],))
-            db.execute('UPDATE attempts SET result=? WHERE id=?', (canonical({'missing_checks': [error.code]}), child['id']))
-            final = OutcomeUnknown(error.code) if uncertain else error
-            db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(final.output()), op['id']))
-            self.store.event(db, op['id'], state, 'unknown' if uncertain else 'blocked', final.message, child['alias'])
+            row = db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone()
+            if not row['dispatched']:
+                final = error if isinstance(error, DomainError) else DomainError('provider_command_failed', next_action='contact_owner')
+                db.execute("UPDATE attempts SET state='blocked',stage='blocked',observed='not_attempted',result=? WHERE id=?",
+                           (canonical({'missing_checks': [final.code]}), child['id']))
+                db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(final.output()), op['id']))
+                self.store.event(db, op['id'], 'blocked', 'blocked', final.message, child['alias'])
+                return
+            db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,created) VALUES(?,?,?,?)',
+                       (child['id'], child['plan_digest'], row['checkpoint'], self.store.clock()))
+            recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
+            try:
+                hint = json.loads(recovery['hint'])
+                if not isinstance(hint, dict): hint = {}
+            except (TypeError, ValueError):
+                hint = {}
+            count = int(hint.get('recovery_observations', 0)) + 1
+            code = error.code if isinstance(error, DomainError) else 'provider_command_failed'
+            hint.update(operation_id=op['id'], attempt_id=child['id'], plan_digest=child['plan_digest'],
+                        recovery_observations=count, last_failure_code=code)
+            db.execute('UPDATE attempt_recovery SET hint=? WHERE attempt_id=?', (canonical(hint), child['id']))
+            exhausted = (count >= MAX_PROVIDER_RECONCILIATIONS
+                         or self.store.clock() - recovery['created'] >= PROVIDER_RECONCILIATION_WINDOW)
+            if exhausted:
+                final = DomainError('recovery_exhausted',
+                    'Provider effect could not be proven after bounded read-only reconciliation',
+                    'contact_owner', retry_safe=False)
+                db.execute("UPDATE attempts SET state='blocked',stage='blocked',observed='unknown',result=? WHERE id=?",
+                           (canonical({'missing_checks': [code, 'recovery_exhausted']}), child['id']))
+                db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(final.output()), op['id']))
+                self.store.event(db, op['id'], 'blocked', 'blocked', final.message, child['alias'])
+                return
+            final = ReconciliationPending(code)
+            db.execute("UPDATE attempts SET state='reconciling',stage='verifying',observed='unknown',result=? WHERE id=?",
+                       (canonical({'missing_checks': [code]}), child['id']))
+            db.execute("UPDATE operations SET state='reconciling',complete=0,work_state='working',lease_until=?,error=? WHERE id=?",
+                       (self.store.clock()+PROVIDER_RECONCILIATION_DELAY, canonical(final.output()), op['id']))
+            self.store.event(db, op['id'], 'verifying', 'started',
+                             'Read-only provider reconciliation deferred; external mutation will not be replayed', child['alias'])
 
     def fail_operation(self, op, error):
         with self.store.connection() as db:
@@ -519,7 +539,10 @@ class Worker:
             self.store.fence(db, op['id'], self.id, op['fence'])
             states = [r[0] for r in db.execute('SELECT state FROM attempts WHERE operation_id=?', (op['id'],))]
             if 'outcome_unknown' in states:
+                # Historical compatibility only; new Worker.fail never writes this state.
                 state = 'outcome_unknown'
+            elif 'reconciling' in states:
+                state = 'reconciling'
             elif any(s not in TERMINAL for s in states):
                 state = 'running'
             elif states and all(s == 'scheduled' for s in states):
@@ -534,13 +557,19 @@ class Worker:
             if pending_finalize:
                 state = 'running'
                 db.execute('UPDATE operations SET lease_until=? WHERE id=?', (self.store.clock()+30, op['id']))
-            complete = state != 'running'
-            db.execute('UPDATE operations SET state=?,complete=?,work_state=? WHERE id=?', (state, int(complete), 'done' if complete else 'working', op['id']))
+            complete = state not in ('running', 'reconciling')
+            if state == 'reconciling':
+                db.execute('UPDATE operations SET lease_until=? WHERE id=?',
+                           (self.store.clock()+PROVIDER_RECONCILIATION_DELAY, op['id']))
+            db.execute('UPDATE operations SET state=?,complete=?,work_state=? WHERE id=?',
+                       (state, int(complete), 'done' if complete else 'working', op['id']))
             if state in ('verified', 'scheduled', 'cancelled'):
                 db.execute('UPDATE operations SET error=NULL WHERE id=?', (op['id'],))
-            if error:
+            if error and state != 'reconciling':
                 db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(error.output()), op['id']))
-            self.store.event(db, op['id'], 'finished', 'completed', 'Automatic command work ended; future delivery remains provider-owned')
+            self.store.event(db, op['id'], 'finished', 'completed' if complete else 'started',
+                             'Automatic command work ended; future delivery remains provider-owned' if complete
+                             else 'Command remains in bounded read-only reconciliation')
 
     def preview(self, op, actor, children):
         token = secrets.token_urlsafe(32)
@@ -561,8 +590,6 @@ class Worker:
         query = args['query']
         request = ReadRequest(b['connection_id'], b['native_id'], query['kind'], args.get('limit', 25), args.get('_provider_cursor'),
                               args.get('_native_item'), args.get('_namespace'), query.get('text', ''))
-        # Browser reads include account verification, native history and exact
-        # media readback. Keep them bounded without applying the API-only 30s cap.
         budget = 90 if b['provider']=='max' and b['account_type']=='max_web' else 30
         budget = max(0.1, min(budget, op['deadline']-self.store.clock()))
         try:
