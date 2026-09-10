@@ -1,8 +1,33 @@
 # VibePublish Social Operations
 
+> Current remote delivery: **partial, not a runnable release**. The implemented
+> behavior and historical test counts below describe the complete archived source.
+> Three production modules remain undelivered; current evidence and exact boundaries
+> are in [runtime status](../../operations/social-runtime.md).
+
+Current bounded runtime contract/skill: **1.5.0-runtime**, eight tools unchanged.
+[Telegram custom emoji](telegram-custom-emoji-v1.md) now has private catalogs,
+numbered visual selection, frozen aliases/rules and semantic native entities.
+This is offline implementation, **Not confirmed by user**, not a live Telegram
+capability claim. Historical design versions below remain requirements context.
+
+> Offline core and native adapter snapshot: [runtime runbook](../../operations/social-runtime.md).
+> This is not complete provider implementation or deployment; canonical goals
+> below remain binding, including all retained capability and live-verification gates.
+
 Owner requirements: `Fixed`, including the follow-up correction of 2026-09-04.
 Engineering realization: selected design `1.1.0-design`, `Not confirmed by user`.
-Runtime implementation: `Not done`.
+Runtime implementation: core, native Telegram/VK subset and offline VisualService **Not confirmed by user**; remaining capabilities **Not done**.
+
+Contract 1.3 adds mutually exclusive native `item_ref` lifecycle commands (scoped
+remote-snapshot CAS) and read-ref forwarding; see the runtime runbook and
+[native provenance](../../reference/native-adapter-provenance.md). Native item
+management never grants access to another author's private draft or assets.
+
+Contract 1.4 implements the existing visual method and inline branch through one
+VisualService, selected-asset hashes, scoped binary resources and single parent
+continuation. It does not add a ninth method. Real executor, initial-preset human
+acceptance and live capabilities remain unverified; see [visuals](../social-visuals/README.md).
 
 ## Current source of truth
 
@@ -81,7 +106,7 @@ An active partner publisher normally receives six core methods, including `read`
 
 ## Reliability and related features
 
-Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. Preserve per-provider successes. Perform deterministic all-target preflight while publishing its stages; after dispatch, providers proceed independently. Record the dispatch boundary before side effects. Unknown outcomes are reconciled, never blindly retried. Media evidence distinguishes input hashes from provider-transcoded results.
+Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. Preserve per-provider successes. Perform deterministic all-target preflight while publishing its stages; after dispatch, providers proceed independently. Record the dispatch boundary before side effects. Unknown outcomes are reconciled, never blindly retried. The owner-authorized additive [original-terminal recovery contract](mcp-contract-v1.md#original-terminal-recovery-owner-max-completion-correction-2026-09-08) reopens the original operation for observation only and durably finalizes matching provider quarantine after resolution; successful siblings are preserved. Media evidence distinguishes input hashes from provider-transcoded results.
 
 [Social visuals](../social-visuals/README.md) preserves `$imagegen` through the requested `gpt-5.6-luna` route, candidate choice, deterministic exact typography and separate training consent. A pending visual is not yet a queued provider post; approval/selection after the native lead-time window blocks submission instead of sending immediately.
 
@@ -90,3 +115,10 @@ Keep request identity separate from the immutable execution plan; freeze concret
 ## Delivery status
 
 This is a design/contract correction, not provider implementation or deployment. New schemas, fixtures and tests describe the corrected contract. Native scheduling, MAX UI, progressive behavior in actual MCP clients, scoped runtime reads, database/history/statistics and imagegen still require the implementation/live gates in the design. No Codex task or live provider operation is authorized or performed by this correction batch.
+
+## VK copied-photo recovery delta
+
+See [ordered photo-ID binding](vk-media-binding.md) and
+[owner-only unknown resolution](unknown-resolution.md) for the narrow native
+postponed correction and immutable absence evidence. Live evidence is maintained
+in [DevCoveer acceptance](../../operations/devcoveer-acceptance-20260905.md).

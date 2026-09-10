@@ -1,0 +1,267 @@
+lse
+         await self.call('publication_update', self.args(receipt))
+@@ -136,7 +158,7 @@
+         self.assertEqual(other.count('reconcile'), 1)
+ 
+     async def test_release_failure_restart_and_connection_guard(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         self.provider.unknown, self.provider.release_failures = False, 1
+         await self.call('publication_update', self.args(receipt))
+         await self.worker.run_once()
+@@ -155,7 +177,7 @@
+         self.assertEqual(self.provider.count('finalize'), 2)
+ 
+     async def test_crash_after_release_before_ack_only_repeats_finalize(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         self.provider.unknown, self.provider.crash_after_release = False, True
+         await self.call('publication_update', self.args(receipt))
+         with self.assertRaises(asyncio.CancelledError):
+@@ -167,7 +189,7 @@
+         self.assertEqual(self.provider.count('finalize'), 2)
+ 
+     async def test_auth_epoch_scope_revision_and_hint_guards(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         args = self.args(receipt)
+         wrong = {**args, 'expected_revision': 2}
+         self.assertEqual((await self.call('publication_update', wrong))['error']['code'], 'revision_conflict')
+@@ -181,7 +203,7 @@
+         self.assertEqual(self.provider.count('effect'), 1)
+ 
+     async def test_revocation_after_admission_prevents_observation(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         await self.call('publication_update', self.args(receipt))
+         self.provider.unknown = False
+         self.store.revoke_binding(self.actor, self.binding)
+@@ -190,7 +212,7 @@
+         self.assertEqual(self.provider.count('finalize'), 0)
+ 
+     async def test_stale_worker_cannot_finalize_or_resolve(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         await self.call('publication_update', self.args(receipt))
+         old = self.store.claim('old')
+         self.now += 31
+@@ -203,7 +225,7 @@
+         self.assertEqual(self.provider.count('finalize'), 0)
+ 
+     async def test_crash_after_durable_resolution_before_release(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         self.provider.unknown = False
+         await self.call('publication_update', self.args(receipt))
+         class CrashAfterCommit(Worker):
+@@ -220,7 +242,7 @@
+         self.assertEqual(self.provider.count('finalize'), 1)
+ 
+     async def test_readback_revocation_rejects_resolution_and_release(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         await self.call('publication_update', self.args(receipt))
+         self.provider.unknown = False
+         original = self.provider.reconcile
+@@ -231,12 +253,12 @@
+         self.provider.reconcile = revoke_during_read
+         await self.worker.run_once()
+         with self.store.connection() as db:
+-            self.assertEqual(db.execute('SELECT state FROM attempts').fetchone()[0], 'outcome_unknown')
++            self.assertEqual(db.execute('SELECT state FROM attempts').fetchone()[0], 'reconciling')
+             self.assertIsNone(db.execute('SELECT observation FROM attempt_recovery').fetchone()[0])
+         self.assertEqual(self.provider.count('finalize'), 0)
+ 
+     async def test_version_three_database_migrates_without_changing_original(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         with self.store.tx() as db:
+             before = dict(db.execute('SELECT * FROM attempts').fetchone())
+             db.execute('DROP TRIGGER immutable_recovery_origin')
+@@ -252,15 +274,19 @@
+         self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'verified')
+ 
+     async def test_same_key_readmission_after_transient_unknown_is_observation_only(self):
+-        receipt = await self.stuck()
++        receipt = await self.legacy_stuck()
+         args = self.args(receipt)
+         await self.call('publication_update', args)
+         await self.worker.run_once()
+-        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
++        current = self.store.receipt(self.actor, receipt['operation_id'])
++        self.assertEqual(current['state'], 'reconciling')
+         self.provider.unknown = False
+         again = await self.call('publication_update', args)
+         self.assertEqual(again['operation_id'], receipt['operation_id'])
++        self.assertEqual(again['state'], 'reconciling')
+         self.assertFalse(again['operation_complete'])
++        self.assertFalse(await self.worker.run_once())  # lease deliberately keeps this read-only recovery bounded
++        self.now += 6
+         await self.worker.run_once()
+         self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'verified')
+         self.assertEqual(self.provider.count('effect'), 1)
+@@ -269,6 +295,51 @@
+             self.assertEqual(db.execute("SELECT count(*) FROM request_keys WHERE key='recover'").fetchone()[0], 1)
+ 
+ 
++    async def test_new_uncertainty_reconciles_automatically_without_effect_replay(self):
++        receipt = await self.stuck()
++        self.provider.unknown = False
++        self.now += 6
++        await self.worker.run_once()
++        result = self.store.receipt(self.actor, receipt['operation_id'])
++        self.assertEqual(result['state'], 'verified', result)
++        self.assertTrue(result['operation_complete'])
++        self.assertEqual(self.provider.count('execute'), 1)
++        self.assertEqual(self.provider.count('effect'), 1)
++        self.assertEqual(self.provider.count('reconcile'), 2)  # execute readback + one recovery observation
++        self.assertNotEqual(result['state'], 'outcome_unknown')
++
++    async def test_new_reconciliation_survives_worker_restart_without_effect_replay(self):
++        receipt = await self.stuck()
++        self.provider.unknown = False
++        self.now += 6
++        restarted = Worker(Store(self.store.path, clock=lambda: self.now), {'max': self.provider})
++        await restarted.run_once()
++        result = self.store.receipt(self.actor, receipt['operation_id'])
++        self.assertEqual(result['state'], 'verified', result)
++        self.assertEqual(self.provider.count('execute'), 1)
++        self.assertEqual(self.provider.count('effect'), 1)
++        self.assertEqual(self.provider.count('reconcile'), 2)  # execute readback + one recovery observation
++
++    async def test_new_reconciliation_is_bounded_and_never_replays_effect(self):
++        receipt = await self.stuck()
++        for _ in range(10):
++            current = self.store.receipt(self.actor, receipt['operation_id'])
++            if current['operation_complete']:
++                break
++            self.now += 6
++            await self.worker.run_once()
++        result = self.store.receipt(self.actor, receipt['operation_id'])
++        self.assertEqual(result['state'], 'blocked', result)
++        self.assertTrue(result['operation_complete'])
++        self.assertEqual(result['error']['code'], 'recovery_exhausted')
++        self.assertFalse(result['retry_safe'])
++        self.assertEqual(result['next_action'], 'contact_owner')
++        self.assertEqual(self.provider.count('execute'), 1)
++        self.assertEqual(self.provider.count('effect'), 1)
++        self.assertEqual(self.provider.count('reconcile'), 6)  # initial readback + five bounded recovery reads
++        self.assertNotEqual(result['state'], 'outcome_unknown')
++
++
+ class NoInputProvider(RecoveringProvider):
+     invalid_proof = None
+     async def execute(self,prepared,hooks):
+@@ -305,6 +376,7 @@
+ class NoInputRecoveryTests(unittest.IsolatedAsyncioTestCase):
+     call=RecoveryTests.call
+     stuck=RecoveryTests.stuck
++    legacy_stuck=RecoveryTests.legacy_stuck
+     args=RecoveryTests.args
+     # Reuse setup/helpers, not unrelated inherited effect-based acceptance cases.
+     def setUp(self):
+@@ -314,7 +386,7 @@
+         self.worker=Worker(self.store,{'max':self.provider})
+ 
+     async def test_no_input_cancels_intent_without_fake_item_or_dispatch_reset(self):
+-        receipt=await self.stuck()
++        receipt=await self.legacy_stuck()
+         await self.call('publication_update',self.args(receipt))
+         await self.worker.run_once()
+         result=self.store.receipt(self.actor,receipt['operation_id'])
+@@ -328,23 +400,40 @@
+ 
+ 
+     async def test_invalid_no_effect_proof_never_releases_uncertainty(self):
+-        for kind in ('checkpoint','absence','click'):
+-            with self.subTest(kind=kind):
+-                self.provider.invalid_proof=kind
+-                receipt=await self.call('publish',{'to':['max'],'content':{'text':'Guard '+kind}})
+-                await self.worker.run_once()
+-                self.assertEqual(self.store.receipt(self.actor,receipt['operation_id'])['state'],'outcome_unknown')
+-                await self.call('publication_update',dict(self.args(receipt),request_key='reject-'+kind))
+-                await self.worker.run_once()
+-                self.assertEqual(self.store.receipt(self.actor,receipt['operation_id'])['state'],'outcome_unknown')
+-                # Resolve this original test guard before admitting the next
+-                # independent case; never manually reset connection quarantine.
+-                self.provider.invalid_proof=None
+-                await self.call('publication_update',dict(self.args(receipt),request_key='resolve-'+kind))
+-                await self.worker.run_once()
++        for kind in ('checkpoint', 'absence', 'click'):
++            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temp:
++                root = Path(temp)
++                now = [1800000000.0]
++                store = Store(root/'ledger.sqlite', clock=lambda: now[0])
++                token = store.create_principal('t', 'owner', owner=True)
++                actor = store.authenticate(token)
++                store.add_connection(actor, 'max', 'max', account_type='fake')
++                store.bind(actor, 'owner', 'max', 'max', 'target')
++                provider = NoInputProvider(root/'no-input.sqlite', 'max', clock=lambda: now[0])
++                provider.core = store
++                app = Application(store)
++                worker = Worker(store, {'max': provider})
++                provider.invalid_proof = kind
++                receipt = await app.call(actor, 'vibepublish_publish', {'to':['max'], 'content':{'text':'Guard '+kind}})
++                await worker.run_once()
++                first = store.receipt(actor, receipt['operation_id'])
++                self.assertEqual(first['state'], 'reconciling')
++                for _ in range(8):
++                    current = store.receipt(actor, receipt['operation_id'])
++                    if current['operation_complete']:
++                        break
++                    now[0] += 6
++                    await worker.run_once()
++                result = store.receipt(actor, receipt['operation_id'])
++                self.assertEqual(result['state'], 'blocked')
++                self.assertEqual(result['error']['code'], 'recovery_exhausted')
++                self.assertFalse(result['retry_safe'])
++                self.assertEqual(provider.count('effect'), 0)
++                self.assertEqual(provider.count('finalize'), 0)
++                self.assertNotEqual(result['state'], 'outcome_unknown')
+ 
+     async def test_no_effect_release_is_durable_across_worker_restart(self):
+-        receipt=await self.stuck()
++        receipt=await self.legacy_stuck()
+         self.provider.release_failures=1
+         await self.call('publication_update',self.args(receipt))
+         await self.worker.run_once()
+--- a/tests/runtime/test_safe_retry.py
++++ b/tests/runtime/test_safe_retry.py
+@@ -76,7 +76,7 @@
+         self.assertEqual((await self.call('publication_update', self.retry_args(edit)))['state'], 'verified')
+         self.assertFalse(await self.worker.run_once())
+ 
+-    async def test_same_key_can_retry_another_predispatch_failure_but_never_unknown(self):
++    async def test_same_key_can_retry_predispatch_failure_but_never_replays_uncertain_effect(self):
+         edit = await self.blocked_edit()
+         args = self.retry_args(edit)
+         await self.call('publication_update', args)
+@@ -86,8 +86,16 @@
+         await self.call('publication_update', args)
+         await self.worker.run_once()
+         result = await self.call('publication_update', args)
+-        self.assertEqual(result['error']['code'], 'retry_not_proven_safe')
+-        self.assertEqual(self.provider.count('effect'), 2)
++        self.assertEqual(result['state'], 'reconciling')
++        self.assertEqual(result['next_action'], 'check_status')
++        self.assertFalse(result['retry_safe'])
++        self.assertEqual(result['error']['code'], 'receipt_lost')
++        effects = self.provider.count('effect')
++        executes = self.provider.count('execute')
++        self.assertEqual(effects, 2)
++        self.assertFalse(await self.worker.run_once())
++        self.assertEqual(self.provider.count('effect'), effects)
++        self.assertEqual(self.provider.count('execute'), executes)
+ 
+     async def test_expired_immediate_deadline_refreshes_but_frozen_native_time_does_not(self):
+         edit = await self.blocked_edit()
+--- a/tests/runtime/test_service.py
++++ b/tests/runtime/test_service.py
+@@ -353,11 +353,11 @@
+     async def test_crash_after_effect_observes_without_second_execute(self):
+         await self.crash_case('after_effect',83,'verified',1)
+ 
+-    async def test_crash_after_marker_is_unknown_and_quarantines_connection(self):
+-        await self.crash_case('after_marker',82,'outcome_unknown',0)
++    async def test_crash_after_marker_enters_reconciliation_and_blocks_new_effect(self):
++    
