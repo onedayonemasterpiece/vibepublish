@@ -6,6 +6,7 @@ are resolved. There are no EventsBot, file-path, URL or other-session fallbacks.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -121,8 +122,9 @@ async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk
             yield adapters
     except DomainError:
         raise
-    except Exception:
-        raise DomainError('native_connection_failed', next_action='reauthorize') from None
+    except Exception as exc:
+        logging.getLogger(__name__).warning('native_adapter_setup_failed: %s: %s', type(exc).__name__, exc, exc_info=True)
+        raise DomainError('native_connection_failed', next_action='reauthorize') from exc
     finally:
         for client in reversed(clients):
             try:

@@ -2,12 +2,14 @@
 
 Reads only the explicitly supplied dedicated session key. No old-session fallback.
 No provider write is performed by discovery; core Worker owns every effect.
+Supports MAX Web via VIBEPUBLISH_MAX_PROFILE environment variable.
 """
 from __future__ import annotations
 import argparse
 import asyncio
 import base64
 import json
+import os
 from pathlib import Path
 from dotenv import dotenv_values
 from telethon import TelegramClient, functions, utils
@@ -100,6 +102,10 @@ async def run(db: Path, env_file: Path, once=False, vk_env_file: Path | None = N
     bundles = {TG_REFERENCE: json.dumps(credentials(env_file))}
     if vk_env_file is not None:
         bundles[VK_REFERENCE] = json.dumps(vk_credentials(vk_env_file))
+    # Pass MAX profile config if present in environment (for adapters.max.live_session.configured_adapter).
+    max_profile = os.environ.get('VIBEPUBLISH_MAX_PROFILE')
+    if max_profile:
+        bundles['VIBEPUBLISH_MAX_PROFILE'] = max_profile
     async with native_adapters(store, env=bundles, telegram_factory=telegram_factory) as wiring:
         for key, adapter in list(wiring.items()):
             if isinstance(adapter, VKAdapter):
