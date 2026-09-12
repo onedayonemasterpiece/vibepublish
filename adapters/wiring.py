@@ -9,7 +9,8 @@ import json
 import os
 import re
 from contextlib import AsyncExitStack, asynccontextmanager
-from .telegram import TelegramAdapter, TelethonTypes
+from .telegram import TelethonTypes
+from .telegram_resilient import ResilientTelegramAdapter
 from .vk import VKAdapter
 from .vk_transport import VKHTTPTransport, VKToken
 from social_operations.domain import DomainError
@@ -69,6 +70,15 @@ async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk
     clients, adapters = [], {}
     with store.connection() as db:
         connections = [dict(row) for row in db.execute('SELECT * FROM connections WHERE active=1')]
+        telegram_targets = {
+            connection['id']: tuple(row['native_id'] for row in db.execute(
+                'SELECT DISTINCT d.native_id FROM bindings b '
+                'JOIN destinations d ON d.id=b.destination_id '
+                'WHERE b.active=1 AND d.connection_id=? ORDER BY d.native_id',
+                (connection['id'],),
+            ))
+            for connection in connections if connection['provider'] == 'telegram'
+        }
     try:
         async with AsyncExitStack() as resources:
             for connection in connections:
@@ -110,7 +120,10 @@ async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk
                     if not await client.is_user_authorized():
                         # Do not call start(), send_code_request(), bot login or interactive auth.
                         raise DomainError('telegram_session_needs_auth', next_action='reauthorize')
-                    adapters[connection['id']] = TelegramAdapter(client, connection_id=connection['id'], account_type=account, tl=compiler, clock=store.clock)
+                    adapters[connection['id']] = ResilientTelegramAdapter(
+                        client, connection_id=connection['id'], account_type=account,
+                        tl=compiler, clock=store.clock,
+                        bound_targets=telegram_targets.get(connection['id'], ()))
                 elif connection['provider'] == 'vk' and account in {'vk_user', 'vk_group'}:
                     tokens = vk_credentials(bundle)
                     if 'vk_' + tokens['editor'].kind != account:
