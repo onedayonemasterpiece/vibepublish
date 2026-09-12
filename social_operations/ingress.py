@@ -1,9 +1,10 @@
-"""Bounded public-HTTPS image ingress and owner direct Telegram thread routing.
+"""Bounded public-HTTPS image ingress and owner direct Telegram link routing.
 
 Public image URLs are imported into private assets before normal admission.
-For the owner only, an exact Telegram /c/... topic link may also select a chat
-visible to the configured Telegram account without a pre-created destination
-binding. The resulting internal route is still verified by provider preflight.
+For the owner only, an exact Telegram message/topic permalink may select any
+chat visible to the configured Telegram account without a pre-created
+VibePublish destination binding. Provider preflight still proves the actual
+account access before any external effect.
 """
 from __future__ import annotations
 
@@ -28,7 +29,12 @@ _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp"}
 _REDIRECTS = {301, 302, 303, 307, 308}
 _DIRECT_ALIAS_PREFIX = "vp_direct_tg_"
 _DIRECT_RIGHTS = ("publish", "edit", "reschedule", "cancel", "delete", "forward")
-_DIRECT_THREAD_PATTERN = r"^https://t\.me/c/[1-9][0-9]*/[1-9][0-9]*/?$"
+# Syntax is deliberately a little wider than parse_source(): the parser remains
+# the authoritative allowlist for query keys and canonicalization.
+_DIRECT_THREAD_PATTERN = (
+    r"^https://t\.me/(?:c/[1-9][0-9]*/[1-9][0-9]*|"
+    r"(?:s/)?[A-Za-z][A-Za-z0-9_]{3,31}/[1-9][0-9]*)(?:\?[^#]{1,512})?/?$"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +188,19 @@ async def fetch_public_image(url: str) -> PublicImage:
     raise DomainError("image_url_redirect_invalid")
 
 
+def _widen_owner_telegram_links(value):
+    """Widen only the authenticated owner's projected MCP schema."""
+    if isinstance(value, list):
+        for item in value:
+            _widen_owner_telegram_links(item)
+    elif isinstance(value, dict):
+        pattern = value.get("pattern")
+        if isinstance(pattern, str) and pattern.startswith(r"^https://t\.me/c/"):
+            value["pattern"] = _DIRECT_THREAD_PATTERN
+        for item in value.values():
+            _widen_owner_telegram_links(item)
+
+
 class IngressApplication(Application):
     """Application facade for safe public media and owner direct Telegram links."""
 
@@ -198,6 +217,7 @@ class IngressApplication(Application):
     def tools(self, actor):
         tools = super().tools(actor)
         if actor.owner:
+            _widen_owner_telegram_links(tools)
             for tool in tools:
                 if tool["name"] != "vibepublish_publish":
                     continue
@@ -218,7 +238,7 @@ class IngressApplication(Application):
 
     def _owner_thread_alias(self, actor, ref: str, requested_to=()) -> str:
         source = parse_source(ref)
-        if source.provider != "telegram" or source.public_candidate:
+        if source.provider != "telegram":
             raise DomainError("telegram_thread_reference_required")
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
@@ -291,7 +311,13 @@ class IngressApplication(Application):
             if not destination:
                 db.execute(
                     "INSERT INTO destinations VALUES(?,?,?,?,?)",
-                    (destination_id, connection_id, source.channel, "", "Telegram direct target"),
+                    (
+                        destination_id,
+                        connection_id,
+                        source.channel,
+                        source.channel if source.public_candidate else "",
+                        "Telegram direct target",
+                    ),
                 )
 
             alias = _DIRECT_ALIAS_PREFIX + hashlib.sha256(
@@ -314,6 +340,26 @@ class IngressApplication(Application):
                 )
             return alias
 
+    def _telegram_thread(self, db, actor, ref):
+        """Owner-direct public links are routes; they never grant partner access."""
+        if ref.startswith("https://"):
+            source = parse_source(ref)
+            if source.provider != "telegram":
+                raise DomainError("telegram_thread_reference_required")
+            matches = [
+                dict(row) for row in self.store.bindings(db, actor)
+                if row["provider"] == "telegram"
+                and source.channel in (row["native_id"], row["handle"])
+            ]
+            if len(matches) != 1:
+                raise DomainError(
+                    "access_denied",
+                    "The Telegram group is not bound for this principal",
+                    "contact_owner",
+                )
+            return matches[0], source.item
+        return super()._telegram_thread(db, actor, ref)
+
     def _rewrite_direct_thread(self, actor, name: str, arguments: dict) -> dict:
         result = json.loads(canonical(arguments))
         if not actor.owner:
@@ -327,7 +373,11 @@ class IngressApplication(Application):
             result["to"] = [alias]
         elif name == "vibepublish_read":
             query = result.get("query", {})
-            if query.get("kind") == "thread" and isinstance(query.get("item_ref"), str) and query["item_ref"].startswith("https://"):
+            if (
+                query.get("kind") == "thread"
+                and isinstance(query.get("item_ref"), str)
+                and query["item_ref"].startswith("https://")
+            ):
                 self._owner_thread_alias(actor, query["item_ref"])
         return result
 
