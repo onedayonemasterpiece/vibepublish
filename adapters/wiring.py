@@ -10,7 +10,7 @@ import os
 import re
 from contextlib import AsyncExitStack, asynccontextmanager
 from .telegram import TelethonTypes
-from .telegram_resilient import ResilientTelegramAdapter
+from .telegram_direct import DirectTargetTelegramAdapter
 from .vk import VKAdapter
 from .vk_transport import VKHTTPTransport, VKToken
 from social_operations.domain import DomainError
@@ -120,7 +120,7 @@ async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk
                     if not await client.is_user_authorized():
                         # Do not call start(), send_code_request(), bot login or interactive auth.
                         raise DomainError('telegram_session_needs_auth', next_action='reauthorize')
-                    adapters[connection['id']] = ResilientTelegramAdapter(
+                    adapters[connection['id']] = DirectTargetTelegramAdapter(
                         client, connection_id=connection['id'], account_type=account,
                         tl=compiler, clock=store.clock,
                         bound_targets=telegram_targets.get(connection['id'], ()))
