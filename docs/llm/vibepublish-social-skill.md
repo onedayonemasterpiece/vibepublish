@@ -66,6 +66,9 @@ For an explicitly authorized **execute publication**, visual selection defaults 
 
 An explicit execute request includes authority for automatic visual selection, including immediate delivery; explicit human selection remains an override. Standalone visual creation never publishes. `mode: preview` remains preview, with separate approval. Explicit media follow the selected visual; generation references are not automatically attached. Default candidate budget remains two (maximum four), including requested format derivatives; training is not part of tuning.
 
+For Telegram forum topics, `thread_ref` is an exact scoped topic reference, not a destination grant. An internal `https://t.me/c/<chat>/<topic-root>` URL is accepted only when its group already matches one active Telegram binding for the caller. To send an image as a Telegram file rather than a compressed photo, use media `role=document`; image/png, image/jpeg and image/webp are supported. `read` with query.kind=thread uses that same scoped URL or an authorized item ref, isolates the exact topic, and may return `media_evidence[].resource_uri` such as `vibepublish://assets/<id>` for private vision/readback.
+
+
 ### Current visual runtime boundary
 
 The shared service has prompt-first contracts and automatic continuation for explicit execute, both now and scheduled. The ordinary Codex-task executor uses owner Codex access, with no separate API fallback. Check actual runtime evidence before claiming readiness. Generation has a frozen10-minute window; this does not extend an expired native publication time. Do not claim that an accepted visual request generated or queued anything. Real generated candidates remain quality-reviewable in the provider queue; automatic placement is permission to skip intermediate selection, not proof of artistic quality.
@@ -88,10 +91,22 @@ Identifiers here are fixtures; use real server-returned values in production.
 {"to":["pka"],"content":{"text":"Открытие сезона — 6 сентября в 12:00."},"media":[{"source":{"kind":"asset","id":"asset_1"}}],"delivery":{"kind":"at","at":"2026-09-06T12:00:00+02:00"}}
 ```
 
+### `vibepublish_publish` — Telegram forum topic with image file
+
+```json
+{"to":["pka_tg"],"thread_ref":"https://t.me/c/4379835477/3","content":{"text":"Материал для медиабанка"},"media":[{"source":{"kind":"asset","id":"asset_1"},"role":"document"}]}
+```
+
 ### `vibepublish_status`
 
 ```json
 {"ids":["op_1"],"after_event":"event_cursor_3","wait_seconds":10}
+```
+
+### `vibepublish_read` — exact Telegram forum topic
+
+```json
+{"query":{"kind":"thread","item_ref":"https://t.me/c/4379835477/3"},"limit":25}
 ```
 
 ### `vibepublish_read` — actual native queue

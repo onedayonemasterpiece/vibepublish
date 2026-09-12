@@ -122,3 +122,39 @@ See [ordered photo-ID binding](vk-media-binding.md) and
 [owner-only unknown resolution](unknown-resolution.md) for the narrow native
 postponed correction and immutable absence evidence. Live evidence is maintained
 in [DevCoveer acceptance](../../operations/devcoveer-acceptance-20260905.md).
+
+## Telegram P0 acceptance integration — 2026-09-12
+
+Status: `Not confirmed by user` for local implementation/tests; deployment and
+live target acceptance `Not done`. Source is exactly
+`cee52feb875ca0e7d6a64c00056bd3e9abb8974e` on
+`work/vibepublish-core-20260904`; its no-file verification commit follows
+`25d720712b8301163262f91cbbd6d2d48cebf8b1`, the eleven-file Telegram transport delta.
+The common ancestor with the acceptance checkout is
+`87be8fcfca1229c419a5e0e47a8d68dacff5ea1f`.
+
+- Exact forum-topic reads and writes require an already active peer binding;
+  `thread_ref` selects a topic but never grants a destination. Acceptance basic
+  Chat creator-only restrictions remain separate from megagroup native rights.
+- Text, PHOTO and DOCUMENT have native send/readback implementations. DOCUMENT
+  here means an image sent as a file (PNG/JPEG/WebP), not arbitrary PDF/binary
+  transport. Non-image documents remain metadata-only on read.
+- Authorized photo/image-document reads download provider bytes into private
+  verified assets, exposed through `vibepublish://assets/<id>` and the existing
+  `vibepublish://assets/{asset_id}` MCP template. Provider-byte evidence hashes
+  need not equal the sanitized PNG derivative hash returned by the resource.
+- Durable native-response checkpoints support observation-only recovery after
+  worker restart. Lost responses without native IDs remain outcome-unknown;
+  they are not guessed from text/time or resent. Offline restart regressions
+  cover text, photo and document with one provider effect and keyed replay.
+- Acceptance OAuth/HTTPS/server/worker glue, MAX integration and prompt-first
+  visual semantics are preserved. No historical Imagegen repair is included.
+
+Existing configuration's `street-story-runtime.conf` server drop-in specifies
+18766, overriding the base unit's 18765. No port edit is required. Deployment
+must still follow worker-stop, server-stop, server-start, verified loopback
+listen, worker-start; no live acceptance claim follows from local tests.
+Worker SQLite startup remains `Not done`; see
+[the bounded incident record](../../reports/incidents/INC-2026-09-12-acceptance-sqlite-io.md).
+Current bounded execution evidence is in
+[the runtime record](../../operations/social-runtime.md#telegram-p0-stage-b-g-local-integration--2026-09-12).

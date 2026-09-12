@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Telegram P0 acceptance integration — 2026-09-12
+
+- Semantically integrate exact source `cee52feb` / transport `25d7207`: bound
+  forum-topic text/photo/image-document transport, private download assets and
+  observation-only recovery; preserve acceptance OAuth/HTTPS, MAX and basic-chat
+  safety policy. No source-branch correction or Imagegen work.
+- Add real SQLite checkpoint/worker-restart regressions for text/photo/document;
+  align the acceptance megagroup test with native permission preflight.
+- Record existing 18766 drop-in, passing external MCP/private-resource checks,
+  blocked host deployment, unresolved worker SQLite I/O incident and absent
+  pre-existing target binding. Local tests are not live acceptance.
+
 ### Core+MAX convergence — 2026-09-10
 
 - Merge accepted core `87be8fc` into acceptance runtime: unified finish paths,

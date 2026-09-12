@@ -101,13 +101,19 @@ async def test_creator_cannot_publish_after_leaving_or_removal(flag):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('kind', ['ChatEmpty', 'ChatForbidden', 'Channel'])
-async def test_chat_placeholders_and_megagroup_creators_stay_gated(kind):
-    entity = (obj(kind, id=CHAT_ID, creator=True) if kind != 'Channel'
-              else obj('Channel', id=CHAT_ID, broadcast=False, megagroup=True, creator=True))
+@pytest.mark.parametrize('kind', ['ChatEmpty', 'ChatForbidden'])
+async def test_chat_placeholders_stay_gated(kind):
+    adapter, client, _ = setup(obj(kind, id=CHAT_ID, creator=True))
+    assert (await adapter.inspect(publish())).reason == 'telegram_group_mutations_needs_review'
+    assert client.effects == 0
+
+
+@pytest.mark.asyncio
+async def test_megagroup_uses_native_permissions_not_basic_chat_creator_gate():
+    entity = obj('Channel', id=CHAT_ID, broadcast=False, megagroup=True, creator=True)
     adapter, client, _ = setup(entity)
-    r = publish() if kind != 'Channel' else publish_target_channel()
-    assert (await adapter.inspect(r)).reason == 'telegram_group_mutations_needs_review'
+    assert (await adapter.inspect(publish_target_channel())).status == 'supported'
+    assert any(name == 'get_permissions' for name, _ in client.calls)
     assert client.effects == 0
 
 

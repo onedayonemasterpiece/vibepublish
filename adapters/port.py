@@ -55,6 +55,27 @@ def downloaded_media(values):
 
 
 @dataclass(frozen=True, slots=True)
+class MediaDownload:
+    """Ephemeral provider bytes returned only to the trusted read worker."""
+    item_native_id: str
+    slot: int
+    provider_ref: str
+    media_kind: str
+    mime: str
+    data: bytes = field(repr=False)
+
+    def __post_init__(self):
+        if (not isinstance(self.item_native_id, str) or not self.item_native_id
+                or type(self.slot) is not int or not 0 <= self.slot < 10
+                or self.media_kind not in {'photo', 'document'}
+                or not isinstance(self.provider_ref, str)
+                or not self.provider_ref.startswith(self.media_kind + ':')
+                or self.mime not in {'image/png', 'image/jpeg', 'image/webp'}
+                or not isinstance(self.data, bytes) or not 0 < len(self.data) <= 20*1024*1024):
+            raise DomainError('download_media_payload_invalid')
+
+
+@dataclass(frozen=True, slots=True)
 class RemoteItem:
     native_id: str = field(repr=False)
     namespace: str
@@ -115,6 +136,7 @@ class ProviderRequest:
     subject: RemoteItem | None = None
     reaction: str | None = None
     reaction_mode: str | None = None
+    topic_root_id: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,12 +204,14 @@ class ReadRequest:
     native_item: str | None = field(default=None, repr=False)
     namespace: str | None = None
     text: str = ""
+    topic_root_id: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
 class ReadPage:
     items: tuple[RemoteItem, ...]
     cursor: str | None = None
+    downloads: tuple[MediaDownload, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

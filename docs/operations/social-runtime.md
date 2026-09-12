@@ -192,3 +192,59 @@ an operation's deadline), matching mutation/recovery's existing upper bound.
 The live exact-own-reaction read reproduced the old 30-second cutoff. API/fake
 provider reads retain 30 seconds. Expiry reports `provider_read_deadline` with
 refresh, not a generic worker failure, and authorizes no mutation or resend.
+
+## Telegram P0 Stage B–G local integration — 2026-09-12
+
+Status: `Not confirmed by user`; **local integration, not deployed completion**.
+The exact remote source `cee52feb875ca0e7d6a64c00056bd3e9abb8974e` was verified
+by `git ls-remote` and fetched into a temporary inspection repository under
+`artifacts/telegram-p0-stage-b/`. Normal acceptance fetch failed because the
+linked checkout's actual Git metadata is outside the permitted writable roots:
+`/home/dev/projects/vibepublish/.git/worktrees/vibepublish-acceptance-20260905`.
+The acceptance checkout remains on `converge/core-max-integration-20260910`,
+HEAD `83ffabc2a4d90bf801efb6b30c529ebacfa6e478`, with scoped uncommitted integration.
+No source correction was needed; source branch/PR #1 were not changed or pushed.
+
+Semantic integration uses the eleven-file `25d7207` delta from common ancestor
+`87be8fc`. Three-way resolution preserves the acceptance basic-chat gate and
+prompt-first visual documentation. The former provider test that blanket-denied
+megagroups now checks native permissions; ChatEmpty/ChatForbidden remain denied.
+Additional acceptance tests cancel a worker after its durable response checkpoint,
+reopen the SQLite fixture, replace the worker/adapter and verify single-effect
+recovery for text/photo/document plus keyed replay.
+
+Existing venv only: `.venv/bin/python`, Python 3.12.3. No dependency installation,
+upgrade or venv recreation. Preflight's CairoSVG import issue, missing pip and
+regex lock drift did not block the requested suites and were not repaired.
+Initial providers: 169 passed, 1 stale expectation failed. Updated providers:
+170 passed. Initial required contracts/runtime/sdk/verification group: 206 passed,
+202 subtests passed, 2 warnings. Targeted topics/media/restart: 15 passed.
+Final required group rerun: 209 passed, 202 subtests passed, 2 warnings. All
+final requested runs have zero failures and zero skips.
+No real Telegram calls were made by these tests.
+
+The base unit's 18765 is overridden by existing `street-story-runtime.conf` to
+18766. `ss` subsequently observed LISTEN `127.0.0.1:18766` (PID not exposed).
+The authorized first deployment operation, stopping the existing worker, failed:
+`Failed to connect to bus: No data available`. The sequence was not continued out
+of order. ActiveState/SubState/MainPID/NRestarts and actual process ownership
+remain unavailable. No alternate service/runtime or host-control mechanism was
+created; no existing approved project control wrapper was found.
+
+Existing public HTTPS endpoint checks succeeded with TLS verification enabled:
+anonymous MCP 401; both OAuth discovery documents 200; authenticated initialize
+200 and initialized notification 202; exactly the eight expected tools; readable
+nonempty skill; private asset template listed. An existing owner's private asset
+was read through MCP (200, 247 bytes, exact stored SHA-256/MIME match). Credentials
+were consumed in memory from the existing owner-token store and never printed.
+These prove the existing public endpoint, NOT activation of this local integration.
+A follow-up public tools-schema check confirms `publish.thread_ref` is absent: the
+new Telegram P0 contract is not active on that endpoint. Deployed SHA is not exposed.
+
+The second read-only ledger inspection still found zero Telegram destinations
+matching peer -1004379835477. Binding scope is peer-level, without a topic column.
+Because deployment was blocked this is not an authoritative post-deployment gate;
+no target reads/sends, grants or binding changes were attempted. Topic 3 live
+acceptance remains blocked by missing pre-existing binding and deployment access.
+Runtime databases were not checkpointed/mutated: service stop was not established.
+No unrelated cleanup, Imagegen work, Fly action or new runtime was performed.
