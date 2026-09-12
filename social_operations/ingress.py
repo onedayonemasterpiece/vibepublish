@@ -198,14 +198,24 @@ class IngressApplication(Application):
         clean_sha = hashlib.sha256(verified.data).hexdigest()
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
-            existing = db.execute(
-                "SELECT id FROM assets WHERE tenant_id=? AND principal_id=? "
-                "AND sha256=? AND source_sha256=? AND mime='image/png' LIMIT 1",
-                (actor.tenant_id, actor.principal_id, clean_sha, source_sha),
-            ).fetchone()
+            def canonical_asset():
+                return db.execute(
+                    "SELECT id FROM assets WHERE tenant_id=? AND principal_id=? "
+                    "AND sha256=? AND source_sha256=? AND mime='image/png' AND bytes=? "
+                    "ORDER BY id LIMIT 1",
+                    (actor.tenant_id, actor.principal_id, clean_sha, source_sha, verified.data),
+                ).fetchone()
+            existing = canonical_asset()
             if existing:
                 return existing["id"]
-            return insert_verified_image(self.store, db, actor, verified)
+            insert_verified_image(self.store, db, actor, verified)
+            # If source bytes are already the canonical metadata-free PNG, the
+            # immutable source row and derivative may be byte-identical. Always
+            # select the same canonical row so retries keep one request digest.
+            inserted = canonical_asset()
+            if not inserted:
+                raise DomainError("asset_integrity", next_action="contact_owner")
+            return inserted["id"]
 
     async def _rewrite_publish(self, actor, arguments: dict) -> dict:
         result = json.loads(canonical(arguments))
