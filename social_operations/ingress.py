@@ -1,10 +1,10 @@
 """Bounded public-HTTPS image ingress and owner direct Telegram link routing.
 
 Public image URLs are imported into private assets before normal admission.
-For the owner only, an exact Telegram message/topic permalink may select any
-chat visible to the configured Telegram account without a pre-created
-VibePublish destination binding. Provider preflight still proves the actual
-account access before any external effect.
+For the owner only, a Telegram chat/message/topic link may select any chat
+visible to the configured Telegram account without a pre-created VibePublish
+destination binding. Provider preflight still proves the actual account access
+before any external effect.
 """
 from __future__ import annotations
 
@@ -12,9 +12,10 @@ import asyncio
 import hashlib
 import ipaddress
 import json
+import re
 import socket
 from dataclasses import dataclass
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 import aiohttp
 from aiohttp.abc import AbstractResolver
@@ -29,12 +30,12 @@ _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp"}
 _REDIRECTS = {301, 302, 303, 307, 308}
 _DIRECT_ALIAS_PREFIX = "vp_direct_tg_"
 _DIRECT_RIGHTS = ("publish", "edit", "reschedule", "cancel", "delete", "forward")
-# Syntax is deliberately a little wider than parse_source(): the parser remains
-# the authoritative allowlist for query keys and canonicalization.
 _DIRECT_THREAD_PATTERN = (
-    r"^https://t\.me/(?:c/[1-9][0-9]*/[1-9][0-9]*|"
-    r"(?:s/)?[A-Za-z][A-Za-z0-9_]{3,31}/[1-9][0-9]*)(?:\?[^#]{1,512})?/?$"
+    r"^https://t\.me/(?:c/[1-9][0-9]*(?:/[1-9][0-9]*)?|"
+    r"(?:s/)?[A-Za-z][A-Za-z0-9_]{3,31}(?:/[1-9][0-9]*)?)/?"
+    r"(?:\?[^#]{1,512})?$"
 )
+_ALLOWED_TELEGRAM_QUERY = {"single", "utm_source", "utm_medium", "utm_campaign"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,65 @@ class PublicImage:
     data: bytes
     mime: str
     final_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class DirectTelegramTarget:
+    selector: str
+    item: str | None
+    public_candidate: bool
+    canonical_url: str
+
+
+def _parse_direct_telegram_target(url: str) -> DirectTelegramTarget:
+    """Parse a stable chat root or exact Telegram message/topic permalink."""
+    try:
+        source = parse_source(url)
+    except DomainError as exc:
+        if exc.code != "unsupported_source_url":
+            raise
+    else:
+        if source.provider != "telegram":
+            raise DomainError("telegram_thread_reference_required")
+        return DirectTelegramTarget(
+            source.channel, source.item, source.public_candidate, source.canonical_url
+        )
+
+    try:
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme != "https"
+            or parsed.username
+            or parsed.password
+            or parsed.port not in (None, 443)
+            or parsed.fragment
+            or "\\" in url
+            or any(char.isspace() or ord(char) < 32 for char in url)
+            or (parsed.hostname or "").lower() != "t.me"
+        ):
+            raise ValueError()
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        if any(key not in _ALLOWED_TELEGRAM_QUERY for key in query):
+            raise ValueError()
+
+        public = re.fullmatch(
+            r"/(?:s/)?([A-Za-z][A-Za-z0-9_]{3,31})/?", parsed.path
+        )
+        if public:
+            handle = public.group(1).lower()
+            return DirectTelegramTarget(handle, None, True, f"https://t.me/{handle}")
+
+        private = re.fullmatch(r"/c/([1-9][0-9]*)/?", parsed.path)
+        if private:
+            channel = private.group(1)
+            peer = str(-1_000_000_000_000 - int(channel))
+            return DirectTelegramTarget(peer, None, False, f"https://t.me/c/{channel}")
+    except ValueError:
+        pass
+    raise DomainError(
+        "telegram_target_url_invalid",
+        "Use a Telegram chat, message or topic link; invite/join links are not destinations",
+    )
 
 
 class _PinnedResolver(AbstractResolver):
@@ -237,9 +297,7 @@ class IngressApplication(Application):
         return tools
 
     def _owner_thread_alias(self, actor, ref: str, requested_to=()) -> str:
-        source = parse_source(ref)
-        if source.provider != "telegram":
-            raise DomainError("telegram_thread_reference_required")
+        target = _parse_direct_telegram_target(ref)
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             if not actor.owner:
@@ -264,7 +322,7 @@ class IngressApplication(Application):
                 "WHERE b.tenant_id=? AND b.principal_id=? AND b.active=1 "
                 "AND c.active=1 AND c.provider='telegram' AND d.native_id=?"
             )
-            params = [actor.tenant_id, actor.principal_id, source.channel]
+            params = [actor.tenant_id, actor.principal_id, target.selector]
             if selector is not None:
                 sql += " AND d.connection_id=?"
                 params.append(selector["connection_id"])
@@ -298,14 +356,14 @@ class IngressApplication(Application):
             stale = db.execute(
                 "SELECT b.active FROM bindings b JOIN destinations d ON d.id=b.destination_id "
                 "WHERE b.tenant_id=? AND b.principal_id=? AND d.connection_id=? AND d.native_id=?",
-                (actor.tenant_id, actor.principal_id, connection_id, source.channel),
+                (actor.tenant_id, actor.principal_id, connection_id, target.selector),
             ).fetchone()
             if stale and not stale["active"]:
                 raise DomainError("access_revoked", next_action="reauthorize")
 
             destination = db.execute(
                 "SELECT id FROM destinations WHERE connection_id=? AND native_id=?",
-                (connection_id, source.channel),
+                (connection_id, target.selector),
             ).fetchone()
             destination_id = destination["id"] if destination else new_id("dest")
             if not destination:
@@ -314,14 +372,14 @@ class IngressApplication(Application):
                     (
                         destination_id,
                         connection_id,
-                        source.channel,
-                        source.channel if source.public_candidate else "",
+                        target.selector,
+                        target.selector if target.public_candidate else "",
                         "Telegram direct target",
                     ),
                 )
 
             alias = _DIRECT_ALIAS_PREFIX + hashlib.sha256(
-                f"{connection_id}:{source.channel}".encode()
+                f"{connection_id}:{target.selector}".encode()
             ).hexdigest()[:20]
             collision = db.execute(
                 "SELECT destination_id FROM bindings WHERE tenant_id=? AND principal_id=? AND alias=?",
@@ -341,15 +399,13 @@ class IngressApplication(Application):
             return alias
 
     def _telegram_thread(self, db, actor, ref):
-        """Owner-direct public links are routes; they never grant partner access."""
+        """Owner-direct Telegram links are routes; they never grant partner access."""
         if ref.startswith("https://"):
-            source = parse_source(ref)
-            if source.provider != "telegram":
-                raise DomainError("telegram_thread_reference_required")
+            target = _parse_direct_telegram_target(ref)
             matches = [
                 dict(row) for row in self.store.bindings(db, actor)
                 if row["provider"] == "telegram"
-                and source.channel in (row["native_id"], row["handle"])
+                and target.selector in (row["native_id"], row["handle"])
             ]
             if len(matches) != 1:
                 raise DomainError(
@@ -357,7 +413,7 @@ class IngressApplication(Application):
                     "The Telegram group is not bound for this principal",
                     "contact_owner",
                 )
-            return matches[0], source.item
+            return matches[0], target.item
         return super()._telegram_thread(db, actor, ref)
 
     def _rewrite_direct_thread(self, actor, name: str, arguments: dict) -> dict:
@@ -424,16 +480,15 @@ class IngressApplication(Application):
 
     async def call(self, actor, name: str, arguments: dict):
         try:
-            prepared = (
-                self._rewrite_direct_thread(actor, name, arguments)
-                if isinstance(arguments, dict) else arguments
-            )
             tool = next((item for item in self.tools(actor) if item["name"] == name), None)
-            if tool is None or not isinstance(prepared, dict):
-                return await super().call(actor, name, prepared)
-            if list(Draft202012Validator(
-                tool["inputSchema"], format_checker=FORMATS
-            ).iter_errors(prepared)):
+            if tool is None or not isinstance(arguments, dict):
+                return await super().call(actor, name, arguments)
+            validator = Draft202012Validator(tool["inputSchema"], format_checker=FORMATS)
+            if list(validator.iter_errors(arguments)):
+                return await super().call(actor, name, arguments)
+
+            prepared = self._rewrite_direct_thread(actor, name, arguments)
+            if list(validator.iter_errors(prepared)):
                 return await super().call(actor, name, prepared)
             if name == "vibepublish_publish" and any(
                 entry.get("source", {}).get("kind") in {"url", "upload"}

@@ -14,6 +14,8 @@ from tests.providers.test_native_adapters import NOW
 URL_A = "https://t.me/c/4379835477/5"
 URL_B = "https://t.me/c/987654321/17"
 URL_PUBLIC = "https://t.me/publicforum/23"
+URL_PUBLIC_ROOT = "https://t.me/publicforum"
+URL_PRIVATE_ROOT = "https://t.me/c/987654321"
 TARGET_A = "-1004379835477"
 TARGET_B = "-1000987654321"
 
@@ -94,6 +96,31 @@ async def test_owner_public_permalink_is_admitted_without_precreated_destination
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "target"),
+    [(URL_PUBLIC_ROOT, "publicforum"), (URL_PRIVATE_ROOT, TARGET_B)],
+)
+async def test_owner_chat_root_link_needs_no_precreated_destination(url, target):
+    temp, store, actor, app = owner_app()
+    try:
+        accepted = await app.call(actor, "vibepublish_publish", {
+            "thread_ref": url,
+            "content": {"text": "Chat root target"},
+            "request_key": "root-" + target.replace("-", "n"),
+        })
+        assert accepted["state"] == "accepted", accepted
+        with store.connection() as db:
+            plan = json.loads(db.execute(
+                "SELECT plan FROM attempts WHERE operation_id=?", (accepted["operation_id"],)
+            ).fetchone()[0])
+            assert plan["native_target"] == target
+            assert "topic_root_id" not in plan
+            assert app.aliases(db, actor) == []
+    finally:
+        temp.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_owner_can_read_new_thread_link_without_precreated_destination():
     temp, store, actor, app = owner_app()
     try:
@@ -129,6 +156,57 @@ async def test_owner_can_read_public_permalink_without_precreated_destination():
             binding = store.binding(db, actor, binding_id=request["_binding_id"])
             assert binding["native_id"] == "publicforum"
             assert request["_topic_root_id"] == "23"
+    finally:
+        temp.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_owner_can_read_public_chat_root_without_precreated_destination():
+    temp, store, actor, app = owner_app()
+    try:
+        accepted = await app.call(actor, "vibepublish_read", {
+            "query": {"kind": "thread", "item_ref": URL_PUBLIC_ROOT},
+            "limit": 10,
+        })
+        assert accepted["state"] == "accepted", accepted
+        with store.connection() as db:
+            request = json.loads(db.execute(
+                "SELECT request FROM operations WHERE id=?", (accepted["operation_id"],)
+            ).fetchone()[0])
+            binding = store.binding(db, actor, binding_id=request["_binding_id"])
+            assert binding["native_id"] == "publicforum"
+            assert request["_topic_root_id"] is None
+    finally:
+        temp.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_invalid_command_does_not_materialize_hidden_route():
+    temp, store, actor, app = owner_app()
+    try:
+        rejected = await app.call(actor, "vibepublish_publish", {
+            "thread_ref": URL_PUBLIC_ROOT,
+            "content": {"not_text": "schema violation"},
+        })
+        assert rejected["error"]["code"] == "invalid_input"
+        with store.connection() as db:
+            assert db.execute("SELECT count(*) FROM destinations").fetchone()[0] == 0
+            assert db.execute("SELECT count(*) FROM bindings").fetchone()[0] == 0
+    finally:
+        temp.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_invite_link_is_not_treated_as_destination_identity():
+    temp, store, actor, app = owner_app()
+    try:
+        rejected = await app.call(actor, "vibepublish_publish", {
+            "thread_ref": "https://t.me/+AbCdEfGhIjKlMnOp",
+            "content": {"text": "Do not join or infer"},
+        })
+        assert rejected["error"]["code"] == "invalid_input"
+        with store.connection() as db:
+            assert db.execute("SELECT count(*) FROM bindings").fetchone()[0] == 0
     finally:
         temp.cleanup()
 
