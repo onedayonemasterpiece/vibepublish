@@ -29,6 +29,34 @@ VisualService, selected-asset hashes, scoped binary resources and single parent
 continuation. It does not add a ninth method. Real executor, initial-preset human
 acceptance and live capabilities remain unverified; see [visuals](../social-visuals/README.md).
 
+## Telegram P0 source hardening — 2026-09-12
+
+Status: `Not confirmed by user`. The source fix is internally verified but has not
+been rolled out or accepted against the live DevCoveer Telegram session yet.
+
+A user-reported live failure established that a disconnected MTProto transport could
+leave the worker alive while later jobs continued to reach an unhealthy Telegram
+client. The P0 runtime therefore must health-check/reconnect **before** each Telegram
+RPC, must never retry a mutation after an RPC has started, and must resolve numeric
+Telegram peers generically from the account's active authorized bindings rather than
+from a hard-coded target/access hash. Runtime failures expose only sanitized
+`exception_type`, `stage` and `correlation_id`; provider/session exception text is not
+part of the receipt. A runtime-health failure must not be represented as supported.
+
+The P0 publish ingress accepts a bounded public `https://` image URL only after
+schema/scope validation, public-address DNS validation with pinned resolution,
+bounded redirects/body and existing image sanitization. The result becomes a private
+VibePublish asset before admission. Telegram `thread_ref`, `role=document` and exact
+media readback remain the existing contract: for `https://t.me/c/4379835477/5` the
+immutable plan must retain native target `-1004379835477` and topic root `5`, publish
+as a document, verify the provider item, read the same topic and expose downloaded
+image bytes only through the caller's private asset resource.
+
+Source regressions cover reconnect, active-binding entity hydration, exact topic 5,
+document provider confirmation/readback, HTTPS ingress rejection boundaries,
+sanitized diagnostics and same-request idempotency. Passing source CI is not live
+provider evidence; rollout and live acceptance remain a separate gate.
+
 ## Current source of truth
 
 Read [implementation design](implementation-design-v1.md), [MCP contract](mcp-contract-v1.md), the executable `contracts/social_mcp_v1.py` and the [agent skill](../../llm/vibepublish-social-skill.md).

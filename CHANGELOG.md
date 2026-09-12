@@ -2,6 +2,48 @@
 
 ## [Unreleased]
 
+### Fixed — owner Telegram direct-link routing — 2026-09-12
+
+- Owner direct routing now accepts private/public chat roots and normal Telegram
+  message/forum-topic links without pre-registering the chat; no concrete numeric
+  Telegram peer is special or hardcoded.
+- Supported copied-message forms include both `<chat>/<message>` and Telegram's
+  forum `<chat>/<topic>/<message>` / `?thread=<topic>` variants. The final provider
+  message is authoritative for the actual topic instead of trusting URL text.
+- Public usernames are resolved through the authenticated Telegram account to the
+  real numeric peer before provider effects. Crash recovery uses the numeric peer
+  already committed in the Telegram checkpoint, not a mutable username.
+- Invalid commands are schema-checked before hidden route materialization. Invite,
+  share and discussion-comment links are not silently reinterpreted as publication
+  targets; multiple-account selection and partner explicit-binding boundaries stay
+  unchanged.
+
+### Fixed — generic owner Telegram topic links — 2026-09-12
+
+- Corrected the Telegram P0 overfit where an owner `/c/<chat>/<topic>` link still
+  required that exact chat to be pre-bound. The link now derives its numeric peer
+  and topic per request; no concrete `-100…` peer is special.
+- With one active Telegram connection the owner link is sufficient. With multiple
+  Telegram connections an existing Telegram alias selects only the account
+  connection; the pasted link still selects the actual chat/topic. Partner
+  principals keep explicit destination-binding boundaries.
+- Newly selected peers can be hydrated from authenticated dialogs after worker
+  startup; the startup binding snapshot is a warm cache, not an allowlist.
+
+### Fixed — Telegram P0 transport and public image ingress — 2026-09-12
+
+- Added MTProto liveness/reconnect checks before Telegram RPCs, active-binding peer
+  hydration without hard-coded access hashes, sanitized runtime diagnostics and a
+  runtime-unhealthy capability state without retrying mutations after RPC start.
+- Added bounded public-HTTPS image ingress with public-address DNS pinning,
+  redirect/body/media limits and existing private image sanitization before normal
+  immutable publish admission; same-byte source/derivative selection is canonical
+  so repeated request keys remain stable.
+- Added exact topic `/5` document publish/confirmation/readback regressions plus
+  reconnect, entity-resolution, diagnostics, HTTPS rejection and idempotency tests.
+  Python 3.12/3.13 Telegram P0 source gates are green; DevCoveer rollout/live
+  provider acceptance remains separate and is `Not confirmed by user`.
+
 ### Telegram P0 acceptance integration — 2026-09-12
 
 - Semantically integrate exact source `cee52feb` / transport `25d7207`: bound

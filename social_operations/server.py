@@ -18,7 +18,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route, Mount
 from .domain import DomainError, canonical
-from .service import Application, SKILL
+from .ingress import IngressApplication
+from .service import SKILL
 from .asset_ingress import MAX_UPLOAD_BYTES, upload_image
 
 
@@ -82,7 +83,7 @@ class AuthBoundary:
 
 
 def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'), authenticate=None, oauth_scopes=()):
-    service = Application(store)
+    service = IngressApplication(store)
     mcp = Server('VibePublish', version='0.1.0')
 
     def actor():
