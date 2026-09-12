@@ -7,41 +7,6 @@ on:
 permissions:
   contents: read
 jobs:
-  telegram-p0:
-    name: Telegram P0 source gate (${{ matrix.python }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ['3.12', '3.13']
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Install committed dependency graph and application
-        run: |
-          python -m pip install --disable-pip-version-check -r requirements.lock
-          python -m pip install --no-deps --no-build-isolation -e .
-          python -m pip check
-      - name: Exact source diff hygiene
-        run: git diff --check HEAD^ HEAD
-      - name: Focused Telegram P0 regressions
-        run: |
-          python -m pytest \
-            tests/providers/test_telegram_resilience.py \
-            tests/providers/test_telegram_p0.py \
-            tests/providers/test_telegram_topics.py \
-            tests/runtime/test_https_ingress.py \
-            tests/runtime/test_telegram_topics_runtime.py -q
-      - name: Compile and import changed runtime modules
-        run: |
-          python -m compileall -q adapters/telegram_resilient.py adapters/wiring.py social_operations/ingress.py social_operations/server.py
-          python -c "import adapters.telegram_resilient, adapters.wiring, social_operations.ingress, social_operations.server"
-
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -153,3 +118,40 @@ jobs:
           name: core-recovery-${{ matrix.python }}-${{ github.sha }}
           path: artifacts/core-recovery/
           retention-days: 7
+
+  telegram-p0:
+    name: Telegram P0 source gate (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install committed dependency graph and application
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements.lock
+          python -m pip install --no-deps --no-build-isolation -e .
+          python -m pip check
+      - name: Exact source diff hygiene
+        run: git diff --check HEAD^ HEAD
+      - name: Focused Telegram P0 regressions
+        run: |
+          python -m pytest \
+            tests/providers/test_telegram_resilience.py \
+            tests/providers/test_telegram_direct_target.py \
+            tests/providers/test_telegram_p0.py \
+            tests/providers/test_telegram_topics.py \
+            tests/runtime/test_https_ingress.py \
+            tests/runtime/test_owner_direct_telegram_links.py \
+            tests/runtime/test_telegram_topics_runtime.py -q
+      - name: Compile and import changed runtime modules
+        run: |
+          python -m compileall -q adapters/telegram_direct.py adapters/telegram_resilient.py adapters/wiring.py social_operations/ingress.py social_operations/server.py
+          python -c "import adapters.telegram_direct, adapters.telegram_resilient, adapters.wiring, social_operations.ingress, social_operations.server"

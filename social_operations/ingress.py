@@ -1,8 +1,9 @@
-"""Bounded public-HTTPS image ingress for MCP/HTTP publish commands.
+"""Bounded public-HTTPS image ingress and owner direct Telegram thread routing.
 
-Only publish media whose contract source.kind is ``url`` is imported here.
-The fetched bytes are verified by the existing image pipeline and stored as a
-private asset before the normal immutable publication plan is admitted.
+Public image URLs are imported into private assets before normal admission.
+For the owner only, an exact Telegram /c/... topic link may also select a chat
+visible to the configured Telegram account without a pre-created destination
+binding. The resulting internal route is still verified by provider preflight.
 """
 from __future__ import annotations
 
@@ -19,12 +20,14 @@ from aiohttp.abc import AbstractResolver
 from jsonschema import Draft202012Validator
 
 from .assets import insert_verified_image, verify_image
-from .domain import DomainError, canonical
+from .domain import DomainError, canonical, new_id, parse_source
 from .service import Application, FORMATS
 
 _MAX_SOURCE_BYTES = 20 * 1024 * 1024
 _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp"}
 _REDIRECTS = {301, 302, 303, 307, 308}
+_DIRECT_ALIAS_PREFIX = "vp_direct_tg_"
+_DIRECT_RIGHTS = ("publish", "edit", "reschedule", "cancel", "delete", "forward")
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,11 +182,141 @@ async def fetch_public_image(url: str) -> PublicImage:
 
 
 class IngressApplication(Application):
-    """Application facade that turns public image URLs into private assets."""
+    """Application facade for safe public media and owner direct Telegram links."""
 
     def __init__(self, store, *, fetcher=None):
         super().__init__(store)
         self._fetcher = fetcher or fetch_public_image
+
+    def aliases(self, db, actor):
+        return [
+            item for item in super().aliases(db, actor)
+            if not item["alias"].startswith(_DIRECT_ALIAS_PREFIX)
+        ]
+
+    def tools(self, actor):
+        tools = super().tools(actor)
+        if actor.owner:
+            for tool in tools:
+                if tool["name"] != "vibepublish_publish":
+                    continue
+                schema = tool["inputSchema"]
+                schema["required"] = [key for key in schema.get("required", []) if key != "to"]
+                schema.setdefault("allOf", []).append({
+                    "anyOf": [{"required": ["to"]}, {"required": ["thread_ref"]}]
+                })
+        return tools
+
+    def _owner_thread_alias(self, actor, ref: str, requested_to=()) -> str:
+        source = parse_source(ref)
+        if source.provider != "telegram" or source.public_candidate:
+            raise DomainError("telegram_thread_reference_required")
+        with self.store.tx() as db:
+            actor = self.store.current(db, actor)
+            if not actor.owner:
+                raise DomainError("access_denied", next_action="contact_owner")
+
+            selector = None
+            if requested_to:
+                selected = self._targets(db, actor, list(requested_to))
+                if len(selected) != 1 or selected[0]["provider"] != "telegram":
+                    raise DomainError(
+                        "telegram_connection_ambiguous",
+                        "Use one Telegram destination to select the account connection",
+                        "fix_input",
+                    )
+                selector = selected[0]
+
+            sql = (
+                "SELECT b.*,d.native_id,d.handle,d.label,d.connection_id,"
+                "c.provider,c.account_type,c.secret_ref FROM bindings b "
+                "JOIN destinations d ON d.id=b.destination_id "
+                "JOIN connections c ON c.id=d.connection_id "
+                "WHERE b.tenant_id=? AND b.principal_id=? AND b.active=1 "
+                "AND c.active=1 AND c.provider='telegram' AND d.native_id=?"
+            )
+            params = [actor.tenant_id, actor.principal_id, source.channel]
+            if selector is not None:
+                sql += " AND d.connection_id=?"
+                params.append(selector["connection_id"])
+            existing = [dict(row) for row in db.execute(sql, params)]
+            if len(existing) == 1:
+                return existing[0]["alias"]
+            if len(existing) > 1:
+                raise DomainError(
+                    "telegram_connection_ambiguous",
+                    "The chat is visible through more than one Telegram connection",
+                    "fix_input",
+                )
+
+            if selector is not None:
+                connection_id = selector["connection_id"]
+            else:
+                connections = [dict(row) for row in db.execute(
+                    "SELECT * FROM connections WHERE tenant_id=? AND provider='telegram' "
+                    "AND account_type IN ('mtproto_user','mtproto_bot') AND active=1 ORDER BY id",
+                    (actor.tenant_id,),
+                )]
+                if len(connections) != 1:
+                    raise DomainError(
+                        "telegram_connection_ambiguous" if connections else "telegram_connection_unavailable",
+                        "Select one Telegram destination when more than one account connection is active"
+                        if connections else "No active Telegram MTProto connection is available",
+                        "fix_input" if connections else "reauthorize",
+                    )
+                connection_id = connections[0]["id"]
+
+            stale = db.execute(
+                "SELECT b.active FROM bindings b JOIN destinations d ON d.id=b.destination_id "
+                "WHERE b.tenant_id=? AND b.principal_id=? AND d.connection_id=? AND d.native_id=?",
+                (actor.tenant_id, actor.principal_id, connection_id, source.channel),
+            ).fetchone()
+            if stale and not stale["active"]:
+                raise DomainError("access_revoked", next_action="reauthorize")
+
+            destination = db.execute(
+                "SELECT id FROM destinations WHERE connection_id=? AND native_id=?",
+                (connection_id, source.channel),
+            ).fetchone()
+            destination_id = destination["id"] if destination else new_id("dest")
+            if not destination:
+                db.execute(
+                    "INSERT INTO destinations VALUES(?,?,?,?,?)",
+                    (destination_id, connection_id, source.channel, "", "Telegram direct target"),
+                )
+
+            alias = _DIRECT_ALIAS_PREFIX + hashlib.sha256(
+                f"{connection_id}:{source.channel}".encode()
+            ).hexdigest()[:20]
+            collision = db.execute(
+                "SELECT destination_id FROM bindings WHERE tenant_id=? AND principal_id=? AND alias=?",
+                (actor.tenant_id, actor.principal_id, alias),
+            ).fetchone()
+            if collision and collision["destination_id"] != destination_id:
+                raise DomainError("direct_target_alias_collision", next_action="contact_owner")
+            if not collision:
+                db.execute(
+                    "INSERT INTO bindings(id,tenant_id,principal_id,alias,destination_id,rights) "
+                    "VALUES(?,?,?,?,?,?)",
+                    (
+                        new_id("bind"), actor.tenant_id, actor.principal_id, alias,
+                        destination_id, canonical(list(_DIRECT_RIGHTS)),
+                    ),
+                )
+            return alias
+
+    def _rewrite_direct_thread(self, actor, name: str, arguments: dict) -> dict:
+        result = json.loads(canonical(arguments))
+        if not actor.owner:
+            return result
+        if name == "vibepublish_publish" and isinstance(result.get("thread_ref"), str):
+            alias = self._owner_thread_alias(actor, result["thread_ref"], result.get("to", ()))
+            result["to"] = [alias]
+        elif name == "vibepublish_read":
+            query = result.get("query", {})
+            if query.get("kind") == "thread" and isinstance(query.get("item_ref"), str) and query["item_ref"].startswith("https://"):
+                self._owner_thread_alias(actor, query["item_ref"])
+        return result
 
     async def _import_url(self, actor, url: str) -> str:
         fetched = await self._fetcher(url)
@@ -198,24 +331,15 @@ class IngressApplication(Application):
         clean_sha = hashlib.sha256(verified.data).hexdigest()
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
-            def canonical_asset():
-                return db.execute(
-                    "SELECT id FROM assets WHERE tenant_id=? AND principal_id=? "
-                    "AND sha256=? AND source_sha256=? AND mime='image/png' AND bytes=? "
-                    "ORDER BY id LIMIT 1",
-                    (actor.tenant_id, actor.principal_id, clean_sha, source_sha, verified.data),
-                ).fetchone()
-            existing = canonical_asset()
+            existing = db.execute(
+                "SELECT id FROM assets WHERE tenant_id=? AND principal_id=? "
+                "AND sha256=? AND source_sha256=? AND mime='image/png' "
+                "ORDER BY created DESC,id DESC LIMIT 1",
+                (actor.tenant_id, actor.principal_id, clean_sha, source_sha),
+            ).fetchone()
             if existing:
                 return existing["id"]
-            insert_verified_image(self.store, db, actor, verified)
-            # If source bytes are already the canonical metadata-free PNG, the
-            # immutable source row and derivative may be byte-identical. Always
-            # select the same canonical row so retries keep one request digest.
-            inserted = canonical_asset()
-            if not inserted:
-                raise DomainError("asset_integrity", next_action="contact_owner")
-            return inserted["id"]
+            return insert_verified_image(self.store, db, actor, verified)
 
     async def _rewrite_publish(self, actor, arguments: dict) -> dict:
         result = json.loads(canonical(arguments))
@@ -236,21 +360,23 @@ class IngressApplication(Application):
         return result
 
     async def call(self, actor, name: str, arguments: dict):
-        # Validate scope and the original public contract before any network I/O.
-        tool = next((item for item in self.tools(actor) if item["name"] == name), None)
-        if tool is None or not isinstance(arguments, dict):
-            return await super().call(actor, name, arguments)
-        if list(Draft202012Validator(
-            tool["inputSchema"], format_checker=FORMATS
-        ).iter_errors(arguments)):
-            return await super().call(actor, name, arguments)
-        if name != "vibepublish_publish" or not any(
-            entry.get("source", {}).get("kind") in {"url", "upload"}
-            for entry in arguments.get("media", [])
-        ):
-            return await super().call(actor, name, arguments)
         try:
-            rewritten = await self._rewrite_publish(actor, arguments)
-            return await super().call(actor, name, rewritten)
+            prepared = (
+                self._rewrite_direct_thread(actor, name, arguments)
+                if isinstance(arguments, dict) else arguments
+            )
+            tool = next((item for item in self.tools(actor) if item["name"] == name), None)
+            if tool is None or not isinstance(prepared, dict):
+                return await super().call(actor, name, prepared)
+            if list(Draft202012Validator(
+                tool["inputSchema"], format_checker=FORMATS
+            ).iter_errors(prepared)):
+                return await super().call(actor, name, prepared)
+            if name == "vibepublish_publish" and any(
+                entry.get("source", {}).get("kind") in {"url", "upload"}
+                for entry in prepared.get("media", [])
+            ):
+                prepared = await self._rewrite_publish(actor, prepared)
+            return await super().call(actor, name, prepared)
         except DomainError as exc:
             return exc.output()
