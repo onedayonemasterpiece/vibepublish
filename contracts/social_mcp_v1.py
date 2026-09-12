@@ -41,6 +41,7 @@ ID = string(128, pattern=r"^[a-z][a-z0-9_:-]*$")
 REV = {"type": "integer", "minimum": 1}
 DATE = string(40, format="date-time")
 URL = string(4096, format="uri", pattern=r"^https://")
+TELEGRAM_THREAD_URL = string(4096, format="uri", pattern=r"^https://t\.me/c/[1-9][0-9]*/[1-9][0-9]*/?$")
 KEY = string(128)
 LIMIT = {"type": "integer", "minimum": 1, "maximum": 50}
 PROVIDER = enum("telegram", "vk", "max")
@@ -136,7 +137,9 @@ DEFS["downloaded_media"] = obj({
     "kind": {"const": "download_sha256"}, "slot": {"type": "integer", "minimum": 0, "maximum": 9},
     "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
     "mime": enum("image/png", "image/jpeg", "image/webp", "video/mp4"),
-    "size": {"type": "integer", "minimum": 1, "maximum": 20*1024*1024}},
+    "size": {"type": "integer", "minimum": 1, "maximum": 20*1024*1024},
+    "asset_ref": ID, "resource_uri": string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$"),
+    "media_kind": enum("photo", "document")},
     ("kind", "slot", "sha256", "mime", "size"))
 DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url": URL,
     "publication_id": ID, "revision": REV, "destination": ALIAS, "own_reactions": array(string(100),0,100),
@@ -191,6 +194,7 @@ tool("get_started", "Get the versioned skill, allowed aliases and current capabi
 
 tool("publish", "Create one publication now or in native provider queues; return accepted progress without waiting for providers. No local scheduler. Preview does not send.",
     obj({"to": array(ALIAS, 1, 20), "content": ref("content"), "media": array(ref("media"), 0, 20),
+        "thread_ref": {"oneOf": [ID, TELEGRAM_THREAD_URL]},
         "surface": enum("post", "story", "message", "album", "video", "short_video"),
         "delivery": ref("delivery"), "mode": enum("execute", "preview"),
         "renderings": ref("renderings"), "visual": ref("visual_spec"),
@@ -240,8 +244,8 @@ queries = [arm("item", {"item_ref": {"oneOf": [ID, URL]}}, ("item_ref",)),
     arm("dialogs", {"provider": PROVIDER}, ("provider",))]
 for k in ("feed", "stories", "scheduled", "notifications", "audience", "editorial_sample"):
     queries.append(arm(k, {"destination": ALIAS}, ("destination",)))
-for k in ("thread", "reactions"):
-    queries.append(arm(k, {"item_ref": ID}, ("item_ref",)))
+queries.append(arm("thread", {"item_ref": {"oneOf": [ID, TELEGRAM_THREAD_URL]}}, ("item_ref",)))
+queries.append(arm("reactions", {"item_ref": ID}, ("item_ref",)))
 queries += [arm("search", {"destination": ALIAS, "text": string(1000)}, ("destination", "text")),
     arm("history", {"destination": ALIAS, "author": enum("mine", "channel"),
         "text": string(1000), "from": DATE, "to": DATE,

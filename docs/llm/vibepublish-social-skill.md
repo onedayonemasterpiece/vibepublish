@@ -49,6 +49,8 @@ Content normally is `{text: ...}`. Plain text is default; bounded Markdown suppo
 
 Media order is binding. Use owned asset refs, real HTTPS imports or host upload tickets; a ChatGPT/local filesystem path is not a server asset. Missing bytes require actual import, not an invented ID. No silent omission, splitting or replacement.
 
+For Telegram forum topics, `thread_ref` is an exact scoped topic reference, not a destination grant. An internal `https://t.me/c/<chat>/<topic-root>` URL is accepted only when its group already matches one active Telegram binding for the caller. To send an image as a Telegram file rather than a compressed photo, use media `role=document`; image/png, image/jpeg and image/webp are supported. `read` with query.kind=thread uses that same scoped URL or an authorized item ref, isolates the exact topic, and may return `media_evidence[].resource_uri` such as `vibepublish://assets/<id>` for private vision/readback.
+
 Visual generate/tune/compose uses art brief plus optional exact copy fields for title/subtitle/body/date/location/source. Presets own branding; formats are post_4_5/story_9_16. Default two candidates and human selection. Automatic selection requires explicit authority. The chosen visual is first, explicit media follow; source images are not automatically attachments. Selection resumes only its authorized parent/revision. Standalone selection does not publish; preview selection does not approve. Training consent is not a model argument.
 
 ### Current visual runtime boundary
@@ -87,10 +89,22 @@ Identifiers here are fixtures; use real server-returned values in production.
 {"to":["pka"],"content":{"text":"Открытие сезона — 6 сентября в 12:00."},"media":[{"source":{"kind":"asset","id":"asset_1"}}],"delivery":{"kind":"at","at":"2026-09-06T12:00:00+02:00"}}
 ```
 
+### `vibepublish_publish` — Telegram forum topic with image file
+
+```json
+{"to":["pka_tg"],"thread_ref":"https://t.me/c/4379835477/3","content":{"text":"Материал для медиабанка"},"media":[{"source":{"kind":"asset","id":"asset_1"},"role":"document"}]}
+```
+
 ### `vibepublish_status`
 
 ```json
 {"ids":["op_1"],"after_event":"event_cursor_3","wait_seconds":10}
+```
+
+### `vibepublish_read` — exact Telegram forum topic
+
+```json
+{"query":{"kind":"thread","item_ref":"https://t.me/c/4379835477/3"},"limit":25}
 ```
 
 ### `vibepublish_read` — actual native queue

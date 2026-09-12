@@ -18,7 +18,8 @@ from typing import Any
 
 from .native import (bind_media, identity, load_checkpoint, plain_text, same_existing,
                      saved_checkpoint, schedule_guard, verify_assets)
-from .port import Capability, Hooks, Observation, Prepared, ProviderRequest, ReadPage, ReadRequest, RemoteItem
+from .port import (Capability, DownloadedMedia, Hooks, MediaDownload, Observation, Prepared,
+                   ProviderRequest, ReadPage, ReadRequest, RemoteItem)
 from social_operations.domain import DomainError, OutcomeUnknown, canonical, digest, parse_time, timestamp
 
 _REQUESTS = {
@@ -27,6 +28,8 @@ _REQUESTS = {
     'app_config': ('help', 'GetAppConfigRequest'),
     'scheduled': ('messages', 'GetScheduledHistoryRequest'),
     'history': ('messages', 'GetHistoryRequest'),
+    'replies': ('messages', 'GetRepliesRequest'),
+    'forum_topics': ('messages', 'GetForumTopicsByIDRequest'),
     'upload': ('messages', 'UploadMediaRequest'),
     'send_text': ('messages', 'SendMessageRequest'),
     'send_media': ('messages', 'SendMediaRequest'),
@@ -39,7 +42,9 @@ _REQUESTS = {
 }
 from social_operations.rich_text import ENTITY_TYPES, from_native, to_native, provider_content, telegram_text_limit
 from .telegram_emoji import check_custom, load_set
-_TYPES = {'InputMediaUploadedPhoto', 'InputPhoto', 'InputMediaPhoto', 'InputSingleMedia', 'InputStickerSetShortName'} | set(ENTITY_TYPES.values())
+_TYPES = {'InputMediaUploadedPhoto', 'InputPhoto', 'InputMediaPhoto', 'InputSingleMedia', 'InputStickerSetShortName',
+          'InputReplyToMessage', 'InputMediaUploadedDocument', 'DocumentAttributeFilename',
+          'InputDocument', 'InputMediaDocument'} | set(ENTITY_TYPES.values())
 
 
 class TelethonTypes:
@@ -114,6 +119,24 @@ def _media(message: Any) -> tuple[str, ...]:
     raise DomainError('telegram_media_needs_review', next_action='contact_owner')
 
 
+def _topic_root(message: Any) -> str | None:
+    reply = getattr(message, 'reply_to', None)
+    if not reply or not getattr(reply, 'forum_topic', False):
+        return None
+    value = getattr(reply, 'reply_to_top_id', None) or getattr(reply, 'reply_to_msg_id', None)
+    return str(value) if type(value) is int and value > 0 else None
+
+
+def _image_mime(data: bytes) -> str:
+    if data.startswith(b'\x89PNG\r\n\x1a\n'):
+        return 'image/png'
+    if data.startswith(b'\xff\xd8\xff'):
+        return 'image/jpeg'
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return 'image/webp'
+    raise DomainError('telegram_download_media_type_needs_review', next_action='contact_owner')
+
+
 class TelegramAdapter:
     def __init__(self, client, *, connection_id: str, account_type='mtproto_user', tl=None, clock=time.time):
         self.client = client
@@ -170,8 +193,15 @@ class TelegramAdapter:
             if not (getattr(permissions, 'is_creator', False) or getattr(permissions, required, False)):
                 raise DomainError('provider_access_denied')
         elif getattr(entity, 'megagroup', False) or type(entity).__name__.startswith('Chat'):
-            # Group mutation permissions have different semantics; not inferred from channel rights.
-            raise DomainError('telegram_group_mutations_needs_review', next_action='contact_owner')
+            permissions = await self.client.get_permissions(entity, me)
+            default_banned = getattr(entity, 'default_banned_rights', None)
+            admin = getattr(permissions, 'is_creator', False) or getattr(permissions, 'is_admin', False)
+            member_can_send = (getattr(permissions, 'has_default_permissions', False)
+                               and not getattr(default_banned, 'send_messages', False))
+            if (permissions is None or getattr(permissions, 'is_banned', False)
+                    or getattr(permissions, 'has_left', False)
+                    or (request.action in {'publish', 'forward'} and not (admin or member_can_send))):
+                raise DomainError('provider_access_denied')
         elif peer_key(entity) != peer_key(me):
             raise DomainError('telegram_direct_messages_needs_review', next_action='contact_owner')
         return entity
@@ -183,9 +213,16 @@ class TelegramAdapter:
             if request.action not in {'publish', 'forward', 'edit', 'reschedule', 'cancel', 'delete'}:
                 raise DomainError('telegram_action_unsupported')
             provider_content(request.content_json, telegram_text_limit(request))
-            verify_assets(request)
+            verify_assets(request, allow_document=True)
+            roles = {'document' if asset.role == 'document' else 'photo' for asset in request.assets}
+            if len(request.assets) > 1 and len(roles) > 1:
+                raise DomainError('telegram_mixed_media_album_needs_review')
             schedule_guard(request, self.clock())
-            await self._rights(request)
+            entity = await self._rights(request)
+            if request.topic_root_id:
+                if request.action != 'publish':
+                    raise DomainError('telegram_topic_action_needs_review')
+                await self._topic(entity, request.topic_root_id)
             await check_custom(self, request)
             if request.existing:
                 if request.existing.native_target != request.native_target:
@@ -221,6 +258,70 @@ class TelegramAdapter:
         if not isinstance(messages, (list, tuple)) or len(messages) > limit:
             raise DomainError('telegram_history_response_invalid')
         return list(messages)
+
+    async def _topic(self, entity, topic_root_id: str):
+        if (not re.fullmatch(r'[1-9][0-9]*', topic_root_id or '')
+                or not getattr(entity, 'megagroup', False) or not getattr(entity, 'forum', False)):
+            raise DomainError('telegram_forum_topic_required')
+        topic_id = int(topic_root_id)
+        forum = await self._call('forum_topics', peer=entity, topics=[topic_id])
+        topics = getattr(forum, 'topics', None)
+        if (not isinstance(topics, (list, tuple)) or len(topics) != 1
+                or str(getattr(topics[0], 'id', '')) != topic_root_id):
+            raise DomainError('telegram_topic_not_found', next_action='refresh')
+        root = await self.client.get_messages(entity, ids=topic_id)
+        if root is None or _id(root) != topic_root_id or peer_key(getattr(root, 'peer_id', None)) != peer_key(entity):
+            raise DomainError('telegram_topic_not_found', next_action='refresh')
+        return root
+
+    async def _replies(self, entity, topic_root_id: str, *, offset=0, limit=100):
+        result = await self._call('replies', peer=entity, msg_id=int(topic_root_id), offset_id=offset,
+                                  offset_date=None, add_offset=0, limit=limit, max_id=0, min_id=0, hash=0)
+        messages = getattr(result, 'messages', None)
+        if not isinstance(messages, (list, tuple)) or len(messages) > limit:
+            raise DomainError('telegram_thread_response_invalid')
+        result_messages = []
+        for message in messages:
+            if _id(message) == topic_root_id:
+                continue
+            if peer_key(getattr(message, 'peer_id', None)) != peer_key(entity) or _topic_root(message) != topic_root_id:
+                raise DomainError('telegram_thread_isolation_failed', next_action='contact_owner')
+            result_messages.append(message)
+        return result_messages, len(messages) < limit
+
+    async def _download_members(self, members, item_native_id: str):
+        downloads, evidence = [], []
+        slot = 0
+        for message in members:
+            refs = _media(message)
+            if not refs:
+                continue
+            if len(refs) != 1:
+                raise DomainError('telegram_media_needs_review', next_action='contact_owner')
+            ref = refs[0]
+            kind = 'photo' if ref.startswith('photo:') else 'document'
+            document = getattr(getattr(message, 'media', None), 'document', None)
+            declared = getattr(document, 'mime_type', None) if document else None
+            if kind == 'document':
+                declared_size = getattr(document, 'size', None)
+                if type(declared_size) is int and (declared_size <= 0 or declared_size > 20*1024*1024):
+                    continue
+            data = await self.client.download_media(message, file=bytes)
+            if not isinstance(data, bytes) or not 0 < len(data) <= 20*1024*1024:
+                raise DomainError('telegram_download_media_invalid')
+            try:
+                mime = _image_mime(data)
+            except DomainError:
+                if kind == 'document':
+                    continue
+                raise
+            if declared in {'image/png', 'image/jpeg', 'image/webp'} and declared != mime:
+                raise DomainError('telegram_download_media_mime_mismatch')
+            sha = hashlib.sha256(data).hexdigest()
+            downloads.append(MediaDownload(item_native_id, slot, ref, kind, mime, data))
+            evidence.append(DownloadedMedia(slot, sha, mime, len(data)))
+            slot += 1
+        return tuple(downloads), tuple(evidence)
 
     def _groups(self, messages, target: str):
         groups = {}
@@ -264,11 +365,15 @@ class TelegramAdapter:
         metrics = tuple((name, float(value), 'count') for name, value in (
             ('views', getattr(members[0], 'views', None)), ('shares', getattr(members[0], 'forwards', None)))
                         if type(value) is int and value >= 0)
+        roots = {_topic_root(m) for m in members if _topic_root(m) is not None}
+        if len(roots) > 1:
+            raise DomainError('telegram_album_topic_mismatch')
+        reply_root = next(iter(roots)) if roots else None
         item = RemoteItem(_id(members[0]), namespace, text, '', timestamp(self.clock()),
                           scheduled_at=dates[0] if namespace == 'scheduled' else None,
                           native_target=target, origin=origin, metrics=metrics,
                           provider_media=tuple(x for m in members for x in _media(m)),
-                          member_ids=tuple(_id(m) for m in members),
+                          member_ids=tuple(_id(m) for m in members), reply_to_native_id=reply_root,
                           entities_json=canonical(from_native(text, getattr(next((m for m in members if getattr(m, 'message', '')), members[0]), 'entities', ()))))
         return replace(item, fingerprint=identity(item))
 
@@ -358,18 +463,30 @@ class TelegramAdapter:
         native_media, compiled_media = [], []
         if r.action == 'publish' or (r.action == 'edit' and r.assets and tuple(a.sha256 for a in r.assets) != tuple(existing.media_hashes)):
             for ordinal, asset in enumerate(r.assets):
-                await hooks.emit_progress('uploading', 'started', f'Staging image {ordinal+1}/{len(r.assets)}')
+                await hooks.emit_progress('uploading', 'started', f'Staging media {ordinal+1}/{len(r.assets)}')
                 stream = io.BytesIO(asset.data)
-                stream.name = 'verified.' + {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}[asset.mime]
+                extension = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}[asset.mime]
+                stream.name = f'verified-{ordinal+1}.{extension}'
                 uploaded = await self.client.upload_file(stream, file_size=asset.size, file_name=stream.name)
-                photo_result = await self._call('upload', peer=entity,
-                    media=self.tl.type('InputMediaUploadedPhoto', file=uploaded))
-                photo = getattr(photo_result, 'photo', None)
-                if photo is None or type(getattr(photo, 'id', None)) is not int:
-                    raise DomainError('telegram_upload_readback_invalid')
-                native_media.append('photo:' + str(photo.id))
-                compiled_media.append(self.tl.type('InputMediaPhoto', id=self.tl.type('InputPhoto',
-                    id=photo.id, access_hash=photo.access_hash, file_reference=photo.file_reference)))
+                if asset.role == 'document':
+                    uploaded_media = self.tl.type('InputMediaUploadedDocument', file=uploaded, mime_type=asset.mime,
+                        attributes=[self.tl.type('DocumentAttributeFilename', file_name=stream.name)], force_file=True)
+                    media_result = await self._call('upload', peer=entity, media=uploaded_media)
+                    document = getattr(media_result, 'document', None)
+                    if document is None or type(getattr(document, 'id', None)) is not int:
+                        raise DomainError('telegram_upload_readback_invalid')
+                    native_media.append('document:' + str(document.id))
+                    compiled_media.append(self.tl.type('InputMediaDocument', id=self.tl.type('InputDocument',
+                        id=document.id, access_hash=document.access_hash, file_reference=document.file_reference)))
+                else:
+                    photo_result = await self._call('upload', peer=entity,
+                        media=self.tl.type('InputMediaUploadedPhoto', file=uploaded))
+                    photo = getattr(photo_result, 'photo', None)
+                    if photo is None or type(getattr(photo, 'id', None)) is not int:
+                        raise DomainError('telegram_upload_readback_invalid')
+                    native_media.append('photo:' + str(photo.id))
+                    compiled_media.append(self.tl.type('InputMediaPhoto', id=self.tl.type('InputPhoto',
+                        id=photo.id, access_hash=photo.access_hash, file_reference=photo.file_reference)))
         elif r.source:
             native_media = state['source']['media']
         elif existing:
@@ -379,10 +496,15 @@ class TelegramAdapter:
         random_ids = [int.from_bytes(hashlib.sha256(f'{r.attempt_id}:{n}'.encode()).digest()[:8], 'big') & ((1 << 63)-1) or 1
                       for n in range(len(state['source']['ids']) if r.source else max(1, len(r.assets)))]
         ids = list(existing.member_ids or (existing.native_id,)) if existing else []
-        checkpoint = {'ids': ids, 'media': native_media, 'source': state.get('source'), 'random_ids': random_ids}
+        checkpoint = {'ids': ids, 'media': native_media, 'source': state.get('source'), 'random_ids': random_ids,
+                      'topic_root_id': r.topic_root_id}
         await hooks.checkpoint('telegram_prepared', saved_checkpoint(r, **checkpoint))
         schedule_guard(r, self.clock())
         schedule = datetime.fromtimestamp(parse_time(r.scheduled_at), timezone.utc) if r.scheduled_at else None
+        reply_to = None
+        if r.topic_root_id:
+            await self._topic(entity, r.topic_root_id)
+            reply_to = self.tl.type('InputReplyToMessage', reply_to_msg_id=int(r.topic_root_id), top_msg_id=int(r.topic_root_id))
         if r.action == 'forward':
             kind, values = 'forward', dict(from_peer=source_entity, id=[int(i) for i in state['source']['ids']],
                 random_id=random_ids, to_peer=entity, schedule_date=schedule, drop_author=False, drop_media_captions=False)
@@ -401,15 +523,15 @@ class TelegramAdapter:
                     raise DomainError('telegram_album_edit_needs_review')
                 values['media'] = compiled_media[0]
         elif len(compiled_media) > 1:
-            kind, values = 'send_album', dict(peer=entity, schedule_date=schedule, multi_media=[
+            kind, values = 'send_album', dict(peer=entity, schedule_date=schedule, reply_to=reply_to, multi_media=[
                 self.tl.type('InputSingleMedia', media=media, random_id=random_ids[i], message=text if i == 0 else '', entities=native_entities if i == 0 else [])
                 for i, media in enumerate(compiled_media)])
         elif compiled_media:
             kind, values = 'send_media', dict(peer=entity, media=compiled_media[0], message=text,
-                random_id=random_ids[0], schedule_date=schedule, entities=native_entities)
+                random_id=random_ids[0], schedule_date=schedule, entities=native_entities, reply_to=reply_to)
         else:
             kind, values = 'send_text', dict(peer=entity, message=text, random_id=random_ids[0],
-                schedule_date=schedule, no_webpage=True, entities=native_entities)
+                schedule_date=schedule, no_webpage=True, entities=native_entities, reply_to=reply_to)
         await check_custom(self, r)
         schedule_guard(r, self.clock())
         await hooks.before_effect(r.attempt_id, r.plan_digest)
@@ -464,6 +586,8 @@ class TelegramAdapter:
             raise OutcomeUnknown('telegram_readback_identity_mismatch')
         source = checkpoint.get('source')
         item = self._item(matches[0], namespace, r.native_target, source=source, source_peer=source['peer'] if source else None)
+        if r.topic_root_id and item.reply_to_native_id != r.topic_root_id:
+            raise OutcomeUnknown('telegram_topic_readback_mismatch')
         if source:
             if digest([item.text, item.entities_json]) != source.get('content_digest'):
                 raise OutcomeUnknown('telegram_forward_content_mismatch')
@@ -482,11 +606,61 @@ class TelegramAdapter:
         self._connection(request)
         return await self._observe(request, load_checkpoint(request, checkpoint), hooks)
 
+    async def _downloaded_items(self, groups, namespace: str, target: str):
+        items, downloads = [], []
+        for group in groups:
+            item = self._item(group, namespace, target)
+            media, evidence = await self._download_members(group, item.native_id)
+            if evidence:
+                item = replace(item, observed_media=evidence)
+            items.append(item)
+            downloads.extend(media)
+        return tuple(items), tuple(downloads)
+
     async def read(self, request: ReadRequest, hooks: Hooks) -> ReadPage:
         self._connection(request)
         entity = await self._entity(request.native_target)
-        if request.kind not in {'scheduled', 'feed', 'item'}:
+        if request.kind not in {'scheduled', 'feed', 'item', 'thread'}:
             raise DomainError('telegram_read_needs_review', next_action='contact_owner')
+        if request.kind == 'thread':
+            if not request.topic_root_id:
+                raise DomainError('telegram_topic_required')
+            await self._topic(entity, request.topic_root_id)
+            offset = 0
+            if request.cursor:
+                try:
+                    cursor = json.loads(request.cursor)
+                    if (cursor['kind'] != 'replies' or cursor['target'] != request.native_target
+                            or cursor['topic_root_id'] != request.topic_root_id
+                            or type(cursor['offset_id']) is not int or cursor['offset_id'] <= 0):
+                        raise ValueError()
+                    offset = cursor['offset_id']
+                except (KeyError, TypeError, ValueError):
+                    raise DomainError('provider_cursor_stale', next_action='refresh') from None
+            raw = []
+            for _ in range(6):
+                chunk, at_end = await self._replies(entity, request.topic_root_id, offset=offset, limit=100)
+                raw.extend(chunk)
+                groups = self._groups(raw, request.native_target)
+                if len(groups) > request.limit or at_end:
+                    break
+                if not chunk:
+                    break
+                next_offset = min(int(_id(m)) for m in chunk)
+                if next_offset == offset:
+                    raise DomainError('telegram_thread_did_not_advance')
+                offset = next_offset
+            else:
+                raise DomainError('telegram_thread_window_needs_review', next_action='contact_owner')
+            selected = groups[:request.limit]
+            items, downloads = await self._downloaded_items(selected, 'published', request.native_target)
+            if any(item.reply_to_native_id != request.topic_root_id for item in items):
+                raise DomainError('telegram_thread_isolation_failed', next_action='contact_owner')
+            next_cursor = (canonical({'kind': 'replies', 'target': request.native_target,
+                                      'topic_root_id': request.topic_root_id,
+                                      'offset_id': min(int(_id(m)) for m in selected[-1])})
+                           if selected and (len(groups) > request.limit or not at_end) else None)
+            return ReadPage(items, next_cursor, downloads)
         if request.kind == 'scheduled' or (request.kind == 'item' and request.namespace == 'scheduled'):
             if self.account_type != 'mtproto_user':
                 raise DomainError('telegram_bot_native_queue_unsupported')
@@ -502,8 +676,6 @@ class TelegramAdapter:
                 raw = [m for m in nearby if m is not None and getattr(m, 'grouped_id', None) == message.grouped_id]
             namespace = 'published'
         else:
-            # Keyset history pagination. Load one complete logical item beyond the
-            # requested page, so no physical-page boundary truncates an album.
             offset = 0
             if request.cursor:
                 try:
@@ -534,10 +706,15 @@ class TelegramAdapter:
                            if selected and (len(groups) > request.limit or not at_end) else None)
             return ReadPage(items, next_cursor)
         groups = self._groups(raw, request.native_target)
-        items = [self._item(g, namespace, request.native_target) for g in groups]
+        if request.kind == 'item' and namespace == 'published':
+            items, downloads = await self._downloaded_items(groups, namespace, request.native_target)
+        else:
+            items = tuple(self._item(g, namespace, request.native_target) for g in groups)
+            downloads = ()
         if request.native_item:
-            items = [i for i in items if request.native_item in i.member_ids]
-        # Queue snapshots are fetched anew; movement invalidates rather than shifts cursors.
+            keep = {item.native_id for item in items if request.native_item in item.member_ids}
+            items = tuple(item for item in items if item.native_id in keep)
+            downloads = tuple(d for d in downloads if d.item_native_id in keep)
         fingerprint = digest([(i.native_id, i.fingerprint) for i in items])
         offset = 0
         if request.cursor:
@@ -549,5 +726,7 @@ class TelegramAdapter:
             except (ValueError, KeyError, TypeError):
                 raise DomainError('provider_cursor_stale', next_action='refresh') from None
         page = tuple(items[offset:offset+request.limit])
+        page_ids = {item.native_id for item in page}
+        page_downloads = tuple(d for d in downloads if d.item_native_id in page_ids)
         cursor = canonical({'snapshot': fingerprint, 'offset': offset+request.limit}) if offset+request.limit < len(items) else None
-        return ReadPage(page, cursor)
+        return ReadPage(page, cursor, page_downloads)

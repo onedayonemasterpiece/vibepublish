@@ -181,7 +181,7 @@ class Application:
             raise DomainError('too_many_destinations')
         return list(result.values())
 
-    def _media(self, db, actor, items, *, allow_video=False):
+    def _media(self, db, actor, items, *, allow_video=False, allow_document=False):
         output = []
         for entry in items:
             if entry['source']['kind'] != 'asset':
@@ -201,20 +201,23 @@ class Application:
             if role == 'video':
                 if not allow_video or row['mime'] != 'video/mp4':
                     raise DomainError('media_role_not_enabled')
+            elif role == 'document':
+                if not allow_document or row['mime'] not in {'image/png', 'image/jpeg', 'image/webp'}:
+                    raise DomainError('media_role_not_enabled')
             elif role != 'image' or not row['mime'].startswith('image/'):
                 raise DomainError('media_role_not_enabled')
             output.append({'ref': row['id'], 'sha256': row['sha256'], 'mime': row['mime'], 'size': len(row['bytes']),
                            'role': role, 'caption': entry.get('caption', ''), 'alt_text': entry.get('alt_text', '')})
         return output
 
-    def _plan(self, db, actor, binding, target, action, existing=None, *, pending_visual=False):
+    def _plan(self, db, actor, binding, target, action, existing=None, *, pending_visual=False, topic_root_id=None):
         required = 'publish' if action in ('publish', 'approve') else action
         if required not in json.loads(binding['rights']):
             raise DomainError('access_denied', 'Binding does not allow this command', 'contact_owner')
         if target.get('visual') and not pending_visual:
             raise DomainError('visual_requires_visual_service')
         content = target.get('renderings', {}).get(binding['provider'], target.get('content', {'text': ''}))
-        assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] == 'max' and binding['account_type'] == 'max_web')
+        assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] == 'max' and binding['account_type'] == 'max_web', allow_document=binding['provider'] == 'telegram')
         if binding['account_type'] != 'fake':
             for asset in assets:
                 fixture = db.execute('SELECT fixture FROM visual_asset_origins WHERE asset_id=?', (asset['ref'],)).fetchone()
@@ -240,7 +243,29 @@ class Application:
                 'action': action, 'surface': target.get('surface', 'post'), 'content_json': canonical(content), 'assets': assets,
                 'scheduled_at': scheduled, 'mode': target.get('mode', 'execute'), 'existing': existing,
                 'selection': target.get('selection', 'post'), 'source': None, 'source_authorized': False,
+                **({'topic_root_id': topic_root_id} if topic_root_id else {}),
                 **({'admission_error': admission_error} if admission_error else {})}
+
+    def _telegram_thread(self, db, actor, ref):
+        """Resolve a topic through an existing scoped binding; never create a grant."""
+        if ref.startswith('https://'):
+            source = parse_source(ref)
+            if source.provider != 'telegram' or source.public_candidate:
+                raise DomainError('telegram_thread_reference_required')
+            matches = [dict(row) for row in self.store.bindings(db, actor)
+                       if row['provider'] == 'telegram' and row['native_id'] == source.channel]
+            if len(matches) != 1:
+                raise DomainError('access_denied', 'The Telegram group is not bound for this principal', 'contact_owner')
+            return matches[0], source.item
+        item = self.resolve_item(db, actor, ref)
+        binding = dict(self.store.binding(db, actor, binding_id=item['binding_id']))
+        if binding['provider'] != 'telegram':
+            raise DomainError('telegram_thread_reference_required')
+        snapshot = json.loads(item['snapshot'])
+        topic = snapshot.get('reply_to_native_id') or item['native_id']
+        if not isinstance(topic, str) or not topic.isdigit() or int(topic) <= 0:
+            raise DomainError('telegram_thread_reference_required')
+        return binding, topic
 
     def accept(self, actor, action, args):
         if action == 'publication_update' and args['change']['kind'] == 'retry_failed':
@@ -280,7 +305,17 @@ class Application:
                         plan.update(subject=subject,subject_ref=target['item_ref'],reaction=target.get('reaction'),reaction_mode=target.get('mode'))
                         plans=[plan]
                     else:
-                        plans = [self._plan(db, actor, b, target, actual, pending_visual=bool(target.get('visual'))) for b in self._targets(db, actor, target['to'])]
+                        target_bindings = self._targets(db, actor, target['to'])
+                        if actual == 'publish' and target.get('thread_ref'):
+                            thread_binding, topic_root_id = self._telegram_thread(db, actor, target['thread_ref'])
+                            if (len(target_bindings) != 1 or target_bindings[0]['id'] != thread_binding['id']
+                                    or 'publish' not in json.loads(thread_binding['rights'])):
+                                raise DomainError('access_denied', 'Thread target must belong to the single authorized destination', 'contact_owner')
+                            plans = [self._plan(db, actor, thread_binding, target, actual,
+                                                pending_visual=bool(target.get('visual')), topic_root_id=topic_root_id)]
+                        else:
+                            plans = [self._plan(db, actor, b, target, actual, pending_visual=bool(target.get('visual')))
+                                     for b in target_bindings]
                     if actual == 'forward':
                         from dataclasses import asdict
                         item = target['item_ref']
@@ -406,7 +441,8 @@ class Application:
                 target['delivery'] = change['delivery']
             if kind in ('cancel', 'delete'):
                 target['delivery'] = {'kind': 'now'}
-            plan = self._plan(db, actor, b, target, 'publish' if kind == 'approve' else kind, observed)
+            plan = self._plan(db, actor, b, target, 'publish' if kind == 'approve' else kind, observed,
+                              topic_root_id=old.get('topic_root_id') if kind == 'approve' else None)
             if kind == 'approve':
                 plan.update(action=old['action'], source=old['source'], source_authorized=old['source_authorized'])
             plans.append(plan)
@@ -487,7 +523,7 @@ class Application:
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             kind = query['kind']
-            if kind not in ('scheduled', 'feed', 'search', 'item', 'history', 'analytics','reactions'):
+            if kind not in ('scheduled', 'feed', 'search', 'item', 'thread', 'history', 'analytics','reactions'):
                 raise DomainError('capability_not_implemented', next_action='contact_owner')
             if kind in ('history', 'analytics'):
                 if args.get('cursor'):
@@ -521,7 +557,10 @@ class Application:
                 op = self._new_operation(db, actor, 'read', args, complete=True, result={'items': items[:limit], 'truncated': len(items)>limit})
             else:
                 intent = json.loads(canonical(args))
-                if kind in {'item','reactions'}:
+                if kind == 'thread':
+                    b, topic_root_id = self._telegram_thread(db, actor, query['item_ref'])
+                    intent['_topic_root_id'] = topic_root_id
+                elif kind in {'item','reactions'}:
                     ref = self.resolve_item(db, actor, query['item_ref'])
                     b = self.store.binding(db, actor, binding_id=ref['binding_id'])
                     intent['_native_item'] = ref['native_id']
@@ -549,7 +588,7 @@ class Application:
             raise DomainError('access_revoked', next_action='reauthorize')
         return row
 
-    def project_item(self, db, actor, binding, remote, *, source='provider', publication=None):
+    def project_item(self, db, actor, binding, remote, *, source='provider', publication=None, media_assets=()):
         ref = new_id('item')
         db.execute('INSERT INTO item_refs VALUES(?,?,?,?,?,?,?,?)', (ref, actor.tenant_id, actor.principal_id, binding['id'], binding['epoch'], remote['native_id'], remote['namespace'], canonical(remote)))
         item = {'ref': ref, 'kind': 'post', 'destination': binding['alias'], 'observed_at': remote['observed_at'],
@@ -567,7 +606,18 @@ class Application:
         if remote.get('observed_media'):
             from dataclasses import asdict
             from adapters.port import downloaded_media
-            item['media_evidence'] = [asdict(value) for value in downloaded_media(remote['observed_media'])]
+            evidence = [asdict(value) for value in downloaded_media(remote['observed_media'])]
+            if media_assets:
+                ordered = sorted(media_assets, key=lambda value: value['slot'])
+                if [value['slot'] for value in ordered] != list(range(len(evidence))):
+                    raise DomainError('download_media_order_invalid')
+                item['media'] = []
+                for row, asset in zip(evidence, ordered):
+                    row.update(asset_ref=asset['asset_ref'], resource_uri='vibepublish://assets/' + asset['asset_ref'],
+                               media_kind=asset['media_kind'])
+                    item['media'].append({'source': {'kind': 'asset', 'id': asset['asset_ref']},
+                                          'role': 'document' if asset['media_kind'] == 'document' else 'image'})
+            item['media_evidence'] = evidence
         elif remote.get('media_hashes'):
             item['error'] = {'code': 'media_projection_not_enabled', 'message': 'This checkpoint returns text and timing; provider media downloads are not exposed'}
         if remote.get('own_reactions_observed'):

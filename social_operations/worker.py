@@ -108,7 +108,8 @@ class Worker:
                                plan['scheduled_at'], op['deadline'], RemoteItem(**plan['existing']) if plan['existing'] else None,
                                NativeSource(**plan['source']) if plan['source'] else None, plan['source_authorized'], plan['selection'],
                                subject=RemoteItem(**plan['subject']) if plan.get('subject') else None,
-                               reaction=plan.get('reaction'),reaction_mode=plan.get('reaction_mode'))
+                               reaction=plan.get('reaction'),reaction_mode=plan.get('reaction_mode'),
+                               topic_root_id=plan.get('topic_root_id'))
 
     async def heartbeat(self, op):
         while True:
@@ -506,7 +507,8 @@ class Worker:
                 raise DomainError('access_revoked', next_action='reauthorize')
         query = args['query']
         request = ReadRequest(b['connection_id'], b['native_id'], query['kind'], args.get('limit', 25), args.get('_provider_cursor'),
-                              args.get('_native_item'), args.get('_namespace'), query.get('text', ''))
+                              args.get('_native_item'), args.get('_namespace'), query.get('text', ''),
+                              topic_root_id=args.get('_topic_root_id'))
         # Browser reads include account verification, native history and exact
         # media readback. Keep them bounded without applying the API-only 30s cap.
         budget = 90 if b['provider']=='max' and b['account_type']=='max_web' else 30
@@ -524,12 +526,34 @@ class Worker:
             self.store.fence(db, op['id'], self.id, op['fence'])
             self.store.current(db, actor)
             self.store.binding(db, actor, binding_id=b['id'])
+            downloads = {}
+            if page.downloads:
+                from social_operations.assets import insert_verified_image, verify_image
+                remote_by_id = {remote.native_id: remote for remote in page.items}
+                for media in page.downloads:
+                    remote = remote_by_id.get(media.item_native_id)
+                    if remote is None or media.slot >= len(remote.observed_media):
+                        raise DomainError('download_media_binding_invalid')
+                    evidence = remote.observed_media[media.slot]
+                    if (media.provider_ref not in remote.provider_media
+                            or evidence.slot != media.slot or evidence.sha256 != hashlib.sha256(media.data).hexdigest()
+                            or evidence.mime != media.mime or evidence.size != len(media.data)):
+                        raise DomainError('download_media_binding_invalid')
+                    verified = verify_image(media.data, media.mime)
+                    sanitized_sha = hashlib.sha256(verified.data).hexdigest()
+                    existing_asset = db.execute(
+                        'SELECT id FROM assets WHERE tenant_id=? AND principal_id=? AND sha256=? AND source_sha256=? AND mime=\'image/png\' LIMIT 1',
+                        (actor.tenant_id, actor.principal_id, sanitized_sha, evidence.sha256)).fetchone()
+                    asset_ref = existing_asset['id'] if existing_asset else insert_verified_image(self.store, db, actor, verified)
+                    downloads.setdefault(media.item_native_id, []).append(
+                        {'slot': media.slot, 'asset_ref': asset_ref, 'media_kind': media.media_kind})
             items = []
             for remote in page.items:
                 if remote.native_target != b['native_id']:
                     raise DomainError('wrong_target_readback', next_action='contact_owner')
                 self.save_fact(db, b['destination_id'], remote)
-                items.append(self.app.project_item(db, actor, b, asdict(remote)))
+                items.append(self.app.project_item(db, actor, b, asdict(remote),
+                                                   media_assets=downloads.get(remote.native_id, ())))
             result = {'items': items, 'truncated': page.cursor is not None}
             if page.cursor:
                 result['next_cursor'] = self.store.cursor(db, actor, 'read', digest(query), page.cursor)
