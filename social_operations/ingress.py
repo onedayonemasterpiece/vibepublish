@@ -28,6 +28,7 @@ _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp"}
 _REDIRECTS = {301, 302, 303, 307, 308}
 _DIRECT_ALIAS_PREFIX = "vp_direct_tg_"
 _DIRECT_RIGHTS = ("publish", "edit", "reschedule", "cancel", "delete", "forward")
+_DIRECT_THREAD_PATTERN = r"^https://t\.me/c/[1-9][0-9]*/[1-9][0-9]*/?$"
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,7 +204,15 @@ class IngressApplication(Application):
                 schema = tool["inputSchema"]
                 schema["required"] = [key for key in schema.get("required", []) if key != "to"]
                 schema.setdefault("allOf", []).append({
-                    "anyOf": [{"required": ["to"]}, {"required": ["thread_ref"]}]
+                    "anyOf": [
+                        {"required": ["to"]},
+                        {
+                            "required": ["thread_ref"],
+                            "properties": {
+                                "thread_ref": {"type": "string", "pattern": _DIRECT_THREAD_PATTERN}
+                            },
+                        },
+                    ]
                 })
         return tools
 

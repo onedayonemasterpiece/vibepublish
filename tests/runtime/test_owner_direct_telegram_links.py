@@ -119,6 +119,20 @@ async def test_multiple_telegram_connections_require_selector_but_target_still_c
         temp.cleanup()
 
 
+@pytest.mark.asyncio
+async def test_internal_thread_item_ref_still_needs_explicit_destination():
+    temp, _store, actor, app = owner_app()
+    try:
+        rejected = await app.call(actor, "vibepublish_publish", {
+            "thread_ref": "item_internal_fixture",
+            "content": {"text": "Internal ref without destination"},
+            "request_key": "internal-without-to",
+        })
+        assert rejected["error"]["code"] == "invalid_input"
+    finally:
+        temp.cleanup()
+
+
 def test_partner_contract_still_requires_explicit_destination_binding():
     temp, store, owner, app = owner_app()
     try:
