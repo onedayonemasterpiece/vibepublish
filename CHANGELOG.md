@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed — Telegram P0 transport and public image ingress — 2026-09-12
+
+- Added MTProto liveness/reconnect checks before Telegram RPCs, active-binding peer
+  hydration without hard-coded access hashes, sanitized runtime diagnostics and a
+  runtime-unhealthy capability state without retrying mutations after RPC start.
+- Added bounded public-HTTPS image ingress with public-address DNS pinning,
+  redirect/body/media limits and existing private image sanitization before normal
+  immutable publish admission; same-byte source/derivative selection is canonical
+  so repeated request keys remain stable.
+- Added exact topic `/5` document publish/confirmation/readback regressions plus
+  reconnect, entity-resolution, diagnostics, HTTPS rejection and idempotency tests.
+  Python 3.12/3.13 Telegram P0 source gates are green; DevCoveer rollout/live
+  provider acceptance remains separate and is `Not confirmed by user`.
+
 - Fixed: bounded native MAX browser read budget and precise read-deadline errors; API read limits unchanged.
 
 - Added: authenticated exact MAX own-reaction reads, distinguishing observed removal from missing metadata.
