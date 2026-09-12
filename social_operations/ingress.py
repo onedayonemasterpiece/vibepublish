@@ -309,7 +309,11 @@ class IngressApplication(Application):
         result = json.loads(canonical(arguments))
         if not actor.owner:
             return result
-        if name == "vibepublish_publish" and isinstance(result.get("thread_ref"), str):
+        if (
+            name == "vibepublish_publish"
+            and isinstance(result.get("thread_ref"), str)
+            and result["thread_ref"].startswith("https://")
+        ):
             alias = self._owner_thread_alias(actor, result["thread_ref"], result.get("to", ()))
             result["to"] = [alias]
         elif name == "vibepublish_read":
@@ -334,7 +338,7 @@ class IngressApplication(Application):
             existing = db.execute(
                 "SELECT id FROM assets WHERE tenant_id=? AND principal_id=? "
                 "AND sha256=? AND source_sha256=? AND mime='image/png' "
-                "ORDER BY created DESC,id DESC LIMIT 1",
+                "ORDER BY rowid DESC LIMIT 1",
                 (actor.tenant_id, actor.principal_id, clean_sha, source_sha),
             ).fetchone()
             if existing:
