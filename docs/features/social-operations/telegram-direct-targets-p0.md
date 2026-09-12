@@ -11,13 +11,23 @@ not a pre-registration key. No concrete Telegram peer such as
 Supported owner selectors in this P0 include:
 
 - private/supergroup chat root: `https://t.me/c/<chat>`;
-- private/supergroup message or topic: `https://t.me/c/<chat>/<message-or-topic>`;
+- private message/topic: `https://t.me/c/<chat>/<message-or-topic>`;
+- Telegram forum-message form: `https://t.me/c/<chat>/<topic>/<message>`;
 - public chat/channel root: `https://t.me/<username>` (and the public preview form);
 - public message/topic: `https://t.me/<username>/<message-or-topic>` and
-  `https://t.me/s/<username>/<message-or-topic>`.
+  `https://t.me/s/<username>/<message-or-topic>`;
+- public forum-message form: `https://t.me/<username>/<topic>/<message>`;
+- normal message-link query flags such as `?single` and `?thread=<topic>`.
 
-Invite/join links such as `t.me/+...` are deliberately not destination identities:
-VibePublish does not silently join chats or infer a durable target from an invite.
+For forum-message links, the final linked Telegram message is authoritative. The
+adapter reads that exact provider object and derives its actual topic root instead
+of trusting a thread number copied from URL text.
+
+Invite/join links such as `t.me/+...` and `t.me/joinchat/...` are deliberately not
+destination identities in this P0: VibePublish does not silently join chats or
+persist invitation capability tokens. Share links and discussion-comment links
+are also different navigation semantics and are not reinterpreted as publication
+destinations.
 
 The owner may paste a supported link for any chat visible to the selected
 authenticated Telegram MTProto account. A pre-existing VibePublish destination
@@ -59,11 +69,12 @@ account dialogs. The startup binding list is a warm cache, not an allowlist.
 ## Acceptance
 
 Source acceptance covers multiple unrelated `/c/...` peers, private/public chat
-roots, public username permalinks, forum-topic and ordinary-chat interpretation,
-owner publish/read without pre-created chat bindings, invalid-command no-debris,
-invite-link rejection, multi-account ambiguity, partner boundary, post-start peer
-hydration, recovery from the durable numeric checkpoint, `git diff --check`,
-compile/import and existing document/media readback tests.
+roots, public username permalinks, two- and three-component forum links, `thread`
+query links, forum-topic and ordinary-chat interpretation, owner publish/read
+without pre-created chat bindings, invalid-command no-debris, invite/comment-link
+rejection, multi-account ambiguity, partner boundary, post-start peer hydration,
+recovery from the durable numeric checkpoint, `git diff --check`, compile/import
+and existing document/media readback tests.
 
 Live acceptance remains separate on DevCoveer and must prove the behavior against
 more than one real accessible Telegram chat/topic before this status can be

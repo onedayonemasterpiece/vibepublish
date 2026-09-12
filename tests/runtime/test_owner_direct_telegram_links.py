@@ -16,6 +16,8 @@ URL_B = "https://t.me/c/987654321/17"
 URL_PUBLIC = "https://t.me/publicforum/23"
 URL_PUBLIC_ROOT = "https://t.me/publicforum"
 URL_PRIVATE_ROOT = "https://t.me/c/987654321"
+URL_PRIVATE_TOPIC_MESSAGE = "https://t.me/c/987654321/17/42?single"
+URL_PUBLIC_THREAD_QUERY = "https://t.me/publicforum/42?thread=17&single"
 TARGET_A = "-1004379835477"
 TARGET_B = "-1000987654321"
 
@@ -121,6 +123,35 @@ async def test_owner_chat_root_link_needs_no_precreated_destination(url, target)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "target"),
+    [
+        (URL_PRIVATE_TOPIC_MESSAGE, TARGET_B),
+        (URL_PUBLIC_THREAD_QUERY, "publicforum"),
+    ],
+)
+async def test_normal_forum_message_link_forms_are_admitted(url, target):
+    temp, store, actor, app = owner_app()
+    try:
+        accepted = await app.call(actor, "vibepublish_publish", {
+            "thread_ref": url,
+            "content": {"text": "Forum message link"},
+            "request_key": "forum-form-" + target.replace("-", "n"),
+        })
+        assert accepted["state"] == "accepted", accepted
+        with store.connection() as db:
+            plan = json.loads(db.execute(
+                "SELECT plan FROM attempts WHERE operation_id=?", (accepted["operation_id"],)
+            ).fetchone()[0])
+            assert plan["native_target"] == target
+            # Both URL forms identify message 42. The provider adapter later
+            # observes that message and derives its real forum topic from Telegram.
+            assert plan["topic_root_id"] == "42"
+    finally:
+        temp.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_owner_can_read_new_thread_link_without_precreated_destination():
     temp, store, actor, app = owner_app()
     try:
@@ -197,14 +228,22 @@ async def test_invalid_command_does_not_materialize_hidden_route():
 
 
 @pytest.mark.asyncio
-async def test_invite_link_is_not_treated_as_destination_identity():
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://t.me/+AbCdEfGhIjKlMnOp",
+        "https://t.me/joinchat/AbCdEfGhIjKlMnOp",
+        "https://t.me/publicforum/42?comment=77",
+    ],
+)
+async def test_non_destination_links_do_not_materialize_routes(url):
     temp, store, actor, app = owner_app()
     try:
         rejected = await app.call(actor, "vibepublish_publish", {
-            "thread_ref": "https://t.me/+AbCdEfGhIjKlMnOp",
-            "content": {"text": "Do not join or infer"},
+            "thread_ref": url,
+            "content": {"text": "Do not infer another destination"},
         })
-        assert rejected["error"]["code"] == "invalid_input"
+        assert rejected["error"]["code"] in {"invalid_input", "telegram_target_url_invalid"}
         with store.connection() as db:
             assert db.execute("SELECT count(*) FROM bindings").fetchone()[0] == 0
     finally:

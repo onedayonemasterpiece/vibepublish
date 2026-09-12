@@ -10,7 +10,11 @@ from adapters.telegram import peer_key
 from adapters.telegram_direct import DirectTargetTelegramAdapter
 from tests.providers.scripted import ScriptedTL, obj
 from tests.providers.test_native_adapters import NOW, Journal, request
-from tests.providers.test_telegram_topics import ForumTelegramClient, TARGET as NUMERIC_TARGET
+from tests.providers.test_telegram_topics import (
+    ForumTelegramClient,
+    TARGET as NUMERIC_TARGET,
+    topic_message,
+)
 
 
 TARGETS = ("-1004379835477", "-1000987654321")
@@ -46,6 +50,7 @@ class PublicForumClient(ForumTelegramClient):
         super().__init__()
         self.entity.username = PUBLIC
         self.entity.forum = forum
+        self.messages[(101, 20)] = topic_message(20, "Message inside topic", topic="3")
 
     async def get_entity(self, target):
         assert target in {PUBLIC, int(NUMERIC_TARGET)}
@@ -94,6 +99,31 @@ async def test_public_username_topic_is_resolved_to_numeric_peer_before_effect()
     assert remote.reply_to_native_id == "3"
     mutation = next(req for name, req in client.calls if name == "SendMessageRequest")
     assert mutation.peer is client.entity
+    assert mutation.reply_to.top_msg_id == 3
+    assert client.effects == 1
+
+
+@pytest.mark.asyncio
+async def test_forum_message_link_resolves_actual_topic_from_provider_message():
+    client = PublicForumClient(forum=True)
+    adapter = DirectTargetTelegramAdapter(
+        client, connection_id="connection", tl=ScriptedTL(), clock=lambda: NOW
+    )
+    journal = Journal()
+    client.before_mutation = lambda _: len(journal.markers) == 1 or pytest.fail(
+        "effect before durable marker"
+    )
+    # Admission passes the final message id, whether the copied URL used
+    # /topic/message or ?thread=. The provider object is authoritative.
+    original = replace(request("telegram", topic_root_id="20"), native_target=PUBLIC)
+
+    prepared = await adapter.prepare(original, journal.hooks)
+    observation = await adapter.execute(prepared, journal.hooks)
+
+    remote, = observation.items
+    assert remote.native_target == PUBLIC
+    assert remote.reply_to_native_id == "3"
+    mutation = next(req for name, req in client.calls if name == "SendMessageRequest")
     assert mutation.reply_to.top_msg_id == 3
     assert client.effects == 1
 

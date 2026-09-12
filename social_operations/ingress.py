@@ -30,12 +30,18 @@ _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp"}
 _REDIRECTS = {301, 302, 303, 307, 308}
 _DIRECT_ALIAS_PREFIX = "vp_direct_tg_"
 _DIRECT_RIGHTS = ("publish", "edit", "reschedule", "cancel", "delete", "forward")
+# Owner direct targets accept the normal t.me chat/message/forum-topic forms,
+# including Telegram's three-component <topic>/<message> forum permalinks.
 _DIRECT_THREAD_PATTERN = (
-    r"^https://t\.me/(?:c/[1-9][0-9]*(?:/[1-9][0-9]*)?|"
-    r"(?:s/)?[A-Za-z][A-Za-z0-9_]{3,31}(?:/[1-9][0-9]*)?)/?"
-    r"(?:\?[^#]{1,512})?$"
+    r"^https://t\.me/(?:"
+    r"c/[1-9][0-9]*(?:/[1-9][0-9]*(?:/[1-9][0-9]*)?)?|"
+    r"(?:s/)?[A-Za-z][A-Za-z0-9_]{3,31}(?:/[1-9][0-9]*(?:/[1-9][0-9]*)?)?"
+    r")/?(?:\?[^#]{1,512})?$"
 )
-_ALLOWED_TELEGRAM_QUERY = {"single", "utm_source", "utm_medium", "utm_campaign"}
+_ALLOWED_TELEGRAM_QUERY = {
+    "single", "thread", "t", "task", "option",
+    "utm_source", "utm_medium", "utm_campaign",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +60,8 @@ class DirectTelegramTarget:
 
 
 def _parse_direct_telegram_target(url: str) -> DirectTelegramTarget:
-    """Parse a stable chat root or exact Telegram message/topic permalink."""
+    """Parse a stable chat root or normal Telegram message/topic permalink."""
+    # Keep the established canonical parser as the first path for its exact forms.
     try:
         source = parse_source(url)
     except DomainError as exc:
@@ -83,24 +90,42 @@ def _parse_direct_telegram_target(url: str) -> DirectTelegramTarget:
         query = parse_qs(parsed.query, keep_blank_values=True)
         if any(key not in _ALLOWED_TELEGRAM_QUERY for key in query):
             raise ValueError()
+        if "thread" in query:
+            values = query["thread"]
+            if len(values) != 1 or not re.fullmatch(r"[1-9][0-9]*", values[0]):
+                raise ValueError()
 
         public = re.fullmatch(
-            r"/(?:s/)?([A-Za-z][A-Za-z0-9_]{3,31})/?", parsed.path
+            r"/(?:s/)?([A-Za-z][A-Za-z0-9_]{3,31})"
+            r"(?:/([1-9][0-9]*)(?:/([1-9][0-9]*))?)?/?",
+            parsed.path,
         )
         if public:
-            handle = public.group(1).lower()
-            return DirectTelegramTarget(handle, None, True, f"https://t.me/{handle}")
+            handle, first, second = public.groups()
+            item = second or first
+            if "thread" in query and item is None:
+                raise ValueError()
+            handle = handle.lower()
+            canonical = f"https://t.me/{handle}" + (f"/{item}" if item else "")
+            return DirectTelegramTarget(handle, item, True, canonical)
 
-        private = re.fullmatch(r"/c/([1-9][0-9]*)/?", parsed.path)
+        private = re.fullmatch(
+            r"/c/([1-9][0-9]*)(?:/([1-9][0-9]*)(?:/([1-9][0-9]*))?)?/?",
+            parsed.path,
+        )
         if private:
-            channel = private.group(1)
+            channel, first, second = private.groups()
+            item = second or first
+            if "thread" in query and item is None:
+                raise ValueError()
             peer = str(-1_000_000_000_000 - int(channel))
-            return DirectTelegramTarget(peer, None, False, f"https://t.me/c/{channel}")
+            canonical = f"https://t.me/c/{channel}" + (f"/{item}" if item else "")
+            return DirectTelegramTarget(peer, item, False, canonical)
     except ValueError:
         pass
     raise DomainError(
         "telegram_target_url_invalid",
-        "Use a Telegram chat, message or topic link; invite/join links are not destinations",
+        "Use a Telegram chat, message or forum-topic link; invite/share/comment links are not direct destinations",
     )
 
 
