@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed — generic owner Telegram topic links — 2026-09-12
+
+- Corrected the Telegram P0 overfit where an owner `/c/<chat>/<topic>` link still
+  required that exact chat to be pre-bound. The link now derives its numeric peer
+  and topic per request; no concrete `-100…` peer is special.
+- With one active Telegram connection the owner link is sufficient. With multiple
+  Telegram connections an existing Telegram alias selects only the account
+  connection; the pasted link still selects the actual chat/topic. Partner
+  principals keep explicit destination-binding boundaries.
+- Newly selected peers can be hydrated from authenticated dialogs after worker
+  startup; the startup binding snapshot is a warm cache, not an allowlist.
+
 ### Fixed — Telegram P0 transport and public image ingress — 2026-09-12
 
 - Added MTProto liveness/reconnect checks before Telegram RPCs, active-binding peer
@@ -214,8 +226,8 @@
 ### Development handoff — 2026-09-04, contract 1.2.0-design
 
 - Added canonical native Telegram/VK forwarding by exact post URL or authorized
-  item reference, with attribution readback, grouped-media handling, private-source
-  authorization and no rewrite/copy fallback. VK scheduled repost remains an
+  item reference, with attribution readback, grouped-media handling,
+  private-source authorization and no rewrite/copy fallback. VK scheduled repost remains an
   unproved capability, not a local-scheduler substitute.
 - Extended the existing engage command schema; no new forward synonym tool.
 - Added personal primary/secondary destination profiles with purpose, audience,
@@ -277,7 +289,7 @@
 - Social visuals contract preserving the required imagegen route, exact text,
   candidate selection and consent-controlled provenance.
 - Video-story feature preserving Telegram editorial control, Kaggle rendering,
-  geo/time filters, music, subtitles, enhancement and approval.
+  geo/time filters, music, subtitles, safe enhancement and approval.
 - Standalone scaffold, feature documentation routing, existing Google AI /
   Supabase limiter code/migrations and EventsBot donor map.
 
@@ -289,5 +301,5 @@
   actual MCP incremental delivery, MAX Web, imagegen, runtime permissions,
   database concurrency and infrastructure-independence canaries remain unrun.
 - Existing Google limiter findings are documented, not fixed by this batch.
-- Schema-valid forbidden calls carry runtime-oracle requirements; schema tests
-  do not claim that an absent runtime enforced those permission/timing rules.
+- Schema-valid forbidden calls carry runtime-oracle requirements; schema tests do
+  not claim that an absent runtime enforced those permission/timing rules.
