@@ -2,17 +2,21 @@
 
 ## [Unreleased]
 
-### Fixed — owner Telegram public permalink routing — 2026-09-12
+### Fixed — owner Telegram direct-link routing — 2026-09-12
 
-- Extended owner direct routing from private `/c/...` links to exact public
-  `t.me/<username>/<message>` and `t.me/s/<username>/<message>` permalinks without
-  pre-registering the chat; no concrete numeric Telegram peer is special.
+- Owner direct routing now accepts private/public chat roots and normal Telegram
+  message/forum-topic links without pre-registering the chat; no concrete numeric
+  Telegram peer is special or hardcoded.
+- Supported copied-message forms include both `<chat>/<message>` and Telegram's
+  forum `<chat>/<topic>/<message>` / `?thread=<topic>` variants. The final provider
+  message is authoritative for the actual topic instead of trusting URL text.
 - Public usernames are resolved through the authenticated Telegram account to the
-  real numeric peer before provider effects. The referenced message determines
-  whether the destination is a forum topic or the ordinary chat/channel root.
-- Crash recovery uses the numeric peer already committed in the Telegram adapter
-  checkpoint instead of re-resolving a mutable username after a possible effect.
-  Multiple-account selection and partner explicit-binding boundaries are unchanged.
+  real numeric peer before provider effects. Crash recovery uses the numeric peer
+  already committed in the Telegram checkpoint, not a mutable username.
+- Invalid commands are schema-checked before hidden route materialization. Invite,
+  share and discussion-comment links are not silently reinterpreted as publication
+  targets; multiple-account selection and partner explicit-binding boundaries stay
+  unchanged.
 
 ### Fixed — generic owner Telegram topic links — 2026-09-12
 
