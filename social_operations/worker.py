@@ -258,8 +258,12 @@ class Worker:
                     # do not overwrite the immutable pre-effect checkpoint to
                     # carry it. Supply the already committed observation instead.
                     with self.store.connection() as db:
-                        committed=db.execute('SELECT observation FROM attempt_recovery WHERE attempt_id=?',(child['id'],)).fetchone()[0]
-                    final=canonical({**json.loads(child['checkpoint']),'committed_observation':json.loads(committed)})
+                        recovery=db.execute(
+                            'SELECT observation,original_checkpoint FROM attempt_recovery WHERE attempt_id=?',
+                            (child['id'],)).fetchone()
+                    final=canonical({**json.loads(child['checkpoint']),
+                        'committed_observation':json.loads(recovery['observation']),
+                        'original_checkpoint':recovery['original_checkpoint']})
                     async with asyncio.timeout(30):
                         await finalize(request, final, self.finalization_hooks(op, child))
                     with self.store.tx() as db:
