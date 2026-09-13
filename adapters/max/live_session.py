@@ -1,8 +1,9 @@
 """Explicit existing-profile ownership for MAX. No QR/auth bootstrap or CDP scan.
 
 Acquires the existing bridge's exclusive-create lock protocol (observed on the
-host) AND ProfileLane AND Chromium's own SingletonLock. Does not reclaim locks,
-copy sessions, kill existing owners, or close tabs in another running browser.
+host) AND ProfileLane AND Chromium's own SingletonLock. Does not reclaim live or
+unrecognized locks, copy sessions, kill existing owners, or close tabs in another
+running browser. Only a well-formed bridge lock with a dead recorded PID is reclaimed.
 """
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -33,6 +34,43 @@ def private_json(path):
         os.close(fd)
 
 
+def _pid_alive(pid):
+    if type(pid) is not int or pid <= 0:
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _claim_bridge_lock(lock):
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW
+    try:
+        return os.open(lock, flags, 0o600)
+    except FileExistsError:
+        try:
+            owner = private_json(lock)
+        except (OSError, ValueError, TypeError, MaxBlocked):
+            raise MaxBlocked('browser_owner_busy') from None
+        if (not isinstance(owner, dict)
+                or set(owner) != {'pid', 'sessionId', 'createdAt'}
+                or type(owner.get('pid')) is not int or owner['pid'] <= 0
+                or not isinstance(owner.get('sessionId'), str) or not owner['sessionId']
+                or not isinstance(owner.get('createdAt'), str) or not owner['createdAt']
+                or _pid_alive(owner['pid'])):
+            raise MaxBlocked('browser_owner_busy')
+        # The cooperative bridge protocol cannot replace an existing O_EXCL lock.
+        # Reclaim only this validated dead-owner record, then contend normally.
+        try:
+            Path(lock).unlink()
+            return os.open(lock, flags, 0o600)
+        except OSError:
+            raise MaxBlocked('browser_owner_busy') from None
+
+
 @asynccontextmanager
 async def existing_session(*, profile, executable, allowlist, explicit_live=False, timeout=30, visual_recovery=None, visual_palette=None, live_writes=False):
     if explicit_live is not True:
@@ -49,10 +87,7 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
     with ProfileLane(profile) as lane:
         lock = profile/'.my-browser-bridge.lock'
         token = 'vibepublish-' + uuid.uuid4().hex
-        try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
-        except FileExistsError:
-            raise MaxBlocked('browser_owner_busy') from None
+        fd = _claim_bridge_lock(lock)
         try:
             with os.fdopen(fd, 'w') as out:
                 json.dump(dict(pid=os.getpid(), sessionId=token, createdAt=datetime.now(timezone.utc).isoformat()), out)

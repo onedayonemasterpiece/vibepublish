@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import adapters.max.live_session as live_session
 import pytest
 from adapters.max.evidence import structure_only
 from adapters.max.live import Target
@@ -41,6 +42,38 @@ async def test_busy_bridge_owner_not_overridden(tmp_path):
         async with existing_session(profile=profile,executable='never-run',allowlist=binding,explicit_live=True):
             pytest.fail('must not launch')
     assert lock.read_text()=='foreign-owner'
+
+def test_dead_bridge_owner_lock_is_reclaimed(tmp_path, monkeypatch):
+    lock = tmp_path/'.my-browser-bridge.lock'
+    owner = {'pid': 424242, 'sessionId': 'old-session',
+             'createdAt': '2026-09-13T05:29:54+00:00'}
+    lock.write_text(json.dumps(owner))
+    lock.chmod(0o600)
+    def dead(pid, signal):
+        assert (pid, signal) == (424242, 0)
+        raise ProcessLookupError()
+    monkeypatch.setattr(live_session.os, 'kill', dead)
+    fd = live_session._claim_bridge_lock(lock)
+    try:
+        assert lock.read_bytes() == b''
+    finally:
+        live_session.os.close(fd)
+        lock.unlink()
+
+
+def test_live_bridge_owner_lock_is_never_reclaimed(tmp_path, monkeypatch):
+    lock = tmp_path/'.my-browser-bridge.lock'
+    owner = {'pid': 424243, 'sessionId': 'live-session',
+             'createdAt': '2026-09-13T05:29:54+00:00'}
+    lock.write_text(json.dumps(owner))
+    lock.chmod(0o600)
+    def alive(pid, signal):
+        assert (pid, signal) == (424243, 0)
+    monkeypatch.setattr(live_session.os, 'kill', alive)
+    with pytest.raises(MaxBlocked, match='browser_owner_busy'):
+        live_session._claim_bridge_lock(lock)
+    assert json.loads(lock.read_text()) == owner
+
 
 @pytest.mark.parametrize('where',[
  '<span>{s}</span>','<img src="https://private/{s}">','<div class="{s}" data-id="{s}">{s}</div>',
