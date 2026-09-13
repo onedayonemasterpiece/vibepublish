@@ -54,6 +54,9 @@ class Application:
                 if arguments['command']['kind'] == 'import':
                     from .chat_file_ingress import import_chat_file
                     result = await import_chat_file(self, actor, arguments)
+                elif arguments['command']['kind'] == 'import_browser_artifact':
+                    from .browser_artifact_ingress import import_browser_artifact
+                    result = await import_browser_artifact(self, actor, arguments)
                 else:
                     result = self.visuals.command(actor, arguments)
             else:
@@ -111,7 +114,7 @@ class Application:
             all_dest = self.aliases(db, actor)
             page = all_dest[offset:offset+50]
             bindings = {r['alias']: r for r in self.store.bindings(db, actor)}
-            result = {'version': '1.5.0-runtime-emoji', 'schema_version': VERSION,
+            result = {'version': '1.5.1-runtime-browser-artifact', 'schema_version': VERSION,
                       'skill_sha256': hashlib.sha256(skill.encode()).hexdigest(), 'skill': skill,
                       'estimated_tokens': (len(skill) + 2)//3, 'server_time': timestamp(self.store.clock()),
                       'timezone': actor.timezone, 'policy_epoch': actor.epoch, 'routing_revision': actor.routing_revision,

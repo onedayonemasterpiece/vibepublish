@@ -7,7 +7,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.5.0-runtime"
+VERSION = "1.5.1-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -227,12 +227,15 @@ TOOLS[-1]["inputSchema"]["oneOf"] = [
     {"required": ["publication_id", "expected_revision"], "not": {"required": ["item_ref"]}},
     {"required": ["item_ref"], "not": {"anyOf": [{"required": ["publication_id"]}, {"required": ["expected_revision"]}]}}]
 
-visual_cmd = {"oneOf": [arm("import"), ref("visual_spec"),
+browser_artifact_uri = string(47, pattern=r"^artifact://[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+visual_cmd = {"oneOf": [arm("import"),
+    arm("import_browser_artifact", {"uri": browser_artifact_uri}, ("uri",)),
+    ref("visual_spec"),
     arm("select", {"job_id": ID, "candidate_id": ID, "expected_revision": REV, "token": string(512)},
         ("job_id", "candidate_id", "expected_revision", "token")),
     arm("feedback", {"job_id": ID, "candidate_id": ID, "rating": enum("accepted", "rejected"), "reason": string(2000)},
         ("job_id", "candidate_id", "rating"))]}
-tool("visual", "Import a chat attachment as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Generate allows optional source references. Selection resumes only its exact authorized parent.",
+tool("visual", "Import a chat attachment or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Generate allows optional source references. Selection resumes only its exact authorized parent.",
     obj({"command": visual_cmd, "request_key": KEY,
          "file": obj({"download_url": string(8192), "file_id": string(512),
                       "mime_type": enum("image/png", "image/jpeg", "image/webp"),
@@ -242,7 +245,11 @@ TOOLS[-1]["_meta"] = {"openai/fileParams": ["file"]}
 TOOLS[-1]["inputSchema"]["allOf"] = [{
     "if": {"properties": {"command": {"properties": {"kind": {"const": "import"}}, "required": ["kind"]}}},
     "then": {"required": ["file", "request_key"]},
-    "else": {"not": {"required": ["file"]}}}]
+    "else": {"not": {"required": ["file"]}}},
+    {"if": {"properties": {"command": {"properties": {"kind": {"const": "import_browser_artifact"}},
+                                        "required": ["kind"]}}},
+     "then": {"required": ["request_key"]}}
+]
 
 tool("status", "Read local receipts and atomic progress, never retry. Watch one operation with after_event; return on its first new event, not all providers.",
     obj({"ids": array(ID, 1, 20), "limit": LIMIT, "cursor": string(512),

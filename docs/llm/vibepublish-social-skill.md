@@ -1,6 +1,6 @@
 # VibePublish social skill
 
-Version: `1.5.0`. Target: `contracts/social_mcp_v1.py`.
+Version: `1.5.1`. Target: `contracts/social_mcp_v1.py`.
 Owner native-queue/read/progress corrections are Fixed. This is the canonical task skill, not proof of a deployed connection. The runtime may return a typed capability gate; never replace an unavailable feature with another action.
 
 ## Start and choose a task
@@ -51,6 +51,8 @@ Content normally is `{text: ...}`. Plain text is default; bounded Markdown suppo
 
 Media order is binding. For a chat attachment call `vibepublish_visual` with `command: {kind: "import"}`, the top-level `file` supplied by the host, and a stable `request_key`. The tool declares `openai/fileParams: ["file"]`; the host passes `download_url`, `file_id`, optional `mime_type` and `file_name`. Do not invent any of these or send a local filesystem path. A verified receipt's `resource_id` is the owned asset to use in publication media or visual sources. Import does not generate or publish. Replay returns the original asset without requiring a still-live download URL.
 
+For an image already saved by `browser.source_image.quiet`, call `vibepublish_visual` with `command: {kind: "import_browser_artifact", uri: "artifact://<uuid>"}` and a stable `request_key`. The URI is opaque: never replace it with a filesystem path and never re-fetch the source URL. VibePublish reads only its trusted configured same-host browser artifact root, verifies the browser metadata, regular-file boundaries, MIME, size and SHA-256, then uses the normal private image ingress/sanitizer. Replay returns the previously admitted asset even if the temporary browser artifact is no longer present.
+
 Binary HTTP `POST /v1/assets` remains available for non-chat clients; users do not need to manually upload through HTTP when the host supplies file parameters. See [upload contract](../operations/asset-ingress.md). Keep original order and roles of references; never silently omit files.
 
 ### Four visual intentions; one prompt
@@ -89,6 +91,12 @@ Identifiers here are fixtures; use real server-returned values in production.
 
 ```json
 {"to":["pka"],"content":{"text":"Открытие сезона — 6 сентября в 12:00."},"media":[{"source":{"kind":"asset","id":"asset_1"}}],"delivery":{"kind":"at","at":"2026-09-06T12:00:00+02:00"}}
+```
+
+### `vibepublish_visual` — quiet browser artifact
+
+```json
+{"command":{"kind":"import_browser_artifact","uri":"artifact://11111111-1111-4111-8111-111111111111"},"request_key":"browser-image-1"}
 ```
 
 ### `vibepublish_publish` — Telegram forum topic with image file
