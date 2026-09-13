@@ -81,7 +81,7 @@ class Worker:
                 restore = db.execute("SELECT value FROM settings WHERE key='restore_guard'").fetchone()
                 if restore and restore[0] == '1':
                     raise DomainError('restore_requires_reconciliation', next_action='contact_owner')
-                unresolved = db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
+                unresolved = db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') AND NOT EXISTS (SELECT 1 FROM attempt_resolutions z WHERE z.attempt_id=a.id) LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
                 pending_release = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND r.finalize_state='pending' LIMIT 1", (plan['connection_id'],)).fetchone()
                 if pending_release:
                     raise DomainError('connection_finalization_pending', next_action='check_status')
