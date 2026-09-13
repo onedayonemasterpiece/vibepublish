@@ -75,11 +75,22 @@ class RealMaxDriver:
         self.live_writes = live_writes is True
         self.min_lead = 60
 
+    def _owned_row_selector(self, target):
+        bound = self.targets.get(target)
+        if bound is None:
+            raise MaxBlocked('target_denied')
+        # Channel posts are provider-owned channel objects and are not reliably
+        # marked as account-outgoing by MAX Web. Test-group reads remain limited
+        # to this account's outgoing rows.
+        return '.messageWrapper' if bound.policy == 'scheduled_only' else '.messageWrapper--isOut'
+
     def _rows(self, main, text, *, outgoing=False):
+        target = self.page.url.rsplit('/', 1)[-1]
+        selector = self._owned_row_selector(target) if outgoing else '.messageWrapper'
         if self.semantic_selectors:
             import json
-            return main.locator('maxrow='+json.dumps(dict(text=text,outgoing=outgoing)))
-        return main.locator('.messageWrapper--isOut' if outgoing else '.messageWrapper').filter(
+            return main.locator('maxrow='+json.dumps(dict(text=text,outgoing=selector=='.messageWrapper--isOut')))
+        return main.locator(selector).filter(
             has=self.page.locator('.bubbleContent > .text').filter(has_text=re.compile('^'+re.escape(text)+'$')))
 
     def _enter(self, target):
@@ -591,16 +602,31 @@ class RealMaxDriver:
         self._enter(target)
         try:
             async with asyncio.timeout(self.timeout):
-                await self._account()
-                await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
-                main=await self._scope(target)
-                rows=main.locator('.messageWrapper--isOut')
-                # Header readiness is not history readiness: MAX loads message rows
-                # asynchronously after navigation. This is a readiness wait only,
-                # never positional item identity or authoritative empty history.
-                await rows.locator('.bubbleContent > .text').first.wait_for(timeout=self.timeout*1000)
+                history_rows = None
+                if native_item is None:
+                    # A correlated provider-native history response proves that
+                    # the target history request completed, including an empty
+                    # history. Do not use the presence of an outgoing text node as
+                    # a readiness surrogate: channel rows may not carry isOut.
+                    from .wire import HistoryObserver
+                    async with HistoryObserver(self.page,target,self.origin,pages=self.evidence_pages) as history:
+                        await self._account()
+                        await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
+                        main=await self._scope(target)
+                        history_rows=await history.wait(min(self.timeout,25))
+                    if not history_rows:
+                        await self._account();await self._scope(target)
+                        return []
+                else:
+                    await self._account()
+                    await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
+                    main=await self._scope(target)
+                rows=main.locator(self._owned_row_selector(target))
+                if native_item is not None:
+                    await rows.locator('.bubbleContent > .text').first.wait_for(timeout=self.timeout*1000)
                 texts=await rows.locator('.bubbleContent > .text').evaluate_all('(es)=>{'+rich.DOM_HELPERS+'return es.map(semanticText);}')
                 if len(texts)>100:raise MaxBlocked('bounded_read_limit')
+                history_ids = {row['id'] for row in history_rows} if history_rows is not None else None
                 items=[];incomplete=False
                 # Snapshot candidate content, then rebind semantically: row indexes
                 # are not stable across scrolling/rerenders (Playwright locator contract).
@@ -634,8 +660,14 @@ class RealMaxDriver:
                             fresh=await self._plain_candidate(target,text,row,media_count=len(item.get('observed_media',[])) or len(item['media']))
                             if fresh['url']!=item['url'] or fresh.get('observed_media',[])!=item.get('observed_media',[]):raise MaxBlocked('native_reference_changed')
                             return [fresh]
-                    else:items.append(item)
+                    else:
+                        if history_ids is not None:
+                            from .wire import published_wire_id
+                            if published_wire_id(item['id']) not in history_ids:continue
+                        items.append(item)
                 await self._account();await self._scope(target)
+                if native_item is None and self.targets[target].policy=='scheduled_only' and history_rows and not items:
+                    raise MaxBlocked('native_history_dom_projection_unavailable')
                 if native_item or incomplete:raise MaxBlocked('exact_read_not_observed')
                 return items
         finally:
@@ -798,7 +830,8 @@ class RealMaxDriver:
         await self.page.bring_to_front()
         await row.scroll_into_view_if_needed()
         async def content():
-            if ('messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()
+            if (self.targets[target].policy != 'scheduled_only'
+                    and 'messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()
                     or await row.locator('.bubbleContent > .text').evaluate(rich.TEXT_JS)!=text
                     or await row.locator('audio').count()
                     or (not media_count and await row.locator('.media').count())):

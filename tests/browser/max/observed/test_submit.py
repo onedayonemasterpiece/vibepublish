@@ -412,6 +412,36 @@ async def test_exact_native_read_does_not_use_chat_or_message_order(writer):
     assert not effects(state) and not d.lane.marker.exists()
 
 
+async def test_channel_feed_read_uses_native_history_readiness_without_isout(writer,monkeypatch):
+    from adapters.max import wire
+    d,page,state,h=writer
+    native='AAAAAAAAACo'
+    state['messages']=[dict(id=native,target='-202',text='Channel post',outgoing=False)]
+    class History:
+        def __init__(self,*args,**kwargs):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def wait(self,*args):return [dict(id='42',text='Channel post')]
+    monkeypatch.setattr(wire,'HistoryObserver',History)
+    result=await d.read('-202')
+    assert len(result)==1 and result[0]['id']==native and result[0]['text']=='Channel post'
+    assert not effects(state)
+
+
+async def test_group_feed_read_does_not_project_incoming_history_as_owned(writer,monkeypatch):
+    from adapters.max import wire
+    d,page,state,h=writer
+    state['messages']=[dict(id='AAAAAAAAACo',target='-101',text='Incoming',outgoing=False)]
+    class History:
+        def __init__(self,*args,**kwargs):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def wait(self,*args):return [dict(id='42',text='Incoming')]
+    monkeypatch.setattr(wire,'HistoryObserver',History)
+    assert await d.read('-101')==[]
+    assert not effects(state)
+
+
 async def test_observed_group_edit_heading(writer):
     d,page,state,h=writer
     await page.add_init_script('window.REPLAY_GROUP_EDIT=true')
