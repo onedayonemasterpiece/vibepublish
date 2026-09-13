@@ -37,6 +37,7 @@ class RecoveringProvider(FakeProvider):
         assert saved['core_recovery']['plan_digest'] == request.plan_digest
         with self.core.connection() as db:
             row = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (request.attempt_id,)).fetchone()
+            assert saved['original_checkpoint'] == row['original_checkpoint']
             assert row['observation'] and row['finalize_state'] == 'pending'
             assert db.execute('SELECT state FROM attempts WHERE id=?', (request.attempt_id,)).fetchone()[0] == 'verified'
         if self.release_gate:
