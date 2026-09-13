@@ -63,7 +63,7 @@ def telegram_factory(creds, **kwargs):
 
 
 def vk_credentials(path: Path):
-    token = dotenv_values(path).get('VK_ACCESS_TOKEN4')
+    token = dotenv_values(path).get('VK_ACCESS_TOKEN9')
     if not token:
         raise DomainError('approved_vk_user_token_missing')
     return {'roles': {role: {'token': token, 'kind': 'user'}
