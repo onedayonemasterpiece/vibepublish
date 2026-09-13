@@ -4,7 +4,7 @@ import math
 import msgpack
 import lz4.block
 import pytest
-from adapters.max.wire import decode_queue_frame,queue_items,MAX_FRAME
+from adapters.max.wire import decode_queue_frame,queue_items,MAX_FRAME,link_id_from_wire_id,published_wire_id
 from adapters.max.profile import MaxBlocked
 
 
@@ -24,6 +24,19 @@ def test_queue_decodes_exact_native_integer_and_schedule(compressed):
     assert item['id']==str(n) and item['time_ms']==1893456000000
     assert 'sender' not in item
     with pytest.raises(MaxBlocked,match='scope'):queue_items(payload,'-202')
+
+
+@pytest.mark.parametrize('wire_id',['1','42',str(2**61+37),str(2**64-1)])
+def test_history_wire_id_has_canonical_round_trip_link_id(wire_id):
+    native_id=link_id_from_wire_id(wire_id)
+    assert len(native_id)==11
+    assert published_wire_id(native_id)==wire_id
+
+
+@pytest.mark.parametrize('bad',['0','-1','01','x',str(2**64),None])
+def test_history_wire_id_encoding_fails_closed(bad):
+    with pytest.raises(MaxBlocked,match='native_history_id_unverified'):
+        link_id_from_wire_id(bad)
 
 
 def test_auth_other_opcode_and_malformed_frames_are_not_decoded():

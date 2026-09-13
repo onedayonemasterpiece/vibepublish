@@ -647,7 +647,17 @@ class RealMaxDriver:
                         await self.page.bring_to_front()
                         await row.scroll_into_view_if_needed()
                         count=await row.locator('[aria-label="Прикрепленные фото"] > button').count()
-                        item=await self._plain_candidate(target,text,row,media_count=count)
+                        native_history_id=None
+                        if history_rows is not None and self.targets[target].policy=='scheduled_only':
+                            matches=[candidate for candidate in history_rows
+                                if candidate['text']==text and candidate['media_count']==count]
+                            if len(matches)>1:
+                                raise MaxBlocked('native_history_dom_projection_ambiguous')
+                            if not matches:
+                                continue
+                            native_history_id=matches[0]['id']
+                        item=await self._plain_candidate(target,text,row,media_count=count,
+                            native_history_id=native_history_id)
                     except MaxBlocked as exc:
                         if not native_item or str(exc) not in {'ambiguous_read_candidate','native_candidate_not_matching','nonexact_plain_candidate','rich_link_not_verified','native_copy_menu_unavailable'}:raise
                         incomplete=True
@@ -824,7 +834,7 @@ class RealMaxDriver:
             await self._scope(target,namespace)
         return result
 
-    async def _plain_candidate(self, target, text, row, *, media_count=0):
+    async def _plain_candidate(self, target, text, row, *, media_count=0, native_history_id=None):
         await self._scope(target)
         await expect(row).to_have_count(1)
         await self.page.bring_to_front()
@@ -852,14 +862,20 @@ class RealMaxDriver:
                 raise MaxBlocked('video_source_unavailable')
             return dict(images=images,videos=videos,entities=styled['entities'])
         media=await content()
-        reference,native_id=await self._copy_native_reference(row,target)
+        if native_history_id is None:
+            reference,native_id=await self._copy_native_reference(row,target)
+        else:
+            from .wire import link_id_from_wire_id
+            native_id=link_id_from_wire_id(native_history_id)
+            reference=None
         if await content()!=media:raise MaxBlocked('candidate_changed_during_copy')
         downloaded=await self._download_media(row,target,media_count) if media_count else []
         await self._scope(target)
         if media_count:
             await content()
-            repeated,_=await self._copy_native_reference(row,target)
-            if repeated!=reference:raise MaxBlocked('media_post_reference_changed')
+            if native_history_id is None:
+                repeated,_=await self._copy_native_reference(row,target)
+                if repeated!=reference:raise MaxBlocked('media_post_reference_changed')
         return dict(id=native_id,url=reference,target=target,namespace='feed',text=text,
             media=[],observed_media=downloaded,entities=media['entities'],scheduled_at=None,observed_at=datetime.now(timezone.utc).isoformat())
 

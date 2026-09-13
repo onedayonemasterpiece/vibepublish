@@ -421,10 +421,31 @@ async def test_channel_feed_read_uses_native_history_readiness_without_isout(wri
         def __init__(self,*args,**kwargs):pass
         async def __aenter__(self):return self
         async def __aexit__(self,*args):pass
-        async def wait(self,*args):return [dict(id='42',text='Channel post')]
+        async def wait(self,*args):return [dict(id='42',text='Channel post',media_count=0)]
+    async def no_copy(*args,**kwargs):
+        raise AssertionError('channel feed projection must not depend on the copy-link menu')
     monkeypatch.setattr(wire,'HistoryObserver',History)
+    monkeypatch.setattr(d,'_copy_native_reference',no_copy)
     result=await d.read('-202')
     assert len(result)==1 and result[0]['id']==native and result[0]['text']=='Channel post'
+    assert result[0]['url'] is None
+    assert not effects(state)
+
+
+async def test_channel_feed_read_refuses_ambiguous_native_history_projection(writer,monkeypatch):
+    from adapters.max import wire
+    d,page,state,h=writer
+    state['messages']=[dict(id='AAAAAAAAACo',target='-202',text='Same post',outgoing=False)]
+    class History:
+        def __init__(self,*args,**kwargs):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def wait(self,*args):return [
+            dict(id='42',text='Same post',media_count=0),
+            dict(id='43',text='Same post',media_count=0)]
+    monkeypatch.setattr(wire,'HistoryObserver',History)
+    with pytest.raises(MaxBlocked,match='native_history_dom_projection_ambiguous'):
+        await d.read('-202')
     assert not effects(state)
 
 

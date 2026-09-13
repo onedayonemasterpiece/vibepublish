@@ -134,6 +134,24 @@ def published_wire_id(copied_native_id):
         raise MaxBlocked('native_link_id_unverified') from None
 
 
+def link_id_from_wire_id(wire_id):
+    """Canonical MAX link-id encoding from an observed provider history ID.
+
+    This never invents a message from DOM order and never creates a URL. The
+    input must already be a provider-native integer retained by HistoryObserver.
+    """
+    if not isinstance(wire_id,str):
+        raise MaxBlocked('native_history_id_unverified')
+    try:
+        value=int(wire_id)
+        if str(value)!=wire_id or value<=0 or value>=1<<64:raise ValueError()
+        native_id=base64.urlsafe_b64encode(value.to_bytes(8,'big')).decode().rstrip('=')
+        if published_wire_id(native_id)!=wire_id:raise ValueError()
+        return native_id
+    except (ValueError,OverflowError):
+        raise MaxBlocked('native_history_id_unverified') from None
+
+
 def own_reactions(value):
     """Only explicit native reactionInfo can prove presence or absence."""
     if not isinstance(value,dict):raise MaxBlocked('native_reactions_unverified')
