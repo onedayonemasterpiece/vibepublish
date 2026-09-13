@@ -101,7 +101,7 @@ async def test_valid_import_preserves_original_sha_and_replays_without_source(en
     [
         "/tmp/browser/payload",
         "artifact://../payload",
-        "artifact://24a9799d-bdc7-4e68-b0ba-65150dabf4d8",
+        "artifact://24a9799d-bdc7-4e68-b0ba-65150dabf4d",
         "artifact://24a9799d-bdc7-1e68-b0ba-65150dabf4d9",
     ],
 )
