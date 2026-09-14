@@ -54,7 +54,6 @@ class Application:
                 result = self.visuals.command(actor, arguments)
             else:
                 raise DomainError('capability_not_implemented', next_action='contact_owner')
-            # Validate outputs too; a malformed success must never escape to clients.
             Draft202012Validator(CATALOG[name]['outputSchema'], format_checker=FORMATS).validate(result)
             return result
         except DomainError as exc:
@@ -84,7 +83,8 @@ class Application:
     def aliases(self, db, actor):
         result = []
         for row in self.store.bindings(db, actor):
-            result.append({'alias': row['alias'], 'kind': 'destination', 'label': row['label'], 'revision': row['epoch']})
+            result.append({'alias': row['alias'], 'kind': 'destination', 'label': row['label'],
+                           'revision': row['epoch'], 'provider': row['provider']})
         for row in db.execute('SELECT * FROM destination_sets WHERE tenant_id=? AND principal_id=?', (actor.tenant_id, actor.principal_id)):
             members = json.loads(row['members'])
             if all(any(d['alias'] == m for d in result) for m in members):
@@ -95,6 +95,34 @@ class Application:
             if profile:
                 destination.update(profile=json.loads(profile['profile']), profile_revision=profile['revision'])
         return sorted(result, key=lambda d: (d.get('profile', {}).get('usage') != 'primary', d['alias']))
+
+    def _recent_preview_preflight(self, db, actor, binding):
+        """Fresh durable proof that native prepare succeeded without provider dispatch."""
+        if binding['account_type'] == 'fake':
+            return False
+        rows = db.execute(
+            """SELECT a.plan FROM attempts a
+               JOIN operations o ON o.id=a.operation_id
+               WHERE a.binding_id=? AND a.binding_epoch=?
+                 AND a.dispatched=0
+                 AND a.state='needs_approval' AND a.stage='awaiting_approval'
+                 AND o.tenant_id=? AND o.principal_id=? AND o.actor_epoch=?
+                 AND o.action='publish' AND o.state='needs_approval'
+                 AND o.complete=1 AND o.work_state='done' AND o.error IS NULL
+                 AND o.created>=?
+               ORDER BY o.created DESC LIMIT 8""",
+            (binding['id'], binding['epoch'], actor.tenant_id, actor.principal_id,
+             actor.epoch, self.store.clock()-3600),
+        ).fetchall()
+        for row in rows:
+            try:
+                plan = json.loads(row['plan'])
+            except (TypeError, ValueError):
+                continue
+            if (plan.get('mode') == 'preview' and plan.get('action') == 'publish'
+                    and plan.get('surface', 'post') == 'post'):
+                return True
+        return False
 
     def bootstrap(self, actor, args):
         skill = SKILL.read_text()
@@ -117,10 +145,17 @@ class Application:
             for d in page:
                 row = bindings.get(d['alias'])
                 if row:
+                    preview_verified = self._recent_preview_preflight(db, actor, row)
+                    if preview_verified:
+                        status = 'supported'
+                        reason = 'Recent preview completed provider/target preflight without provider dispatch'
+                    else:
+                        status = 'needs_review' if row['account_type'] in {'fake','mtproto_user','mtproto_bot','vk_user','vk_group'} else 'needs_auth'
+                        reason = 'Offline fixture only; no live capability verified' if row['account_type'] == 'fake' else 'Native implementation requires explicit worker wiring and target preflight; no live canary verified'
                     result['capabilities'].append({'destination': row['alias'], 'operation': 'publish', 'surface': 'post',
-                        'status': 'needs_review' if row['account_type'] in {'fake','mtproto_user','mtproto_bot','vk_user','vk_group'} else 'needs_auth',
+                        'status': status,
                         'observed_at': timestamp(self.store.clock()),
-                        'reason': 'Offline fixture only; no live capability verified' if row['account_type'] == 'fake' else 'Native implementation requires explicit worker wiring and target preflight; no live canary verified'})
+                        'reason': reason})
             if offset+50 < len(all_dest):
                 result['next_cursor'] = self.store.cursor(db, actor, 'bootstrap', scope, offset+50)
             return result
@@ -368,11 +403,9 @@ class Application:
         return self.store.receipt(actor, op)
 
     def _adopt_plan(self, db, actor, args):
-        """A shared-channel read ref gives item CAS, never another author's draft."""
         source = self.resolve_item(db, actor, args['item_ref'])
         b = self.store.binding(db, actor, binding_id=source['binding_id'])
         remote = json.loads(source['snapshot'])
-        # Preserve native object IDs, not another principal's private asset hashes.
         remote['media_hashes'] = []
         change, kind = args['change'], args['change']['kind']
         if kind not in {'edit', 'reschedule', 'cancel', 'delete'}:
@@ -467,13 +500,12 @@ class Application:
                     ready = ready or event is not None or bool(op['complete'])
             if ready or asyncio.get_running_loop().time() >= deadline:
                 return {'receipts': [self.store.receipt(actor, ident, after=args.get('after_event'), event_limit=args.get('limit', 50)) for ident in ids]}
-            await asyncio.sleep(0.025)  # Journal wait only; never a publication timer.
+            await asyncio.sleep(0.025)
 
     def destinations(self, actor, args):
         intent = normalize_intent('destinations', args)
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
-            # Keyed replay precedes profile/set CAS, atomically with mutations.
             op = self._replay(db, actor, 'destinations', intent, args, implicit=False)
             if not op:
                 op = self._destinations_mutation(db, actor, args['command'], intent)
@@ -508,7 +540,7 @@ class Application:
                 db.execute('DELETE FROM destination_sets WHERE tenant_id=? AND principal_id=? AND alias=?', (actor.tenant_id, actor.principal_id, command['alias']))
             else:
                 for alias in command['members']:
-                    self.store.binding(db, actor, alias=alias)  # No nested sets.
+                    self.store.binding(db, actor, alias=alias)
                 db.execute('INSERT INTO destination_sets VALUES(?,?,?,?,?,?) ON CONFLICT(tenant_id,principal_id,alias) DO UPDATE SET label=excluded.label,revision=excluded.revision,members=excluded.members',
                            (actor.tenant_id, actor.principal_id, command['alias'], command['label'], command['expected_revision']+1, canonical(list(dict.fromkeys(command['members'])))))
         if action != 'list':
