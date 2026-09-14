@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Telegram production quarantine incident — 2026-09-14
+
+- Mark the dedicated Telegram session ownership and Telegram entity-readback
+  regression as `Not done` while the production fix and live recovery are pending.
+- Treat exact Telegram text/target/thread/media as delivery evidence and retain
+  provider-normalized entities as observed data rather than quarantining an
+  already completed send because Telegram rewrote entity metadata.
+- Record that repair probes opened direct Telethon clients from the production
+  session while the worker was active; future diagnostics must use VibePublish.
+
 ### Fixed — metadata-only Telegram thread reads — 2026-09-14
 
 - Telegram thread/topic listings now return attachment metadata without downloading

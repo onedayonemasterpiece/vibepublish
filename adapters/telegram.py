@@ -40,7 +40,8 @@ _REQUESTS = {
     'delete_channel': ('channels', 'DeleteMessagesRequest'),
     'delete_messages': ('messages', 'DeleteMessagesRequest'),
 }
-from social_operations.rich_text import ENTITY_TYPES, from_native, to_native, provider_content, telegram_text_limit
+from social_operations.rich_text import (ENTITY_TYPES, from_native, to_native,
+    provider_content, telegram_content_matches, telegram_text_limit)
 from .telegram_emoji import check_custom, load_set
 _TYPES = {'InputMediaUploadedPhoto', 'InputPhoto', 'InputMediaPhoto', 'InputSingleMedia', 'InputStickerSetShortName',
           'InputReplyToMessage', 'InputMediaUploadedDocument', 'DocumentAttributeFilename',
@@ -606,8 +607,12 @@ class TelegramAdapter:
             if digest([item.text, item.entities_json]) != source.get('content_digest'):
                 raise OutcomeUnknown('telegram_forward_content_mismatch')
         else:
-            expected_text, expected_entities = provider_content(r.content_json, telegram_text_limit(r))
-            if item.text != expected_text or json.loads(item.entities_json) != expected_entities:
+            if not telegram_content_matches(
+                r.content_json,
+                item.text,
+                json.loads(item.entities_json),
+                telegram_text_limit(r),
+            ):
                 raise OutcomeUnknown('telegram_entities_readback_mismatch')
         item = bind_media(r, item, checkpoint['media'])
         return Observation('provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',

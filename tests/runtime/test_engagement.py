@@ -43,6 +43,29 @@ async def publish(runtime):
     await worker.run_once();result=store.receipt(actor,result['operation_id'])
     assert result['state']=='verified';return result['deliveries'][0]['item_ref']
 
+
+@pytest.mark.asyncio
+async def test_telegram_worker_records_native_entities_without_quarantining(tmp_path):
+    store=Store(tmp_path/'core.sqlite');token=store.create_principal('tenant','owner',owner=True)
+    actor=store.authenticate(token);store.add_connection(actor,'connection','telegram',account_type='mtproto_user')
+    store.bind(actor,'owner','telegram','connection','-101')
+    provider=Provider()
+    original_execute=provider.execute
+    async def execute(prepared,hooks):
+        observed=await original_execute(prepared,hooks)
+        item=replace(observed.items[0],entities_json=json.dumps([
+            {'type':'bold','offset':0,'length':6}
+        ],separators=(',',':')))
+        return replace(observed,items=(item,))
+    provider.execute=execute
+    app=Application(store);worker=Worker(store,{'telegram':provider})
+    accepted=await app.call(actor,'vibepublish_publish',{
+        'to':['telegram'],'content':{'text':'Source'}
+    })
+    await worker.run_once();result=store.receipt(actor,accepted['operation_id'])
+    assert result['state']=='verified',result
+    assert provider.effects==1
+
 @pytest.mark.asyncio
 async def test_reply_and_reaction_use_same_worker_and_explicit_additive_rights(runtime):
     store,actor,binding,p,app,worker=runtime;source=await publish(runtime)

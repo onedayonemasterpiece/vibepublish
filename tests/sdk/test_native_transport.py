@@ -31,6 +31,7 @@ class NativeTransport:
         self.effects = 0
         self.after_effect = None
         self.fail_read = False
+        self.provider_plain_entities = None
         self.docs = [t.Document(id=int(e['document_id']), access_hash=4, file_reference=b'fixture',
             date=DATE, mime_type='image/png', size=1, dc_id=1,
             attributes=[t.DocumentAttributeCustomEmoji(alt=alt,
@@ -100,6 +101,8 @@ class NativeTransport:
                     date=wire.schedule_date or DATE, message=row.message, entities=row.entities,
                     media=t.MessageMediaPhoto(photo=self.photo(media.id.id)) if media else None,
                     grouped_id=80 if len(rows)>1 else None)
+                if not row.entities and self.provider_plain_entities is not None:
+                    self.messages[ident].entities = list(self.provider_plain_entities)
                 if wire.schedule_date:
                     self.scheduled.add(ident)
                 updates.append(t.UpdateMessageID(id=ident, random_id=row.random_id))
@@ -127,7 +130,11 @@ def setup(**changes):
     journal = Journal()
     client = NativeTransport(journal)
     adapter = TelegramAdapter(client, connection_id='connection', clock=lambda: NOW)
-    r = request('telegram', content_json=canonical(dict(text=TEXT, format='telegram_entities', entities=list(ENTITY_SPECS))), **changes)
+    content_json = changes.pop(
+        'content_json',
+        canonical(dict(text=TEXT, format='telegram_entities', entities=list(ENTITY_SPECS))),
+    )
+    r = request('telegram', content_json=content_json, **changes)
     return adapter, client, journal, r
 
 
@@ -179,19 +186,49 @@ async def test_real_tl_media_edit_replaces_exact_photo():
 
 
 @pytest.mark.asyncio
-async def test_native_readback_wrong_emoji_is_not_success_or_resend():
+async def test_native_readback_entity_normalization_is_observed_not_quarantined():
     adapter, client, journal, r = setup()
     prepared = await adapter.prepare(r, journal.hooks)
     def corrupt(transport):
         next(iter(transport.messages.values())).entities[0].document_id += 1
     client.after_effect = corrupt
-    with pytest.raises(OutcomeUnknown) as failure:
-        await adapter.execute(prepared, journal.hooks)
-    assert failure.value.code == 'telegram_entities_readback_mismatch'
+    result = await adapter.execute(prepared, journal.hooks)
+    item, = result.items
+    assert json.loads(item.entities_json)[0]['document_id'] != ENTITY_SPECS[0]['document_id']
     for _ in range(2):
-        with pytest.raises(OutcomeUnknown) as failure:
-            await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
-        assert failure.value.code == 'telegram_entities_readback_mismatch'
+        recovered = await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
+        assert recovered.items[0].native_id == item.native_id
+    assert client.effects == 1
+
+
+@pytest.mark.asyncio
+async def test_plain_text_accepts_provider_added_text_inherent_url_entity():
+    text = 'Источник: Sakh.online; документальная фотография.'
+    adapter, client, journal, r = setup(content_json=canonical({'text': text}))
+    offset = len('Источник: '.encode('utf-16-le')) // 2
+    client.provider_plain_entities = [t.MessageEntityUrl(offset=offset, length=len('Sakh.online'))]
+    result = await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
+    item, = result.items
+    assert item.text == text
+    assert json.loads(item.entities_json) == [
+        {'type': 'url', 'offset': offset, 'length': len('Sakh.online')}
+    ]
+    assert client.effects == 1
+    recovered = await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
+    recovered_item, = recovered.items
+    assert recovered_item.native_id == item.native_id
+    assert client.effects == 1
+
+
+@pytest.mark.asyncio
+async def test_plain_text_observes_provider_added_formatting_entity():
+    text = 'Обычный текст'
+    adapter, client, journal, r = setup(content_json=canonical({'text': text}))
+    client.provider_plain_entities = [t.MessageEntityBold(offset=0, length=7)]
+    result = await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
+    assert json.loads(result.items[0].entities_json) == [
+        {'type': 'bold', 'offset': 0, 'length': 7}
+    ]
     assert client.effects == 1
 
 

@@ -159,6 +159,17 @@ def provider_content(content_json, limit):
     return c['text'], entities
 
 
+def telegram_content_matches(content_json, observed_text, observed_entities, limit):
+    """Confirm exact Telegram text; retain native entity readback as observed data.
+
+    Telegram owns its entity normalization and can add or rewrite entity metadata
+    after accepting an otherwise exact payload. Entity drift must not turn a
+    completed provider effect into an unknown outcome or quarantine the transport.
+    """
+    expected_text, _ = provider_content(content_json, limit)
+    return observed_text == expected_text
+
+
 MAX_ENTITY_TYPES = frozenset({'bold', 'italic', 'code', 'spoiler', 'text_link', 'url'})
 
 

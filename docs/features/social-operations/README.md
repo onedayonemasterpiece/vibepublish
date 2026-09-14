@@ -107,7 +107,17 @@ The agent can find its earlier publications quickly using local history, then re
 
 VibePublish is one independent service on DevCoveer with MCP and HTTP interfaces over the same application services. It owns adapters, connection references, tenant/principal bindings, aliases/sets, semantic rendering, assets, immediate command execution, native queue management, observations, history and audit.
 
-Telegram uses independent VibePublish sessions, including the canonical `VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE`; never fall back to EventsBot/E2E sessions. Bot API/business connections remain separate capability families. VK uses independent role-scoped VibePublish credentials and reusable donor transport/upload/readback behavior. MAX uses an isolated persistent profile and specialized Playwright driver; no general-purpose model agent selects targets or clicks submit.
+`Not done` after the 2026-09-14 production incident: Telegram uses independent
+VibePublish sessions, including the canonical `VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE`;
+never fall back to EventsBot/E2E sessions. The production session must have one
+process owner for its full connected lifetime. Diagnostics and acceptance must go
+through VibePublish; they must not construct another Telethon client from the
+production session while the worker is connected. The runtime must fail closed if
+a second conforming worker tries to claim that session. Bot API/business
+connections remain separate capability families. VK uses independent role-scoped
+VibePublish credentials and reusable donor transport/upload/readback behavior. MAX
+uses an isolated persistent profile and specialized Playwright driver; no
+general-purpose model agent selects targets or clicks submit.
 
 Tenant-owned credentials and operator-shared credentials are both supported. Operator-shared access requires an owner-created exact destination binding and actual provider publishing rights. Supplying a URL never creates a binding. Multi-tenant isolation, secure onboarding, quotas and revocation belong to the first core batch; the initial administration surface may be owner-only CLI.
 
@@ -171,6 +181,10 @@ The common ancestor with the acceptance checkout is
 - Text, PHOTO and DOCUMENT have native send/readback implementations. DOCUMENT
   here means an image sent as a file (PNG/JPEG/WebP), not arbitrary PDF/binary
   transport. Non-image documents remain metadata-only on read.
+- `Not confirmed by user`: Telegram delivery confirmation requires exact native
+  identity, destination/topic, text and media binding. Telegram-normalized entity
+  metadata is retained as observed provider data but is not an equality gate and
+  cannot by itself quarantine an already completed publication.
 - Authorized photo/image-document reads download provider bytes into private
   verified assets, exposed through `vibepublish://assets/<id>` and the existing
   `vibepublish://assets/{asset_id}` MCP template. Provider-byte evidence hashes

@@ -33,6 +33,13 @@ native_spec = importlib.util.spec_from_file_location('stand_native_worker', Path
 native = importlib.util.module_from_spec(native_spec)
 native_spec.loader.exec_module(native)
 
+production_spec = importlib.util.spec_from_file_location(
+    'stand_production_worker',
+    Path(__file__).resolve().parents[2] / 'deploy/devcoveer/production_worker.py',
+)
+production = importlib.util.module_from_spec(production_spec)
+production_spec.loader.exec_module(production)
+
 
 def test_only_dedicated_session_is_accepted(tmp_path):
     from social_operations.domain import DomainError
@@ -49,6 +56,18 @@ def test_explicit_bundle_is_decoded_without_old_session_fallback(tmp_path):
     supplied = base64.urlsafe_b64encode(json.dumps({'session': '1explicit-test-only'}).encode()).decode()
     env.write_text(f'VIBE_PUBLISH_TG_SESSION={supplied}\nTELEGRAM_SESSION=old\nTG_API_ID=123\nTG_API_HASH=abc\n')
     assert native.credentials(env) == {'api_id': 123, 'api_hash': 'abc', 'session': '1explicit-test-only'}
+
+
+def test_production_telegram_session_has_one_process_owner(tmp_path):
+    from social_operations.domain import DomainError
+    lock = tmp_path / 'telegram-session.lock'
+    with production.exclusive_session_owner(lock):
+        with pytest.raises(DomainError, match='telegram session already owned') as failure:
+            with production.exclusive_session_owner(lock):
+                pass
+        assert failure.value.code == 'telegram_session_already_owned'
+    with production.exclusive_session_owner(lock):
+        pass
 
 
 def test_vk_requires_explicit_approved_key(tmp_path):

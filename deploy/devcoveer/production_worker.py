@@ -10,9 +10,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+from contextlib import contextmanager
+import fcntl
 import json
 import os
 from pathlib import Path
+import stat
 
 from dotenv import dotenv_values
 from telethon import TelegramClient
@@ -26,6 +29,33 @@ from social_operations.worker import Worker
 TG_REFERENCE = "VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE"
 VK_REFERENCE = "VIBEPUBLISH_VK_USER_AUTH_BUNDLE"
 MAX_REFERENCE = "VIBEPUBLISH_MAX_PROFILE"
+
+
+@contextmanager
+def exclusive_session_owner(path: Path):
+    """Hold one host-process owner for the production Telegram session."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0)
+    fd = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise DomainError('telegram_session_lock_invalid', next_action='contact_owner')
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise DomainError(
+                'telegram_session_already_owned',
+                'telegram session already owned',
+                'contact_owner',
+            ) from None
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def telegram_credentials(path: Path):
@@ -125,30 +155,31 @@ async def run(
         raise DomainError("max_profile_config_missing")
     bundles[MAX_REFERENCE] = max_profile
 
-    async with native_adapters(
-        store,
-        env=bundles,
-        telegram_factory=telegram_factory,
-    ) as wiring:
-        imagegen = None
-        if codex_task_artifacts is not None:
-            from adapters.codex_task_imagegen import CodexTaskImagegen
+    with exclusive_session_owner(db.parent / 'telegram-session.lock'):
+        async with native_adapters(
+            store,
+            env=bundles,
+            telegram_factory=telegram_factory,
+        ) as wiring:
+            imagegen = None
+            if codex_task_artifacts is not None:
+                from adapters.codex_task_imagegen import CodexTaskImagegen
 
-            imagegen = CodexTaskImagegen(
-                codex_task_artifacts,
-                codex_home=Path("/home/dev/.codex"),
-            )
-        worker = Worker(store, wiring, imagegen=imagegen)
-        try:
-            while True:
-                worked = await worker.run_once()
-                if once:
-                    return
-                if not worked:
-                    await asyncio.sleep(0.25)
-        finally:
-            if imagegen is not None:
-                await imagegen.close()
+                imagegen = CodexTaskImagegen(
+                    codex_task_artifacts,
+                    codex_home=Path("/home/dev/.codex"),
+                )
+            worker = Worker(store, wiring, imagegen=imagegen)
+            try:
+                while True:
+                    worked = await worker.run_once()
+                    if once:
+                        return
+                    if not worked:
+                        await asyncio.sleep(0.25)
+            finally:
+                if imagegen is not None:
+                    await imagegen.close()
 
 
 def main():
