@@ -82,7 +82,7 @@ DEFS = {
             "preset": ALIAS, "candidates": {"type": "integer", "minimum": 1, "maximum": 4},
             "selection": enum("automatic", "human")}, ("sources", "brief"))]},
     "destination": obj({"alias": ALIAS, "kind": enum("destination", "set"),
-        "label": string(200), "revision": REV, "members": array(ALIAS, 0, 100)},
+        "label": string(200), "revision": REV, "provider": PROVIDER, "members": array(ALIAS, 0, 100)},
         ("alias", "kind", "label", "revision")),
     "capability": obj({"destination": ALIAS, "operation": string(80),
         "surface": string(80), "status": enum("supported", "unsupported", "needs_auth", "needs_review", "temporarily_unavailable"),
