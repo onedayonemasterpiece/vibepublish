@@ -5,6 +5,7 @@ onboarding/TLS deployment is a separate gate. No provider worker runs in request
 """
 from __future__ import annotations
 import asyncio
+import base64
 import json
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -17,6 +18,7 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route, Mount
+from .assets import AssetPreview
 from .domain import DomainError, canonical
 from .ingress import IngressApplication
 from .service import SKILL
@@ -104,6 +106,17 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'),
     @mcp.call_tool(validate_input=False)
     async def call_tool(name, arguments):
         result = await service.call(actor(), name, arguments)
+        if isinstance(result, AssetPreview):
+            metadata = result.metadata
+            return types.CallToolResult(
+                content=[
+                    types.TextContent(type='text', text=canonical(metadata)),
+                    types.ImageContent(type='image', data=base64.b64encode(result.data).decode('ascii'),
+                                       mimeType=metadata['mime_type']),
+                ],
+                structuredContent=metadata,
+                isError=False,
+            )
         return types.CallToolResult(content=[types.TextContent(type='text', text=canonical(result))],
                                     structuredContent=result, isError='error' in result and 'operation_id' not in result)
 

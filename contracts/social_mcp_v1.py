@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.6.0-runtime"
+VERSION = "1.6.1-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -195,7 +195,7 @@ def tool(name, description, inputs, outputs, scope, read_only=False):
     TOOLS.append({"name": "vibepublish_" + name, "description": description,
         "inputSchema": inputs, "outputSchema": outputs, "required_scope": scope,
         "annotations": {"readOnlyHint": read_only, "destructiveHint": not read_only,
-                        "openWorldHint": name not in ("get_started", "status")}})
+                        "openWorldHint": name not in ("get_started", "status", "asset_preview")}})
 
 
 tool("get_started", "Get the versioned skill, allowed aliases and current capabilities. Never grants access.",
@@ -278,6 +278,19 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
                                         "required": ["kind"]}}},
      "then": {"required": ["request_key"]}}
 ]
+
+tool("asset_preview", "Return a small metadata-free WebP preview of one authorized VibePublish image so the model can inspect it before deciding whether to reuse it. The existing vibepublish://assets/{asset_id} URI remains the immutable source reference.",
+    obj({"resource_uri": string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$")},
+        ("resource_uri",)),
+    obj({"resource_uri": string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$"),
+         "source_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+         "preview_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+         "mime_type": {"const": "image/webp"},
+         "width": {"type": "integer", "minimum": 1, "maximum": 768},
+         "height": {"type": "integer", "minimum": 1, "maximum": 768},
+         "size_bytes": {"type": "integer", "minimum": 1, "maximum": 393216}},
+        ("resource_uri", "source_sha256", "preview_sha256", "mime_type", "width", "height", "size_bytes")),
+    "visual", True)
 
 tool("status", "Read local receipts and atomic progress, never retry. Watch one operation with after_event; return on its first new event, not all providers.",
     obj({"ids": array(ID, 1, 20), "limit": LIMIT, "cursor": string(512),

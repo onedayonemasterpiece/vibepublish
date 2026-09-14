@@ -68,6 +68,8 @@ publish("Сначала дай выбрать одну из двух иллюс�
 publish("Улучши мой черновик карточки перед публикацией", visual={"kind": "tune", "source": ASSET, "brief": "Сохрани подтверждённый текст, улучши композицию"})
 publish("Скомпонуй две фотографии для поста", visual={"kind": "compose", "sources": [ASSET, ASSET2], "brief": "Афиша без новых фактов"})
 job("Создай отдельную иллюстрацию, не публикуй", "visual", {"command": {"kind": "generate", "brief": "Музыкальное настроение"}})
+job("Покажи лёгкое превью сохранённой картинки", "asset_preview", {
+    "resource_uri": "vibepublish://assets/asset_1"}, "bounded_private_webp_for_model_vision")
 job("Улучши отдельную карточку", "visual", {"command": {"kind": "tune", "source": ASSET, "brief": "Больше воздуха"}})
 job("Сделай композицию из двух картинок отдельно", "visual", {"command": {"kind": "compose", "sources": [ASSET, ASSET2], "brief": "Вертикальная композиция"}})
 job("Выбираю второй вариант; продолжи исходную публикацию", "visual", {"command": {"kind": "select", "job_id": "visual_1", "candidate_id": "candidate_2", "expected_revision": 2, "token": "review_token"}})

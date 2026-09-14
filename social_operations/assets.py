@@ -17,6 +17,16 @@ class VerifiedImage:
     height: int
 
 
+@dataclass(frozen=True, slots=True)
+class AssetPreview:
+    metadata: dict
+    data: bytes
+
+
+PREVIEW_MAX_EDGE = 768
+PREVIEW_MAX_BYTES = 384 * 1024
+
+
 def verify_image(data: bytes, mime: str) -> VerifiedImage:
     if not isinstance(data, bytes) or not 1 <= len(data) <= 20 * 1024 * 1024:
         raise DomainError('asset_size_limit')
@@ -58,6 +68,40 @@ def insert_verified_image(store, db, actor, image: VerifiedImage) -> str:
                (derivative, actor.tenant_id, actor.principal_id, hashlib.sha256(verified).hexdigest(),
                 'image/png', width, height, verified, source_hash, store.clock()))
     return derivative
+
+
+def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> AssetPreview:
+    """Create a bounded, metadata-free model preview without changing the source asset."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data)) as source:
+                source.load()
+                clean = Image.new('RGB', source.size, 'white')
+                if 'A' in source.getbands():
+                    clean.paste(source.convert('RGBA'), mask=source.getchannel('A'))
+                else:
+                    clean.paste(source.convert('RGB'))
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise DomainError('invalid_image') from exc
+    for edge, quality in ((768, 72), (640, 68), (512, 64), (384, 58)):
+        preview = clean.copy()
+        preview.thumbnail((edge, edge), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        preview.save(output, format='WEBP', quality=quality, method=4, exif=b'')
+        encoded = output.getvalue()
+        if len(encoded) <= PREVIEW_MAX_BYTES:
+            metadata = {
+                'resource_uri': resource_uri,
+                'source_sha256': source_sha256,
+                'preview_sha256': hashlib.sha256(encoded).hexdigest(),
+                'mime_type': 'image/webp',
+                'width': preview.width,
+                'height': preview.height,
+                'size_bytes': len(encoded),
+            }
+            return AssetPreview(metadata, encoded)
+    raise DomainError('asset_preview_size_limit')
 
 
 

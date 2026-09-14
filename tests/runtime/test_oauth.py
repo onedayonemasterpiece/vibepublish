@@ -283,7 +283,7 @@ def test_actual_mcp_tools_oauth_descriptor(setup):
     response=client.post('/mcp/',json={'jsonrpc':'2.0','id':2,'method':'tools/list'},headers=headers)
     assert response.status_code==200,response.text
     tools=response.json()['result']['tools']
-    assert len(tools)==9
+    assert len(tools)==10
     for tool in tools:
         assert tool['securitySchemes']==[{'type':'oauth2','scopes':[SCOPE]}]
         assert tool['_meta']['securitySchemes']==tool['securitySchemes']

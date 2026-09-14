@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Model-visible private asset preview — 2026-09-14
+
+- Add a read-only `vibepublish_asset_preview` MCP tool that turns an authorized
+  `vibepublish://assets/{asset_id}` source into a metadata-free WebP image block
+  bounded to 768 px and 384 KiB without changing the original transfer URI.
+- Bind preview metadata to both source and derivative SHA-256 values and retain
+  the existing principal/tenant/revocation checks. ChatGPT delivery remains
+  `Not confirmed by user` until the deployed connector is refreshed and tested.
+
 ### Private media-store reliability — 2026-09-14
 
 - Add the owner-only Telegram media database as a separate non-public product

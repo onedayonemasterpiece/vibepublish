@@ -9,6 +9,7 @@ import sqlite3
 from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
 from contracts.social_mcp_v1 import VERSION, catalog, project_catalog
+from .assets import AssetPreview, render_asset_preview
 from .domain import DomainError, canonical, digest, new_id, normalize_intent, parse_source, parse_time, timestamp
 
 CATALOG = {t['name']: t for t in catalog()['tools']}
@@ -61,10 +62,16 @@ class Application:
                     result = await import_browser_artifact(self, actor, arguments)
                 else:
                     result = self.visuals.command(actor, arguments)
+            elif short == 'asset_preview':
+                resource_uri = arguments['resource_uri']
+                ident = resource_uri.removeprefix('vibepublish://assets/')
+                data, _mime, source_sha256 = self.read_asset(actor, ident)
+                result = await asyncio.to_thread(render_asset_preview, data, source_sha256, resource_uri)
             else:
                 raise DomainError('capability_not_implemented', next_action='contact_owner')
             # Validate outputs too; a malformed success must never escape to clients.
-            Draft202012Validator(CATALOG[name]['outputSchema'], format_checker=FORMATS).validate(result)
+            validated_result = result.metadata if isinstance(result, AssetPreview) else result
+            Draft202012Validator(CATALOG[name]['outputSchema'], format_checker=FORMATS).validate(validated_result)
             return result
         except DomainError as exc:
             return exc.output()

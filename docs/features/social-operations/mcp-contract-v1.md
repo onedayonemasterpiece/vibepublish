@@ -436,6 +436,24 @@ inline visual arguments are denied when visual scope is absent, not merely hidde
 from list_tools. The initial real-preset automatic-choice and live executor gates
 are explicit in the canonical visuals document.
 
+### Model-visible lightweight asset preview — owner decision 2026-09-14
+
+Status: **Fixed; implemented, not confirmed by user in ChatGPT**.
+
+The existing `vibepublish://assets/{asset_id}` URI remains the source identity and
+exact-byte transfer reference. It is not replaced with another asset link.
+`vibepublish_asset_preview` accepts that exact URI and returns a standard MCP image
+content block plus bounded metadata. The image is a metadata-free WebP derivative,
+maximum 768 px on either edge and 384 KiB, intended only for fast model inspection
+before selection or transfer. The returned metadata binds the preview SHA-256 to
+the authorized source SHA-256.
+
+Preview generation rechecks the same current principal, tenant, scope, visual-job
+and emoji-catalog access as a full resource read. It cannot publish, select, grant
+access, or replace the immutable source. The server returns neither provider URLs
+nor credentials. ChatGPT delivery requires an exact deployed connector refresh and
+a real model-visible image smoke; local SDK success alone is not that acceptance.
+
 
 ## 1.5 runtime delta: Telegram palettes and semantic entities
 

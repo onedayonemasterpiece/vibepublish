@@ -71,7 +71,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     initialized = await session.initialize()
                     self.assertEqual(initialized.protocolVersion,'2025-11-25')
                     tools = await session.list_tools()
-                    self.assertEqual(len(tools.tools),9)
+                    self.assertEqual(len(tools.tools),10)
                     boot = (await session.call_tool('vibepublish_get_started',{'section':'all'})).structuredContent
                     self.assertIn('skill_sha256',boot)
                     self.assertTrue(boot['skill'])
@@ -263,6 +263,15 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': BlockedEdit(sys.argv[2], 'te
                     self.assertEqual(hashlib.sha256(binary.content).hexdigest(),candidate['sha256'])
                     resource=await session.read_resource('vibepublish://assets/'+candidate['asset_ref'])
                     self.assertEqual(base64.b64decode(resource.contents[0].blob),binary.content)
+                    preview=await session.call_tool('vibepublish_asset_preview',{
+                        'resource_uri':'vibepublish://assets/'+candidate['asset_ref']})
+                    self.assertFalse(preview.isError,preview)
+                    self.assertEqual(preview.structuredContent['mime_type'],'image/webp')
+                    self.assertLessEqual(max(preview.structuredContent['width'],preview.structuredContent['height']),768)
+                    self.assertLessEqual(preview.structuredContent['size_bytes'],393216)
+                    image=next(part for part in preview.content if part.type=='image')
+                    self.assertEqual(image.mimeType,'image/webp')
+                    self.assertEqual(hashlib.sha256(base64.b64decode(image.data)).hexdigest(),preview.structuredContent['preview_sha256'])
                     choice={'command':{'kind':'select','job_id':first['visual_job_id'],'candidate_id':candidate['id'],
                             'expected_revision':ready['visual_revision'],'token':candidate['selection_token']}}
                     selected=await http.post(self.base+'/v1/visuals/commands',headers={'Idempotency-Key':'choose-http-mcp'},json=choice)
@@ -298,6 +307,9 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': BlockedEdit(sys.argv[2], 'te
                     tools=await session.list_tools()
                     # Publish scope grants private attachment import, never image generation.
                     visual=next(t for t in tools.tools if t.name=='vibepublish_visual')
+                    denied_preview=await session.call_tool('vibepublish_asset_preview',{'resource_uri':'vibepublish://assets/'+candidate['asset_ref']})
+                    self.assertTrue(denied_preview.isError)
+                    self.assertEqual(denied_preview.structuredContent['error']['code'],'asset_not_available')
                     command_schema=visual.inputSchema['properties']['command']
                     self.assertEqual(command_schema['properties']['kind'], {'const':'import'})
                     self.assertNotIn('oneOf', command_schema)

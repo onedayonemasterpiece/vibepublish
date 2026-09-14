@@ -98,6 +98,11 @@ The shared service has prompt-first contracts and automatic continuation for exp
 
 Candidates are private authenticated HTTP assets or MCP `vibepublish://assets/{id}` resources. Reuse only returned asset IDs, revisions and tokens. Selection resumes the original parent at most once; revocation blocks reads/reuse. Fake fixtures cannot enter native connections. Request-key replay observes the original result and never authorizes a retry of an uncertain effect.
 
+To inspect an owned image quickly, call `vibepublish_asset_preview` with its existing
+`vibepublish://assets/{id}` URI. The returned WebP is only a bounded visual preview;
+use the unchanged resource URI, not the preview bytes, when another authorized
+service imports the asset.
+
 ## Lifecycle and safety
 
 Use current publication_id and expected_revision. edit replaces only supplied fields. reschedule changes the existing native queue item. cancel removes a queued item at the provider, or cancels a never-dispatched intent; delete removes an already published item. No silent delete/re-create or automatic delete after a cancel race. Readback and external manual changes remain authoritative.
