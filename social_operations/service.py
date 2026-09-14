@@ -91,7 +91,8 @@ class Application:
     def aliases(self, db, actor):
         result = []
         for row in self.store.bindings(db, actor):
-            result.append({'alias': row['alias'], 'kind': 'destination', 'label': row['label'], 'revision': row['epoch']})
+            result.append({'alias': row['alias'], 'kind': 'destination', 'label': row['label'],
+                           'revision': row['epoch'], 'provider': row['provider']})
         for row in db.execute('SELECT * FROM destination_sets WHERE tenant_id=? AND principal_id=?', (actor.tenant_id, actor.principal_id)):
             members = json.loads(row['members'])
             if all(any(d['alias'] == m for d in result) for m in members):
@@ -102,6 +103,36 @@ class Application:
             if profile:
                 destination.update(profile=json.loads(profile['profile']), profile_revision=profile['revision'])
         return sorted(result, key=lambda d: (d.get('profile', {}).get('usage') != 'primary', d['alias']))
+
+    def _recent_preview_preflight(self, db, actor, binding):
+        """Fresh durable Telegram proof that native prepare succeeded without dispatch."""
+        if binding['provider'] != 'telegram' or binding['account_type'] == 'fake':
+            return False
+        rows = db.execute(
+            """SELECT a.plan FROM attempts a
+               JOIN operations o ON o.id=a.operation_id
+               WHERE a.binding_id=? AND a.binding_epoch=?
+                 AND a.dispatched=0
+                 AND a.state='needs_approval' AND a.stage='awaiting_approval'
+                 AND o.tenant_id=? AND o.principal_id=? AND o.actor_epoch=?
+                 AND o.action='publish' AND o.state='needs_approval'
+                 AND o.complete=1 AND o.work_state='done' AND o.error IS NULL
+                 AND o.created>=?
+               ORDER BY o.created DESC LIMIT 8""",
+            (binding['id'], binding['epoch'], actor.tenant_id, actor.principal_id,
+             actor.epoch, self.store.clock()-3600),
+        ).fetchall()
+        for row in rows:
+            try:
+                plan = json.loads(row['plan'])
+            except (TypeError, ValueError):
+                continue
+            if (plan.get('provider') == 'telegram'
+                    and plan.get('mode') == 'preview'
+                    and plan.get('action') == 'publish'
+                    and plan.get('surface', 'post') == 'post'):
+                return True
+        return False
 
     def bootstrap(self, actor, args):
         skill = SKILL.read_text()
@@ -124,10 +155,17 @@ class Application:
             for d in page:
                 row = bindings.get(d['alias'])
                 if row:
+                    preview_verified = self._recent_preview_preflight(db, actor, row)
+                    if preview_verified:
+                        status = 'supported'
+                        reason = 'Recent preview completed Telegram provider/target preflight without provider dispatch'
+                    else:
+                        status = 'needs_review' if row['account_type'] in {'fake','mtproto_user','mtproto_bot','vk_user','vk_group'} else 'needs_auth'
+                        reason = 'Offline fixture only; no live capability verified' if row['account_type'] == 'fake' else 'Native implementation requires explicit worker wiring and target preflight; no live canary verified'
                     result['capabilities'].append({'destination': row['alias'], 'operation': 'publish', 'surface': 'post',
-                        'status': 'needs_review' if row['account_type'] in {'fake','mtproto_user','mtproto_bot','vk_user','vk_group'} else 'needs_auth',
+                        'status': status,
                         'observed_at': timestamp(self.store.clock()),
-                        'reason': 'Offline fixture only; no live capability verified' if row['account_type'] == 'fake' else 'Native implementation requires explicit worker wiring and target preflight; no live canary verified'})
+                        'reason': reason})
             if offset+50 < len(all_dest):
                 result['next_cursor'] = self.store.cursor(db, actor, 'bootstrap', scope, offset+50)
             return result
