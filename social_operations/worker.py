@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from adapters.port import Asset, Hooks, NativeSource, Observation, ProviderRequest, ReadRequest, RemoteItem, UnavailableAdapter
-from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time
+from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time, timestamp
 from .service import Application
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled'}
@@ -24,6 +24,7 @@ class Worker:
         self.id = worker_id or new_id('worker')
         self.app = Application(store)
         self.imagegen = imagegen
+        self.next_media_store_purge = 0
         self.lock_root = store.path.parent / (store.path.name+'.locks')
         self.lock_root.mkdir(mode=0o700, exist_ok=True)
 
@@ -81,8 +82,9 @@ class Worker:
                 restore = db.execute("SELECT value FROM settings WHERE key='restore_guard'").fetchone()
                 if restore and restore[0] == '1':
                     raise DomainError('restore_requires_reconciliation', next_action='contact_owner')
-                unresolved = db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') AND NOT EXISTS (SELECT 1 FROM attempt_resolutions z WHERE z.attempt_id=a.id) LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
-                pending_release = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND r.finalize_state='pending' LIMIT 1", (plan['connection_id'],)).fetchone()
+                is_media_store = plan.get('workload') == 'media_store'
+                unresolved = None if is_media_store else db.execute("SELECT 1 FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') AND COALESCE(json_extract(a.plan,'$.workload'),'publication')!='media_store' AND NOT EXISTS (SELECT 1 FROM attempt_resolutions z WHERE z.attempt_id=a.id) LIMIT 1", (plan['connection_id'], child['id'])).fetchone()
+                pending_release = None if is_media_store else db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND COALESCE(json_extract(a.plan,'$.workload'),'publication')!='media_store' AND r.finalize_state='pending' LIMIT 1", (plan['connection_id'],)).fetchone()
                 if pending_release:
                     raise DomainError('connection_finalization_pending', next_action='check_status')
                 if unresolved:
@@ -120,6 +122,10 @@ class Worker:
                 db.execute('UPDATE operations SET lease_until=?,worker_seen=? WHERE id=?', (self.store.clock()+30, self.store.clock(), op['id']))
 
     async def run_once(self):
+        if self.store.clock() >= self.next_media_store_purge:
+            with self.store.tx() as db:
+                self.app._purge_media_store_assets(db)
+            self.next_media_store_purge = self.store.clock() + 60
         op = self.store.claim(self.id)
         if not op:
             return False
@@ -178,6 +184,7 @@ class Worker:
                 await asyncio.gather(*(self.run_child(op, c, actor, prepared.get(c['id'])) for c in pending))
             await self.finalize_pending(op, actor)
             self.aggregate(op)
+            self.schedule_media_store_retry(op)
         except asyncio.CancelledError:
             # A stopped worker leaves its durable claim for observation-only recovery.
             raise
@@ -190,6 +197,41 @@ class Worker:
             pulse.cancel()
             await asyncio.gather(pulse, return_exceptions=True)
         return True
+
+    def schedule_media_store_retry(self, op):
+        """Durably retry safe pre-dispatch failures and known-ID observations."""
+        transient = {'telegram_rpc_failed', 'telegram_cooldown', 'provider_command_failed',
+                     'provider_preflight_failed', 'provider_read_deadline'}
+        with self.store.tx() as db:
+            current = db.execute('SELECT * FROM operations WHERE id=?', (op['id'],)).fetchone()
+            if not current or current['complete'] == 0:
+                return
+            candidates = []
+            for child in db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)):
+                plan = json.loads(child['plan'])
+                if plan.get('workload') != 'media_store' or child['state'] not in {'blocked','outcome_unknown'}:
+                    continue
+                missing = json.loads(child['result']).get('missing_checks', [])
+                saved = json.loads(child['checkpoint'])
+                saved = saved.get('adapter', saved)
+                safe = (not child['dispatched'] and bool(set(missing) & transient)) or (
+                    child['dispatched'] and bool(saved.get('ids')))
+                if safe:
+                    candidates.append(child)
+            if not candidates or self.store.clock() >= current['deadline']:
+                return
+            result = json.loads(current['result'])
+            count = int(result.get('media_store_retry_count', 0))+1
+            delay = min(300, 2**min(count, 8))
+            result.update(media_store_retry_count=count,
+                          media_store_retry_at=timestamp(self.store.clock()+delay))
+            for child in candidates:
+                db.execute("UPDATE attempts SET state=?,stage='waiting_connection' WHERE id=?",
+                           ('running' if child['dispatched'] else 'accepted', child['id']))
+            db.execute("UPDATE operations SET state='running',complete=0,work_state='working',lease_owner=NULL,lease_until=?,error=NULL,result=? WHERE id=?",
+                       (self.store.clock()+delay, canonical(result), op['id']))
+            self.store.event(db, op['id'], 'waiting_connection', 'started',
+                             'Private media-store retry scheduled without blocking the connection')
 
     async def run_child(self, op, child, actor, prepared):
         try:
@@ -447,6 +489,11 @@ class Worker:
                 final_checkpoint['provider_evidence'] = evidence
             db.execute('UPDATE attempts SET state=?,stage=\'finished\',observed=?,result=?,checkpoint=? WHERE id=?',
                        (state, observation.observed, canonical(result), canonical(final_checkpoint), child['id']))
+            if plan.get('workload') == 'media_store' and state == 'verified':
+                staging = [row['asset_id'] for row in db.execute(
+                    "SELECT asset_id FROM media_store_assets WHERE publication_id=? AND purpose='staging'",
+                    (op['publication_id'],))]
+                db.executemany('DELETE FROM assets WHERE id=?', [(ident,) for ident in staging])
             self.store.event(db, op['id'], 'finished', 'completed', 'Exact provider item observed: '+observation.observed, child['alias'])
 
     @staticmethod
@@ -597,11 +644,21 @@ class Worker:
                             or evidence.mime != media.mime or evidence.size != len(media.data)):
                         raise DomainError('download_media_binding_invalid')
                     verified = verify_image(media.data, media.mime)
-                    sanitized_sha = hashlib.sha256(verified.data).hexdigest()
-                    existing_asset = db.execute(
-                        'SELECT id FROM assets WHERE tenant_id=? AND principal_id=? AND sha256=? AND source_sha256=? AND mime=\'image/png\' LIMIT 1',
-                        (actor.tenant_id, actor.principal_id, sanitized_sha, evidence.sha256)).fetchone()
-                    asset_ref = existing_asset['id'] if existing_asset else insert_verified_image(self.store, db, actor, verified)
+                    if args.get('_media_store_get'):
+                        asset_ref = new_id('asset')
+                        db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
+                                   (asset_ref, actor.tenant_id, actor.principal_id, evidence.sha256,
+                                    media.mime, verified.width, verified.height, media.data,
+                                    evidence.sha256, self.store.clock()))
+                        db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
+                                   (asset_ref, None, 'download_cache', self.store.clock()+3600))
+                    else:
+                        sanitized_sha = hashlib.sha256(verified.data).hexdigest()
+                        existing_asset = db.execute(
+                            'SELECT id FROM assets WHERE tenant_id=? AND principal_id=? AND sha256=? AND source_sha256=? AND mime=\'image/png\' LIMIT 1',
+                            (actor.tenant_id, actor.principal_id, sanitized_sha, evidence.sha256)).fetchone()
+                        asset_ref = existing_asset['id'] if existing_asset else insert_verified_image(
+                            self.store, db, actor, verified)
                     downloads.setdefault(media.item_native_id, []).append(
                         {'slot': media.slot, 'asset_ref': asset_ref, 'media_kind': media.media_kind})
             items = []

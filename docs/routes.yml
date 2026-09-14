@@ -50,6 +50,14 @@ sections:
     imagegen_inventory: scripts/inspect/probe_imagegen_plugin.py
 
 features:
+  media_store:
+    status: not_confirmed_by_user_local_verification_passed
+    docs: docs/features/media-store/README.md
+    provider_transport: telegram_private_topic
+    public_publication: forbidden
+    local_text_index: required
+    verified_staging_purge: required
+    provider_byte_read: required
   llm_gateway:
     status: existing_code_audit_findings_not_verified
     docs: docs/features/llm-gateway/README.md
@@ -67,7 +75,7 @@ features:
       - scripts/inspect/sweep_google_ai_stale.py
   social_operations:
     status: partial_remote_source_not_runnable
-    contract_version: 1.5.0-runtime
+    contract_version: 1.6.0-runtime
     base_design_version: 1.1.0-design
     scheduling: provider_native_only
     local_publication_scheduler: forbidden
@@ -82,7 +90,7 @@ features:
     latest_extension: docs/features/social-operations/forwarding-and-editorial-profiles-v1.md
     acceptance_tests: docs/features/social-operations/acceptance-tests-v1.md
     skill: docs/llm/vibepublish-social-skill.md
-    skill_update_status: v1_5_emoji_palette_and_native_entities
+    skill_update_status: v1_6_owner_telegram_media_database
     references:
       - docs/reference/events-bot-social-donor-map.md
     historical_references:

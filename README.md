@@ -2,7 +2,7 @@
 
 Independent Telegram, VK and MAX Web operations service, with one MCP/HTTP application core and an image/video pipeline.
 
-## Current contract: 1.5.0-runtime; offline core, native adapters, emoji and visuals
+## Current contract: 1.6.0-runtime; Telegram media database, native adapters, emoji and visuals
 
 Owner corrections of 2026-09-04 are Fixed:
 
@@ -53,7 +53,7 @@ python -m pip install --no-deps --no-build-isolation -e .
 python -m pytest tests
 ```
 
-The canonical contract remains eight tools, sixteen input/output schemas,
+The canonical contract exposes nine tools, including the owner-only Telegram media database,
 125 golden jobs and 44 invalid calls. Offline runtime tests are separate from
 these design fixtures and do not establish live provider/browser/model behavior.
 

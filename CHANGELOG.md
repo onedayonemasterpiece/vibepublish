@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Private media-store reliability — 2026-09-14
+
+- Add the owner-only Telegram media database as a separate non-public product
+  plane with topic-scoped listing, global caption search, exact provider byte
+  retrieval, durable Telegram DOCUMENT delivery and no connection-wide
+  quarantine coupling. Local bytes are staging/cache only, never the durable store.
+
 ### Telegram production quarantine incident — 2026-09-14
 
 - Restore the dedicated Telegram transport after observation-only recovery of the

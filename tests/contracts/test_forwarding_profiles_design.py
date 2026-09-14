@@ -69,8 +69,8 @@ class ForwardingProfilesDesignTests(unittest.TestCase):
             with self.subTest(args=args):
                 self.assertFalse(valid(tool, args))
 
-    def test_existing_tool_count_no_skill_or_forward_alias(self):
-        self.assertEqual(len(TOOLS), 8)
+    def test_tool_count_no_skill_or_forward_alias(self):
+        self.assertEqual(len(TOOLS), 9)
         self.assertNotIn('vibepublish_skill_get', TOOLS)
         self.assertNotIn('vibepublish_forward', TOOLS)
 
@@ -105,7 +105,7 @@ class ForwardingProfilesDesignTests(unittest.TestCase):
         for item in TOOLS.values():
             Draft202012Validator.check_schema(item['inputSchema'])
             Draft202012Validator.check_schema(item['outputSchema'])
-        self.assertEqual(catalog()['version'], '1.5.1-runtime')
+        self.assertEqual(catalog()['version'], '1.6.0-runtime')
         self.assertEqual(catalog()['tools'], list(TOOLS.values()))
 
 if __name__ == '__main__':

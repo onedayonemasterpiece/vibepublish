@@ -84,7 +84,7 @@ async def test_E12_actual_ClientSession_catalog_choice_and_native_worker(runtime
                             assert r and 'error' not in r,r
                             return r
                         boot=await tool('get_started',{'section':'emoji'})
-                        assert boot['schema_version']=='1.5.1-runtime'
+                        assert boot['schema_version']=='1.6.0-runtime'
                         r=await tool('destinations',{'command':{'kind':'emoji_set_register','destination':'telegram','url':'https://t.me/addemoji/Example','expected_revision':0}})
                         assert r['state']=='accepted' and not client.calls
                         await worker.run_once()

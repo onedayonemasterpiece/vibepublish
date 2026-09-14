@@ -83,6 +83,11 @@ unrelated contract/version and provider-read failures.
 
 ## Follow-Ups
 
+- A separate owner-only Telegram media-database plane is implemented in contract
+  1.6.0 with atomic staging, durable bounded retries, topic/global metadata search,
+  exact provider retrieval, expiring cache and quarantine isolation. Local checks
+  pass; production acceptance is tracked in
+  `docs/features/media-store/README.md` and remains `Not confirmed by user`.
 - Remove direct production-session probes from repair practice and use MCP status,
   read and bounded normal-path canaries.
 - Move the production credential to a separately isolated service identity/secret

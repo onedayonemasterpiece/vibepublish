@@ -1,13 +1,17 @@
 # VibePublish social skill
 
-Version: `1.5.1`. Target: `contracts/social_mcp_v1.py`.
+Version: `1.6.0`. Target: `contracts/social_mcp_v1.py`.
 Owner native-queue/read/progress corrections are Fixed. This is the canonical task skill, not proof of a deployed connection. The runtime may return a typed capability gate; never replace an unavailable feature with another action.
 
 ## Start and choose a task
 
 Call `vibepublish_get_started`, cache skill/schema version and policy epoch, and use the actual returned aliases, capabilities and tenant timezone. Never invent an item/asset ID, revision or review token.
 
-New publication: publish. Existing publication: publication_update. Separate image generation/choice/feedback: visual. Operation progress or timeout: status. Provider queue/feed, local publication history or statistics: read. Reply/reaction/forward: engage. Allowed target lookup/set management: destinations. All names have the `vibepublish_` prefix.
+New publication: publish. Existing publication: publication_update. Private Telegram
+media database: media_store. Separate image generation/choice/feedback: visual.
+Operation progress or timeout: status. Provider queue/feed, local publication
+history or statistics: read. Reply/reaction/forward: engage. Allowed target
+lookup/set management: destinations. All names have the `vibepublish_` prefix.
 
 One authorized publication uses one mutation call. Do not search for prepare/upload/commit tools. Status calls observe that same operation and never create another publication.
 
@@ -70,6 +74,23 @@ An explicit execute request includes authority for automatic visual selection, i
 
 For Telegram forum topics, `thread_ref` is an exact scoped topic reference, not a destination grant. An internal `https://t.me/c/<chat>/<topic-root>` URL is accepted only when its group already matches one active Telegram binding for the caller. To send an image as a Telegram file rather than a compressed photo, use media `role=document`; image/png, image/jpeg and image/webp are supported. `read` with query.kind=thread uses that same scoped URL or an authorized item ref, isolates the exact topic, and may return `media_evidence[].resource_uri` such as `vibepublish://assets/<id>` for private vision/readback.
 
+### Private Telegram media database
+
+This owner-only workflow is storage, not public publication. After importing a
+browser/chat image, call `vibepublish_media_store` with `command.kind=put`, one
+bound Telegram destination, its exact private `thread_ref`, a descriptive caption,
+document media and a stable request key. VibePublish retains bytes only as staging
+until exact Telegram readback; Telegram holds the durable original document.
+
+Use `command.kind=list` with `to` and `thread_ref` to inspect one topic. Use
+`command.kind=search` with text to search captions across every indexed topic in
+the owner's Telegram media database. Both are local metadata operations and must
+not download media. Results return `entry_ref`, caption, hashes, destination,
+topic link and exact Telegram message link. Use `command.kind=get` with the
+returned `entry_ref` only when bytes are required; it downloads the exact Telegram
+document into short-lived cache and returns an asset resource. Do not use ordinary
+social `read` or public `publish` as substitutes.
+
 
 ### Current visual runtime boundary
 
@@ -103,6 +124,20 @@ Identifiers here are fixtures; use real server-returned values in production.
 
 ```json
 {"to":["pka_tg"],"thread_ref":"https://t.me/c/4379835477/3","content":{"text":"Материал для медиабанка"},"media":[{"source":{"kind":"asset","id":"asset_1"},"role":"document"}]}
+```
+
+### `vibepublish_media_store` — save, global search, retrieve
+
+```json
+{"command":{"kind":"put","to":"pka_tg","thread_ref":"https://t.me/c/4379835477/5","content":{"text":"Луноход — архивная фотография и описание источника"},"media":[{"source":{"kind":"asset","id":"asset_1"},"role":"document"}]},"request_key":"media-lunokhod-1"}
+```
+
+```json
+{"command":{"kind":"search","text":"Луноход"},"limit":25}
+```
+
+```json
+{"command":{"kind":"get","entry_ref":"pub_1"}}
 ```
 
 ### `vibepublish_status`

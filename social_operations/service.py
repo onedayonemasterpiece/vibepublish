@@ -48,6 +48,8 @@ class Application:
                 result = self.destinations(actor, arguments)
             elif short == 'read':
                 result = self.read(actor, arguments)
+            elif short == 'media_store':
+                result = self.media_store(actor, arguments)
             elif short in ('publish', 'engage', 'publication_update'):
                 result = self.accept(actor, short, arguments)
             elif short == 'visual':
@@ -70,6 +72,8 @@ class Application:
             return DomainError("store_unavailable", "No receipt could be returned. Recover using status or the same request key, never a new send", "contact_owner").output()
 
     def read_asset(self, actor, ident):
+        with self.store.tx() as db:
+            self._purge_media_store_assets(db)
         with self.store.connection() as db:
             actor = self.store.current(db, actor)
             if not actor.scopes.intersection({'visual', 'publish'}):
@@ -87,6 +91,97 @@ class Application:
             if hashlib.sha256(row['bytes']).hexdigest() != row['sha256']:
                 raise DomainError('asset_integrity')
             return row['bytes'], row['mime'], row['sha256']
+
+    def media_store(self, actor, args):
+        """Owner-only private media store with provider-independent local reads."""
+        if not actor.owner:
+            raise DomainError('access_denied', next_action='contact_owner')
+        with self.store.tx() as db:
+            self._purge_media_store_assets(db)
+        command = args['command']
+        if command['kind'] == 'put':
+            return self.accept(actor, 'media_store', {
+                'to': [command['to']], 'thread_ref': command['thread_ref'],
+                'content': command['content'], 'media': command['media'],
+                'request_key': args['request_key']})
+        get_ref = None
+        with self.store.tx() as db:
+            actor = self.store.current(db, actor)
+            if command['kind'] == 'get':
+                fact = db.execute(
+                    "SELECT f.* FROM facts f JOIN publications p ON p.id=f.publication_id "
+                    "WHERE p.id=? AND p.tenant_id=? AND p.principal_id=? AND p.kind='media_store' "
+                    "ORDER BY f.observed_at DESC LIMIT 1",
+                    (command['entry_ref'], actor.tenant_id, actor.principal_id)).fetchone()
+                if not fact:
+                    raise DomainError('media_store_entry_not_found', next_action='refresh')
+                binding = next((b for b in self.store.bindings(db, actor)
+                                if b['destination_id'] == fact['destination_id']), None)
+                if binding is None:
+                    raise DomainError('access_denied', next_action='contact_owner')
+                remote = json.loads(fact['snapshot'])
+                projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
+                get_ref = projected['ref']
+            elif command['kind'] == 'list':
+                binding, topic = self._telegram_thread(db, actor, command['thread_ref'])
+                if binding['alias'] != command['to']:
+                    raise DomainError('access_denied', next_action='contact_owner')
+                items = self._media_store_items(db, actor, binding=binding, topic=topic,
+                                                text=command.get('text', ''))
+                limit = args.get('limit', 25)
+                result = {'media_store_items': items[:limit], 'truncated': len(items) > limit}
+                op = self._new_operation(db, actor, 'media_store_list', args,
+                                         complete=True, result=result)
+            else:
+                items = self._media_store_items(db, actor, text=command['text'])
+                limit = args.get('limit', 25)
+                result = {'media_store_items': items[:limit], 'truncated': len(items) > limit}
+                op = self._new_operation(db, actor, 'media_store_search', args,
+                                         complete=True, result=result)
+        if get_ref:
+            return self.read(actor, {'query': {'kind': 'item', 'item_ref': get_ref},
+                                     '_media_store_get': True})
+        return self.store.receipt(actor, op)
+
+    def _purge_media_store_assets(self, db):
+        expired = [row['asset_id'] for row in db.execute(
+            "SELECT asset_id FROM media_store_assets WHERE expires<?",
+            (self.store.clock(),))]
+        db.executemany('DELETE FROM assets WHERE id=?', [(ident,) for ident in expired])
+
+    def _media_store_items(self, db, actor, *, publication_id=None, binding=None, topic=None, text=''):
+        params = [actor.tenant_id, actor.principal_id]
+        sql = ("SELECT f.*,p.id AS entry_ref,p.revision FROM facts f JOIN publications p ON p.id=f.publication_id "
+               "WHERE p.tenant_id=? AND p.principal_id=? AND p.kind='media_store'")
+        if publication_id:
+            sql += ' AND p.id=?'; params.append(publication_id)
+        if binding:
+            sql += ' AND f.destination_id=?'; params.append(binding['destination_id'])
+        sql += ' ORDER BY f.observed_at DESC'
+        output = []
+        for row in db.execute(sql, params):
+            remote = json.loads(row['snapshot'])
+            if topic and remote.get('reply_to_native_id') != topic:
+                continue
+            if text.casefold() not in row['text'].casefold():
+                continue
+            item_binding = binding or next((b for b in self.store.bindings(db, actor)
+                                            if b['destination_id'] == row['destination_id']), None)
+            if item_binding is None:
+                continue
+            native_target = item_binding['native_id']
+            if (not native_target.startswith('-100') or not native_target[1:].isdigit()
+                    or not str(remote['native_id']).isdigit()
+                    or not str(remote.get('reply_to_native_id', '')).isdigit()):
+                continue
+            channel = native_target[4:]
+            output.append({'entry_ref': row['entry_ref'], 'text': row['text'],
+                           'observed_at': remote['observed_at'], 'native_id': remote['native_id'],
+                           'destination': item_binding['alias'],
+                           'thread_ref': f"https://t.me/c/{channel}/{remote['reply_to_native_id']}",
+                           'telegram_url': f"https://t.me/c/{channel}/{remote['native_id']}",
+                           'sha256': list(remote['media_hashes'])})
+        return output
 
     def aliases(self, db, actor):
         result = []
@@ -145,7 +240,7 @@ class Application:
             all_dest = self.aliases(db, actor)
             page = all_dest[offset:offset+50]
             bindings = {r['alias']: r for r in self.store.bindings(db, actor)}
-            result = {'version': '1.5.1-runtime-browser-artifact', 'schema_version': VERSION,
+            result = {'version': '1.6.0-runtime-telegram-media-database', 'schema_version': VERSION,
                       'skill_sha256': hashlib.sha256(skill.encode()).hexdigest(), 'skill': skill,
                       'estimated_tokens': (len(skill) + 2)//3, 'server_time': timestamp(self.store.clock()),
                       'timezone': actor.timezone, 'policy_epoch': actor.epoch, 'routing_revision': actor.routing_revision,
@@ -179,7 +274,8 @@ class Application:
         op = new_id('op')
         db.execute('INSERT INTO operations(id,tenant_id,principal_id,actor_epoch,publication_id,revision,action,request_digest,request,created,deadline,state,complete,work_state,result) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                    (op, actor.tenant_id, actor.principal_id, actor.epoch, publication, revision, action, digest([action, intent]), canonical(intent),
-                    self.store.clock(), self.store.clock()+120, 'verified' if complete else 'accepted', int(complete), 'done' if complete else 'ready', canonical(result or {})))
+                    self.store.clock(), self.store.clock()+(30*86400 if action == 'media_store' else 120),
+                    'verified' if complete else 'accepted', int(complete), 'done' if complete else 'ready', canonical(result or {})))
         self.store.event(db, op, 'finished' if complete else 'accepted', 'completed' if complete else 'started',
                          'Local operation complete' if complete else 'Command durably accepted; no provider effect yet')
         return op
@@ -338,8 +434,8 @@ class Application:
                 if action == 'publication_update':
                     publication, revision, plans = (self._adopt_plan(db, actor, args) if args.get('item_ref') else self._update_plan(db, actor, args))
                 else:
-                    target = intent if action == 'publish' else intent['command']
-                    actual = 'publish' if action == 'publish' else target['kind']
+                    target = intent if action in {'publish', 'media_store'} else intent['command']
+                    actual = 'publish' if action in {'publish', 'media_store'} else target['kind']
                     if actual not in ('publish', 'forward', 'reply', 'react'):
                         raise DomainError('capability_not_implemented', next_action='contact_owner')
                     if actual in ('reply','react'):
@@ -355,6 +451,26 @@ class Application:
                         plan.update(subject=subject,subject_ref=target['item_ref'],reaction=target.get('reaction'),reaction_mode=target.get('mode'))
                         plans=[plan]
                     else:
+                        if action == 'media_store':
+                            staged = []
+                            for item in target['media']:
+                                if item.get('role', 'document') not in {'auto', 'document'}:
+                                    raise DomainError('media_store_document_required')
+                                source = item['source']
+                                if source['kind'] != 'asset':
+                                    raise DomainError('media_ingress_not_enabled')
+                                row = db.execute(
+                                    'SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
+                                    (source['id'], actor.tenant_id, actor.principal_id)).fetchone()
+                                if not row:
+                                    raise DomainError('asset_not_available')
+                                clone = new_id('asset')
+                                db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
+                                           (clone, row['tenant_id'], row['principal_id'], row['sha256'], row['mime'],
+                                            row['width'], row['height'], row['bytes'], row['source_sha256'], self.store.clock()))
+                                staged.append({**item, 'source': {'kind': 'asset', 'id': clone},
+                                               'role': 'document'})
+                            target = {**target, 'media': staged}
                         target_bindings = self._targets(db, actor, target['to'])
                         if actual == 'publish' and target.get('thread_ref'):
                             thread_binding, topic_root_id = self._telegram_thread(db, actor, target['thread_ref'])
@@ -403,8 +519,13 @@ class Application:
                             if not source.public_candidate and not authorized:
                                 raise DomainError('source_access_denied', next_action='contact_owner')
                             plan.update(source=asdict(source), source_authorized=authorized)
+                    if action == 'media_store':
+                        if len(plans) != 1 or plans[0]['provider'] != 'telegram' or plans[0].get('scheduled_at'):
+                            raise DomainError('media_store_target_invalid')
+                        plans[0]['workload'] = 'media_store'
                     publication, revision = new_id('pub'), 1
-                    db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)', (publication, actor.tenant_id, actor.principal_id, revision, actual, self.store.clock()))
+                    kind = 'media_store' if action == 'media_store' else actual
+                    db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)', (publication, actor.tenant_id, actor.principal_id, revision, kind, self.store.clock()))
                 db.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?)', (actor.tenant_id, actor.principal_id, publication, revision, canonical(intent), canonical(plans), digest(plans)))
                 op = self._new_operation(db, actor, action, intent, publication=publication, revision=revision)
                 pending_visual = intent.get('visual') if action == 'publish' else None
@@ -413,6 +534,13 @@ class Application:
                 for plan in (() if pending_visual else plans):
                     db.execute('INSERT INTO attempts(id,operation_id,binding_id,binding_epoch,alias,provider,plan,plan_digest) VALUES(?,?,?,?,?,?,?,?)',
                                (new_id('attempt'), op, plan['binding_id'], plan['binding_epoch'], plan['alias'], plan['provider'], canonical(plan), digest(plan)))
+                if action == 'media_store':
+                    staging_expires = db.execute(
+                        'SELECT deadline FROM operations WHERE id=?', (op,)).fetchone()['deadline'] + 3600
+                    for plan in plans:
+                        for asset in plan['assets']:
+                            db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
+                                       (asset['ref'], publication, 'staging', staging_expires))
                 if args.get('request_key'):
                     self._key(db, actor, args['request_key'], digest([action, intent]), op)
         return self.store.receipt(actor, op)

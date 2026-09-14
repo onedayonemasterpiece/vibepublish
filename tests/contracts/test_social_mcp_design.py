@@ -27,7 +27,7 @@ class ContractDesignTests(unittest.TestCase):
             elif isinstance(node, list):
                 for value in node:
                     visit(value)
-        self.assertEqual(len(TOOLS), 8)
+        self.assertEqual(len(TOOLS), 9)
         for tool in TOOLS.values():
             for field in ("inputSchema", "outputSchema"):
                 with self.subTest(tool=tool["name"], schema=field):
@@ -90,7 +90,7 @@ class ContractDesignTests(unittest.TestCase):
         self.assertEqual(project_catalog(set()), [])
         self.assertEqual(catalog(), CATALOG)
         self.assertEqual(project_catalog(scopes), tools)
-        self.assertEqual(len(project_catalog({t["required_scope"] for t in CATALOG["tools"]}, owner=True)), 8)
+        self.assertEqual(len(project_catalog({t["required_scope"] for t in CATALOG["tools"]}, owner=True)), 9)
 
     def test_native_queue_only(self):
         schema = TOOLS["vibepublish_publish"]["inputSchema"]["$defs"]["delivery"]

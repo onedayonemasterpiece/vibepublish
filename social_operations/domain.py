@@ -113,14 +113,14 @@ def normalize_intent(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     result = json.loads(canonical(args))
     for key in ("request_key", "repeat_of", "routing_revision"):
         result.pop(key, None)
-    if tool in {"publish", "engage"}:
-        target = result if tool == "publish" else result.get("command", {})
-        if tool == "publish" or target.get("kind") == "forward":
+    if tool in {"publish", "media_store", "engage"}:
+        target = result if tool in {"publish", "media_store"} else result.get("command", {})
+        if tool in {"publish", "media_store"} or target.get("kind") == "forward":
             target.setdefault("delivery", {"kind": "now"})
             target.setdefault("mode", "execute")
             if target["delivery"]["kind"] == "at":
                 target["delivery"]["at"] = timestamp(parse_time(target["delivery"]["at"]))
-            if tool == "publish":
+            if tool in {"publish", "media_store"}:
                 target.setdefault("surface", "post")
                 target.setdefault("media", [])
                 target.setdefault("renderings", {})

@@ -29,7 +29,7 @@ class Store:
         os.chmod(self.path, 0o600)
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4, 5):
+            if version not in (0, 1, 2, 3, 4, 5, 6):
                 raise RuntimeError("Unsupported VibePublish database version")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -45,6 +45,8 @@ class Store:
 
             if version < 5:
                 db.executescript(Path(__file__).with_name("recovery_schema.sql").read_text())
+            if version < 6:
+                db.executescript(Path(__file__).with_name("media_store_schema.sql").read_text())
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:

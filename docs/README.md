@@ -37,7 +37,8 @@ supersedes stale domain/TLS blockers in the previous acceptance snapshot.
 
 - [Social operations](features/social-operations/README.md),
   [MCP contract](features/social-operations/mcp-contract-v1.md) and
-  [canonical skill](llm/vibepublish-social-skill.md): eight tools, native queues,
+  [canonical skill](llm/vibepublish-social-skill.md): publication tools plus the
+  owner-only Telegram media database, native queues,
   scoped access, immutable revisions, progress and provider readback.
 - [Telegram custom emoji](features/social-operations/telegram-custom-emoji-v1.md):
   sets, private numbered media, singles/chains, aliases/rules and frozen entities.

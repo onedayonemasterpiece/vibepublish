@@ -1,13 +1,14 @@
 """Executable design, not an MCP server. Render: python contracts/social_mcp_v1.py.
 
-The eight-tool design is selected for implementation; weak-agent effectiveness
+The original eight-tool publication design plus the owner-only Telegram media
+database are selected for implementation; weak-agent effectiveness
 is not established by schema validation. No credentials or provider I/O here.
 """
 from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.5.1-runtime"
+VERSION = "1.6.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -176,6 +177,16 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
     "review_token": string(512), "poll_after_seconds": {"type": "integer", "minimum": 1},
     "error": ref("error"), "dry_run": {"type": "boolean"}},
     ("operation_id", "action", "state", "message", "operation_complete", "progress", "next_action", "retry_safe", "receipt_ref", "deliveries"))
+DEFS["media_store_item"] = obj({
+    "entry_ref": ID, "text": {**string(), "minLength": 0}, "observed_at": DATE,
+    "native_id": string(128), "destination": ALIAS,
+    "thread_ref": TELEGRAM_THREAD_URL, "telegram_url": TELEGRAM_THREAD_URL,
+    "sha256": array(string(64, pattern=r"^[a-f0-9]{64}$"), 1, 20),
+}, ("entry_ref", "text", "observed_at", "native_id", "destination",
+    "thread_ref", "telegram_url", "sha256"))
+DEFS["receipt"]["properties"]["media_store_items"] = array(ref("media_store_item"), 0, 50)
+DEFS["receipt"]["properties"]["media_store_retry_count"] = {"type": "integer", "minimum": 1}
+DEFS["receipt"]["properties"]["media_store_retry_at"] = DATE
 
 TOOLS = []
 
@@ -210,6 +221,21 @@ tool("publish", "Create one publication now or in native provider queues; return
 TOOLS[-1]["inputSchema"]["anyOf"] = [
     {"required": ["content"]}, {"required": ["visual"]},
     {"required": ["media"], "properties": {"media": {"minItems": 1}}}]
+
+tool("media_store", "Single-owner Telegram media database, not social publication. Put verified images as Telegram DOCUMENTs; list one thread or search every indexed thread without provider I/O; get exact bytes from Telegram into short-lived cache.",
+    obj({"command": {"oneOf": [
+        arm("put", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
+            "content": ref("content"), "media": array(ref("media"), 1, 20)},
+            ("to", "thread_ref", "content", "media")),
+        arm("list", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
+            "text": {**string(1000), "minLength": 0}}, ("to", "thread_ref")),
+        arm("search", {"text": string(1000)}, ("text",)),
+        arm("get", {"entry_ref": ID}, ("entry_ref",))]},
+        "request_key": KEY, "limit": LIMIT}, ("command",)), ref("receipt"), "media.store")
+TOOLS[-1]["inputSchema"]["allOf"] = [{
+    "if": {"properties": {"command": {"properties": {"kind": {"const": "put"}}, "required": ["kind"]}}},
+    "then": {"required": ["request_key"]}
+}]
 
 change = {"oneOf": [
     arm("approve", {"token": string(512)}, ("token",)),
@@ -308,7 +334,7 @@ tool("destinations", "List allowed aliases, update personal purpose/notes/primar
 
 
 
-# Telegram palette extensions keep the canonical eight methods and closed grammar.
+# Telegram palette extensions keep the publication methods and closed grammar.
 DEFS["emoji_part"] = obj({"document_id": string(19, pattern=r"^[1-9][0-9]{0,18}$"),
     "alt": string(128), "preview_sha256": string(64, pattern=r"^[a-f0-9]{64}$")},
     ("document_id", "alt", "preview_sha256"))
@@ -431,6 +457,8 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
     effective.discard("social.read")  # Legacy read scope cannot bypass destination binding.
     if owner or ("publish" in effective and publish_destinations):
         effective.add("social.read")
+    if owner:
+        effective.add("media.store")
     # Narrow task scopes expose only their own command variants.
     if publish_destinations and "publish" in effective:
         if "forward" in effective:
