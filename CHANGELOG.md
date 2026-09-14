@@ -4,13 +4,16 @@
 
 ### Telegram production quarantine incident — 2026-09-14
 
-- Mark the dedicated Telegram session ownership and Telegram entity-readback
-  regression as `Not done` while the production fix and live recovery are pending.
+- Restore the dedicated Telegram transport after observation-only recovery of the
+  original message and a verified live image-document canary in topic 5; final
+  status remains `Not confirmed by user` pending user-visible confirmation.
 - Treat exact Telegram text/target/thread/media as delivery evidence and retain
   provider-normalized entities as observed data rather than quarantining an
   already completed send because Telegram rewrote entity metadata.
 - Record that repair probes opened direct Telethon clients from the production
   session while the worker was active; future diagnostics must use VibePublish.
+- Hold an OS process lease for the complete production worker lifetime and fail
+  closed when a second conforming session owner starts.
 
 ### Fixed — metadata-only Telegram thread reads — 2026-09-14
 

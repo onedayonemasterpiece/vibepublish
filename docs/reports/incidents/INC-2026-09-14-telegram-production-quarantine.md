@@ -1,6 +1,7 @@
 # INC-2026-09-14-telegram-production-quarantine
 
-Status: `Open` — product delivery is blocked until source, rollout, observation-only reconciliation and a live document canary pass.
+Status: `Not confirmed by user` — source, rollout, observation-only recovery and
+live document canary passed; user-visible Telegram confirmation remains.
 
 ## Summary
 
@@ -52,8 +53,9 @@ diagnostic processes.
   delivery gate or quarantining an already completed send.
 - Source fixed: add a host process lease held for the complete production worker
   lifetime and fail closed on a second conforming session owner.
-- Pending: reconcile message 156 by observation only, never resend it, then verify
-  a new document publication through the normal MCP/worker path.
+- Production verified: message 156 was reconciled by observation only with its
+  original operation/attempt and native identity; no resend occurred. A new image
+  document was then published and read back through normal MCP/worker transport.
 
 ## Regression Checks
 
@@ -67,11 +69,24 @@ unrelated contract/version and provider-read failures.
 
 ## Release Evidence
 
-None yet.
+- Release `22079838ab6a65848d1b868eca4b05833c73dbc4` activated at
+  2026-09-14 13:35:16Z; rollback remains
+  `276b4802325ff90181a53bd0ec08624668e03e4d`.
+- Worker PID 50427 is active with zero restart-loop count and holds the production
+  `telegram-session.lock` as an OS `FLOCK WRITE` lease.
+- Original operation `op_3515b977342749b8ad1aa2d841ced38c` recovered to
+  `verified` on Telegram message 156, topic root 5, document binding intact.
+- Live canary `op_2378a9fc70d24916b17ced8aedc5111a` verified Telegram message
+  157 in topic root 5 with image document hash
+  `56de4ea813316e183696f0f77a35e71f16cf2709fba8b88744cbe18bc3235d9f`.
+- After recovery and canary, unresolved dispatched Telegram attempt count is zero.
 
 ## Follow-Ups
 
 - Remove direct production-session probes from repair practice and use MCP status,
   read and bounded normal-path canaries.
+- Move the production credential to a separately isolated service identity/secret
+  boundary. The process lease prevents a second conforming worker, but a raw
+  same-user Telethon script can deliberately bypass a cooperative lock.
 - Add asset-content validation so a site logo cannot be accepted as a claimed
   documentary photograph without explicit review.

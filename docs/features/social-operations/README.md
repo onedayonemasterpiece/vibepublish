@@ -107,7 +107,7 @@ The agent can find its earlier publications quickly using local history, then re
 
 VibePublish is one independent service on DevCoveer with MCP and HTTP interfaces over the same application services. It owns adapters, connection references, tenant/principal bindings, aliases/sets, semantic rendering, assets, immediate command execution, native queue management, observations, history and audit.
 
-`Not done` after the 2026-09-14 production incident: Telegram uses independent
+`Not confirmed by user` after the 2026-09-14 production recovery: Telegram uses independent
 VibePublish sessions, including the canonical `VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE`;
 never fall back to EventsBot/E2E sessions. The production session must have one
 process owner for its full connected lifetime. Diagnostics and acceptance must go
