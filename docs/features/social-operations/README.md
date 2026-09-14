@@ -57,6 +57,11 @@ document provider confirmation/readback, HTTPS ingress rejection boundaries,
 sanitized diagnostics and same-request idempotency. Passing source CI is not live
 provider evidence; rollout and live acceptance remain a separate gate.
 
+`Not confirmed by user` Telegram native reads use a bounded 90-second worker
+budget so exact thread/feed media readback is not cut off by the API-only
+30-second budget. Explicit item reads and their media-download evidence are
+unchanged.
+
 ## Current source of truth
 
 Read [implementation design](implementation-design-v1.md), [MCP contract](mcp-contract-v1.md), the executable `contracts/social_mcp_v1.py` and the [agent skill](../../llm/vibepublish-social-skill.md).

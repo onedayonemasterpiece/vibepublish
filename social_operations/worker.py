@@ -569,7 +569,7 @@ class Worker:
                               topic_root_id=args.get('_topic_root_id'))
         # Browser reads include account verification, native history and exact
         # media readback. Keep them bounded without applying the API-only 30s cap.
-        budget = 90 if b['provider']=='max' and b['account_type']=='max_web' else 30
+        budget = 90 if (b['provider']=='telegram' or (b['provider']=='max' and b['account_type']=='max_web')) else 30
         budget = max(0.1, min(budget, op['deadline']-self.store.clock()))
         try:
             async with self.lane(b['connection_id']):

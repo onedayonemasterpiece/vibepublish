@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed — bounded Telegram media readback — 2026-09-14
+
+- Give native Telegram reads the existing bounded 90-second provider-read budget
+  so media-heavy topic/feed pages can complete exact media evidence hydration.
+  Explicit item reads and mutation retry/idempotency behavior are unchanged.
+
 ### Fixed — owner Telegram direct-link routing — 2026-09-12
 
 - Owner direct routing now accepts private/public chat roots and normal Telegram
