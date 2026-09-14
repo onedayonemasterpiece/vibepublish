@@ -51,7 +51,7 @@ sections:
 
 features:
   media_store:
-    status: not_confirmed_by_user_local_verification_passed
+    status: not_confirmed_by_user_production_contract_active
     docs: docs/features/media-store/README.md
     provider_transport: telegram_private_topic
     public_publication: forbidden

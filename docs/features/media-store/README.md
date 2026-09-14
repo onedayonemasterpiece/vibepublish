@@ -1,8 +1,9 @@
 # Private media store
 
 Status: `Not confirmed by user` — requirements and implementation are complete;
-local contract/runtime/provider-fixture checks pass. Production MCP migration and
-live Telegram acceptance remain to be verified.
+local checks pass and production exposes contract 1.6.0 after the version-6
+migration. The first user-visible Telegram media-database write remains to be
+confirmed in the target topic.
 
 ## Product boundary
 
@@ -63,3 +64,7 @@ complete. Provider verification is reported only after exact native readback.
 - Contracts: 24 passed plus 200 schema subtests.
 - Adapters: 81 passed; SDK: 22 passed; deployment: 26 passed.
 - The built wheel contains the version-6 migration and version-1.6.0 skill.
+- Production release `1a944d3c639850dc8977ae216f15993313076ae5` is active;
+  server/worker are running with zero restart count, the worker holds the exclusive
+  Telegram session lock, and owner tool projection exposes
+  `vibepublish_media_store` with `put`, `list`, `search` and `get`.
