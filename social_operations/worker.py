@@ -569,7 +569,7 @@ class Worker:
                               topic_root_id=args.get('_topic_root_id'))
         # Browser reads include account verification, native history and exact
         # media readback. Keep them bounded without applying the API-only 30s cap.
-        budget = 90 if (b['provider']=='telegram' or (b['provider']=='max' and b['account_type']=='max_web')) else 30
+        budget = 90 if b['provider']=='max' and b['account_type']=='max_web' else 30
         budget = max(0.1, min(budget, op['deadline']-self.store.clock()))
         try:
             async with self.lane(b['connection_id']):
@@ -610,8 +610,13 @@ class Worker:
                 if remote.native_target != b['native_id']:
                     raise DomainError('wrong_target_readback', next_action='contact_owner')
                 self.save_fact(db, b['destination_id'], remote)
-                items.append(self.app.project_item(db, actor, b, asdict(remote),
-                                                   media_assets=downloads.get(remote.native_id, ())))
+                item = self.app.project_item(db, actor, b, asdict(remote),
+                                             media_assets=downloads.get(remote.native_id, ()))
+                if request.kind == 'thread':
+                    item['media'] = [{'role': 'document' if ref.startswith('document:') else 'image'}
+                                     for ref in remote.provider_media]
+                    item['media_evidence'] = []
+                items.append(item)
             result = {'items': items, 'truncated': page.cursor is not None}
             if page.cursor:
                 result['next_cursor'] = self.store.cursor(db, actor, 'read', digest(query), page.cursor)

@@ -57,10 +57,9 @@ document provider confirmation/readback, HTTPS ingress rejection boundaries,
 sanitized diagnostics and same-request idempotency. Passing source CI is not live
 provider evidence; rollout and live acceptance remain a separate gate.
 
-`Not confirmed by user` Telegram native reads use a bounded 90-second worker
-budget so exact thread/feed media readback is not cut off by the API-only
-30-second budget. Explicit item reads and their media-download evidence are
-unchanged.
+`Not confirmed by user` Telegram thread/topic listings return attachment metadata
+without downloading historical provider bytes. Explicit published item reads retain
+the existing provider-byte download and media-evidence hydration path.
 
 ## Current source of truth
 

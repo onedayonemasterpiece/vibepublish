@@ -667,7 +667,8 @@ class TelegramAdapter:
             else:
                 raise DomainError('telegram_thread_window_needs_review', next_action='contact_owner')
             selected = groups[:request.limit]
-            items, downloads = await self._downloaded_items(selected, 'published', request.native_target)
+            items = tuple(self._item(group, 'published', request.native_target) for group in selected)
+            downloads = ()
             if any(item.reply_to_native_id != request.topic_root_id for item in items):
                 raise DomainError('telegram_thread_isolation_failed', next_action='contact_owner')
             next_cursor = (canonical({'kind': 'replies', 'target': request.native_target,

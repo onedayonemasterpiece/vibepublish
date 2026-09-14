@@ -113,36 +113,6 @@ async def test_exact_own_reaction_reads_preserve_empty_vs_missing_evidence(runti
 
 
 @pytest.mark.asyncio
-async def test_native_telegram_read_budget_preserves_bounded_media_readback(tmp_path, monkeypatch):
-    from contextlib import asynccontextmanager
-    import social_operations.worker as module
-
-    store = Store(tmp_path / 'telegram-read.sqlite')
-    token = store.create_principal('tenant', 'owner', owner=True)
-    actor = store.authenticate(token)
-    store.add_connection(actor, 'telegram-connection', 'telegram', account_type='mtproto_user')
-    store.bind(actor, 'owner', 'telegram', 'telegram-connection', '-101')
-    provider = Provider()
-    app = Application(store)
-    worker = Worker(store, {'telegram-connection': provider})
-    seen = []
-
-    @asynccontextmanager
-    async def timeout(seconds):
-        seen.append(seconds)
-        yield
-
-    monkeypatch.setattr(module.asyncio, 'timeout', timeout)
-    admitted = await app.call(actor, 'vibepublish_read', {
-        'query': {'kind': 'feed', 'destination': 'telegram'},
-    })
-    await worker.run_once()
-    result = store.receipt(actor, admitted['operation_id'])
-    assert seen == [90]
-    assert result['state'] == 'verified'
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize('runtime,budget',[('max_web',90),('fake',30)],indirect=['runtime'])
 @pytest.mark.parametrize('expire',[False,True])
 async def test_native_browser_read_budget_is_bounded_and_timeout_is_precise(runtime,budget,expire,monkeypatch):

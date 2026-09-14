@@ -27,7 +27,7 @@ def png(rgb):
 
 
 @pytest.mark.asyncio
-async def test_thread_url_publish_read_downloads_into_private_assets():
+async def test_thread_url_publish_read_returns_media_metadata_without_private_downloads():
     with tempfile.TemporaryDirectory() as temp:
         store = Store(Path(temp) / 'ledger.sqlite', clock=lambda: NOW)
         token = store.create_principal('tenant', 'owner', owner=True)
@@ -65,6 +65,8 @@ async def test_thread_url_publish_read_downloads_into_private_assets():
         assert document_done['state'] == 'verified', document_done
         assert client.effects == 2
 
+        with store.connection() as db:
+            count_before = db.execute('SELECT count(*) FROM assets').fetchone()[0]
         read = await app.call(actor, 'vibepublish_read', {
             'query': {'kind': 'thread', 'item_ref': TOPIC_URL}, 'limit': 10,
         })
@@ -74,21 +76,17 @@ async def test_thread_url_publish_read_downloads_into_private_assets():
         assert result['state'] == 'verified', result
         assert [item['text'] for item in result['items']] == ['Topic document', 'Topic photo']
         assert [[m['role'] for m in item['media']] for item in result['items']] == [['document'], ['image']]
-        evidence = [e for item in result['items'] for e in item['media_evidence']]
-        assert [e['media_kind'] for e in evidence] == ['document', 'photo']
-        assert all(e['resource_uri'] == 'vibepublish://assets/' + e['asset_ref'] for e in evidence)
-        for e in evidence:
-            data, mime, sha = app.read_asset(actor, e['asset_ref'])
-            assert data.startswith(b'\x89PNG\r\n\x1a\n') and mime == 'image/png' and len(sha) == 64
-
+        assert all(item['media_evidence'] == [] for item in result['items'])
         with store.connection() as db:
-            count_before = db.execute('SELECT count(*) FROM assets').fetchone()[0]
+            assert db.execute('SELECT count(*) FROM assets').fetchone()[0] == count_before
+
         repeated = await app.call(actor, 'vibepublish_read', {
             'query': {'kind': 'thread', 'item_ref': TOPIC_URL}, 'limit': 10,
         })
         await worker.run_once()
         repeated_result = (await app.call(actor, 'vibepublish_status', {'ids': [repeated['operation_id']]}))['receipts'][0]
         assert repeated_result['state'] == 'verified'
+        assert all(item['media_evidence'] == [] for item in repeated_result['items'])
         with store.connection() as db:
             assert db.execute('SELECT count(*) FROM assets').fetchone()[0] == count_before
 

@@ -146,6 +146,8 @@ DEFS["downloaded_media"] = obj({
     "asset_ref": ID, "resource_uri": string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$"),
     "media_kind": enum("photo", "document")},
     ("kind", "slot", "sha256", "mime", "size"))
+DEFS["read_media"] = {"oneOf": [ref("media"), obj({
+    "role": enum("auto", "image", "video", "audio", "document", "animation")}, ("role",))]}
 DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url": URL,
     "publication_id": ID, "revision": REV, "destination": ALIAS, "own_reactions": array(string(100),0,100),
     "publication_kind": enum("original", "forward"), "forward_origin": ref("forward_origin"),
@@ -154,7 +156,7 @@ DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url":
     "origin": enum("vibepublish", "provider_client", "imported"),
     "observed_state": enum("provider_scheduled", "provider_processing", "published", "deleted", "cancelled", "unknown"),
     "queue_ref": ID, "preview_ref": ID, "navigate_hint": string(500),
-    "media": array(ref("media"), 0, 20), "media_evidence": array(ref("downloaded_media"), 1, 10),
+    "media": array(ref("read_media"), 0, 20), "media_evidence": array(ref("downloaded_media"), 0, 10),
     "metrics_observed_at": DATE, "error": ref("error"),
     "metrics": array(obj({"name": string(100), "value": {"type": "number"}, "unit": string(40)},
                          ("name", "value")), 0, 100)}, ("ref", "kind", "observed_at", "source", "freshness"))

@@ -189,6 +189,22 @@ async def test_thread_read_isolates_interleaved_topics_and_paginates():
 
 
 @pytest.mark.asyncio
+async def test_thread_read_returns_media_metadata_without_downloading_provider_bytes():
+    adapter, client, journal = setup()
+    client.messages[(101, 20)] = topic_message(20, 'photo', topic=TOPIC, media=photo_media(2000))
+
+    async def fail_download(message, file=None):
+        pytest.fail('thread listing must not download provider media bytes')
+
+    client.download_media = fail_download
+    page = await adapter.read(ReadRequest('connection', TARGET, 'thread', 10, topic_root_id=TOPIC), journal.hooks)
+    item, = page.items
+    assert item.provider_media == ('photo:2000',)
+    assert item.observed_media == ()
+    assert page.downloads == ()
+
+
+@pytest.mark.asyncio
 async def test_topic_text_publish_uses_native_reply_target_and_reads_back_exact_topic():
     adapter, client, journal = setup()
     r = topic_request()

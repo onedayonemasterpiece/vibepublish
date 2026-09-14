@@ -2,11 +2,11 @@
 
 ## [Unreleased]
 
-### Fixed — bounded Telegram media readback — 2026-09-14
+### Fixed — metadata-only Telegram thread reads — 2026-09-14
 
-- Give native Telegram reads the existing bounded 90-second provider-read budget
-  so media-heavy topic/feed pages can complete exact media evidence hydration.
-  Explicit item reads and mutation retry/idempotency behavior are unchanged.
+- Telegram thread/topic listings now return attachment metadata without downloading
+  historical provider bytes. Explicit published item reads retain provider-byte
+  downloads and media-evidence hydration.
 
 ### Fixed — owner Telegram direct-link routing — 2026-09-12
 
