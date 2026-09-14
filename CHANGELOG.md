@@ -2,11 +2,248 @@
 
 ## [Unreleased]
 
+### Fixed — owner Telegram direct-link routing — 2026-09-12
+
+- Owner direct routing now accepts private/public chat roots and normal Telegram
+  message/forum-topic links without pre-registering the chat; no concrete numeric
+  Telegram peer is special or hardcoded.
+- Supported copied-message forms include both `<chat>/<message>` and Telegram's
+  forum `<chat>/<topic>/<message>` / `?thread=<topic>` variants. The final provider
+  message is authoritative for the actual topic instead of trusting URL text.
+- Public usernames are resolved through the authenticated Telegram account to the
+  real numeric peer before provider effects. Crash recovery uses the numeric peer
+  already committed in the Telegram checkpoint, not a mutable username.
+- Invalid commands are schema-checked before hidden route materialization. Invite,
+  share and discussion-comment links are not silently reinterpreted as publication
+  targets; multiple-account selection and partner explicit-binding boundaries stay
+  unchanged.
+
+### Fixed — generic owner Telegram topic links — 2026-09-12
+
+- Corrected the Telegram P0 overfit where an owner `/c/<chat>/<topic>` link still
+  required that exact chat to be pre-bound. The link now derives its numeric peer
+  and topic per request; no concrete `-100…` peer is special.
+- With one active Telegram connection the owner link is sufficient. With multiple
+  Telegram connections an existing Telegram alias selects only the account
+  connection; the pasted link still selects the actual chat/topic. Partner
+  principals keep explicit destination-binding boundaries.
+- Newly selected peers can be hydrated from authenticated dialogs after worker
+  startup; the startup binding snapshot is a warm cache, not an allowlist.
+
+### Fixed — Telegram P0 transport and public image ingress — 2026-09-12
+
+- Added MTProto liveness/reconnect checks before Telegram RPCs, active-binding peer
+  hydration without hard-coded access hashes, sanitized runtime diagnostics and a
+  runtime-unhealthy capability state without retrying mutations after RPC start.
+- Added bounded public-HTTPS image ingress with public-address DNS pinning,
+  redirect/body/media limits and existing private image sanitization before normal
+  immutable publish admission; same-byte source/derivative selection is canonical
+  so repeated request keys remain stable.
+- Added exact topic `/5` document publish/confirmation/readback regressions plus
+  reconnect, entity-resolution, diagnostics, HTTPS rejection and idempotency tests.
+  Python 3.12/3.13 Telegram P0 source gates are green; DevCoveer rollout/live
+  provider acceptance remains separate and is `Not confirmed by user`.
+
+- Fixed: bounded native MAX browser read budget and precise read-deadline errors; API read limits unchanged.
+
+- Added: authenticated exact MAX own-reaction reads, distinguishing observed removal from missing metadata.
+
+- Added: exact authorized-source download binding for native MAX media forwards without re-uploading.
+
+### Added — MAX engagement proof contract
+
+- Admit bound-subject replies/reactions through the existing worker with explicit
+  additive owner-granted rights and exact relationship/own-reaction verification.
+- Retain authorized MAX forward source refs and check native attribution/content/media.
+
+
+### Fixed — native cancellation receipts
+
+- Do not serialize a cancelled native snapshot as a pending schedule with null
+  requested time; project old committed cancellation receipts without rewriting history.
+
+
+### Added — native scheduled replacement evidence
+
+- Bind MAX reschedule native ID replacements to original fingerprint and exact
+  observed time/content/media without retrying Save or widening other providers.
+
+
+### Added — guarded no-effect compensation
+
+- Finalization carries the committed observation separately from immutable
+  pre-effect evidence, including native IDs first learned during recovery.
+
+- Trusted, checkpoint-bound no-input proofs can cancel an original intent without
+  fabricating a remote item or resetting dispatch history; existing durable
+  post-commit finalization releases its exact quarantine across restart.
+- Delivery receipts expose the explicit additive compensation outcome.
+
+### Fixed — MAX visual font semantics
+
+- Canonicalize MAX bold/italic spans around neutral raster emoji graphemes,
+  preserving exact text/link evidence and unchanged Telegram/VK semantics.
+
+### Added — exact native-slot download evidence
+
+- Added typed ordered downloaded-media evidence distinct from native attachment
+  IDs and uploaded source hashes, with explicit immutable-intent binding.
+- Added the `download_binding` receipt category and MAX lifecycle CAS checks;
+  existing provider fingerprints remain unchanged without the new evidence.
+- Read receipts now expose safe downloaded-media evidence metadata instead of
+  falsely reporting text-only output, without signed URLs or private input hashes.
+- Added validation, serialization, mismatched binding and actual core adoption
+  regressions; authorized MAX browser downloads remain adapter-owned.
+
+### Added — MAX-only semantic content and verified video ingress
+
+- Added opt-in MAX semantic styles/links with exact entity verification and
+  immutable edit/adoption preservation; Telegram/VK defaults remain unchanged.
+- Added owner-only bounded local MP4 ingress with actual decode, metadata removal,
+  source lineage, quota checks and preserved video roles; native adapters opt in
+  explicitly. FFmpeg is now a CI fixture prerequisite, not a social capability.
+- Added real local media/CLI and offline plan/readback regressions; native MAX
+  rich/video acceptance remains separately owned in PR #2.
+
+### Fixed — explicit retries of never-dispatched failures
+
+- `retry_failed` now re-admits selected original blocked attempts only while
+  durable dispatch remains zero, preserving publication revision, immutable
+  native CAS and successful siblings; dispatched/unknown effects remain forbidden.
+- Renewed the immediate command deadline only; frozen native times and current
+  authorization/integrity checks still apply. Added same-key, epoch, external-CAS,
+  partial-success and actual MCP/separate-worker retry regressions.
+
+### Added — opt-in MAX native worker factory
+
+- Standard `worker --native` now lazily selects the optional MAX context factory
+  only for approved `max_web` connections; CLI connection provisioning accepts
+  that account type. Explicit MAX configuration remains owned by its adapter.
+- Added context cleanup, missing-package, denied-binding and standard CLI worker
+  regression tests without opening real profiles or changing Telegram/VK wiring.
+
+### Fixed — original-terminal provider recovery
+
+- Added authenticated `publication_update.change.kind=reconcile` for original
+  dispatched unknown attempts, preserving operation/revision/plan identity,
+  request-key replay (including observation-only re-admission after transient
+  unknown evidence), scoped authority and successful sibling receipts.
+- Added schema-4 durable evidence/resolution journal and optional idempotent
+  provider finalization hook. Quarantine release follows durable resolution;
+  pending release blocks connection effects and resumes after worker restart
+  without repeating execute. Existing providers remain compatible.
+- Added terminal recovery, authority/fence, migration, partial-success,
+  release/crash/restart and real MCP ClientSession/separate-worker regressions.
+  Live MAX acceptance and its driver remain in the existing MAX PR #2.
+- Added an independent Python 3.12/3.13 core recovery/transport/provider/SDK CI
+  gate with exact-SHA/JUnit evidence; retained the unchanged mandatory full-suite
+  gate and its separately reported pre-existing imagegen collection blocker.
+
+### Owner correction: full Codex rollout includes real Imagegen — 2026-09-05
+
+- Replaced the rejected Telegram/VK-only handoff with a single-link task for local
+  Codex on DevCoveer: implementation, real generate/tune/compose, visible candidates,
+  selection, compositor, image/emoji publication/readback and persistent deployment.
+- Updated active continuation, docs routing and the imagegen runbook so historical
+  ChatGPT-stage no-generation/no-deployment limits do not silently shrink the new
+  owner-authorized task. Actual platform/access/budget controls remain required.
+- Preserved the existing core, tests and separate MAX PR #2. This is documentation
+  only: no missing source payload, model call, deployment or new test pass claimed.
+
+### Restore Telegram rich text and VK source — 2026-09-05
+
+- Commit `ae73b259` delivers both exact archived modules through normal GitHub
+  writes; 132 of 133 archive paths are present. Only the Codex executor is absent
+  after a new request-safety response; no alternate upload was attempted.
+- Real core/Telethon gate now passes all 14 requests. Diagnostic execution:
+  296 tests and 199 subtests pass, but one Codex import error remains (exit 1).
+  Strict full CI stays mandatory; no runtime or test behavior was weakened.
+- Updated current status, routing and continuation. Main/MAX and live operations
+  were not changed; actual DevCoveer image-only activation remains unverified.
+
+### Recover delivered commits and accepted documentation — 2026-09-05
+
+- Corrected the prior response's false "no new commits" claim: five source
+  commits through `18152e5d` added 30 unchanged archive files. Their source/tests
+  tree was independently verified from the real CI artifact.
+- Read back and attached existing accepted tree `1f36d725` as `76ad2c55`, restoring
+  ten documentation changes. No denied source payload was uploaded through it.
+- Preserved the remaining historical handoffs and full visual feature description;
+  updated current runtime status and continuation rather than creating another plan.
+- Re-ran 69 independent tests + 199 subtests in an empty hash-installed venv.
+  Full collection still has ten errors; the core SDK gate still fails. Only VK,
+  rich-text and Codex executor modules remain absent. No green full-runtime claim.
+- No runtime byte changes, weakened tests, MAX changes, model/provider calls,
+  alternate-route blocked writes, merge or deployment.
+
+### Actual core source delivery and current access boundary — 2026-09-05
+
+- Read the existing access retrospectives and corrected an overbroad permanent
+  write-ban assumption. Standard authorized GitHub source writes succeeded.
+- Saved 26 original source/configuration paths in commits `938f303d` and
+  `348233a0`; independently matched the complete accepted partial tree hash.
+- Later VK adapter and rich-text source requests received explicit request-safety
+  evaluation blocks. Their payloads and 46 other pending paths are not delivered;
+  this partial checkout is not a runnable or deployable full application.
+- Preserved the mandatory full-runtime CI instead of claiming seed-only green
+  checks prove delivery. Updated canonical status and concise delivery proof rule.
+- No blocked payload retry via another route, agent delegation, MAX change,
+  provider/model call, merge or deployment.
+
+### Locked environment and real core SDK regression — 2026-09-05
+
+- Pinned the independently qualified 70-package graph for Linux Python 3.12/3.13;
+  normal hosted CI installs the committed lock. Added six input/include regression
+  tests. Qualification CI 33953694373 succeeded on both versions.
+- Full LOCAL core passed 327 tests + 199 subtests in a clean hashed-wheel environment.
+  Added 19 real SDK/core tests; fixed the old >8-byte SDK gate (valid config is 8).
+- Direct runtime pins unchanged; explicitly qualified transitive SVG updates:
+  cssselect2 0.10.1 and webencodings 0.6.1, plus optional SDK/browser/build pins.
+- Full core/source and its mandatory runtime CI remain local. No protected upload,
+  MAX change, delegated task, real generation or deployment.
+
+### Dependency and native SDK qualification — 2026-09-05
+
+- Added an independent real Telethon 1.44 wire-roundtrip gate (14 request kinds,
+  exact custom emoji IDs and UTF-16 spans), without credentials or provider RPCs.
+- Added dependency graph/wheelhouse validation and 10 regression cases; extended
+  the same hosted CI to empty Python 3.12/3.13 environments and exact hashed,
+  offline reinstallation. Both jobs succeeded in run 33953694373; source artifact bytes were read back.
+- Corrected the local pip diagnosis: DNS failure is not package nonexistence.
+- No protected core payload, MAX implementation, agent or model call is included.
+
+### Telegram custom emoji workflow and continuation — 2026-09-05
+
+- Recorded required emoji-set links, private numbered previews, exact single or
+  ordered-chain selection, personal aliases/rules, frozen semantic entities and
+  pre-publication compilation; detailed workflow is Draft, runtime Not done.
+- Read actual EventsBot transformer/tests and composite-ID/medallion incidents;
+  reuse deterministic behavior, not hard-coded two-unit spans or delayed editing.
+- Corrected imagegen execution target to local Codex on DevCoveer, not the owner's
+  desktop/OpenCode candidate; generator invocation is not coding delegation.
+- Verified the original transfer archive again and recorded MAX PR #2's actual
+  fixture-only scope, missing-archive integration blocker and continuation.
+- Added one ChatGPT continuation handoff; no runtime code, emoji/live test,
+  generation, MAX task, deployment or previously blocked core write performed.
+
+### MAX handoff and imagegen plugin identification — 2026-09-05
+
+- Published the separate MAX Web task against the actual archived shared port,
+  with independent MAX commits and explicit offline/browser/live boundaries.
+- Verified official Codex imagegen sources and the separately identified
+  OpenCode candidate; do not infer the owner installation or requested route.
+- Added passive bounded installation inventory and 21 tests. No auth reads,
+  plugin imports, agent delegation, generation or deployment.
+- Extended the existing GitHub-hosted CI with inventory tests. This does not
+  deliver or validate the separately archived full runtime.
+- Documented actual GitHub write permissions versus the previous per-call
+  OpenAI safety-check block; the new MAX document write/readback succeeded.
+
 ### Development handoff — 2026-09-04, contract 1.2.0-design
 
 - Added canonical native Telegram/VK forwarding by exact post URL or authorized
-  item reference, with attribution readback, grouped-media handling, private-source
-  authorization and no rewrite/copy fallback. VK scheduled repost remains an
+  item reference, with attribution readback, grouped-media handling,
+  private-source authorization and no rewrite/copy fallback. VK scheduled repost remains an
   unproved capability, not a local-scheduler substitute.
 - Extended the existing engage command schema; no new forward synonym tool.
 - Added personal primary/secondary destination profiles with purpose, audience,
@@ -68,7 +305,7 @@
 - Social visuals contract preserving the required imagegen route, exact text,
   candidate selection and consent-controlled provenance.
 - Video-story feature preserving Telegram editorial control, Kaggle rendering,
-  geo/time filters, music, subtitles, enhancement and approval.
+  geo/time filters, music, subtitles, safe enhancement and approval.
 - Standalone scaffold, feature documentation routing, existing Google AI /
   Supabase limiter code/migrations and EventsBot donor map.
 
@@ -80,5 +317,5 @@
   actual MCP incremental delivery, MAX Web, imagegen, runtime permissions,
   database concurrency and infrastructure-independence canaries remain unrun.
 - Existing Google limiter findings are documented, not fixed by this batch.
-- Schema-valid forbidden calls carry runtime-oracle requirements; schema tests
-  do not claim that an absent runtime enforced those permission/timing rules.
+- Schema-valid forbidden calls carry runtime-oracle requirements; schema tests do
+  not claim that an absent runtime enforced those permission/timing rules.

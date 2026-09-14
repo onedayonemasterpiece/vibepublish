@@ -1,6 +1,10 @@
+> Delivery status: the shared VisualService, importer, compositor and regression
+> suites are in PR #1. The archived `adapters/codex_imagegen.py` module is not.
+> This is not a runnable complete release. See [runtime delivery status](../../operations/social-runtime.md).
+
 # Social visuals
 
-Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: `Not done`.
+Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: offline shared service `Not confirmed by user`; live executor and acceptance `Not done`.
 
 Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the handoff](../social-operations/analysis-handoff-20260904.md). Publication/runtime/security rules live in [implementation design](../social-operations/implementation-design-v1.md).
 
@@ -11,6 +15,14 @@ Generate a new illustration, improve a rough/PIL-like card, or compose several s
 Tuning means image-to-image improvement, not training the model. Real fine-tuning is future scope. Existing drafts are negative/rough inputs, not automatically positive training samples.
 
 ## Required executor
+
+Owner clarification 2026-09-05: imagegen is an already used plugin/bundle, not
+a hypothetical API or a requirement for an executable named `$imagegen`.
+See [verified plugin sources and passive host inventory](../../reference/imagegen-plugin-discovery-20260905.md).
+Codex built-in, explicit API-key fallback and an OpenCode package are distinct
+execution paths. The researched OpenCode candidate is not yet identified as
+the owner installation and hard-codes a different routing model; do not select
+it silently. The actual VibePublish plugin-host binding remains **Not done**.
 
 ```text
 VisualService -> ImagegenExecutor -> verified $imagegen route
@@ -24,6 +36,7 @@ The adapter contract is typed and independent of a general coding-agent workflow
 
 - `submit(job_key, mode, brief, source_manifest, preset_version, requested_route, candidate_budget, deadline)` returns a durable execution reference or a classified pre-dispatch error.
 - `inspect(execution_ref)` returns queued/running/succeeded/failed/unknown, actual executor/model identity if supplied, bounded usage and artifact manifests.
+- `find(job_key)` is a read-only durable-key lookup for a lost submit response; absence never authorizes automatic resubmission.
 - `cancel(execution_ref)` is best effort, with actual outcome recorded; cancelling never claims already generated artifacts disappeared.
 - Artifact manifests contain allowed-root file/object references, SHA-256, MIME, dimensions and size. The importer verifies actual bytes and ownership, not a model's textual assertion of success.
 
@@ -65,3 +78,63 @@ At implementation time fetch the authorized original media, not a screenshot of 
 Offline acceptance: fake executor success/failure/unknown/restart; path/MIME/hash checks; no cross-tenant candidate or preview access; exact source and selected lineage; no post on generation failure; single resume after replay; schedule expiry; text overflow; 4:5/9:16 safe regions; budget enforcement; consent defaults.
 
 Live acceptance: actual `$imagegen` route on DevCoveer returns real verified artifacts through the required requested route; requested/actual identifiers are reported honestly; both fixtures have rendered human review; selected derivative is the one delivered; provider readback uses the evidence levels in the social design.
+
+
+## Implemented checkpoint — 2026-09-05
+
+`social_operations/visuals.py` is the sole service; `adapters/imagegen.py` defines
+immutable typed requests/observations and an explicitly offline FakeImagegen.
+Default wiring is unavailable. No real $imagegen, Google image provider or coding
+agent was invoked. Requested route gpt-5.6-luna is stored separately from actual
+executor/model metadata; a missing actual model remains null.
+
+SQLite migration 1 -> 2 preserves core tables and adds immutable jobs/candidates,
+private origins and append-only feedback. Core records a marker before submit,
+then recovers lost responses by read-only job-key lookup, including after a real
+worker-process exit. A frozen candidate budget is not an external billing quote.
+The limit counts final candidates across formats (default 2, maximum 4); the art
+request budget is rounded up by format count and no extra derivative is admitted.
+
+Artifact imports are scoped to the exact job output directory. Traversal, symlink
+files/directories, shared hardlinks, wrong SHA/MIME/size/dimensions and cross-job
+artifacts are rejected. Actual verified art and final bytes are private immutable
+assets. Rendering and metadata insertion are quota-bounded and transactional.
+
+`social_operations/compositor.py` owns editorial-card-v1: 1080x1350 and 1080x1920,
+SVG layout with explicit structured copy, safe regions and readable fixed glyph
+outlines. It reads trusted DejaVu font files, stores their hashes, and does not
+redistribute font files. CairoSVG renders the generated SVG. Unknown glyphs,
+control characters and overflow block output rather than silently losing words.
+Pillow only verifies inputs/derivatives and generates clearly synthetic test art.
+
+Selection binds actor/job/plan/candidate hash through the frozen job digest and a
+private one-use token, with CAS and current rights/routing/time checks. Inline
+selection creates the first immutable provider attempts for the SAME original
+operation. It never turns preview into execute. Standalone selection returns an
+asset only. Private bytes are available by authenticated HTTP or MCP resource;
+revocation invalidates reads, status and later asset reuse. Offline fixtures
+cannot be published via native connections; CLI rejects --native plus --fake-imagegen.
+
+### Explicit remaining gates
+
+Real imagegen integration, verified originals of the two acceptance links above,
+baked-in lettering/art quality, owner review of the initial preset, multiple
+versioned brand presets and native-media canaries are not verified. Automatic
+selection currently runs only for explicit offline fixtures. A nonfixture result
+from an initial unreviewed preset remains needs_selection even if automatic was
+requested. This is a safety gate, not a claim that full production auto-selection
+is delivered. Public asset ingress, policy-controlled training consent/withdrawal,
+retention/export deletion and real feedback-dataset consumption remain Not done.
+Consent defaults to shared_training=false; no training or export is performed.
+
+Use the runtime runbook for exact execution evidence and the remote write blocker.
+
+
+## Local Codex on DevCoveer: bounded process continuation
+
+The optional [DevCoveer process executor](../../operations/devcoveer-imagegen.md)
+now implements the existing typed executor and passes exact returned, verified
+job-scoped files into the existing importer. Defaults remain disabled. Scripted
+CLI subprocess tests are not a host/canary claim. The real installed version,
+image-only enforcement and billed-call budget require operator verification;
+actual image-model metadata stays unknown. No coding agent implemented this code.

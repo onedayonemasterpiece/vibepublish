@@ -5,23 +5,32 @@ entrypoints:
   docs_index: docs/README.md
   agent_routes: AGENTS.md
   changelog: CHANGELOG.md
+  core_continuation: docs/handoffs/codex-full-product-rollout-20260905.md
+  runtime_evidence: docs/operations/social-runtime.md
+  codex_full_product_rollout: docs/handoffs/codex-full-product-rollout-20260905.md
+  archived_emoji_delivery: docs/handoffs/emoji-imagegen-delivery-20260905.md
   implementation_start: docs/handoffs/implementation-start-20260904.md
-  max_web_task: docs/handoffs/max-web-codex-20260904.md
+  native_visual_delivery: docs/handoffs/native-visual-delivery-20260905.md
+  max_web_task: docs/handoffs/max-web-codex-20260905.md
 
 sections:
   architecture:
     overview: docs/architecture/overview.md
     social_runtime: docs/features/social-operations/implementation-design-v1.md
   operations:
+    dependency_sdk_verification: docs/operations/dependency-sdk-verification.md
     requirements_governance: docs/operations/requirements-governance.md
     repository_workflow: docs/operations/repository-workflow.md
+    social_runtime_checkpoint: docs/operations/social-runtime.md
     llm_limits_setup: docs/operations/llm-limits-setup.md
   llm:
     index: docs/llm/README.md
     social_skill: docs/llm/vibepublish-social-skill.md
   reference:
     index: docs/reference/README.md
+    imagegen_plugin_discovery: docs/reference/imagegen-plugin-discovery-20260905.md
     events_bot_social_donor_map: docs/reference/events-bot-social-donor-map.md
+    native_adapter_provenance: docs/reference/native-adapter-provenance.md
   backlog:
     index: docs/backlog/README.md
     historical_video_requirements: docs/backlog/requirements.md
@@ -33,6 +42,7 @@ sections:
     incident_template: docs/reports/incidents/TEMPLATE.md
   tools:
     index: docs/tools/README.md
+    imagegen_inventory: scripts/inspect/probe_imagegen_plugin.py
 
 features:
   llm_gateway:
@@ -51,8 +61,8 @@ features:
       - scripts/inspect/probe_supabase_rpc.py
       - scripts/inspect/sweep_google_ai_stale.py
   social_operations:
-    status: implementation_design_runtime_not_done
-    contract_version: 1.2.0-design
+    status: partial_remote_source_not_runnable
+    contract_version: 1.5.0-runtime
     base_design_version: 1.1.0-design
     scheduling: provider_native_only
     local_publication_scheduler: forbidden
@@ -62,10 +72,12 @@ features:
     docs: docs/features/social-operations/README.md
     design: docs/features/social-operations/implementation-design-v1.md
     mcp_contract: docs/features/social-operations/mcp-contract-v1.md
+    telegram_custom_emoji: docs/features/social-operations/telegram-custom-emoji-v1.md
+    telegram_custom_emoji_status: remote_source_and_offline_core_tests_verified_live_unverified
     latest_extension: docs/features/social-operations/forwarding-and-editorial-profiles-v1.md
     acceptance_tests: docs/features/social-operations/acceptance-tests-v1.md
     skill: docs/llm/vibepublish-social-skill.md
-    skill_update_status: v1_1_text_requires_v1_2_forwarding_and_profiles_sync_before_runtime_release
+    skill_update_status: v1_5_emoji_palette_and_native_entities
     references:
       - docs/reference/events-bot-social-donor-map.md
     historical_references:
@@ -77,20 +89,49 @@ features:
       - contracts/requirements.txt
       - tests/contracts/test_social_mcp_design.py
       - tests/contracts/test_forwarding_profiles_design.py
+    runtime_entrypoints:
+      - social_operations/schema.sql
+      - social_operations/storage.py
+      - social_operations/service.py
+      - social_operations/worker.py
+      - social_operations/server.py
+      - social_operations/cli.py
+      - social_operations/assets.py
+      - adapters/port.py
+      - adapters/fake.py
+      - tests/runtime/
+      - requirements.lock
+      - adapters/native.py
+      - adapters/telegram.py
+      - adapters/vk_transport.py
+      - adapters/wiring.py
+      - tests/providers/
+      - social_operations/emojis.py
+      - social_operations/emoji_preview.py
+      - adapters/telegram_emoji.py
+      - tests/emoji/
+      - scripts/verify/telegram_sdk.py
+      - adapters/vk.py
+      - social_operations/rich_text.py
     planned_entrypoints:
-      - social_operations/
-      - adapters/telegram/
-      - adapters/vk/
       - adapters/max/
-      - mcp/
-      - api/
-      - worker/
   social_visuals:
-    status: fixed_design_runtime_not_done
+    status: partial_remote_source_not_runnable
     docs: docs/features/social-visuals/README.md
-    planned_entrypoints:
-      - adapters/imagegen/
-      - social_operations/services/
+    live_executor: devcoveer_host_contract_unverified_no_canary
+    active_rollout: docs/handoffs/codex-full-product-rollout-20260905.md
+    rollout_requirement: real_imagegen_generate_tune_compose_and_end_to_end_acceptance
+    process_module_delivery: request_safety_blocked
+    process_executor: docs/operations/devcoveer-imagegen.md
+    undelivered_entrypoints:
+      - adapters/codex_imagegen.py
+    runtime_entrypoints:
+      - adapters/imagegen.py
+      - social_operations/visuals.py
+      - social_operations/visual_artifacts.py
+      - social_operations/compositor.py
+      - social_operations/visual_schema.sql
+      - tests/visuals/
   video_stories:
     status: draft_normalization_runtime_not_done
     docs: docs/features/video-stories/README.md

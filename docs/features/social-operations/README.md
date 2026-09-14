@@ -1,8 +1,61 @@
 # VibePublish Social Operations
 
+> Current remote delivery: **partial, not a runnable release**. The implemented
+> behavior and historical test counts below describe the complete archived source.
+> Three production modules remain undelivered; current evidence and exact boundaries
+> are in [runtime status](../../operations/social-runtime.md).
+
+Current bounded runtime contract/skill: **1.5.0-runtime**, eight tools unchanged.
+[Telegram custom emoji](telegram-custom-emoji-v1.md) now has private catalogs,
+numbered visual selection, frozen aliases/rules and semantic native entities.
+This is offline implementation, **Not confirmed by user**, not a live Telegram
+capability claim. Historical design versions below remain requirements context.
+
+> Offline core and native adapter snapshot: [runtime runbook](../../operations/social-runtime.md).
+> This is not complete provider implementation or deployment; canonical goals
+> below remain binding, including all retained capability and live-verification gates.
+
 Owner requirements: `Fixed`, including the follow-up correction of 2026-09-04.
 Engineering realization: selected design `1.1.0-design`, `Not confirmed by user`.
-Runtime implementation: `Not done`.
+Runtime implementation: core, native Telegram/VK subset and offline VisualService **Not confirmed by user**; remaining capabilities **Not done**.
+
+Contract 1.3 adds mutually exclusive native `item_ref` lifecycle commands (scoped
+remote-snapshot CAS) and read-ref forwarding; see the runtime runbook and
+[native provenance](../../reference/native-adapter-provenance.md). Native item
+management never grants access to another author's private draft or assets.
+
+Contract 1.4 implements the existing visual method and inline branch through one
+VisualService, selected-asset hashes, scoped binary resources and single parent
+continuation. It does not add a ninth method. Real executor, initial-preset human
+acceptance and live capabilities remain unverified; see [visuals](../social-visuals/README.md).
+
+## Telegram P0 source hardening — 2026-09-12
+
+Status: `Not confirmed by user`. The source fix is internally verified but has not
+been rolled out or accepted against the live DevCoveer Telegram session yet.
+
+A user-reported live failure established that a disconnected MTProto transport could
+leave the worker alive while later jobs continued to reach an unhealthy Telegram
+client. The P0 runtime therefore must health-check/reconnect **before** each Telegram
+RPC, must never retry a mutation after an RPC has started, and must resolve numeric
+Telegram peers generically from the account's active authorized bindings rather than
+from a hard-coded target/access hash. Runtime failures expose only sanitized
+`exception_type`, `stage` and `correlation_id`; provider/session exception text is not
+part of the receipt. A runtime-health failure must not be represented as supported.
+
+The P0 publish ingress accepts a bounded public `https://` image URL only after
+schema/scope validation, public-address DNS validation with pinned resolution,
+bounded redirects/body and existing image sanitization. The result becomes a private
+VibePublish asset before admission. Telegram `thread_ref`, `role=document` and exact
+media readback remain the existing contract: for `https://t.me/c/4379835477/5` the
+immutable plan must retain native target `-1004379835477` and topic root `5`, publish
+as a document, verify the provider item, read the same topic and expose downloaded
+image bytes only through the caller's private asset resource.
+
+Source regressions cover reconnect, active-binding entity hydration, exact topic 5,
+document provider confirmation/readback, HTTPS ingress rejection boundaries,
+sanitized diagnostics and same-request idempotency. Passing source CI is not live
+provider evidence; rollout and live acceptance remain a separate gate.
 
 ## Current source of truth
 
@@ -81,7 +134,7 @@ An active partner publisher normally receives six core methods, including `read`
 
 ## Reliability and related features
 
-Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. Preserve per-provider successes. Perform deterministic all-target preflight while publishing its stages; after dispatch, providers proceed independently. Record the dispatch boundary before side effects. Unknown outcomes are reconciled, never blindly retried. Media evidence distinguishes input hashes from provider-transcoded results.
+Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. Preserve per-provider successes. Perform deterministic all-target preflight while publishing its stages; after dispatch, providers proceed independently. Record the dispatch boundary before side effects. Unknown outcomes are reconciled, never blindly retried. The owner-authorized additive [original-terminal recovery contract](mcp-contract-v1.md#original-terminal-recovery-owner-max-completion-correction-2026-09-08) reopens the original operation for observation only and durably finalizes matching provider quarantine after resolution; successful siblings are preserved. Media evidence distinguishes input hashes from provider-transcoded results.
 
 [Social visuals](../social-visuals/README.md) preserves `$imagegen` through the requested `gpt-5.6-luna` route, candidate choice, deterministic exact typography and separate training consent. A pending visual is not yet a queued provider post; approval/selection after the native lead-time window blocks submission instead of sending immediately.
 
