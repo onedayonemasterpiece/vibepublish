@@ -32,4 +32,4 @@ social_operations = ["schema.sql", "visual_schema.sql", "emoji_schema.sql", "res
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --import-mode=importlib"
