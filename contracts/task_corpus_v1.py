@@ -29,6 +29,17 @@ def update(text, change, expect="accept_after_runtime_checks"):
 job("Покажи инструкцию и доступные каналы", "get_started", {})
 job("Покажи примеры вызовов", "get_started", {"section": "examples"})
 job("Покажи возможности работы с картинками", "get_started", {"section": "visuals"})
+job("Сохрани картинку файлом в приватную медиабазу", "media_store", {"command": {
+    "kind": "put", "to": "pka_tg", "thread_ref": "https://t.me/c/4379835477/5",
+    "content": {"text": "Подпись"}, "media": [{**ASSET, "role": "document"}]},
+    "request_key": "media-store-1"}, "private_store_durable_put")
+job("Проверь подписи в приватной медиабазе без скачивания файлов", "media_store", {"command": {
+    "kind": "list", "to": "pka_tg", "thread_ref": "https://t.me/c/4379835477/5",
+    "text": "Луноход"}}, "local_text_index_no_provider_io")
+job("Найди файл по описанию во всей Telegram-медиабазе, независимо от треда", "media_store", {"command": {
+    "kind": "search", "text": "Луноход"}}, "private_store_global_search")
+job("Забери точный файл из приватной медиабазы", "media_store", {"command": {
+    "kind": "get", "entry_ref": "pub_1"}}, "exact_telegram_download_short_cache")
 publish("Опубликуй текст в телеграм-канале", to=["pka_tg"])
 publish("Опубликуй текст в группе ВК", to=["pka_vk"])
 publish("Опубликуй текст в MAX через веб", to=["pka_max"])
@@ -57,6 +68,8 @@ publish("Сначала дай выбрать одну из двух иллюс�
 publish("Улучши мой черновик карточки перед публикацией", visual={"kind": "tune", "source": ASSET, "brief": "Сохрани подтверждённый текст, улучши композицию"})
 publish("Скомпонуй две фотографии для поста", visual={"kind": "compose", "sources": [ASSET, ASSET2], "brief": "Афиша без новых фактов"})
 job("Создай отдельную иллюстрацию, не публикуй", "visual", {"command": {"kind": "generate", "brief": "Музыкальное настроение"}})
+job("Покажи лёгкое превью сохранённой картинки", "asset_preview", {
+    "resource_uri": "vibepublish://assets/asset_1"}, "bounded_private_webp_for_model_vision")
 job("Улучши отдельную карточку", "visual", {"command": {"kind": "tune", "source": ASSET, "brief": "Больше воздуха"}})
 job("Сделай композицию из двух картинок отдельно", "visual", {"command": {"kind": "compose", "sources": [ASSET, ASSET2], "brief": "Вертикальная композиция"}})
 job("Выбираю второй вариант; продолжи исходную публикацию", "visual", {"command": {"kind": "select", "job_id": "visual_1", "candidate_id": "candidate_2", "expected_revision": 2, "token": "review_token"}})

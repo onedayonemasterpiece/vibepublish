@@ -27,7 +27,7 @@ class ContractDesignTests(unittest.TestCase):
             elif isinstance(node, list):
                 for value in node:
                     visit(value)
-        self.assertEqual(len(TOOLS), 8)
+        self.assertEqual(len(TOOLS), 10)
         for tool in TOOLS.values():
             for field in ("inputSchema", "outputSchema"):
                 with self.subTest(tool=tool["name"], schema=field):
@@ -84,13 +84,13 @@ class ContractDesignTests(unittest.TestCase):
     def test_scoped_projection_and_determinism(self):
         scopes = {"bootstrap", "publish", "publication.manage", "visual", "status"}
         tools = project_catalog(scopes)
-        self.assertEqual(len(tools), 5)
+        self.assertEqual(len(tools), 6)
         self.assertTrue(all("required_scope" not in t for t in tools))
         self.assertNotIn("vibepublish_read", {t["name"] for t in tools})
         self.assertEqual(project_catalog(set()), [])
         self.assertEqual(catalog(), CATALOG)
         self.assertEqual(project_catalog(scopes), tools)
-        self.assertEqual(len(project_catalog({t["required_scope"] for t in CATALOG["tools"]}, owner=True)), 8)
+        self.assertEqual(len(project_catalog({t["required_scope"] for t in CATALOG["tools"]}, owner=True)), 10)
 
     def test_native_queue_only(self):
         schema = TOOLS["vibepublish_publish"]["inputSchema"]["$defs"]["delivery"]
@@ -102,7 +102,7 @@ class ContractDesignTests(unittest.TestCase):
     def test_publisher_inherits_scoped_read_catalog(self):
         scopes = {"bootstrap", "publish", "publication.manage", "visual", "status"}
         projected = project_catalog(scopes, publish_destinations=("own_channel",))
-        self.assertEqual(len(projected), 6)
+        self.assertEqual(len(projected), 7)
         read = next(t for t in projected if t["name"] == "vibepublish_read")
         v = Draft202012Validator(read["inputSchema"], format_checker=FormatChecker())
         for kind in ("feed", "scheduled", "stories"):
