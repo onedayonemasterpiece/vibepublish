@@ -36,7 +36,7 @@ class HealthyForumClient(ForumTelegramClient):
 
 
 @pytest.mark.asyncio
-async def test_topic_5_document_publish_confirmation_and_private_readback_bytes():
+async def test_topic_5_document_publish_confirmation_and_metadata_only_thread_readback():
     client = HealthyForumClient()
     client.messages[(101, 5)] = topic_message(5, "P0 topic root")
     adapter = ResilientTelegramAdapter(
@@ -79,9 +79,9 @@ async def test_topic_5_document_publish_confirmation_and_private_readback_bytes(
         journal.hooks,
     )
     item, = page.items
-    download, = page.downloads
     assert item.native_id == remote.native_id
     assert item.reply_to_native_id == "5"
-    assert download.media_kind == "document"
-    assert download.data == media.data
-    assert item.observed_media[0].sha256 == media.sha256
+    assert item.provider_media[0].startswith("document:")
+    # Thread listings are intentionally metadata-only. Exact bytes are fetched
+    # only through explicit item/asset reads, never as a side effect of listing.
+    assert page.downloads == ()
