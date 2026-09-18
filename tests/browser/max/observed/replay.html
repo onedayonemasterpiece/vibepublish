@@ -1,0 +1,126 @@
+<!doctype html><meta charset="utf-8"><title>Sanitized MAX observed navigation replay</title>
+<nav><button>Настройки</button></nav><aside></aside>
+<main tabindex="-1" class="main main--active" aria-labelledby="main-header-title"></main>
+<script>
+// Independent provider/navigation state. IDs and content below are invented;
+// DOM semantics/classes/labels are transcribed from allowed MAX UI, not app code.
+const state=window.provider={order:window.REPLAY_ORDER||['-101','-202','-303'],target:null,mode:'feed',effects:0,visits:[],rename:{},wrong:false};
+const titles={'-101':'Test Group','-202':'Channel A','-303':'Channel B'};
+function sidebar(){document.querySelector('aside').innerHTML=state.order.map(id=>`<div class="item" data-index="${state.order.indexOf(id)}"><div role="presentation"><button class="cell" onclick="go('${id}')"><h3 class="title"><span class="name"><span class="text">${titles[id]}</span></span></h3><span>Unrelated preview</span></button></div></div>`).join('')+`<div class="searchResultsList"><button aria-haspopup="dialog"><span class="title"><span class="name"><span class="text">Channel A</span></span></span><span class="text">preview</span></button><button><span class="title"><span class="name"><span class="text">Other chat</span></span></span><span class="text"><span>Test Group</span></span></button></div>`;}
+function render(){let main=document.querySelector('main');main.innerHTML=state.mode==='scheduled'?'<span>Запланированные посты</span>':`<h2 id="main-header-title">${titles[state.target]}</h2><button aria-label="Открыть профиль ${state.rename[state.target]||titles[state.wrong?'-202':state.target]}"></button><button aria-label="Открыть отложенные сообщения" onclick="provider.mode='scheduled';render()"></button>`;
+main.innerHTML+=`<div class="history"><div role="listitem"><div role="presentation" class="messageWrapper messageWrapper--isOut"><div class="bubbleContent"><span class="text">Safe example</span><span class="meta"><span class="text">12:00</span></span></div></div></div></div><div data-testid="composer"><div class="attaches"></div><button aria-label="Загрузить файл" onclick="uploadMenu()"></button><input type="file" multiple hidden onchange="previewFiles(this)"><div contenteditable role="textbox" data-lexical-editor="true" aria-placeholder="Сообщение"></div><button aria-label="Отправить сообщение" onclick="effect()"></button></div>`;}
+// Minimal native-link menu transcribed from the original task-owned message.
+// Message state and copy effects live on the provider side, never on the driver.
+const messages=window.REPLAY_MESSAGES||[{id:'safe-item',text:'Safe example',outgoing:true}];
+function fixtureText(root){
+ if(root.nodeType===1&&root.hasAttribute('data-lexical-emoji'))return root.getAttribute('data-lexical-emoji');
+ if(root.nodeType===3)return root.textContent;
+ return [...root.childNodes].map(fixtureText).join('');
+}
+function rasterize(root){
+ if(!window.REPLAY_RASTER_EMOJI)return;
+ const walk=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),nodes=[];
+ while(walk.nextNode())if(walk.currentNode.textContent.includes('😀'))nodes.push(walk.currentNode);
+ for(const node of nodes){const parts=node.textContent.split('😀'),fragment=document.createDocumentFragment();
+  parts.forEach((part,i)=>{fragment.append(document.createTextNode(part));if(i<parts.length-1){
+   const wrapper=document.createElement('span');wrapper.className='emojiWrapper';wrapper.contentEditable='false';
+   const emoji=document.createElement('span');emoji.setAttribute('data-lexical-emoji','😀');
+   const image=document.createElement('img');image.alt='😀';image.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==';
+   emoji.append(image);wrapper.append(emoji);fragment.append(wrapper);
+  }});node.replaceWith(fragment);
+ }
+}
+document.addEventListener('input',event=>{if(event.target.matches('main [role="textbox"][contenteditable]'))rasterize(event.target);});
+const originalRender=render;
+render=function(){
+ originalRender();
+ const history=document.querySelector('main .history');history.replaceChildren();
+ for(const message of messages){
+  if(message.target && message.target!==state.target)continue;
+  const row=document.createElement('div');row.className='messageWrapper'+(message.outgoing?' messageWrapper--isOut':'');
+  const bubble=document.createElement('div');bubble.className='bubbleContent';
+  const content=document.createElement('span');content.className='text';if(message.html!==undefined)content.innerHTML=message.html;else content.textContent=message.text;rasterize(content);bubble.append(content);row.append(bubble);
+  if(message.media){const media=document.createElement('span');media.className='media';if(Array.isArray(message.media)){
+   const grid=document.createElement('div');grid.setAttribute('aria-label','Прикрепленные фото');media.append(grid);
+   for(const src of message.media){const tile=document.createElement('button');const isVideo=src.endsWith('.mp4');
+    if(isVideo){const video=document.createElement('video');const source=document.createElement('source');source.src=src;video.append(source);tile.append(video);
+     // Actual media tile contains nested player buttons: they are not album slots.
+     for(const label of ['Развернуть на весь экран','Включить звук','Воспроизвести']){const control=document.createElement('button');control.setAttribute('aria-label',label);tile.append(control);}
+    }else{const img=document.createElement('img');img.src=src;img.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();};if(window.REPLAY_LAZY_MEDIA)setTimeout(()=>tile.append(img),window.REPLAY_LAZY_MEDIA);else tile.append(img);}grid.append(tile);
+    tile.onclick=()=>{const dialog=document.createElement('div');dialog.role='dialog';
+     const download=document.createElement('button');download.textContent=isVideo?'Скачать видео':'Скачать';
+     download.onclick=()=>{const link=document.createElement('a');link.href=src+'?download=1';link.download=isVideo?'video.mp4':'photo.png';document.body.append(link);link.click();link.remove();};
+     const close=document.createElement('button');close.setAttribute('aria-label','Закрыть');close.onclick=()=>dialog.remove();dialog.append(download,close);document.body.append(dialog);};
+   }
+  }row.append(media);}
+  row.oncontextmenu=event=>{
+   event.preventDefault();document.querySelector('[role=menu]')?.remove();
+   window.REPLAY_MENU_OPENS=(window.REPLAY_MENU_OPENS||0)+1;
+   const menu=document.createElement('div');menu.role='menu';
+   const copy=document.createElement('button');copy.role='menuitem';copy.textContent='Скопировать ссылку на сообщение';
+   copy.disabled=Boolean(window.REPLAY_DISABLED_COPY);
+   copy.onclick=async()=>{
+    const ref='https://max.ru/c/'+(window.REPLAY_COPY_TARGET||state.target)+'/'+(window.REPLAY_COPY_ID||message.id);
+    if(!window.REPLAY_SILENT_COPY)await navigator.clipboard.writeText(ref);
+    await fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'copy',target:state.target,id:message.id})});
+    menu.remove();
+   };
+   menu.append(copy);
+   if(message.outgoing){
+    const edit=document.createElement('button');edit.role='menuitem';edit.textContent='Редактировать';
+    edit.onclick=()=>{state.editing=message.id;menu.remove();
+     const label=document.createElement('span');label.textContent=window.REPLAY_GROUP_EDIT?'Редактирование сообщения':'Редактирование поста';label.className='edit-heading';
+     document.querySelector('main').append(label);
+     if(message.html!==undefined)document.querySelector('main [role="textbox"][contenteditable]').innerHTML=message.html;else document.querySelector('main [role="textbox"][contenteditable]').textContent=message.text;
+    };
+    menu.append(edit);
+    const remove=document.createElement('button');remove.role='menuitem';remove.textContent='Удалить';
+    remove.onclick=()=>{menu.remove();
+     const dialog=document.createElement('div');dialog.role='dialog';
+     dialog.innerHTML='<h2>Удалить сообщение</h2><label><input type="checkbox">Удалить для всех?</label><button>Удалить</button><button>Отменить</button>';
+     dialog.querySelectorAll('button')[1].onclick=()=>dialog.remove();
+     dialog.querySelector('button').onclick=async()=>{
+      if(!dialog.querySelector('input').checked)return;
+      const response=await fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'effect',action:'delete',target:state.target,existing:message.id})});
+      const result=await response.json();messages.splice(0,messages.length,...result.messages);dialog.remove();render();
+     };document.body.append(dialog);
+    };menu.append(remove);
+   }
+   document.body.append(menu);
+   if(window.REPLAY_DROP_MENUS>0){window.REPLAY_DROP_MENUS--;queueMicrotask(()=>menu.remove());}
+  };
+  history.append(row);
+ }
+};
+function uploadMenu(){
+ const menu=document.createElement('div');menu.role='menu';
+ const button=document.createElement('button');button.role='menuitem';button.textContent='Фото или видео';
+ button.onclick=()=>{menu.remove();document.querySelector('input[type=file]').click();};menu.append(button);document.body.append(menu);
+}
+function previewFiles(input){
+ const parent=document.querySelector('.attaches');parent.replaceChildren();
+ for(const file of input.files){const attach=document.createElement('div');attach.className='attach';const img=document.createElement('img');img.src=file.type==='video/mp4'?'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==':URL.createObjectURL(file);img.alt=file.name;attach.append(img);parent.append(attach);}
+}
+async function effect(){
+ state.effects++;
+ const text=fixtureText(document.querySelector('main [role="textbox"][contenteditable]'));
+ const response=await fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'effect',target:state.target,text,html:document.querySelector('main [role="textbox"][contenteditable]').innerHTML,media:[...document.querySelectorAll('.attaches img')].map(e=>e.alt),action:state.editing?'edit':'publish',existing:state.editing||null})});
+ const result=await response.json();
+ if(result.messages){state.editing=null;messages.splice(0,messages.length,...result.messages);render();}
+}
+function go(id){fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'visit',target:id})});state.target=id;state.visits.push(id);history.pushState({},'',id);render();}
+document.addEventListener('keydown',e=>{
+ const editor=document.querySelector('main [role="textbox"][contenteditable]');
+ if(e.ctrlKey&&e.target===editor&&e.code==='Backslash'){e.preventDefault();document.execCommand('removeFormat');document.execCommand('unlink');}
+ if(e.ctrlKey&&e.target===editor&&e.key.toLowerCase()==='k'){
+  e.preventDefault();const selected=getSelection().getRangeAt(0).cloneRange();
+  const dialog=document.createElement('div');dialog.role='dialog';dialog.innerHTML='<h2>Ссылка</h2><input placeholder="https://max.ru"><button>Отменить</button><button>Добавить</button>';
+  dialog.querySelector('button').onclick=()=>dialog.remove();dialog.querySelectorAll('button')[1].onclick=()=>{
+   const url=dialog.querySelector('input').value;dialog.remove();editor.focus();getSelection().removeAllRanges();getSelection().addRange(selected);document.execCommand('createLink',false,url);
+  };document.body.append(dialog);
+ }
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=document.querySelector('[role=menu]');if(menu)menu.remove();else if(window.REPLAY_ESCAPE_LEAVES_CHAT)history.pushState({},'', '/');}});
+sidebar();go(location.pathname.slice(1)||'-101');
+if(window.REPLAY_HISTORY_DELAY){document.querySelector('main .history').replaceChildren();setTimeout(()=>render(),window.REPLAY_HISTORY_DELAY);}
+</script>

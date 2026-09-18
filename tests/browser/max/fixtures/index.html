@@ -1,0 +1,60 @@
+<!doctype html><meta charset="utf-8"><title>SYNTHETIC MAX state machine fixture — NOT live MAX DOM</title>
+<div data-testid="session" data-account="fixture-account">
+<label>Exact destination<input id="destination"></label><button onclick="openTarget()">Open exact destination</button>
+<div data-testid="channel" data-target="" data-readable="true" data-writable="true"></div></div>
+<script>
+// Synthetic provider persists independently of the client process on the local
+// fixture server. No MAX endpoints, credentials or copied personal DOM.
+let target='', kind='scheduled', offset=0, media=[], state={};
+const channel=()=>document.querySelector('[data-testid=channel]');
+const config=()=>state.config || {};
+async function refresh(){ state=await (await fetch('/state')).json(); }
+async function openTarget(){
+ target=document.querySelector('#destination').value;
+ if (!['channel-a','channel-b'].includes(target)) return;
+ await refresh();
+ channel().dataset.target=target;
+ channel().innerHTML=`<h1>Same channel name</h1><button onclick="list('feed')">feed</button><button onclick="list('scheduled')">scheduled</button>
+ <div data-testid="items" data-ready="false"></div><button id="next" onclick="nextPage()">Next page</button>
+ <label>Action<select id="action">${['publish','edit','reschedule','cancel','delete'].map(x=>`<option>${x}</option>`).join('')}</select></label>
+ <label>Existing item<input id="existing"></label><button onclick="compose()">Compose</button>`;
+ await list(kind);
+}
+async function list(k){kind=k;offset=0;await renderItems();}
+async function nextPage(){offset+=2;await renderItems();}
+async function renderItems(){
+ const host=channel().querySelector('[data-testid=items]');host.dataset.ready='false';
+ await refresh();await new Promise(r=>setTimeout(r,config().read_delay || 10));
+ const items=state.items.filter(x=>x.target===target && x.namespace===kind);
+ host.replaceChildren();
+ for(const item of items.slice(offset,offset+2)){
+  const row=document.createElement('article'); row.dataset.testid='item';row.dataset.item=JSON.stringify(item);
+  row.textContent=item.text;host.append(row);
+ }
+ document.querySelector('#next').disabled=offset+2>=items.length;host.dataset.ready='true';
+}
+function compose(){
+ channel().querySelector('[role=dialog]')?.remove();media=[];
+ const el=document.createElement('section');el.setAttribute('role','dialog');
+ el.innerHTML=`<label>Text<textarea></textarea></label><label>Images<input type="file" multiple></label>
+ <div data-testid="uploads" data-ready="true" data-media="[]"></div>
+ <label>Native time<input id="native-time"></label><button onclick="submitOnce()">Submit once</button>`;
+ channel().append(el);el.querySelector('[type=file]').onchange=upload;
+ if(config().rerender) setTimeout(()=>{const copy=el.cloneNode(true);el.replaceWith(copy);copy.querySelector('[type=file]').onchange=upload;},20);
+}
+async function upload(e){
+ let node=channel().querySelector('[data-testid=uploads]');node.dataset.ready='false';
+ const files=[...e.target.files];
+ await new Promise(r=>setTimeout(r,config().upload_delay || 10));
+ media=files.map(f=>({name:f.name,id:crypto.randomUUID()}));
+ if(config().drop_upload)media.pop();if(config().reverse_upload)media.reverse();
+ node=channel().querySelector('[data-testid=uploads]');node.dataset.media=JSON.stringify(media);node.dataset.ready='true';
+}
+async function submitOnce(){
+ const dialog=channel().querySelector('[role=dialog]');
+ const response=await fetch('/effect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+ target,action:document.querySelector('#action').value,existing:document.querySelector('#existing').value,
+ text:dialog.querySelector('textarea').value,media:media.map(x=>x.id),scheduled_at:document.querySelector('#native-time').value || null})});
+ if(response.ok){dialog.remove();await renderItems();}
+}
+</script>

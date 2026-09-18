@@ -69,8 +69,8 @@ class ForwardingProfilesDesignTests(unittest.TestCase):
             with self.subTest(args=args):
                 self.assertFalse(valid(tool, args))
 
-    def test_existing_tool_count_no_skill_or_forward_alias(self):
-        self.assertEqual(len(TOOLS), 8)
+    def test_tool_count_no_skill_or_forward_alias(self):
+        self.assertEqual(len(TOOLS), 10)
         self.assertNotIn('vibepublish_skill_get', TOOLS)
         self.assertNotIn('vibepublish_forward', TOOLS)
 
@@ -81,7 +81,7 @@ class ForwardingProfilesDesignTests(unittest.TestCase):
         branches = projected['vibepublish_engage']['inputSchema']['properties']['command']['oneOf']
         self.assertEqual([b['properties']['kind']['const'] for b in branches], ['forward'])
         branches = projected['vibepublish_destinations']['inputSchema']['properties']['command']['oneOf']
-        self.assertEqual({b['properties']['kind']['const'] for b in branches}, {'list','profile_update'})
+        self.assertEqual({b['properties']['kind']['const'] for b in branches}, {'list','profile_update','emoji_set_register','emoji_alias_select','emoji_rule_put'})
 
     def test_unbound_task_scope_does_not_inherit_tools(self):
         projected = {t['name'] for t in project_catalog({'publish','forward','destination.profile'})}
@@ -105,7 +105,7 @@ class ForwardingProfilesDesignTests(unittest.TestCase):
         for item in TOOLS.values():
             Draft202012Validator.check_schema(item['inputSchema'])
             Draft202012Validator.check_schema(item['outputSchema'])
-        self.assertEqual(catalog()['version'], '1.2.0-design')
+        self.assertEqual(catalog()['version'], '1.6.1-runtime')
         self.assertEqual(catalog()['tools'], list(TOOLS.values()))
 
 if __name__ == '__main__':

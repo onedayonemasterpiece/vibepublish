@@ -1,5 +1,10 @@
 # Automated acceptance tests — VibePublish v1.2
 
+> Current remote delivery: **partial, not a runnable release**. The implemented
+> behavior and historical test counts below describe the complete archived source.
+> Three production modules remain undelivered; current evidence and exact boundaries
+> are in [runtime status](../../operations/social-runtime.md).
+
 Date: 2026-09-04. Owner functional requirements: Fixed. Runtime tests below: Not done until their actual implementations/runs exist.
 
 ## Executed versus designed
@@ -7,6 +12,15 @@ Date: 2026-09-04. Owner functional requirements: Fixed. Runtime tests below: Not
 Executed locally in this design session: `python -m unittest discover -s tests/contracts -p 'test_*.py' -v` with jsonschema 4.26.0. Result: **22 unittest methods passed**, 16 schemas, **125 golden calls** (105 existing + 20 forwarding/profile cases), **44 negative calls** (30 existing + 14 new). The baseline 14 methods were also rerun before editing. These are schema, catalog-projection and fixture checks, not evidence of live providers, database crash recovery, model accuracy or a working server.
 
 Canonical executed sources: `tests/contracts/test_social_mcp_design.py`, `tests/contracts/test_forwarding_profiles_design.py`, `contracts/task_corpus_v1.py`, `contracts/social_mcp_v1.py`. Negative and runtime-oracle labels are not substituted for executable security tests.
+
+## First executable core checkpoint
+
+`tests/runtime/` adds real SQLite, independent subprocess crash/recovery and
+concurrent worker cases, current-authority/cache/source/asset denials, fake
+native queues and lifecycle readback, profile CAS/routing/idempotency, incremental
+receipts, and actual MCP SDK/HTTP tests. See the runtime runbook for executed
+commands/counts and the exact source-delivery boundary. The test matrix below
+remains the complete target, not a claim that every case is implemented.
 
 ## Test layers and implementation ownership
 
