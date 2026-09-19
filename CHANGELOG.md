@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Add an explicit dedicated Telegram QR-login helper for DevCoveer2 recovery,
+  with private credential output and no fallback to another product's session.
+  Provider recovery remains incomplete until native MCP reads succeed.
+
 ### Clean-host verification compatibility — 2026-09-19
 
 - Make MAX async browser fixtures/tests explicit for current pytest-asyncio strict

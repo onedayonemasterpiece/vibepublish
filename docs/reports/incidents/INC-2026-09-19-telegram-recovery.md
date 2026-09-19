@@ -1,0 +1,39 @@
+# INC-2026-09-19-telegram-recovery
+
+Status: `Open` — Telegram recovery `Not done`.
+
+## Summary
+
+The restored public OAuth MCP answers requests but Telegram thread reads return
+`telegram_connection_unavailable`. Public MCP availability did not establish
+provider readiness.
+
+## Impact
+
+Telegram reads and publications cannot execute on DevCoveer2.
+
+## Root Cause
+
+The restored ledger has no provider connections and the worker runs without
+native adapters. No dedicated VibePublish Telegram session was found in the
+available credential configuration. Other products' Telegram sessions must not
+be reused.
+
+## Fix
+
+Pending: authorize a fresh dedicated session, register its connection in the
+existing tenant, activate the native worker with exclusive session ownership,
+and verify an owner-requested Telegram thread read through the public MCP.
+
+## Regression Checks
+
+Require provider-backed read completion; tools/list and health alone are
+insufficient. Never retry historical publication effects during recovery.
+
+## Release Evidence
+
+Not yet accepted. Account login requires the owner's Telegram confirmation.
+
+## Follow-Ups
+
+VK and MAX remain separate unresolved provider recoveries.
