@@ -105,14 +105,21 @@ def telegram_factory(credentials, **kwargs):
     )
 
 
-def production_connections(store: Store, *, telegram_only=False):
+def production_connections(store: Store, *, telegram_only=False, providers=None):
     expected = {
         "telegram": ("mtproto_user", TG_REFERENCE),
         "vk": ("vk_user", VK_REFERENCE),
         "max": ("max_web", MAX_REFERENCE),
     }
-    if telegram_only:
-        expected = {"telegram": expected["telegram"]}
+    if telegram_only and providers is not None:
+        raise DomainError('production_provider_selection_conflict')
+    selected_providers = tuple(providers) if providers is not None else (
+        ('telegram',) if telegram_only else tuple(expected))
+    if ('telegram' not in selected_providers
+            or len(set(selected_providers)) != len(selected_providers)
+            or any(provider not in expected for provider in selected_providers)):
+        raise DomainError('production_provider_selection_invalid')
+    expected = {provider: expected[provider] for provider in selected_providers}
     with store.connection() as db:
         rows = [
             dict(row)
@@ -149,21 +156,23 @@ async def run(
     codex_task_artifacts: Path | None = None,
     once: bool = False,
     telegram_only: bool = False,
+    providers: tuple[str, ...] | None = None,
     telegram_session_key: str = "VIBE_PUBLISH_TG_SESSION",
     telegram_api_id_key: str = "TG_API_ID",
     telegram_api_hash_key: str = "TG_API_HASH",
 ):
     store = Store(db)
-    production_connections(store, telegram_only=telegram_only)
+    selected = production_connections(store, telegram_only=telegram_only, providers=providers)
     bundles = {
         TG_REFERENCE: json.dumps(telegram_credentials(
             telegram_env_file, session_key=telegram_session_key,
             api_id_key=telegram_api_id_key, api_hash_key=telegram_api_hash_key)),
     }
-    if not telegram_only:
+    if 'vk' in selected:
         if vk_env_file is None or not vk_token_key:
             raise DomainError('approved_vk_configuration_missing')
         bundles[VK_REFERENCE] = json.dumps(vk_credentials(vk_env_file, vk_token_key))
+    if 'max' in selected:
         max_profile = os.environ.get(MAX_REFERENCE)
         if not max_profile:
             raise DomainError("max_profile_config_missing")
@@ -202,8 +211,11 @@ def main():
     parser.add_argument("--telegram-env-file", required=True, type=Path)
     parser.add_argument("--vk-env-file", type=Path)
     parser.add_argument("--vk-token-key", default="")
-    parser.add_argument("--telegram-only", action="store_true",
+    topology = parser.add_mutually_exclusive_group()
+    topology.add_argument("--telegram-only", action="store_true",
                         help="Explicit Telegram-only topology; rejects other active providers")
+    topology.add_argument("--providers", nargs='+', choices=('telegram', 'vk', 'max'),
+                          help="Exact provider topology; Telegram required; default all three")
     parser.add_argument("--telegram-session-key", default="VIBE_PUBLISH_TG_SESSION")
     parser.add_argument("--telegram-api-id-key", default="TG_API_ID")
     parser.add_argument("--telegram-api-hash-key", default="TG_API_HASH")
@@ -220,6 +232,7 @@ def main():
                 codex_task_artifacts=args.codex_task_artifacts,
                 once=args.once,
                 telegram_only=args.telegram_only,
+                providers=tuple(args.providers) if args.providers is not None else None,
                 telegram_session_key=args.telegram_session_key,
                 telegram_api_id_key=args.telegram_api_id_key,
                 telegram_api_hash_key=args.telegram_api_hash_key,

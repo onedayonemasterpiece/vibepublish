@@ -26,6 +26,15 @@ the single-provider recovery topology and rejects other active connections;
 the default full-provider topology remains strict. The session lock remains
 mandatory in both modes.
 
+For incremental recovery, `--providers telegram vk` explicitly selects those
+two providers without requiring a MAX profile. Omitting provider selection still
+requires all three. It is mutually exclusive with legacy `--telegram-only`;
+missing, duplicate or extra active connections fail closed. VK requires an
+explicit existing `--vk-env-file` and `--vk-token-key`; no token guessing or
+fallback is performed. This capability is not evidence of VK connectivity:
+[VK recovery acceptance](../reports/incidents/INC-2026-09-19-vk-recovery.md)
+remains `Not done` until a provider-backed MCP read succeeds.
+
 The DevCoveer2 `vibepublish-worker.service` runs the existing production worker
 with the following arguments (paths and variable names only, never secrets):
 

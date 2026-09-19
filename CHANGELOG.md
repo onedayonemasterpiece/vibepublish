@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Allow explicit production provider selection for incremental Telegram/VK/MAX
+  recovery while preserving exact connection validation and session ownership.
+
 - Wire owner-selected existing Telegram credentials through explicit production
   worker key mappings and a locked, opt-in Telegram-only recovery topology.
 
