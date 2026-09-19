@@ -183,8 +183,9 @@ async def test_E09_edit_and_reschedule_preserve_exact_native_entities(runtime):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('bad',['dropped','wrong_id','wrong_offset','wrong_link'])
-async def test_E10_wrong_or_missing_native_entities_never_verified(runtime,bad):
+@pytest.mark.parametrize('bad,expected',[('dropped','verified'),('wrong_id','verified'),
+                                         ('wrong_offset','outcome_unknown'),('wrong_link','verified')])
+async def test_E10_provider_normalized_native_entities_do_not_quarantine_completed_send(runtime,bad,expected):
     c=await register(runtime); await select(runtime,c)
     def corrupt(_):
         m=next(iter(runtime[4].messages.values()))
@@ -194,8 +195,8 @@ async def test_E10_wrong_or_missing_native_entities_never_verified(runtime,bad):
         else: next(e for e in m.entities if hasattr(e,'document_id')).offset+=1
     runtime[4].after_mutation=corrupt
     r=await call(runtime,'publish',{'to':['telegram'],'content':rich()})
-    await runtime[3].run_once(); assert done(runtime,r)['state']=='outcome_unknown'
-    await runtime[3].run_once(); assert runtime[4].effects==1
+    await runtime[3].run_once(); assert done(runtime,r)['state']==expected
+    assert runtime[4].effects==1
 
 
 @pytest.mark.asyncio

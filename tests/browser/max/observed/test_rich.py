@@ -59,6 +59,7 @@ async def test_raster_unicode_emoji_text_range_and_neutral_style_gap(writer):
 
 async def test_semantic_row_selector_rebinds_emoji_and_order_not_position(writer):
     d,page,_,_=writer
+    await page.goto(d.origin+'/-101')
     await page.set_content('<main><div class="messageWrapper messageWrapper--isOut"><div class="bubbleContent"><span class="text">A<span class="emoji" data-lexical-emoji="😀"></span>B</span></div></div><div class="messageWrapper"><div class="bubbleContent"><span class="text">A<span class="emoji" data-lexical-emoji="🙂"></span>B</span></div></div></main>')
     row=d._rows(page.locator('main'),'A😀B',outgoing=True)
     assert await row.count()==1

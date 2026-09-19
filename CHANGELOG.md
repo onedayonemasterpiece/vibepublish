@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Clean-host verification compatibility — 2026-09-19
+
+- Make MAX async browser fixtures/tests explicit for current pytest-asyncio strict
+  mode and preserve the bound target URL in the semantic row-selector fixture.
+- Allow verification to use an installed Google Chrome executable, and update
+  stale MCP tool-count, database migration, and Telegram entity-normalization
+  expectations to the current runtime contracts.
+
 ### Model-visible private asset preview — 2026-09-14
 
 - Add a read-only `vibepublish_asset_preview` MCP tool that turns an authorized

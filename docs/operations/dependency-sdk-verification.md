@@ -68,6 +68,12 @@ For the complete local source, additionally install the app with `--no-deps
 --no-build-isolation`, run `python scripts/verify/telegram_sdk.py` and the full
 suite. No absent SDK test may be hidden with importorskip. The local full-core
 workflow retains mandatory full-runtime/browser/SDK steps in the same CI path.
+Async browser modules and fixtures must use explicit `pytest-asyncio` markers and
+fixture decorators so newer pytest strict mode executes them rather than silently
+skipping or rejecting them. Browser verification may use an installed Chromium or
+Google Chrome executable; it does not require Playwright's bundled revision when
+a clean host deliberately supplies the system browser. Tool-surface tests assert
+the required capability names instead of freezing an obsolete total tool count.
 
 ## Corrected diagnosis and remaining boundary
 

@@ -14,6 +14,8 @@ ProfileLane = importlib.import_module('adapters.max.profile').ProfileLane
 MaxBlocked = importlib.import_module('adapters.max.profile').MaxBlocked
 FixtureDriver = importlib.import_module('adapters.max.driver').FixtureDriver
 
+pytestmark = pytest.mark.asyncio
+
 
 async def test_M09_actual_process_death_observe_not_resubmit(server, tmp_path):
     origin, state = server

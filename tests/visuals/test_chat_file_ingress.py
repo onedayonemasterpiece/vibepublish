@@ -187,7 +187,8 @@ def test_real_mcp_projection_and_import(env):
             return response.json()['result']
         rpc('initialize',{'protocolVersion':'2025-11-25','capabilities':{},'clientInfo':{'name':'fixture','version':'1'}})
         listed=rpc('tools/list',{})['tools']
-        assert len(listed)==8
+        names={tool['name'] for tool in listed}
+        assert {'vibepublish_get_started','vibepublish_visual','vibepublish_status'} <= names
         visual=next(t for t in listed if t['name']=='vibepublish_visual')
         assert visual['_meta']['openai/fileParams']==['file']
         result=rpc('tools/call',{'name':'vibepublish_visual','arguments':args()})

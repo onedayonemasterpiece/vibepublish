@@ -102,7 +102,7 @@ from adapters.max.live import RealMaxDriver, Target
 from adapters.max.profile import MaxBlocked
 HTML=Path(__file__).with_name("observed").joinpath("replay.html").read_text()
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def replay(tmp_path):
     async with async_playwright() as pw:
         browser=await pw.chromium.launch()

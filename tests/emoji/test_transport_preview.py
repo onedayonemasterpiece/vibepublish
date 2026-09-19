@@ -14,6 +14,7 @@ import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from playwright.async_api import async_playwright
+from contracts.social_mcp_v1 import VERSION
 from social_operations.emoji_preview import render_catalog
 from .test_runtime import runtime, register
 from .fixtures import PAIR
@@ -26,7 +27,9 @@ async def test_E12_browser_visual_selection_repeat_order_no_horizontal_overflow(
     markup,_=render_catalog(runtime[2],runtime[1],catalog)
     errors=[]
     async with async_playwright() as p:
-        executable=os.environ.get('VIBEPUBLISH_TEST_CHROMIUM') or shutil.which('chromium') or p.chromium.executable_path
+        executable=(os.environ.get('VIBEPUBLISH_TEST_CHROMIUM') or shutil.which('chromium')
+                    or shutil.which('google-chrome') or shutil.which('google-chrome-stable')
+                    or p.chromium.executable_path)
         browser=await p.chromium.launch(executable_path=executable,headless=True,args=['--no-sandbox'])
         try:
             page=await browser.new_page(viewport={'width':width,'height':height})
@@ -78,13 +81,15 @@ async def test_E12_actual_ClientSession_catalog_choice_and_native_worker(runtime
                 async with streamable_http_client(base+'/mcp/',http_client=http) as (read,write,_):
                     async with ClientSession(read,write,read_timeout_seconds=timedelta(seconds=15)) as session:
                         await session.initialize()
-                        assert len((await session.list_tools()).tools)==8
+                        tools={tool.name for tool in (await session.list_tools()).tools}
+                        assert {'vibepublish_get_started','vibepublish_destinations',
+                                'vibepublish_status','vibepublish_publish'} <= tools
                         async def tool(name,args):
                             r=(await session.call_tool('vibepublish_'+name,args)).structuredContent
                             assert r and 'error' not in r,r
                             return r
                         boot=await tool('get_started',{'section':'emoji'})
-                        assert boot['schema_version']=='1.6.0-runtime'
+                        assert boot['schema_version']==VERSION
                         r=await tool('destinations',{'command':{'kind':'emoji_set_register','destination':'telegram','url':'https://t.me/addemoji/Example','expected_revision':0}})
                         assert r['state']=='accepted' and not client.calls
                         await worker.run_once()

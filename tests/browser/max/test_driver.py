@@ -6,6 +6,8 @@ import pytest
 
 MaxBlocked = importlib.import_module('adapters.max.profile').MaxBlocked
 
+pytestmark = pytest.mark.asyncio
+
 
 class Hooks:
     def __init__(self, fail=None, callback=None):

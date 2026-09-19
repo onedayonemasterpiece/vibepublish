@@ -5,6 +5,7 @@ import os
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
 from playwright.async_api import async_playwright
 
 from adapters.max.live import RealMaxDriver, Target
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.asyncio
 TEXT = 'Plain publication without an injected task marker'
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def writer(tmp_path):
     state = dict(messages=[], events=[], checkpoints=[], outbound=[], fault=None,
                  orders=['-101', '-202', '-303'], checks=0)
