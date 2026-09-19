@@ -2,7 +2,7 @@
 
 Independent Telegram, VK and MAX Web operations service, with one MCP/HTTP application core and an image/video pipeline.
 
-## Current contract: 1.6.0-runtime; Telegram media database, native adapters, emoji and visuals
+## Current contract: 1.6.2-runtime; Telegram media database, native adapters, emoji and visuals
 
 Owner corrections of 2026-09-04 are Fixed:
 

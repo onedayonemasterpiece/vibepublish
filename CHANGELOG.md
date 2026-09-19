@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Recover the private Telegram media index after the DevCoveer crash, preserving
+  native album identities and source captions; document retained recovery evidence
+  and the restored Wonderful Lections private asset bridge.
+- Let the owner list a bound private media topic by its exact thread URL without
+  knowing a hidden routing alias, and preserve verified hashes across metadata-only
+  thread reads when the ordered Telegram attachment identities remain unchanged.
+
 - Resolve VK shared-post IDs using the explicit approved coowner wall mapping;
   preserve target validation for unproven, conflicting and scheduled identities.
 

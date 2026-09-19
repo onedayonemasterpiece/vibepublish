@@ -5,7 +5,7 @@
 > Three production modules remain undelivered; current evidence and exact boundaries
 > are in [runtime status](../../operations/social-runtime.md).
 
-Version: `1.5.0-runtime` (base design `1.1.0-design`). Owner corrections: `Fixed`. Offline implementation: `Not confirmed by user`; retained/live gates: `Not done`.
+Version: `1.6.2-runtime` (base design `1.1.0-design`). Owner corrections: `Fixed`. Offline implementation: `Not confirmed by user`; retained/live gates: `Not done`.
 
 Canonical schemas: [`contracts/social_mcp_v1.py`](../../../contracts/social_mcp_v1.py). Tasks: [`contracts/task_corpus_v1.py`](../../../contracts/task_corpus_v1.py). Runtime semantics: [implementation design](implementation-design-v1.md). Skill: [vibepublish-social-skill.md](../../llm/vibepublish-social-skill.md).
 

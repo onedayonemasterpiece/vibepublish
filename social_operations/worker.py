@@ -540,8 +540,23 @@ class Worker:
             raise OutcomeUnknown('vk_photo_evidence_invalid') from None
 
     def save_fact(self, db, destination, remote, actor=None, publication=None):
+        snapshot = asdict(remote)
+        previous = db.execute(
+            'SELECT snapshot FROM facts WHERE destination_id=? AND native_id=? AND namespace=?',
+            (destination, remote.native_id, remote.namespace),
+        ).fetchone()
+        if previous and not snapshot.get('observed_media'):
+            prior = json.loads(previous['snapshot'])
+            # A thread/feed read intentionally avoids downloading bytes. Preserve
+            # earlier byte evidence only while the ordered provider attachments
+            # and album membership still identify the exact same media item.
+            if (tuple(snapshot.get('provider_media', ())) == tuple(prior.get('provider_media', ()))
+                    and tuple(snapshot.get('member_ids', ())) == tuple(prior.get('member_ids', ()))):
+                snapshot['observed_media'] = prior.get('observed_media', [])
+                snapshot['media_hashes'] = prior.get('media_hashes', [])
+                snapshot['media_check'] = prior.get('media_check', snapshot.get('media_check'))
         db.execute('INSERT INTO facts VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(destination_id,native_id,namespace) DO UPDATE SET snapshot=excluded.snapshot,text=excluded.text,observed_at=excluded.observed_at',
-                   (new_id('fact'), destination, remote.native_id, remote.namespace, actor, publication, 'forward' if remote.origin else 'original', canonical(asdict(remote)), remote.text, remote.observed_at))
+                   (new_id('fact'), destination, remote.native_id, remote.namespace, actor, publication, 'forward' if remote.origin else 'original', canonical(snapshot), remote.text, remote.observed_at))
 
     def fail(self, op, child, error):
         with self.store.tx() as db:

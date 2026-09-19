@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.6.1-runtime"
+VERSION = "1.6.2-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -181,7 +181,7 @@ DEFS["media_store_item"] = obj({
     "entry_ref": ID, "text": {**string(), "minLength": 0}, "observed_at": DATE,
     "native_id": string(128), "destination": ALIAS,
     "thread_ref": TELEGRAM_THREAD_URL, "telegram_url": TELEGRAM_THREAD_URL,
-    "sha256": array(string(64, pattern=r"^[a-f0-9]{64}$"), 1, 20),
+    "sha256": array(string(64, pattern=r"^[a-f0-9]{64}$"), 0, 20),
 }, ("entry_ref", "text", "observed_at", "native_id", "destination",
     "thread_ref", "telegram_url", "sha256"))
 DEFS["receipt"]["properties"]["media_store_items"] = array(ref("media_store_item"), 0, 50)
@@ -228,7 +228,7 @@ tool("media_store", "Single-owner Telegram media database, not social publicatio
             "content": ref("content"), "media": array(ref("media"), 1, 20)},
             ("to", "thread_ref", "content", "media")),
         arm("list", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
-            "text": {**string(1000), "minLength": 0}}, ("to", "thread_ref")),
+            "text": {**string(1000), "minLength": 0}}, ("thread_ref",)),
         arm("search", {"text": string(1000)}, ("text",)),
         arm("get", {"entry_ref": ID}, ("entry_ref",))]},
         "request_key": KEY, "limit": LIMIT}, ("command",)), ref("receipt"), "media.store")

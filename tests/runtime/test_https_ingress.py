@@ -29,6 +29,32 @@ def png_bytes():
 
 
 @pytest.mark.asyncio
+async def test_media_store_list_resolves_hidden_direct_binding_from_thread_url(tmp_path):
+    store = Store(tmp_path / "ledger.sqlite", clock=lambda: NOW)
+    token = store.create_principal("tenant", "owner", owner=True)
+    actor = store.authenticate(token)
+    store.add_connection(
+        actor,
+        "conn_tg",
+        "telegram",
+        account_type="mtproto_user",
+        secret_ref="VIBEPUBLISH_TELEGRAM_SESSION",
+        shared=True,
+    )
+    app = IngressApplication(store)
+    hidden_alias = app._owner_thread_alias(actor, TOPIC_URL)
+    with store.connection() as db:
+        assert hidden_alias.startswith("vp_direct_tg_")
+        assert hidden_alias not in {row["alias"] for row in app.aliases(db, actor)}
+
+    listed = await app.call(actor, "vibepublish_media_store", {
+        "command": {"kind": "list", "thread_ref": TOPIC_URL},
+    })
+    assert listed["state"] == "verified"
+    assert listed["media_store_items"] == []
+
+
+@pytest.mark.asyncio
 async def test_public_https_image_becomes_private_document_asset_for_exact_topic_5():
     calls = []
     source = png_bytes()

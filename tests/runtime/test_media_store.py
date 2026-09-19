@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+from dataclasses import replace
 
 import pytest
 from PIL import Image
@@ -109,6 +110,48 @@ async def test_put_is_separate_idempotent_and_purges_verified_staging(tmp_path):
     assert item['thread_ref']=='https://t.me/c/4379835477/5'
     assert item['telegram_url']=='https://t.me/c/4379835477/101'
     assert item['sha256']==[hashlib.sha256(verify_image(png(),'image/png').data).hexdigest()]
+
+    listed_without_alias=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'list',
+        'thread_ref':'https://t.me/c/4379835477/5','text':'луноход'}})
+    assert listed_without_alias['state']=='verified'
+    assert [row['native_id'] for row in listed_without_alias['media_store_items']]==['101']
+
+    mismatch=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'list','to':'other',
+        'thread_ref':'https://t.me/c/4379835477/5'}})
+    assert mismatch['error']['code']=='media_store_destination_mismatch'
+    assert mismatch['next_action']=='fix_input'
+
+
+@pytest.mark.asyncio
+async def test_metadata_only_reread_preserves_exact_media_evidence(tmp_path):
+    store,actor,asset,provider,app,worker=runtime(tmp_path)
+    accepted=await app.call(actor,'vibepublish_media_store',args(asset))
+    await worker.run_once(); assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
+    remote=provider.items['101'][0]
+    metadata_only=replace(remote,observed_media=(),media_hashes=(),media_check='not_applicable')
+    with store.tx() as db:
+        destination=db.execute("SELECT destination_id FROM facts WHERE native_id='101'").fetchone()[0]
+        worker.save_fact(db,destination,metadata_only)
+    listed=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'list',
+        'thread_ref':'https://t.me/c/4379835477/5'}})
+    item,=listed['media_store_items']
+    assert item['sha256']==[hashlib.sha256(verify_image(png(),'image/png').data).hexdigest()]
+
+
+@pytest.mark.asyncio
+async def test_changed_provider_media_invalidates_old_hash_without_breaking_list(tmp_path):
+    store,actor,asset,provider,app,worker=runtime(tmp_path)
+    accepted=await app.call(actor,'vibepublish_media_store',args(asset))
+    await worker.run_once(); assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
+    changed=replace(provider.items['101'][0],provider_media=('document:replacement',),
+                    observed_media=(),media_hashes=(),media_check='not_applicable')
+    with store.tx() as db:
+        destination=db.execute("SELECT destination_id FROM facts WHERE native_id='101'").fetchone()[0]
+        worker.save_fact(db,destination,changed)
+    listed=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'list',
+        'thread_ref':'https://t.me/c/4379835477/5'}})
+    assert listed['state']=='verified'
+    assert listed['media_store_items'][0]['sha256']==[]
 
 
 @pytest.mark.asyncio

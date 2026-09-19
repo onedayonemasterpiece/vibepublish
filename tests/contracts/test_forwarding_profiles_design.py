@@ -105,7 +105,7 @@ class ForwardingProfilesDesignTests(unittest.TestCase):
         for item in TOOLS.values():
             Draft202012Validator.check_schema(item['inputSchema'])
             Draft202012Validator.check_schema(item['outputSchema'])
-        self.assertEqual(catalog()['version'], '1.6.1-runtime')
+        self.assertEqual(catalog()['version'], '1.6.2-runtime')
         self.assertEqual(catalog()['tools'], list(TOOLS.values()))
 
 if __name__ == '__main__':

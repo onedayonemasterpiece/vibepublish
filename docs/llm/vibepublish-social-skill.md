@@ -1,6 +1,6 @@
 # VibePublish social skill
 
-Version: `1.6.0`. Target: `contracts/social_mcp_v1.py`.
+Version: `1.6.2`. Target: `contracts/social_mcp_v1.py`.
 Owner native-queue/read/progress corrections are Fixed. This is the canonical task skill, not proof of a deployed connection. The runtime may return a typed capability gate; never replace an unavailable feature with another action.
 
 ## Start and choose a task
@@ -82,7 +82,8 @@ bound Telegram destination, its exact private `thread_ref`, a descriptive captio
 document media and a stable request key. VibePublish retains bytes only as staging
 until exact Telegram readback; Telegram holds the durable original document.
 
-Use `command.kind=list` with `to` and `thread_ref` to inspect one topic. Use
+Use `command.kind=list` with the exact `thread_ref` to inspect one already bound
+topic. Omit `to` unless you are deliberately checking one known matching alias. Use
 `command.kind=search` with text to search captions across every indexed topic in
 the owner's Telegram media database. Both are local metadata operations and must
 not download media. Results return `entry_ref`, caption, hashes, destination,

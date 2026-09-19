@@ -28,7 +28,7 @@ class SkillExamplesTests(unittest.TestCase):
 
     def test_current_skill_contains_forwarding_routing_and_offline_boundary(self):
         text = SKILL.read_text()
-        for phrase in ('Version: `1.6.0`', '### Private Telegram media database',
+        for phrase in ('Version: `1.6.2`', '### Private Telegram media database',
                        'command.kind=search', '## Native forwarding', '## Saved editorial destinations',
                        'routing_revision', 'expected_revision', '## Current offline implementation boundary'):
             self.assertIn(phrase, text)

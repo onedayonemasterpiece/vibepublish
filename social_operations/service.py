@@ -131,8 +131,9 @@ class Application:
                 get_ref = projected['ref']
             elif command['kind'] == 'list':
                 binding, topic = self._telegram_thread(db, actor, command['thread_ref'])
-                if binding['alias'] != command['to']:
-                    raise DomainError('access_denied', next_action='contact_owner')
+                if command.get('to') is not None and binding['alias'] != command['to']:
+                    raise DomainError('media_store_destination_mismatch',
+                                      'The destination does not match thread_ref', 'fix_input')
                 items = self._media_store_items(db, actor, binding=binding, topic=topic,
                                                 text=command.get('text', ''))
                 limit = args.get('limit', 25)
@@ -247,7 +248,7 @@ class Application:
             all_dest = self.aliases(db, actor)
             page = all_dest[offset:offset+50]
             bindings = {r['alias']: r for r in self.store.bindings(db, actor)}
-            result = {'version': '1.6.0-runtime-telegram-media-database', 'schema_version': VERSION,
+            result = {'version': '1.6.2-runtime-telegram-media-database', 'schema_version': VERSION,
                       'skill_sha256': hashlib.sha256(skill.encode()).hexdigest(), 'skill': skill,
                       'estimated_tokens': (len(skill) + 2)//3, 'server_time': timestamp(self.store.clock()),
                       'timezone': actor.timezone, 'policy_epoch': actor.epoch, 'routing_revision': actor.routing_revision,

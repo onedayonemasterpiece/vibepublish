@@ -34,7 +34,7 @@ job("Сохрани картинку файлом в приватную меди
     "content": {"text": "Подпись"}, "media": [{**ASSET, "role": "document"}]},
     "request_key": "media-store-1"}, "private_store_durable_put")
 job("Проверь подписи в приватной медиабазе без скачивания файлов", "media_store", {"command": {
-    "kind": "list", "to": "pka_tg", "thread_ref": "https://t.me/c/4379835477/5",
+    "kind": "list", "thread_ref": "https://t.me/c/4379835477/5",
     "text": "Луноход"}}, "local_text_index_no_provider_io")
 job("Найди файл по описанию во всей Telegram-медиабазе, независимо от треда", "media_store", {"command": {
     "kind": "search", "text": "Луноход"}}, "private_store_global_search")
