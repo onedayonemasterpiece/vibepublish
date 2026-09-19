@@ -3,7 +3,7 @@
 This worker intentionally has no acceptance-only Telegram target probes or VK
 postponed-only policy. Provider connections are provisioned in the durable
 ledger and must use the production secret references below. Startup fails
-closed when the active Telegram/VK/MAX topology is incomplete or ambiguous.
+closed when the selected provider topology is incomplete or ambiguous.
 """
 from __future__ import annotations
 
@@ -58,9 +58,10 @@ def exclusive_session_owner(path: Path):
             os.close(fd)
 
 
-def telegram_credentials(path: Path):
+def telegram_credentials(path: Path, *, session_key="VIBE_PUBLISH_TG_SESSION",
+                         api_id_key="TG_API_ID", api_hash_key="TG_API_HASH"):
     values = dotenv_values(path)
-    supplied = values.get("VIBE_PUBLISH_TG_SESSION")
+    supplied = values.get(session_key)
     if not supplied:
         raise DomainError("dedicated_telegram_session_missing")
     try:
@@ -71,8 +72,8 @@ def telegram_credentials(path: Path):
             session = supplied
         else:
             raise DomainError("dedicated_telegram_session_invalid") from None
-    api_id = values.get("TG_API_ID")
-    api_hash = values.get("TG_API_HASH")
+    api_id = values.get(api_id_key)
+    api_hash = values.get(api_hash_key)
     if not api_id or not api_hash:
         raise DomainError("dedicated_telegram_api_credentials_missing")
     try:
@@ -104,12 +105,14 @@ def telegram_factory(credentials, **kwargs):
     )
 
 
-def production_connections(store: Store):
+def production_connections(store: Store, *, telegram_only=False):
     expected = {
         "telegram": ("mtproto_user", TG_REFERENCE),
         "vk": ("vk_user", VK_REFERENCE),
         "max": ("max_web", MAX_REFERENCE),
     }
+    if telegram_only:
+        expected = {"telegram": expected["telegram"]}
     with store.connection() as db:
         rows = [
             dict(row)
@@ -118,6 +121,8 @@ def production_connections(store: Store):
                 "FROM connections WHERE active=1"
             )
         ]
+    if any(row['provider'] not in expected for row in rows):
+        raise DomainError('production_connection_topology_invalid', next_action='contact_owner')
     selected = {}
     for provider, (account_type, secret_ref) in expected.items():
         provider_rows = [row for row in rows if row["provider"] == provider]
@@ -138,22 +143,31 @@ def production_connections(store: Store):
 async def run(
     db: Path,
     telegram_env_file: Path,
-    vk_env_file: Path,
+    vk_env_file: Path | None,
     *,
     vk_token_key: str,
     codex_task_artifacts: Path | None = None,
     once: bool = False,
+    telegram_only: bool = False,
+    telegram_session_key: str = "VIBE_PUBLISH_TG_SESSION",
+    telegram_api_id_key: str = "TG_API_ID",
+    telegram_api_hash_key: str = "TG_API_HASH",
 ):
     store = Store(db)
-    production_connections(store)
+    production_connections(store, telegram_only=telegram_only)
     bundles = {
-        TG_REFERENCE: json.dumps(telegram_credentials(telegram_env_file)),
-        VK_REFERENCE: json.dumps(vk_credentials(vk_env_file, vk_token_key)),
+        TG_REFERENCE: json.dumps(telegram_credentials(
+            telegram_env_file, session_key=telegram_session_key,
+            api_id_key=telegram_api_id_key, api_hash_key=telegram_api_hash_key)),
     }
-    max_profile = os.environ.get(MAX_REFERENCE)
-    if not max_profile:
-        raise DomainError("max_profile_config_missing")
-    bundles[MAX_REFERENCE] = max_profile
+    if not telegram_only:
+        if vk_env_file is None or not vk_token_key:
+            raise DomainError('approved_vk_configuration_missing')
+        bundles[VK_REFERENCE] = json.dumps(vk_credentials(vk_env_file, vk_token_key))
+        max_profile = os.environ.get(MAX_REFERENCE)
+        if not max_profile:
+            raise DomainError("max_profile_config_missing")
+        bundles[MAX_REFERENCE] = max_profile
 
     with exclusive_session_owner(db.parent / 'telegram-session.lock'):
         async with native_adapters(
@@ -186,8 +200,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", required=True, type=Path)
     parser.add_argument("--telegram-env-file", required=True, type=Path)
-    parser.add_argument("--vk-env-file", required=True, type=Path)
-    parser.add_argument("--vk-token-key", required=True)
+    parser.add_argument("--vk-env-file", type=Path)
+    parser.add_argument("--vk-token-key", default="")
+    parser.add_argument("--telegram-only", action="store_true",
+                        help="Explicit Telegram-only topology; rejects other active providers")
+    parser.add_argument("--telegram-session-key", default="VIBE_PUBLISH_TG_SESSION")
+    parser.add_argument("--telegram-api-id-key", default="TG_API_ID")
+    parser.add_argument("--telegram-api-hash-key", default="TG_API_HASH")
     parser.add_argument("--codex-task-artifacts", type=Path)
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
@@ -200,6 +219,10 @@ def main():
                 vk_token_key=args.vk_token_key,
                 codex_task_artifacts=args.codex_task_artifacts,
                 once=args.once,
+                telegram_only=args.telegram_only,
+                telegram_session_key=args.telegram_session_key,
+                telegram_api_id_key=args.telegram_api_id_key,
+                telegram_api_hash_key=args.telegram_api_hash_key,
             )
         )
     except Exception as exc:

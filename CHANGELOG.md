@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Wire owner-selected existing Telegram credentials through explicit production
+  worker key mappings and a locked, opt-in Telegram-only recovery topology.
+
 - Restrict DevCoveer2 Telegram recovery to existing owner-designated credentials;
   remove the unsolicited login helper and require actual provider read acceptance.
 
