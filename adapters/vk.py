@@ -115,9 +115,35 @@ class VKAdapter:
             result.append(f'{kind}{_int(value.get("owner_id"))}_{_int(value.get("id"))}')
         return tuple(result)
 
-    def _item(self, raw, namespace, target):
-        if str(_int(raw.get('owner_id'))) != target or _int(raw.get('id')) <= 0:
+    @staticmethod
+    def _wall_post_id(raw, namespace, target):
+        owner, ident = _int(raw.get('owner_id')), _int(raw.get('id'))
+        if ident <= 0:
             raise DomainError('vk_read_target_mismatch')
+        if str(owner) == target:
+            return ident
+        # Shared posts retain their source wall ID in wall.get/getById. Only
+        # an explicit approved mapping may establish the requested wall ID.
+        coowners = raw.get('coowners')
+        if namespace != 'published' or not isinstance(coowners, dict):
+            raise DomainError('vk_read_target_mismatch')
+        local = coowners.get('coowner_post_id')
+        members = coowners.get('list')
+        if (not isinstance(local, dict) or type(local.get('owner_id')) is not int
+                or str(local['owner_id']) != target
+                or type(local.get('post_id')) is not int or local['post_id'] <= 0
+                or not isinstance(members, list)):
+            raise DomainError('vk_read_target_mismatch')
+        matches = [member for member in members if isinstance(member, dict)
+                   and type(member.get('owner_id')) is int and str(member['owner_id']) == target]
+        if (len(matches) != 1 or matches[0].get('status') != 'approved'
+                or type(matches[0].get('post_id')) is not int
+                or matches[0]['post_id'] != local['post_id']):
+            raise DomainError('vk_read_target_mismatch')
+        return local['post_id']
+
+    def _item(self, raw, namespace, target):
+        ident = self._wall_post_id(raw, namespace, target)
         if namespace == 'scheduled' and raw.get('post_type') not in {None, 'postpone'}:
             raise DomainError('vk_queue_namespace_mismatch')
         if namespace == 'published' and raw.get('post_type') in {'postpone', 'suggest'}:
@@ -131,11 +157,11 @@ class VKAdapter:
         metrics = tuple((name, float(raw[name]['count']), 'count') for name in ('views', 'likes', 'comments', 'reposts')
                         if isinstance(raw.get(name), dict) and type(raw[name].get('count')) is int and raw[name]['count'] >= 0)
         media = self._media(copies[0] if copies else raw)
-        item = RemoteItem(str(raw['id']), namespace, raw.get('text') or '', '', timestamp(self.clock()),
+        item = RemoteItem(str(ident), namespace, raw.get('text') or '', '', timestamp(self.clock()),
                           scheduled_at=timestamp(_int(raw.get('date'))) if namespace == 'scheduled' else None,
                           native_target=target, origin=origin, provider_media=media,
-                          member_ids=(str(raw['id']),), metrics=metrics,
-                          url=f'https://vk.ru/wall{target}_{raw["id"]}' if namespace == 'published' else None)
+                          member_ids=(str(ident),), metrics=metrics,
+                          url=f'https://vk.ru/wall{target}_{ident}' if namespace == 'published' else None)
         return replace(item, fingerprint=identity(item))
 
     async def _queue(self, target, *, include_raw=False):
@@ -171,7 +197,7 @@ class VKAdapter:
         rows = _items(response)
         if not rows:
             return None
-        if len(rows) != 1 or str(rows[0].get('id')) != ident:
+        if len(rows) != 1 or str(self._wall_post_id(rows[0], namespace, target)) != ident:
             raise DomainError('vk_readback_identity_mismatch')
         return self._item(rows[0], namespace, target)
 

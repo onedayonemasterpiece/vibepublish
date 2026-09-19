@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Resolve VK shared-post IDs using the explicit approved coowner wall mapping;
+  preserve target validation for unproven, conflicting and scheduled identities.
+
 - Allow explicit production provider selection for incremental Telegram/VK/MAX
   recovery while preserving exact connection validation and session ownership.
 

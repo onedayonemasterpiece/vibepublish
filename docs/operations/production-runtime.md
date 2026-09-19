@@ -2,8 +2,8 @@
 
 ## DevCoveer2 provider recovery — 2026-09-19
 
-Status: Telegram read `Not confirmed by user` (public MCP read verified);
-VK/MAX recovery `Not done`. Public MCP availability alone is not provider
+Status: Telegram and VK reads `Not confirmed by user` (public MCP reads verified);
+MAX recovery `Not done`. Public MCP availability alone is not provider
 acceptance. Track provider wiring and verification in
 [the recovery incident](../reports/incidents/INC-2026-09-19-telegram-recovery.md).
 
@@ -33,7 +33,10 @@ missing, duplicate or extra active connections fail closed. VK requires an
 explicit existing `--vk-env-file` and `--vk-token-key`; no token guessing or
 fallback is performed. This capability is not evidence of VK connectivity:
 [VK recovery acceptance](../reports/incidents/INC-2026-09-19-vk-recovery.md)
-remains `Not done` until a provider-backed MCP read succeeds.
+records the completed provider-backed read acceptance separately from publication
+acceptance. On this host VK uses `/home/dev/.env:VK_USER_TOKEN1`, selected after
+read-only verification against the historically used account and `lovekenig`
+group. `VK_USER_TOKEN2` also passed those checks but is not an automatic fallback.
 
 The DevCoveer2 `vibepublish-worker.service` runs the existing production worker
 with the following arguments (paths and variable names only, never secrets):
@@ -44,12 +47,21 @@ with the following arguments (paths and variable names only, never secrets):
 --telegram-session-key TELEGRAM_VIBE_PUBLISH
 --telegram-api-id-key TELEGRAM_API_ID
 --telegram-api-hash-key TELEGRAM_API_HASH
---telegram-only
+--providers telegram vk
+--vk-env-file /home/dev/.env
+--vk-token-key VK_USER_TOKEN1
 ```
 
 Current recovery deployment uses `/home/dev/projects/vibepublish` and interpreter
 `/home/dev/.local/opt/vibepublish/bin/python`; migration to the historical immutable
-release layout below has not been performed by this Telegram repair.
+release layout below has not been performed by this provider repair.
+
+VK shared-post reads resolve the requested wall's ID only when the provider
+returns both an exact `coowners.coowner_post_id` and a matching approved list
+entry. Feed and exact-item reads use that wall-local ID. Unknown, conflicting,
+pending, and scheduled cross-wall mappings fail closed; the general target
+identity check remains intact. This behavior was verified against actual
+`wall.get` and `wall.getById` responses on DevCoveer2.
 
 As of 2026-09-13, VibePublish production is expected to run from immutable releases under `/home/dev/.local/share/vibepublish/releases/<sha>` with `/home/dev/.local/share/vibepublish/current` pointing at the deployed release.
 
