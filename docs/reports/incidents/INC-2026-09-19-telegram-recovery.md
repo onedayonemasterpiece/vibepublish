@@ -15,13 +15,13 @@ Telegram reads and publications cannot execute on DevCoveer2.
 ## Root Cause
 
 The restored ledger has no provider connections and the worker runs without
-native adapters. No dedicated VibePublish Telegram session was found in the
-available credential configuration. Other products' Telegram sessions must not
-be reused.
+native adapters. Credential mapping was not completed. The owner confirms that
+`.env` contains an existing specifically designated session; the earlier claim
+that a new session was necessary was unsupported.
 
 ## Fix
 
-Pending: authorize a fresh dedicated session, register its connection in the
+Pending: resolve the existing owner-designated session, register its connection in the
 existing tenant, activate the native worker with exclusive session ownership,
 and verify an owner-requested Telegram thread read through the public MCP.
 
@@ -32,7 +32,8 @@ insufficient. Never retry historical publication effects during recovery.
 
 ## Release Evidence
 
-Not yet accepted. Account login requires the owner's Telegram confirmation.
+Not yet accepted. Existing credentials must be preserved; new authorization is
+not part of this recovery.
 
 ## Follow-Ups
 

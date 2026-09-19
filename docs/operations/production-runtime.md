@@ -3,17 +3,16 @@
 ## DevCoveer2 provider recovery — 2026-09-19
 
 Status: `Not done`. Public MCP is reachable, but providerless worker startup is
-not Telegram/VK/MAX acceptance. Track the missing dedicated Telegram session in
+not Telegram/VK/MAX acceptance. Track the missing provider wiring in
 [the recovery incident](../reports/incidents/INC-2026-09-19-telegram-recovery.md).
 
-`deploy/devcoveer/telegram_login.py` explicitly authorizes a fresh dedicated
-Telegram session using an owner-scanned QR. It reads only API ID/hash from the
-selected env, never other products' sessions. Install `qrcode` for this optional
-operator helper. Pass private output, QR and optional two-factor-password paths;
-QR artifacts must be mode 0600 inside a managed artifact directory. The output
-env contains `VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE` and refuses overwrite. Login alone
-does not register a connection or start a native worker. Activate native wiring
-only after authorization and retain exclusive session ownership.
+Recovery must use the existing owner-designated Telegram session from `.env`
+through Telethon `StringSession`. Resolve the credential mapping before changing
+the runtime; an unexpected variable name does not establish a missing session.
+Do not initiate new authorization, generate login challenges, or create, replace
+or rotate sessions without the owner's explicit permission. Retain exclusive
+session ownership. Acceptance requires a real provider-backed read, not merely
+an active service or successful health response.
 
 As of 2026-09-13, VibePublish production is expected to run from immutable releases under `/home/dev/.local/share/vibepublish/releases/<sha>` with `/home/dev/.local/share/vibepublish/current` pointing at the deployed release.
 

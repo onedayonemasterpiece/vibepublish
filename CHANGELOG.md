@@ -2,9 +2,8 @@
 
 ## [Unreleased]
 
-- Add an explicit dedicated Telegram QR-login helper for DevCoveer2 recovery,
-  with private credential output and no fallback to another product's session.
-  Provider recovery remains incomplete until native MCP reads succeed.
+- Restrict DevCoveer2 Telegram recovery to existing owner-designated credentials;
+  remove the unsolicited login helper and require actual provider read acceptance.
 
 ### Clean-host verification compatibility — 2026-09-19
 
