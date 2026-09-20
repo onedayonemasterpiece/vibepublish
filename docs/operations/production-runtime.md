@@ -50,11 +50,19 @@ with the following arguments (paths and variable names only, never secrets):
 --providers telegram vk
 --vk-env-file /home/dev/.env
 --vk-token-key VK_USER_TOKEN1
+--codex-task-artifacts /home/dev/.local/state/vibepublish/imagegen
 ```
 
 Current recovery deployment uses `/home/dev/projects/vibepublish` and interpreter
 `/home/dev/.local/opt/vibepublish/bin/python`; migration to the historical immutable
 release layout below has not been performed by this provider repair.
+
+The canonical recovery installer is
+`deploy/devcoveer/install_production_worker.py`. It installs the checked-in
+`vibepublish-worker.service`, creates both `imagegen` and `imagegen-tasks`
+as owner-only directories, reloads user systemd, restarts the worker and verifies
+that the live ExecStart contains the Codex task artifact root. Image generation
+continues to use the existing owner Codex login/quota; there is no API fallback.
 
 VK shared-post reads resolve the requested wall's ID only when the provider
 returns both an exact `coowners.coowner_post_id` and a matching approved list
