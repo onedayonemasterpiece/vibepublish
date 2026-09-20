@@ -1,0 +1,17 @@
+[Unit]
+Description=VibePublish native Telegram and VK worker (existing credentials)
+After=vibepublish.service
+Requires=vibepublish.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/dev/projects/vibepublish
+ExecStart=/home/dev/.local/opt/vibepublish/bin/python /home/dev/projects/vibepublish/deploy/devcoveer/production_worker.py --db /home/dev/.local/state/vibepublish/vibepublish.sqlite3 --telegram-env-file /home/dev/.env --telegram-session-key TELEGRAM_VIBE_PUBLISH --telegram-api-id-key TELEGRAM_API_ID --telegram-api-hash-key TELEGRAM_API_HASH --providers telegram vk --vk-env-file /home/dev/.env --vk-token-key VK_USER_TOKEN1 --codex-task-artifacts /home/dev/.local/state/vibepublish/imagegen
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
