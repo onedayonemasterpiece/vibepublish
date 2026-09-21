@@ -51,6 +51,20 @@ def test_upload_read_replay_restart_and_status(env):
     assert upload(client, png('red')).status_code == 409
 
 
+def test_exact_source_reuses_verified_derivative_without_storage_growth(env):
+    store, _, client = env
+    first = upload(client, key='dedup-1').json()
+    with store.connection() as db:
+        before = db.execute('SELECT count(*),COALESCE(SUM(length(bytes)),0) FROM assets').fetchone()
+    second = upload(client, key='dedup-2').json()
+    assert second['asset_id'] == first['asset_id']
+    assert second['source_sha256'] == first['source_sha256']
+    with store.connection() as db:
+        after = db.execute('SELECT count(*),COALESCE(SUM(length(bytes)),0) FROM assets').fetchone()
+        assert tuple(after) == tuple(before)
+        assert db.execute('SELECT count(*) FROM operations').fetchone()[0] == 2
+
+
 def test_authority_isolation_and_quota(env):
     store, token, client = env
     result = upload(client).json()
@@ -65,7 +79,7 @@ def test_authority_isolation_and_quota(env):
     client.headers['authorization'] = 'Bearer '+token
     with store.tx() as db:
         db.execute('UPDATE tenants SET storage_limit=1')
-    assert upload(client, key='quota').status_code == 422
+    assert upload(client, png('red'), key='quota').status_code == 422
     assert upload(client).json() == result
     with store.tx() as db:
         db.execute("UPDATE principals SET active=0 WHERE id='owner'")
