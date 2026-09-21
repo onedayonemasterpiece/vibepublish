@@ -82,7 +82,7 @@ def test_authority_isolation_and_quota(env):
     client.headers['authorization'] = 'Bearer '+token
     with store.tx() as db:
         db.execute('UPDATE tenants SET storage_limit=1')
-    assert upload(client, key='quota').status_code == 422
+    assert upload(client, png('red'), key='quota').status_code == 422
     assert upload(client).json() == result
     with store.tx() as db:
         db.execute("UPDATE principals SET active=0 WHERE id='owner'")
