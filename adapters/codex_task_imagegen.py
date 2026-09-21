@@ -27,6 +27,7 @@ from social_operations.domain import DomainError, OutcomeUnknown, canonical
 MODEL = 'gpt-5.6-luna'
 VERSION = 'codex-cli 0.153.0'
 MAX_IMAGE = 20 * 1024 * 1024
+MAX_SOURCE_IMAGE = 32 * 1024 * 1024
 MAX_SKILL = 64 * 1024
 MAX_MESSAGE = 128 * 1024 * 1024
 THREAD_READ_TIMEOUT = 3.0
@@ -268,7 +269,7 @@ class CodexTaskImagegen:
         for source in request.sources:
             if len(source.data) != source.size or hashlib.sha256(source.data).hexdigest() != source.sha256:
                 raise DomainError('imagegen_source_integrity')
-            image = verify_image(source.data, source.mime)
+            image = verify_image(source.data, source.mime, max_input_bytes=MAX_SOURCE_IMAGE)
             if (image.width, image.height) != (source.width, source.height):
                 raise DomainError('imagegen_source_integrity')
 
