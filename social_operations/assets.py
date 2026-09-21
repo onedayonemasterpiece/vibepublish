@@ -51,7 +51,7 @@ def verify_image(data: bytes, mime: str, *, max_input_bytes: int = INGRESS_IMAGE
                 width, height = clean.size
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
         raise DomainError('invalid_image') from exc
-    if len(verified) > 32 * 1024 * 1024:
+    if len(verified) > VERIFIED_IMAGE_MAX_BYTES:
         raise DomainError('asset_size_limit')
     return VerifiedImage(data, mime, verified, width, height)
 
