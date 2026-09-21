@@ -151,6 +151,17 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data, Path(params['input'][1]['path']).read_bytes())
         self.assertIn('no API fallback', prompt)
 
+    async def test_verified_internal_source_may_exceed_upload_limit(self):
+        data = png() + b'\\0' * (20 * 1024 * 1024)
+        source = ImagegenSource('source', hashlib.sha256(data).hexdigest(), 'image/png',
+                                64, 80, len(data), data)
+        await self.adapter.submit(replace(self.request, mode='tune', sources=(source,)))
+        params = next(p for m, p in self.native.calls if m == 'turn/start')
+        self.assertEqual('localImage', params['input'][1]['type'])
+        self.assertEqual(data, Path(params['input'][1]['path']).read_bytes())
+        self.assertGreater(len(data), 20 * 1024 * 1024)
+        self.assertLessEqual(len(data), 32 * 1024 * 1024)
+
     async def test_source_integrity_failure_never_starts(self):
         source = ImagegenSource('source', 'c' * 64, 'image/png', 64, 80, len(png()), png())
         with self.assertRaises(DomainError):
