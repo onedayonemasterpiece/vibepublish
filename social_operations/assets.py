@@ -55,17 +55,29 @@ def verify_image(data: bytes, mime: str) -> VerifiedImage:
 def insert_verified_image(store, db, actor, image: VerifiedImage) -> str:
     data, mime, verified, width, height = image.original, image.original_mime, image.data, image.width, image.height
     store.current(db, actor)
+    source_hash = hashlib.sha256(data).hexdigest()
+    verified_hash = hashlib.sha256(verified).hexdigest()
+    existing = db.execute(
+        """SELECT id,bytes FROM assets
+           WHERE tenant_id=? AND principal_id=? AND source_sha256=? AND sha256=?
+             AND mime='image/png' AND width=? AND height=?
+           ORDER BY created DESC""",
+        (actor.tenant_id, actor.principal_id, source_hash, verified_hash, width, height),
+    ).fetchall()
+    for row in existing:
+        stored = row['bytes']
+        if stored == verified and hashlib.sha256(stored).hexdigest() == verified_hash:
+            return row['id']
     used = db.execute('SELECT COALESCE(SUM(length(bytes)),0) FROM assets WHERE tenant_id=?', (actor.tenant_id,)).fetchone()[0]
     quota = db.execute('SELECT storage_limit FROM tenants WHERE id=?', (actor.tenant_id,)).fetchone()[0]
     if used + len(verified) + len(data) > quota:
         raise DomainError('storage_quota_exceeded')
     original = new_id('asset')
-    source_hash = hashlib.sha256(data).hexdigest()
     db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
                (original, actor.tenant_id, actor.principal_id, source_hash, mime, width, height, data, source_hash, store.clock()))
     derivative = new_id('asset')
     db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
-               (derivative, actor.tenant_id, actor.principal_id, hashlib.sha256(verified).hexdigest(),
+               (derivative, actor.tenant_id, actor.principal_id, verified_hash,
                 'image/png', width, height, verified, source_hash, store.clock()))
     return derivative
 
