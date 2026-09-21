@@ -51,6 +51,23 @@ def test_upload_read_replay_restart_and_status(env):
     assert upload(client, png('red')).status_code == 409
 
 
+def test_same_bytes_different_key_reuses_verified_asset_at_quota(env):
+    store, _, client = env
+    first = upload(client, key='first').json()
+    with store.tx() as db:
+        used = db.execute('SELECT COALESCE(SUM(length(bytes)),0) FROM assets').fetchone()[0]
+        db.execute('UPDATE tenants SET storage_limit=?', (used,))
+    second = upload(client, key='second')
+    assert second.status_code == 200, second.text
+    second = second.json()
+    assert second['asset_id'] == first['asset_id']
+    assert second['source_sha256'] == first['source_sha256']
+    with store.connection() as db:
+        assert db.execute('SELECT count(*) FROM assets').fetchone()[0] == 2
+        assert db.execute("SELECT count(*) FROM operations WHERE action='asset_ingress'").fetchone()[0] == 2
+        assert db.execute('SELECT count(*) FROM request_keys').fetchone()[0] == 2
+
+
 def test_authority_isolation_and_quota(env):
     store, token, client = env
     result = upload(client).json()
