@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Include only the native Telegram entity class name in unsupported-entity diagnostics so observation-only recovery can identify compatibility gaps without exposing message text or entity payloads.
+
 - Treat Telegram provider-inferred passive span entities (including hashtags,
   bot commands, email/phone/cashtag/bank-card detection and blockquotes) as
   observation-only metadata so exact-text publication readback and queue reads
