@@ -234,7 +234,8 @@ class VKAdapter:
     async def _photo_proof(self, photo, expected=None):
         if not hasattr(self.transport, 'image_fingerprint'):
             raise DomainError('vk_photo_binding_unavailable')
-        candidates = self._renditions(photo)
+        all_candidates = self._renditions(photo)
+        candidates = all_candidates
         if expected is not None:
             if (not isinstance(expected, dict) or set(expected) != {'sha256', 'size', 'mime', 'width', 'height'}
                     or not isinstance(expected['sha256'], str) or not re.fullmatch(r'[a-f0-9]{64}', expected['sha256'])
@@ -244,7 +245,11 @@ class VKAdapter:
             candidates = [value for value in candidates
                           if (value['width'], value['height']) == (expected['width'], expected['height'])]
         if not candidates:
-            raise DomainError('vk_photo_binding_unavailable')
+            available = sorted({(value['width'], value['height']) for value in all_candidates})
+            detail = ('; expected=' + str(expected['width']) + 'x' + str(expected['height'])
+                      + '; available=' + ','.join(str(w) + 'x' + str(h) for w, h in available))
+            raise DomainError('vk_photo_binding_unavailable',
+                              'vk photo binding unavailable' + detail)
         # One exact rendition, no perceptual/fuzzy matching or unbounded probing.
         rendition = candidates[0]
         proof = await self.transport.image_fingerprint(rendition['url'])
