@@ -238,6 +238,19 @@ async def test_plain_text_ignores_provider_inferred_hashtag_entity():
     assert client.effects == 1
 
 
+def test_unknown_native_entity_error_identifies_only_entity_class():
+    from social_operations.rich_text import from_native
+
+    class MessageEntityFuture:
+        offset = 0
+        length = 1
+
+    with pytest.raises(DomainError) as error:
+        from_native('x', [MessageEntityFuture()])
+    assert error.value.code == 'telegram_entity_needs_review'
+    assert 'MessageEntityFuture' in str(error.value)
+
+
 @pytest.mark.asyncio
 async def test_plain_text_observes_provider_added_formatting_entity():
     text = 'Обычный текст'
