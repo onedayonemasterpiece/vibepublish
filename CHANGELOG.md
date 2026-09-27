@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Treat Telegram provider-inferred passive span entities (including hashtags,
+  bot commands, email/phone/cashtag/bank-card detection and blockquotes) as
+  observation-only metadata so exact-text publication readback and queue reads
+  do not become `telegram_entity_needs_review`.
+
 - Reconcile transient Codex app-server `interrupted` image turns by saved thread/turn identity, including cached failed receipts, without replaying generation; executor-owned interrupts remain terminal.
 - Canonicalize the trusted top-level Codex home before secure imagegen skill/artifact
   traversal, so the DevCoveer `/home/dev/.codex` symlink resolves to its owner-private

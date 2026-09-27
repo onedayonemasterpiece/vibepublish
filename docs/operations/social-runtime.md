@@ -2,6 +2,15 @@
 
 Status: **Not confirmed by user / partial acceptance**. Keep release/full CI unaccepted.
 
+### Telegram passive provider entities
+
+Telegram may infer span-only entities from otherwise plain text, including hashtags,
+bot commands, email/phone/cashtag/bank-card tokens and blockquotes. During native
+observation these provider-added spans are metadata: they must not turn an
+exact-text publication or queue read into `outcome_unknown`. The outbound authored
+entity allowlist remains unchanged, and unknown native entity classes outside the
+bounded passive allowlist continue to fail closed.
+
 ## Current isolated acceptance
 
 The [canonical DevCoveer report](devcoveer-acceptance-20260905.md) records the
