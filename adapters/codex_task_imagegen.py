@@ -69,6 +69,23 @@ def _read(path: Path, limit: int) -> bytes:
         os.close(directory)
 
 
+def _canonical_codex_home(path: Path) -> Path:
+    """Resolve only the trusted top-level Codex home alias, then pin a private real directory."""
+    try:
+        resolved = Path(path).absolute().resolve(strict=True)
+        st = resolved.lstat()
+    except OSError:
+        raise DomainError('codex_task_home_unavailable', next_action='contact_owner') from None
+    if (
+        resolved.resolve() != resolved
+        or not stat.S_ISDIR(st.st_mode)
+        or st.st_uid != os.getuid()
+        or st.st_mode & 0o077
+    ):
+        raise DomainError('codex_task_home_untrusted', next_action='contact_owner')
+    return resolved
+
+
 def _save(path: Path, data: bytes):
     temporary = path.with_name('.' + path.name + '.' + secrets.token_hex(8))
     try:
@@ -215,7 +232,9 @@ class CodexTaskImagegen:
         self.artifact_root = Path(root).absolute()
         self.control_root = self.artifact_root.parent / (self.artifact_root.name + '-tasks')
         _private(self.artifact_root); _private(self.control_root)
-        self.codex_home = Path(codex_home or os.environ.get('CODEX_HOME', Path.home() / '.codex')).absolute()
+        self.codex_home = _canonical_codex_home(
+            Path(codex_home or os.environ.get('CODEX_HOME', Path.home() / '.codex'))
+        )
         self.transport = transport or AppServer(self.codex_home)
         self.timeout = timeout_seconds
         self.timers = {}
