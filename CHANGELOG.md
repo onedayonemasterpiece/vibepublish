@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix Codex imagegen pre-submit handling when the trusted top-level `CODEX_HOME` is a symlink: canonicalize the owner-private target once, then retain strict no-symlink traversal beneath it. This prevents false `outcome_unknown` before `thread/start` while preserving credential isolation and no-replay semantics.
+
 - Recover the private Telegram media index after the DevCoveer crash, preserving
   native album identities and source captions; document retained recovery evidence
   and the restored Wonderful Lections private asset bridge.
