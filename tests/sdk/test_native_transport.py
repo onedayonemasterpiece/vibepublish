@@ -221,6 +221,24 @@ async def test_plain_text_accepts_provider_added_text_inherent_url_entity():
 
 
 @pytest.mark.asyncio
+async def test_plain_text_ignores_provider_inferred_hashtag_entity():
+    text = '#Калининград'
+    adapter, client, journal, r = setup(content_json=canonical({'text': text}))
+    client.provider_plain_entities = [
+        t.MessageEntityHashtag(offset=0, length=len(text.encode('utf-16-le')) // 2)
+    ]
+    result = await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
+    item, = result.items
+    assert item.text == text
+    assert item.entities_json == '[]'
+    assert client.effects == 1
+    recovered = await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
+    recovered_item, = recovered.items
+    assert recovered_item.native_id == item.native_id
+    assert client.effects == 1
+
+
+@pytest.mark.asyncio
 async def test_plain_text_observes_provider_added_formatting_entity():
     text = 'Обычный текст'
     adapter, client, journal, r = setup(content_json=canonical({'text': text}))
