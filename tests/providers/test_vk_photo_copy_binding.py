@@ -140,6 +140,27 @@ async def test_missing_preupload_rendition_blocks_before_wall_post():
 
 
 @pytest.mark.asyncio
+async def test_copy_dimension_mismatch_reports_only_safe_dimensions():
+    a, t, j, r = setup_copy()
+    invoke = t.invoke
+
+    async def resized(**args):
+        result = await invoke(**args)
+        if args['method'] == 'wall.post':
+            for post in t.posts.values():
+                post['attachments'][0]['photo']['sizes'][0].update(width=8, height=8)
+        return result
+
+    t.invoke = resized
+    with pytest.raises(DomainError) as error:
+        await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    assert error.value.code == 'vk_photo_binding_unavailable'
+    assert 'expected=4x4' in str(error.value)
+    assert 'available=8x8' in str(error.value)
+    assert 'https://' not in str(error.value)
+
+
+@pytest.mark.asyncio
 async def test_copy_proof_detects_post_change_during_download():
     a, t, j, r = setup_copy()
     fingerprint = t.image_fingerprint
