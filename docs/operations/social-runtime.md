@@ -2,6 +2,15 @@
 
 Status: **Not confirmed by user / partial acceptance**. Keep release/full CI unaccepted.
 
+### Telegram provider-inferred passive entities — 2026-09-27
+
+Telegram may infer passive span entities from otherwise plain text, including
+hashtags, bot commands, email/phone/cashtag/bank-card tokens and blockquotes.
+These provider-added spans are observation-only and must not turn exact-text
+publication readback or native queue listing into `outcome_unknown`.
+Unknown entity classes outside the bounded observation allowlist still fail
+closed and never expand the public authored rich-text contract.
+
 ### Telegram passive provider entities
 
 Telegram may infer span-only entities from otherwise plain text, including hashtags,
