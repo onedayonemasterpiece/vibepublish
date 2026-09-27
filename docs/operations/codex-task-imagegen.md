@@ -28,8 +28,13 @@ is shut down. The artifact root and its sibling `<name>-tasks` must be private,
 owned by the service user, and writable. Each job has its own working directory
 and staged sources. The service must permit the **existing approved** Codex home
 to write its thread state and `generated_images`; read-only home protection alone
-is insufficient. Changing worker service paths is deployment-owned work, not an
-instruction to modify shared Codex services or copy authentication credentials.
+is insufficient. A trusted top-level Codex-home alias such as `/home/dev/.codex`
+may itself be a symlink: the executor resolves that alias once at construction,
+requires the resolved target to be a real owner-private directory, and then keeps
+the existing no-symlink secure traversal for the skill, generated images and all
+paths beneath that canonical root. Changing worker service paths is deployment-owned
+work, not an instruction to modify shared Codex services or copy authentication
+credentials.
 
 The client launches its own `/home/dev/.local/bin/codex app-server --stdio`,
 checks `codex-cli 0.153.0`, and initializes the native protocol. It does not import,
