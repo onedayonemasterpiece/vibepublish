@@ -65,6 +65,13 @@ multiple or missing turns remain unknown. No `thread/resume`, `turn/start`, or
 history search is used by recovery. A lost thread-creation response with no saved
 thread ID remains unknown and is not recreated automatically.
 
+Codex app-server may transiently expose a saved turn as `interrupted` while a
+built-in image generation is still converging. That status is terminal only
+after this executor has first persisted its own `interrupt_pending` intent.
+A cached `failed` receipt with immutable thread/turn identity is therefore
+re-read safely and may recover to `succeeded`; reconciliation never creates a
+new thread or turn and never replays generation.
+
 Deadlines schedule an interrupt while this executor lives; post-restart polls
 also enforce the saved deadline. `cancel` interrupts only the saved thread/turn
 using `turn/interrupt`, never a shared process or unrelated thread. If observation

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Reconcile transient Codex app-server `interrupted` image turns by saved thread/turn identity, including cached failed receipts, without replaying generation; executor-owned interrupts remain terminal.
 - Canonicalize the trusted top-level Codex home before secure imagegen skill/artifact
   traversal, so the DevCoveer `/home/dev/.codex` symlink resolves to its owner-private
   real directory without relaxing no-follow checks for nested paths.

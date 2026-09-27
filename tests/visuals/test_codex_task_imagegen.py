@@ -185,6 +185,39 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('unknown', (await self.adapter.inspect(key)).state)
         self.assertEqual(1, sum(m == 'thread/read' for m, _ in self.native.calls))
 
+    async def test_interrupted_turn_is_reconciled_without_resubmit(self):
+        key = await self.adapter.submit(self.request)
+        self.native.status = 'interrupted'
+        first = await self.adapter.inspect(key)
+        self.assertEqual('running', first.state)
+        self.native.status = 'completed'
+        recovered = await self.adapter.inspect(key)
+        self.assertEqual('succeeded', recovered.state)
+        self.assertEqual(1, sum(m == 'thread/start' for m, _ in self.native.calls))
+        self.assertEqual(1, sum(m == 'turn/start' for m, _ in self.native.calls))
+
+    async def test_cached_failed_receipt_with_saved_turn_is_reconciled(self):
+        key = await self.adapter.submit(self.request)
+        directory = self.adapter._directory(key)
+        record = self.adapter._load(directory)
+        record['state'] = 'failed'
+        record['phase'] = 'submitted'
+        self.adapter._record(directory, record)
+        self.native.status = 'completed'
+        recovered = await self.adapter.inspect(key)
+        self.assertEqual('succeeded', recovered.state)
+        self.assertEqual(1, sum(m == 'turn/start' for m, _ in self.native.calls))
+
+    async def test_executor_owned_interrupt_remains_terminal(self):
+        key = await self.adapter.submit(self.request)
+        self.native.status = 'inProgress'
+        cancelled = await self.adapter.cancel(key)
+        self.assertEqual('unknown', cancelled.state)
+        self.assertEqual('interrupted', self.native.status)
+        terminal = await self.adapter.inspect(key)
+        self.assertEqual('failed', terminal.state)
+        self.assertEqual(1, sum(m == 'turn/start' for m, _ in self.native.calls))
+
     async def test_transport_read_errors_retry_only_saved_thread(self):
         for error in (OSError, RuntimeError, asyncio.TimeoutError):
             with self.subTest(error=error.__name__):

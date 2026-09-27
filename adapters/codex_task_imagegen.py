@@ -444,7 +444,12 @@ class CodexTaskImagegen:
         if not (directory / 'receipt.json').exists(): raise OutcomeUnknown('imagegen_job_not_observed')
         with self._lock(directory):
             record = self._load(directory)
-            if record['state'] in ('succeeded', 'failed') or not record.get('thread_id'):
+            # A saved thread/turn identity is always safe to re-read. Codex app-server
+            # can transiently expose an interrupted turn that later becomes completed
+            # after built-in image generation finishes. Only succeeded receipts are
+            # immutable cache hits; a cached failed receipt with a saved thread is
+            # reconciled from that same identity and never authorizes a new submit.
+            if record['state'] == 'succeeded' or not record.get('thread_id'):
                 try:
                     return self._observation(record)
                 except Exception as exc:
@@ -465,15 +470,20 @@ class CodexTaskImagegen:
                 if turn.get('status') == 'completed':
                     self._import(record, turn)
                     record['state'] = 'succeeded'
-                elif turn.get('status') in ('failed', 'interrupted'):
+                elif turn.get('status') == 'failed':
                     record['state'] = 'failed'
+                elif turn.get('status') == 'interrupted':
+                    # Treat app-server interrupted as terminal only after this
+                    # executor persisted its own interrupt intent. Otherwise it
+                    # is a read-only transient state and the saved turn is polled.
+                    record['state'] = 'failed' if record.get('phase') == 'interrupt_pending' else 'running'
                 else:
                     record['state'] = 'running'
                 if record['state'] == 'running' and time.time() >= record['deadline']:
+                    record['phase'], record['state'] = 'interrupt_pending', 'unknown'
                     self._record(directory, record)
                     await self.transport.request('turn/interrupt', {
                         'threadId': record['thread_id'], 'turnId': record['turn_id']})
-                    record['state'] = 'unknown'
             except asyncio.CancelledError as exc:
                 record['state'] = 'unknown'
                 record['last_observation_error'] = _exception_frames(exc)
