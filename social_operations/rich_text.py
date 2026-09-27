@@ -19,6 +19,16 @@ ENTITY_TYPES = {
     'custom_emoji': 'MessageEntityCustomEmoji',
 }
 REVERSE_TYPES = {v: k for k, v in ENTITY_TYPES.items()}
+PASSIVE_NATIVE_ENTITY_TYPES = frozenset({
+    'MessageEntityHashtag',
+    'MessageEntityBotCommand',
+    'MessageEntityEmail',
+    'MessageEntityPhone',
+    'MessageEntityCashtag',
+    'MessageEntityBankCard',
+    'MessageEntityBlockquote',
+    'MessageEntityExpandableBlockquote',
+})
 
 
 def utf16(text: str) -> int:
@@ -109,8 +119,11 @@ def normalized_entities(text, entities):
 def from_native(text, entities):
     result = []
     for native in entities or ():
-        kind = REVERSE_TYPES.get(type(native).__name__)
+        native_type = type(native).__name__
+        kind = REVERSE_TYPES.get(native_type)
         if kind is None:
+            if native_type in PASSIVE_NATIVE_ENTITY_TYPES:
+                continue
             raise DomainError('telegram_entity_needs_review')
         e = {'type': kind, 'offset': native.offset, 'length': native.length}
         if kind == 'custom_emoji':
