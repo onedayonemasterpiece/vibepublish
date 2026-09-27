@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Canonicalize the trusted top-level Codex home before secure imagegen skill/artifact
+  traversal, so the DevCoveer `/home/dev/.codex` symlink resolves to its owner-private
+  real directory without relaxing no-follow checks for nested paths.
+
 - Recover the private Telegram media index after the DevCoveer crash, preserving
   native album identities and source captions; document retained recovery evidence
   and the restored Wonderful Lections private asset bridge.

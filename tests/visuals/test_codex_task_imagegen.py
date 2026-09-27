@@ -152,7 +152,7 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('no API fallback', prompt)
 
     async def test_verified_internal_source_may_exceed_upload_limit(self):
-        data = png() + b'\\0' * (20 * 1024 * 1024)
+        data = png() + bytes(20 * 1024 * 1024)
         source = ImagegenSource('source', hashlib.sha256(data).hexdigest(), 'image/png',
                                 64, 80, len(data), data)
         await self.adapter.submit(replace(self.request, mode='tune', sources=(source,)))
@@ -340,6 +340,49 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('unknown', record['state'])
         self.assertEqual('CancelledError', record['last_observation_error']['class'])
         self.assertNotIn('PRIVATE_CANCELLATION_TEXT', json.dumps(record))
+
+    async def test_trusted_top_level_codex_home_symlink_is_canonicalized(self):
+        real = self.root / 'real-codex'
+        real.mkdir(mode=0o700)
+        skill = real / 'skills' / '.system' / 'imagegen' / 'SKILL.md'
+        skill.parent.mkdir(parents=True)
+        skill.write_text(SKILL_FIXTURE)
+        alias = self.root / 'codex-alias'
+        alias.symlink_to(real, target_is_directory=True)
+        native = NativeFixture(real)
+        adapter = CodexTaskImagegen(
+            self.root / 'symlink-images',
+            codex_home=alias,
+            transport=native,
+        )
+        try:
+            self.assertEqual(real.resolve(), adapter.codex_home)
+            key = await adapter.submit(replace(
+                self.request,
+                job_key='visual_' + 'c' * 32,
+            ))
+            record = adapter._load(adapter._directory(key))
+            self.assertEqual(
+                str(real / 'skills/.system/imagegen/SKILL.md'),
+                record['skill_snapshot']['path'],
+            )
+            self.assertTrue(any(m == 'thread/start' for m, _ in native.calls))
+        finally:
+            await adapter.close()
+
+    def test_untrusted_resolved_codex_home_is_rejected(self):
+        unsafe = self.root / 'unsafe-codex'
+        unsafe.mkdir(mode=0o700)
+        unsafe.chmod(0o755)
+        alias = self.root / 'unsafe-alias'
+        alias.symlink_to(unsafe, target_is_directory=True)
+        with self.assertRaises(DomainError) as error:
+            CodexTaskImagegen(
+                self.root / 'unsafe-images',
+                codex_home=alias,
+                transport=self.native,
+            )
+        self.assertEqual('codex_task_home_untrusted', error.exception.code)
 
     async def test_preloads_fixed_skill_into_developer_context_with_private_hash(self):
         key = await self.adapter.submit(self.request)
