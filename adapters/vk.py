@@ -245,7 +245,8 @@ class VKAdapter:
         if sw == cw:
             return 0.80 <= ch / sh <= 1.0
         if sh == ch:
-            return 0.80 <= cw / sw <= 1.0
+            minimum = 0.65 if sw / sh >= 2.4 else 0.80
+            return minimum <= cw / sw <= 1.0
         rw, rh = cw / sw, ch / sh
         return 0.50 <= rw <= 1.0 and 0.50 <= rh <= 1.0 and abs(rw - rh) <= 0.03
 
@@ -300,11 +301,7 @@ class VKAdapter:
             if len(expected) == 1:
                 current_proof = await self._photo_proof(photo)
                 if not self._single_photo_copy_compatible(proofs[index], current_proof):
-                    raise OutcomeUnknown(
-                        'vk_single_photo_copy_incompatible_'
-                        + str(proofs[index]['width']) + 'x' + str(proofs[index]['height'])
-                        + '_to_' + str(current_proof['width']) + 'x' + str(current_proof['height'])
-                    )
+                    raise OutcomeUnknown('media_identity_or_order_mismatch')
             else:
                 await self._photo_proof(photo, proofs[index])
             mappings.append({'ordinal': index, 'saved': old, 'current': new,
