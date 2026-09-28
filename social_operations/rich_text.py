@@ -124,8 +124,7 @@ def from_native(text, entities):
         if kind is None:
             if native_type in PASSIVE_NATIVE_ENTITY_TYPES:
                 continue
-            raise DomainError('telegram_entity_needs_review',
-                              f'telegram entity needs review ({native_type})')
+            raise DomainError('telegram_entity_needs_review_' + native_type)
         e = {'type': kind, 'offset': native.offset, 'length': native.length}
         if kind == 'custom_emoji':
             e['document_id'] = str(native.document_id)
