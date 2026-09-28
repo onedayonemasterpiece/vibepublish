@@ -195,8 +195,8 @@ class TelegramAdapter:
                 raise DomainError('provider_access_denied')
         elif type(entity).__name__.startswith('Chat') and not getattr(entity, 'megagroup', False):
             # A basic group has no channel-style post_messages flag. Permit only
-            # a fresh immediate post when Telegram itself confirms this user can
-            # send there; keep scheduling and every other mutation gated.
+            # a fresh post (immediate or native-scheduled) when Telegram itself
+            # confirms this user can send there; keep every other mutation gated.
             basic_publish = (
                     type(entity).__name__ == 'Chat'
                     and not getattr(entity, 'megagroup', False)
@@ -204,7 +204,7 @@ class TelegramAdapter:
                     and getattr(entity, 'migrated_to', None) is None
                     and self.account_type == 'mtproto_user'
                     and request.action == 'publish' and request.surface == 'post'
-                    and request.existing is None and request.scheduled_at is None
+                    and request.existing is None
                     and request.source is None)
             if not basic_publish:
                 raise DomainError('telegram_group_mutations_needs_review', next_action='contact_owner')

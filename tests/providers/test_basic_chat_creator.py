@@ -25,11 +25,14 @@ class BasicChatClient(TelegramClient):
     async def __call__(self, req):
         result = await super().__call__(req)
         if getattr(getattr(req, 'peer', None), 'id', None) == CHAT_ID:
+            for message in getattr(result, 'messages', []):
+                message.peer_id = obj('PeerChat', chat_id=CHAT_ID)
             updates = []
             for update in getattr(result, 'updates', []):
-                if type(update).__name__ == 'UpdateNewChannelMessage':
+                if type(update).__name__ in {'UpdateNewChannelMessage', 'UpdateNewScheduledMessage'}:
                     update.message.peer_id = obj('PeerChat', chat_id=CHAT_ID)
-                    update = obj('UpdateNewMessage', message=update.message)
+                    if type(update).__name__ == 'UpdateNewChannelMessage':
+                        update = obj('UpdateNewMessage', message=update.message)
                 updates.append(update)
             if hasattr(result, 'updates'):
                 result.updates = updates
@@ -167,12 +170,34 @@ async def test_other_group_actions_remain_gated(action):
 
 
 @pytest.mark.asyncio
+async def test_active_member_can_schedule_fresh_basic_group_post():
+    adapter, client, journal = setup(basic_chat(creator=False))
+    client.permissions = obj(
+        'Permissions',
+        is_creator=False,
+        is_admin=False,
+        has_default_permissions=True,
+        is_banned=False,
+        has_left=False,
+    )
+    r = publish(scheduled_at=timestamp(NOW + 3600))
+    assert (await adapter.inspect(r)).status == 'supported'
+    prepared = await adapter.prepare(r, journal.hooks)
+    result = await adapter.execute(prepared, journal.hooks)
+    assert result.observed == 'provider_scheduled'
+    item, = result.items
+    assert item.native_target == TARGET
+    assert item.namespace == 'scheduled'
+    assert item.scheduled_at == r.scheduled_at
+    assert len(journal.markers) == 1 and client.effects == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('changes', [
-    {'scheduled_at': timestamp(NOW + 3600)},
     {'existing': RemoteItem('7', 'published', 'old', 'hash', timestamp(NOW), native_target=TARGET)},
     {'source': parse_source('https://t.me/source/7')},
 ])
-async def test_publish_cannot_smuggle_schedule_existing_item_or_forward_source(changes):
+async def test_publish_cannot_smuggle_existing_item_or_forward_source(changes):
     adapter, client, _ = setup()
     assert (await adapter.inspect(publish(**changes))).reason == 'telegram_group_mutations_needs_review'
     assert client.effects == 0
