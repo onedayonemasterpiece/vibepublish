@@ -247,8 +247,7 @@ def test_unknown_native_entity_error_identifies_only_entity_class():
 
     with pytest.raises(DomainError) as error:
         from_native('x', [MessageEntityFuture()])
-    assert error.value.code == 'telegram_entity_needs_review'
-    assert 'MessageEntityFuture' in str(error.value)
+    assert error.value.code == 'telegram_entity_needs_review_MessageEntityFuture'
 
 
 @pytest.mark.asyncio
