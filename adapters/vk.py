@@ -300,7 +300,11 @@ class VKAdapter:
             if len(expected) == 1:
                 current_proof = await self._photo_proof(photo)
                 if not self._single_photo_copy_compatible(proofs[index], current_proof):
-                    raise OutcomeUnknown('media_identity_or_order_mismatch')
+                    raise OutcomeUnknown(
+                        'vk_single_photo_copy_incompatible_'
+                        + str(proofs[index]['width']) + 'x' + str(proofs[index]['height'])
+                        + '_to_' + str(current_proof['width']) + 'x' + str(current_proof['height'])
+                    )
             else:
                 await self._photo_proof(photo, proofs[index])
             mappings.append({'ordinal': index, 'saved': old, 'current': new,
