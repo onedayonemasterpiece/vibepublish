@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accept bounded proportional downscaling of a single VK community-wall photo copy after exact post/slot/owner readback; arbitrary aspect changes and multi-image remaps remain fail-closed.
+
 - Treat VK wall-upload receipts with a positive server, valid hash, and empty `photo` as a transient upload-server response. Retry at most three times with a fresh upload server before `wall.post`; all other upload failures remain non-retried.
 - Bind a single VK community-wall photo copy after exact post/slot/owner readback without requiring byte-identical provider media. The narrow compatibility gate keeps MIME equal, one image edge exact, and the other edge within 90–100% of the verified pre-copy rendition; multi-image posts keep strict ordered proof.
 - Require the production worker's `PYTHONPATH` to point at the same immutable release source as `ExecStart` and `WorkingDirectory`, preventing adapters from silently importing an older installed package.
