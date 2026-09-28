@@ -242,11 +242,14 @@ class VKAdapter:
         cw, ch = current.get('width'), current.get('height')
         if any(type(value) is not int or value <= 0 for value in (sw, sh, cw, ch)):
             return False
+        if cw > sw or ch > sh:
+            return False
         if sw == cw:
-            return 0.90 <= ch / sh <= 1.0
+            return 0.80 <= ch / sh <= 1.0
         if sh == ch:
-            return 0.90 <= cw / sw <= 1.0
-        return False
+            return 0.80 <= cw / sw <= 1.0
+        scale_w, scale_h = cw / sw, ch / sh
+        return 0.50 <= scale_w <= 1.0 and 0.50 <= scale_h <= 1.0 and abs(scale_w - scale_h) <= 0.02
 
     async def _photo_proof(self, photo, expected=None):
         if not hasattr(self.transport, 'image_fingerprint'):
