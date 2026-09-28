@@ -172,6 +172,14 @@ def test_single_photo_copy_compatibility_is_narrow():
     assert not VKAdapter._single_photo_copy_compatible(
         source, {'mime': 'image/png', 'width': 653, 'height': 979}
     )
+    assert VKAdapter._single_photo_copy_compatible(
+        {'mime': 'image/jpeg', 'width': 1600, 'height': 1200},
+        {'mime': 'image/jpeg', 'width': 1024, 'height': 768},
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        {'mime': 'image/jpeg', 'width': 1600, 'height': 1200},
+        {'mime': 'image/jpeg', 'width': 1024, 'height': 600},
+    )
 
 
 @pytest.mark.asyncio
