@@ -193,7 +193,21 @@ class VKHTTPTransport:
         if (not isinstance(response, dict) or type(response.get('server')) is not int or response['server'] <= 0
                 or not isinstance(response.get('photo'), str) or not 1 <= len(response['photo']) <= 65536
                 or not isinstance(response.get('hash'), str) or not 1 <= len(response['hash']) <= 512 or 'error' in response):
-            raise DomainError('vk_upload_response_invalid', 'vk upload response invalid (response=' + type(response).__name__ + (',error=' + ('present' if 'error' in response else 'absent') + ',server=' + type(response.get('server')).__name__ + ',photo=' + type(response.get('photo')).__name__ + ',hash=' + type(response.get('hash')).__name__ if isinstance(response, dict) else '') + ')')
+            detail = 'response=' + type(response).__name__
+            if isinstance(response, dict):
+                server = response.get('server')
+                photo = response.get('photo')
+                digest_value = response.get('hash')
+                detail += (
+                    ',error=' + ('present' if 'error' in response else 'absent')
+                    + ',server_type=' + type(server).__name__
+                    + ',server_positive=' + str(type(server) is int and server > 0).lower()
+                    + ',photo_type=' + type(photo).__name__
+                    + ',photo_len=' + str(len(photo) if isinstance(photo, str) else -1)
+                    + ',hash_type=' + type(digest_value).__name__
+                    + ',hash_len=' + str(len(digest_value) if isinstance(digest_value, str) else -1)
+                )
+            raise DomainError('vk_upload_response_invalid', 'vk upload response invalid (' + detail + ')')
         return {k: response[k] for k in ('server', 'photo', 'hash')}
 
     async def image_fingerprint(self, url: str) -> dict:
