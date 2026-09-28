@@ -245,8 +245,10 @@ class VKAdapter:
         if sw == cw:
             return 0.80 <= ch / sh <= 1.0
         if sh == ch:
-            return 0.80 <= cw / sw <= 1.0
-        return False
+            minimum = 0.65 if sw / sh >= 2.4 else 0.80
+            return minimum <= cw / sw <= 1.0
+        rw, rh = cw / sw, ch / sh
+        return 0.50 <= rw <= 1.0 and 0.50 <= rh <= 1.0 and abs(rw - rh) <= 0.03
 
     async def _photo_proof(self, photo, expected=None):
         if not hasattr(self.transport, 'image_fingerprint'):
