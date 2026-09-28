@@ -245,13 +245,15 @@ class VKAdapter:
             candidates = [value for value in candidates
                           if (value['width'], value['height']) == (expected['width'], expected['height'])]
         if not candidates:
+            if expected is None:
+                raise DomainError('vk_photo_binding_unavailable')
             available = sorted({(value['width'], value['height']) for value in all_candidates})
-            detail = '; available=' + ','.join(str(w) + 'x' + str(h) for w, h in available)
-            if expected is not None:
-                detail = ('; expected=' + str(expected['width']) + 'x' + str(expected['height'])
-                          + detail)
-            raise DomainError('vk_photo_binding_unavailable',
-                              'vk photo binding unavailable' + detail)
+            suffix = '_'.join(str(w) + 'x' + str(h) for w, h in available) or 'none'
+            raise DomainError(
+                'vk_photo_binding_unavailable_expected_'
+                + str(expected['width']) + 'x' + str(expected['height'])
+                + '_available_' + suffix
+            )
         # One exact rendition, no perceptual/fuzzy matching or unbounded probing.
         rendition = candidates[0]
         proof = await self.transport.image_fingerprint(rendition['url'])
