@@ -1,6 +1,7 @@
 """Offline copied-ID fixtures; no VK calls or real generated imagery."""
 import copy
 import hashlib
+from dataclasses import replace
 
 import pytest
 
@@ -199,22 +200,38 @@ async def test_cdn_reader_does_not_accept_arbitrary_urls():
 
 
 @pytest.mark.asyncio
-async def test_upload_receipt_diagnostic_exposes_only_safe_shape():
+async def test_empty_photo_with_valid_server_and_hash_is_transient():
     transport = VKHTTPTransport(tokens={})
 
     async def fake_post(url, data, *, api=False):
-        return {'server': -1, 'photo': '[]', 'hash': ''}
+        return {'server': 857412, 'photo': '', 'hash': 'a' * 32}
 
     transport._post = fake_post
     with pytest.raises(DomainError) as error:
         await transport.upload_photo('https://pu.vk.com/upload', b'x', 'image/jpeg')
-    assert error.value.code == 'vk_upload_response_invalid'
-    message = str(error.value)
-    assert 'server_positive=false' in message
-    assert 'photo_len=2' in message
-    assert 'hash_len=0' in message
-    assert 'https://' not in message
-    assert '[]' not in message
+    assert error.value.code == 'vk_upload_transient_empty_photo'
+
+
+@pytest.mark.asyncio
+async def test_transient_empty_photo_retries_before_wall_post():
+    a, t, j, r = setup_copy()
+    r = replace(r, assets=(r.assets[0],))
+    upload = t.upload_photo
+    attempts = 0
+
+    async def transient(url, data, mime):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise DomainError('vk_upload_transient_empty_photo')
+        return await upload(url, data, mime)
+
+    t.upload_photo = transient
+    result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    assert result.observed == 'provider_scheduled'
+    assert attempts == 3
+    assert t.effects == 1
+    assert len(t.uploads) == 1
 
 
 @pytest.mark.asyncio
