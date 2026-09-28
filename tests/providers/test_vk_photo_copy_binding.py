@@ -166,8 +166,24 @@ def test_single_photo_copy_compatibility_is_narrow():
     assert not VKAdapter._single_photo_copy_compatible(
         source, {'mime': 'image/jpeg', 'width': 640, 'height': 959}
     )
+    assert VKAdapter._single_photo_copy_compatible(
+        {'mime': 'image/jpeg', 'width': 800, 'height': 372},
+        {'mime': 'image/jpeg', 'width': 661, 'height': 372},
+    )
+    assert VKAdapter._single_photo_copy_compatible(
+        {'mime': 'image/jpeg', 'width': 1920, 'height': 1080},
+        {'mime': 'image/jpeg', 'width': 1280, 'height': 720},
+    )
     assert not VKAdapter._single_photo_copy_compatible(
         source, {'mime': 'image/jpeg', 'width': 653, 'height': 810}
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        {'mime': 'image/jpeg', 'width': 1920, 'height': 1080},
+        {'mime': 'image/jpeg', 'width': 1200, 'height': 800},
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        {'mime': 'image/jpeg', 'width': 1920, 'height': 1080},
+        {'mime': 'image/jpeg', 'width': 800, 'height': 450},
     )
     assert not VKAdapter._single_photo_copy_compatible(
         source, {'mime': 'image/png', 'width': 653, 'height': 979}
