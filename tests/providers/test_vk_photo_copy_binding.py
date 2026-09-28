@@ -140,7 +140,7 @@ async def test_missing_preupload_rendition_blocks_before_wall_post():
 
 
 @pytest.mark.asyncio
-async def test_copy_dimension_mismatch_reports_only_safe_dimensions():
+async def test_single_photo_copy_rejects_large_dimension_change():
     a, t, j, r = setup_copy()
     invoke = t.invoke
 
@@ -152,10 +152,25 @@ async def test_copy_dimension_mismatch_reports_only_safe_dimensions():
         return result
 
     t.invoke = resized
-    with pytest.raises(DomainError) as error:
+    with pytest.raises(OutcomeUnknown) as error:
         await a.execute(await a.prepare(r, j.hooks), j.hooks)
-    assert error.value.code == 'vk_photo_binding_unavailable_expected_4x4_available_8x8'
-    assert 'https://' not in str(error.value)
+    assert error.value.code == 'media_identity_or_order_mismatch'
+
+
+def test_single_photo_copy_compatibility_is_narrow():
+    source = {'mime': 'image/jpeg', 'width': 653, 'height': 1024}
+    assert VKAdapter._single_photo_copy_compatible(
+        source, {'mime': 'image/jpeg', 'width': 653, 'height': 979}
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        source, {'mime': 'image/jpeg', 'width': 640, 'height': 959}
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        source, {'mime': 'image/jpeg', 'width': 653, 'height': 810}
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        source, {'mime': 'image/png', 'width': 653, 'height': 979}
+    )
 
 
 @pytest.mark.asyncio
