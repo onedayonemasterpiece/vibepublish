@@ -194,18 +194,28 @@ class TelegramAdapter:
             if not (getattr(permissions, 'is_creator', False) or getattr(permissions, required, False)):
                 raise DomainError('provider_access_denied')
         elif type(entity).__name__.startswith('Chat') and not getattr(entity, 'megagroup', False):
-            # Basic-chat ownership is explicit native evidence, not a channel's
-            # post_messages permission. Keep every other group mutation gated.
-            if not (type(entity).__name__ == 'Chat'
-                    and getattr(entity, 'creator', False) is True
+            # A basic group has no channel-style post_messages flag. Permit only
+            # a fresh immediate post when Telegram itself confirms this user can
+            # send there; keep scheduling and every other mutation gated.
+            basic_publish = (
+                    type(entity).__name__ == 'Chat'
                     and not getattr(entity, 'megagroup', False)
                     and not getattr(entity, 'deactivated', False)
                     and getattr(entity, 'migrated_to', None) is None
                     and self.account_type == 'mtproto_user'
                     and request.action == 'publish' and request.surface == 'post'
                     and request.existing is None and request.scheduled_at is None
-                    and request.source is None):
+                    and request.source is None)
+            if not basic_publish:
                 raise DomainError('telegram_group_mutations_needs_review', next_action='contact_owner')
+            permissions = await self.client.get_permissions(entity, me)
+            default_banned = getattr(entity, 'default_banned_rights', None)
+            admin = getattr(permissions, 'is_creator', False) or getattr(permissions, 'is_admin', False)
+            member_can_send = (getattr(permissions, 'has_default_permissions', False)
+                               and not getattr(default_banned, 'send_messages', False))
+            if (permissions is None or getattr(permissions, 'is_banned', False)
+                    or getattr(permissions, 'has_left', False) or not (admin or member_can_send)):
+                raise DomainError('provider_access_denied')
         elif getattr(entity, 'megagroup', False):
             permissions = await self.client.get_permissions(entity, me)
             default_banned = getattr(entity, 'default_banned_rights', None)

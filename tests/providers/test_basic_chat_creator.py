@@ -1,4 +1,4 @@
-"""Offline basic-chat creator capability; no sessions or live Telegram calls."""
+"""Offline basic-chat send-right capability; no sessions or live Telegram calls."""
 from datetime import datetime, timezone
 
 import pytest
@@ -69,7 +69,7 @@ async def test_creator_preview_then_publish_exact_basic_chat_peer(image_count):
     assert item.media_hashes == tuple(a.sha256 for a in r.assets)
     assert len(item.member_ids) == max(1, image_count)
     assert len(journal.markers) == 1 and client.effects == 1
-    assert not any(name == 'get_permissions' for name, _ in client.calls)
+    assert any(name == 'get_permissions' for name, _ in client.calls)
     for ident in item.member_ids:
         assert peer_key(client.messages[(CHAT_ID, int(ident))].peer_id) == TARGET
     send_name = ('SendMessageRequest', 'SendMediaRequest', 'SendMultiMediaRequest')[image_count]
@@ -78,11 +78,46 @@ async def test_creator_preview_then_publish_exact_basic_chat_peer(image_count):
 
 
 @pytest.mark.asyncio
+async def test_active_member_with_default_send_permission_is_supported():
+    adapter, client, _ = setup(basic_chat(creator=False))
+    client.permissions = obj(
+        'Permissions',
+        is_creator=False,
+        is_admin=False,
+        has_default_permissions=True,
+        is_banned=False,
+        has_left=False,
+    )
+    capability = await adapter.inspect(publish())
+    assert capability.status == 'supported'
+    assert any(name == 'get_permissions' for name, _ in client.calls)
+    assert client.effects == 0
+
+
+@pytest.mark.asyncio
+async def test_member_without_send_permission_is_denied():
+    adapter, client, journal = setup(basic_chat(creator=False))
+    client.permissions = obj(
+        'Permissions',
+        is_creator=False,
+        is_admin=False,
+        has_default_permissions=False,
+        is_banned=False,
+        has_left=False,
+    )
+    capability = await adapter.inspect(publish())
+    assert capability.status == 'unsupported'
+    assert capability.reason == 'provider_access_denied'
+    with pytest.raises(DomainError, match='provider access denied'):
+        await adapter.prepare(publish(), journal.hooks)
+    assert client.effects == 0 and client.uploads == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('changes', [
-    {'creator': False}, {'creator': None}, {'creator': 1}, {'creator': 'true'},
     {'deactivated': True}, {'migrated_to': obj('InputChannel', channel_id=404)},
 ])
-async def test_only_explicit_active_unmigrated_creator_is_supported(changes):
+async def test_inactive_or_migrated_basic_chat_stays_gated(changes):
     adapter, client, journal = setup(basic_chat(**changes))
     capability = await adapter.inspect(publish())
     assert capability.status == 'unsupported'
@@ -156,8 +191,15 @@ async def test_bot_creator_and_user_bot_mismatch_stay_gated():
 async def test_creator_rights_are_rechecked_before_upload_or_effect():
     adapter, client, journal = setup()
     prepared = await adapter.prepare(publish(assets=(asset(),)), journal.hooks)
-    client.entities[CHAT_ID].creator = False
-    with pytest.raises(DomainError, match='telegram group mutations needs review'):
+    client.permissions = obj(
+        'Permissions',
+        is_creator=False,
+        is_admin=False,
+        has_default_permissions=False,
+        is_banned=False,
+        has_left=False,
+    )
+    with pytest.raises(DomainError, match='provider access denied'):
         await adapter.execute(prepared, journal.hooks)
     assert client.effects == 0 and client.uploads == [] and journal.markers == []
 
