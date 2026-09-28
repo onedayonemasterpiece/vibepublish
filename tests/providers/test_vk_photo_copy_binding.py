@@ -1,6 +1,7 @@
 """Offline copied-ID fixtures; no VK calls or real generated imagery."""
 import copy
 import hashlib
+from dataclasses import replace
 
 import pytest
 
@@ -140,6 +141,40 @@ async def test_missing_preupload_rendition_blocks_before_wall_post():
 
 
 @pytest.mark.asyncio
+async def test_single_photo_copy_rejects_large_dimension_change():
+    a, t, j, r = setup_copy()
+    invoke = t.invoke
+
+    async def resized(**args):
+        result = await invoke(**args)
+        if args['method'] == 'wall.post':
+            for post in t.posts.values():
+                post['attachments'][0]['photo']['sizes'][0].update(width=8, height=8)
+        return result
+
+    t.invoke = resized
+    with pytest.raises(DomainError) as error:
+        await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    assert error.value.code == 'vk_photo_binding_unavailable'
+
+
+def test_single_photo_copy_compatibility_is_narrow():
+    source = {'mime': 'image/jpeg', 'width': 653, 'height': 1024}
+    assert VKAdapter._single_photo_copy_compatible(
+        source, {'mime': 'image/jpeg', 'width': 653, 'height': 979}
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        source, {'mime': 'image/jpeg', 'width': 640, 'height': 959}
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        source, {'mime': 'image/jpeg', 'width': 653, 'height': 810}
+    )
+    assert not VKAdapter._single_photo_copy_compatible(
+        source, {'mime': 'image/png', 'width': 653, 'height': 979}
+    )
+
+
+@pytest.mark.asyncio
 async def test_copy_proof_detects_post_change_during_download():
     a, t, j, r = setup_copy()
     fingerprint = t.image_fingerprint
@@ -162,6 +197,41 @@ async def test_cdn_reader_does_not_accept_arbitrary_urls():
                 'https://u:p@userapi.com/a', 'https://userapi.com:444/a'):
         with pytest.raises(DomainError):
             await t.image_fingerprint(url)
+
+
+@pytest.mark.asyncio
+async def test_empty_photo_with_valid_server_and_hash_is_transient():
+    transport = VKHTTPTransport(tokens={})
+
+    async def fake_post(url, data, *, api=False):
+        return {'server': 857412, 'photo': '', 'hash': 'a' * 32}
+
+    transport._post = fake_post
+    with pytest.raises(DomainError) as error:
+        await transport.upload_photo('https://pu.vk.com/upload', b'x', 'image/jpeg')
+    assert error.value.code == 'vk_upload_transient_empty_photo'
+
+
+@pytest.mark.asyncio
+async def test_transient_empty_photo_retries_before_wall_post():
+    a, t, j, r = setup_copy()
+    r = replace(r, assets=(r.assets[0],))
+    upload = t.upload_photo
+    attempts = 0
+
+    async def transient(url, data, mime):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise DomainError('vk_upload_transient_empty_photo')
+        return await upload(url, data, mime)
+
+    t.upload_photo = transient
+    result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    assert result.observed == 'provider_scheduled'
+    assert attempts == 3
+    assert t.effects == 1
+    assert len(t.uploads) == 1
 
 
 @pytest.mark.asyncio

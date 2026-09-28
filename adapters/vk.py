@@ -5,6 +5,7 @@ postponed wall.post is implemented. Scheduled wall.repost is deliberately absent
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -231,10 +232,27 @@ class VKAdapter:
                     result.append({'url': value['url'], 'width': w, 'height': h})
         return sorted(result, key=lambda row: row['width'] * row['height'], reverse=True)
 
+    @staticmethod
+    def _single_photo_copy_compatible(source, current):
+        if (not isinstance(source, dict) or not isinstance(current, dict)
+                or source.get('mime') != current.get('mime')
+                or source.get('mime') not in {'image/png', 'image/jpeg', 'image/webp'}):
+            return False
+        sw, sh = source.get('width'), source.get('height')
+        cw, ch = current.get('width'), current.get('height')
+        if any(type(value) is not int or value <= 0 for value in (sw, sh, cw, ch)):
+            return False
+        if sw == cw:
+            return 0.90 <= ch / sh <= 1.0
+        if sh == ch:
+            return 0.90 <= cw / sw <= 1.0
+        return False
+
     async def _photo_proof(self, photo, expected=None):
         if not hasattr(self.transport, 'image_fingerprint'):
             raise DomainError('vk_photo_binding_unavailable')
-        candidates = self._renditions(photo)
+        all_candidates = self._renditions(photo)
+        candidates = all_candidates
         if expected is not None:
             if (not isinstance(expected, dict) or set(expected) != {'sha256', 'size', 'mime', 'width', 'height'}
                     or not isinstance(expected['sha256'], str) or not re.fullmatch(r'[a-f0-9]{64}', expected['sha256'])
@@ -278,7 +296,12 @@ class VKAdapter:
                     or attachment.get('type') != 'photo' or not isinstance(photo, dict)
                     or str(photo.get('owner_id')) != request.native_target or proofs[index] is None):
                 raise OutcomeUnknown('media_identity_or_order_mismatch')
-            await self._photo_proof(photo, proofs[index])
+            if len(expected) == 1:
+                current_proof = await self._photo_proof(photo)
+                if not self._single_photo_copy_compatible(proofs[index], current_proof):
+                    raise OutcomeUnknown('media_identity_or_order_mismatch')
+            else:
+                await self._photo_proof(photo, proofs[index])
             mappings.append({'ordinal': index, 'saved': old, 'current': new,
                              'provider_sha256': proofs[index]['sha256']})
         current = await self._exact(request.native_target, item.native_id, item.namespace)
@@ -342,12 +365,20 @@ class VKAdapter:
         if r.action == 'publish' or (r.action == 'edit' and not reuse):
             for n, asset in enumerate(r.assets):
                 await hooks.emit_progress('uploading', 'started', f'Staging image {n+1}/{len(r.assets)}')
-                server = await self._call('photos.getWallUploadServer', group_id=group)
-                if not isinstance(server, dict):
-                    raise DomainError('vk_upload_server_invalid')
-                url = server.get('upload_url')
-                validated_url(url)
-                receipt = await self.transport.upload_photo(url, asset.data, asset.mime)
+                for upload_attempt in range(3):
+                    server = await self._call('photos.getWallUploadServer', group_id=group)
+                    if not isinstance(server, dict):
+                        raise DomainError('vk_upload_server_invalid')
+                    url = server.get('upload_url')
+                    validated_url(url)
+                    try:
+                        receipt = await self.transport.upload_photo(url, asset.data, asset.mime)
+                    except DomainError as exc:
+                        if exc.code != 'vk_upload_transient_empty_photo' or upload_attempt == 2:
+                            raise
+                        await asyncio.sleep(upload_attempt + 1)
+                        continue
+                    break
                 saved = await self._call('photos.saveWallPhoto', group_id=group, **receipt)
                 if not isinstance(saved, list) or len(saved) != 1:
                     raise DomainError('vk_saved_photo_invalid')

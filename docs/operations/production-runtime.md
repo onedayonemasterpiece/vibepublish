@@ -73,7 +73,7 @@ identity check remains intact. This behavior was verified against actual
 
 As of 2026-09-13, VibePublish production is expected to run from immutable releases under `/home/dev/.local/share/vibepublish/releases/<sha>` with `/home/dev/.local/share/vibepublish/current` pointing at the deployed release.
 
-The permanent Python runtime is `/home/dev/.local/share/vibepublish/venv/bin/python`. Production server and worker units must use that interpreter, not an acceptance-project virtualenv, with `PYTHONPATH=/home/dev/.local/share/vibepublish/current`.
+The permanent Python runtime is `/home/dev/.local/share/vibepublish/venv/bin/python`. Production server and worker units must use that interpreter, not an acceptance-project virtualenv. For an immutable worker release, `WorkingDirectory`, the `production_worker.py` path in `ExecStart`, and `PYTHONPATH` must all point to the same exact `/home/dev/.local/share/vibepublish/releases/<sha>/source`. Updating only `ExecStart`/WorkingDirectory is insufficient: Python can otherwise import an older installed `adapters` or `social_operations` package while appearing to run the new release. Deployment acceptance therefore includes a process-environment readback of the exact release `PYTHONPATH`.
 
 Trusted browser artifacts are imported only from the configured root `/var/lib/my-browser-bridge/data/artifacts` via `VIBEPUBLISH_BROWSER_ARTIFACT_ROOT`; VibePublish does not refetch source images for `import_browser_artifact`.
 
