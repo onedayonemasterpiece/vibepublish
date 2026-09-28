@@ -243,9 +243,9 @@ class VKAdapter:
         if any(type(value) is not int or value <= 0 for value in (sw, sh, cw, ch)):
             return False
         if sw == cw:
-            return 0.90 <= ch / sh <= 1.0
+            return 0.80 <= ch / sh <= 1.0
         if sh == ch:
-            return 0.90 <= cw / sw <= 1.0
+            return 0.80 <= cw / sw <= 1.0
         return False
 
     async def _photo_proof(self, photo, expected=None):
