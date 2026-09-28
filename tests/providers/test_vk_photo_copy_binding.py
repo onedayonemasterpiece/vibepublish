@@ -199,6 +199,25 @@ async def test_cdn_reader_does_not_accept_arbitrary_urls():
 
 
 @pytest.mark.asyncio
+async def test_upload_receipt_diagnostic_exposes_only_safe_shape():
+    transport = VKHTTPTransport(tokens={})
+
+    async def fake_post(url, data, *, api=False):
+        return {'server': -1, 'photo': '[]', 'hash': ''}
+
+    transport._post = fake_post
+    with pytest.raises(DomainError) as error:
+        await transport.upload_photo('https://pu.vk.com/upload', b'x', 'image/jpeg')
+    assert error.value.code == 'vk_upload_response_invalid'
+    message = str(error.value)
+    assert 'server_positive=false' in message
+    assert 'photo_len=2' in message
+    assert 'hash_len=0' in message
+    assert 'https://' not in message
+    assert '[]' not in message
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('failure', [None, 'redirect', 'encoding', 'mime', 'bytes'])
 async def test_cdn_reader_bounds_and_credential_isolation(monkeypatch, failure):
     import aiohttp
