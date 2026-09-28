@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 
-- Include only the native Telegram entity class name in unsupported-entity diagnostics so observation-only recovery can identify compatibility gaps without exposing message text or entity payloads.
+- Bind a single VK community-wall photo copy after exact post/slot/owner readback without requiring byte-identical provider media. The narrow compatibility gate keeps MIME equal, one image edge exact, and the other edge within 90–100% of the verified pre-copy rendition; multi-image posts keep strict ordered proof.
+- Require the production worker's `PYTHONPATH` to point at the same immutable release source as `ExecStart` and `WorkingDirectory`, preventing adapters from silently importing an older installed package.
 
 - Treat Telegram provider-inferred passive span entities (including hashtags,
   bot commands, email/phone/cashtag/bank-card detection and blockquotes) as
