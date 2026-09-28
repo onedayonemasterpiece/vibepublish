@@ -5,6 +5,7 @@ postponed wall.post is implemented. Scheduled wall.repost is deliberately absent
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -364,12 +365,20 @@ class VKAdapter:
         if r.action == 'publish' or (r.action == 'edit' and not reuse):
             for n, asset in enumerate(r.assets):
                 await hooks.emit_progress('uploading', 'started', f'Staging image {n+1}/{len(r.assets)}')
-                server = await self._call('photos.getWallUploadServer', group_id=group)
-                if not isinstance(server, dict):
-                    raise DomainError('vk_upload_server_invalid')
-                url = server.get('upload_url')
-                validated_url(url)
-                receipt = await self.transport.upload_photo(url, asset.data, asset.mime)
+                for upload_attempt in range(3):
+                    server = await self._call('photos.getWallUploadServer', group_id=group)
+                    if not isinstance(server, dict):
+                        raise DomainError('vk_upload_server_invalid')
+                    url = server.get('upload_url')
+                    validated_url(url)
+                    try:
+                        receipt = await self.transport.upload_photo(url, asset.data, asset.mime)
+                    except DomainError as exc:
+                        if exc.code != 'vk_upload_transient_empty_photo' or upload_attempt == 2:
+                            raise
+                        await asyncio.sleep(upload_attempt + 1)
+                        continue
+                    break
                 saved = await self._call('photos.saveWallPhoto', group_id=group, **receipt)
                 if not isinstance(saved, list) or len(saved) != 1:
                     raise DomainError('vk_saved_photo_invalid')
