@@ -154,9 +154,7 @@ async def test_copy_dimension_mismatch_reports_only_safe_dimensions():
     t.invoke = resized
     with pytest.raises(DomainError) as error:
         await a.execute(await a.prepare(r, j.hooks), j.hooks)
-    assert error.value.code == 'vk_photo_binding_unavailable'
-    assert 'expected=4x4' in str(error.value)
-    assert 'available=8x8' in str(error.value)
+    assert error.value.code == 'vk_photo_binding_unavailable_expected_4x4_available_8x8'
     assert 'https://' not in str(error.value)
 
 
