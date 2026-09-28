@@ -152,9 +152,9 @@ async def test_single_photo_copy_rejects_large_dimension_change():
         return result
 
     t.invoke = resized
-    with pytest.raises(OutcomeUnknown) as error:
+    with pytest.raises(DomainError) as error:
         await a.execute(await a.prepare(r, j.hooks), j.hooks)
-    assert error.value.code == 'media_identity_or_order_mismatch'
+    assert error.value.code == 'vk_photo_binding_unavailable'
 
 
 def test_single_photo_copy_compatibility_is_narrow():
