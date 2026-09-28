@@ -190,6 +190,11 @@ class VKHTTPTransport:
         # Some upload servers return the receipt in a response envelope.
         if isinstance(response, dict) and isinstance(response.get('response'), dict):
             response = response['response']
+        if (isinstance(response, dict) and 'error' not in response
+                and type(response.get('server')) is int and response['server'] > 0
+                and response.get('photo') == ''
+                and isinstance(response.get('hash'), str) and 1 <= len(response['hash']) <= 512):
+            raise DomainError('vk_upload_transient_empty_photo')
         if (not isinstance(response, dict) or type(response.get('server')) is not int or response['server'] <= 0
                 or not isinstance(response.get('photo'), str) or not 1 <= len(response['photo']) <= 65536
                 or not isinstance(response.get('hash'), str) or not 1 <= len(response['hash']) <= 512 or 'error' in response):
