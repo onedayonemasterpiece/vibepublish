@@ -246,8 +246,10 @@ class VKAdapter:
                           if (value['width'], value['height']) == (expected['width'], expected['height'])]
         if not candidates:
             available = sorted({(value['width'], value['height']) for value in all_candidates})
-            detail = ('; expected=' + str(expected['width']) + 'x' + str(expected['height'])
-                      + '; available=' + ','.join(str(w) + 'x' + str(h) for w, h in available))
+            detail = '; available=' + ','.join(str(w) + 'x' + str(h) for w, h in available)
+            if expected is not None:
+                detail = ('; expected=' + str(expected['width']) + 'x' + str(expected['height'])
+                          + detail)
             raise DomainError('vk_photo_binding_unavailable',
                               'vk photo binding unavailable' + detail)
         # One exact rendition, no perceptual/fuzzy matching or unbounded probing.
