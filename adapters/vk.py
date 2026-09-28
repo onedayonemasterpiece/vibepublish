@@ -231,6 +231,22 @@ class VKAdapter:
                     result.append({'url': value['url'], 'width': w, 'height': h})
         return sorted(result, key=lambda row: row['width'] * row['height'], reverse=True)
 
+    @staticmethod
+    def _single_photo_copy_compatible(source, current):
+        if (not isinstance(source, dict) or not isinstance(current, dict)
+                or source.get('mime') != current.get('mime')
+                or source.get('mime') not in {'image/png', 'image/jpeg', 'image/webp'}):
+            return False
+        sw, sh = source.get('width'), source.get('height')
+        cw, ch = current.get('width'), current.get('height')
+        if any(type(value) is not int or value <= 0 for value in (sw, sh, cw, ch)):
+            return False
+        if sw == cw:
+            return 0.90 <= ch / sh <= 1.0
+        if sh == ch:
+            return 0.90 <= cw / sw <= 1.0
+        return False
+
     async def _photo_proof(self, photo, expected=None):
         if not hasattr(self.transport, 'image_fingerprint'):
             raise DomainError('vk_photo_binding_unavailable')
@@ -245,15 +261,7 @@ class VKAdapter:
             candidates = [value for value in candidates
                           if (value['width'], value['height']) == (expected['width'], expected['height'])]
         if not candidates:
-            if expected is None:
-                raise DomainError('vk_photo_binding_unavailable')
-            available = sorted({(value['width'], value['height']) for value in all_candidates})
-            suffix = '_'.join(str(w) + 'x' + str(h) for w, h in available) or 'none'
-            raise DomainError(
-                'vk_photo_binding_unavailable_expected_'
-                + str(expected['width']) + 'x' + str(expected['height'])
-                + '_available_' + suffix
-            )
+            raise DomainError('vk_photo_binding_unavailable')
         # One exact rendition, no perceptual/fuzzy matching or unbounded probing.
         rendition = candidates[0]
         proof = await self.transport.image_fingerprint(rendition['url'])
@@ -287,7 +295,12 @@ class VKAdapter:
                     or attachment.get('type') != 'photo' or not isinstance(photo, dict)
                     or str(photo.get('owner_id')) != request.native_target or proofs[index] is None):
                 raise OutcomeUnknown('media_identity_or_order_mismatch')
-            await self._photo_proof(photo, proofs[index])
+            if len(expected) == 1:
+                current_proof = await self._photo_proof(photo)
+                if not self._single_photo_copy_compatible(proofs[index], current_proof):
+                    raise OutcomeUnknown('media_identity_or_order_mismatch')
+            else:
+                await self._photo_proof(photo, proofs[index])
             mappings.append({'ordinal': index, 'saved': old, 'current': new,
                              'provider_sha256': proofs[index]['sha256']})
         current = await self._exact(request.native_target, item.native_id, item.namespace)
