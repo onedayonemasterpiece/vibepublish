@@ -238,7 +238,7 @@ async def test_plain_text_ignores_provider_inferred_hashtag_entity():
     assert client.effects == 1
 
 
-def test_unknown_native_entity_error_identifies_only_entity_class():
+def test_unknown_native_entity_still_fails_closed():
     from social_operations.rich_text import from_native
 
     class MessageEntityFuture:
@@ -247,7 +247,7 @@ def test_unknown_native_entity_error_identifies_only_entity_class():
 
     with pytest.raises(DomainError) as error:
         from_native('x', [MessageEntityFuture()])
-    assert error.value.code == 'telegram_entity_needs_review_MessageEntityFuture'
+    assert error.value.code == 'telegram_entity_needs_review'
 
 
 @pytest.mark.asyncio
