@@ -242,11 +242,14 @@ class VKAdapter:
         cw, ch = current.get('width'), current.get('height')
         if any(type(value) is not int or value <= 0 for value in (sw, sh, cw, ch)):
             return False
+        # VK may either crop one edge while preserving the other, or generate
+        # a proportionally scaled wall rendition. Keep both paths bounded.
         if sw == cw:
-            return 0.90 <= ch / sh <= 1.0
+            return 0.80 <= ch / sh <= 1.0
         if sh == ch:
-            return 0.90 <= cw / sw <= 1.0
-        return False
+            return 0.80 <= cw / sw <= 1.0
+        rw, rh = cw / sw, ch / sh
+        return 0.50 <= rw <= 1.0 and 0.50 <= rh <= 1.0 and abs(rw - rh) <= 0.03
 
     async def _photo_proof(self, photo, expected=None):
         if not hasattr(self.transport, 'image_fingerprint'):
