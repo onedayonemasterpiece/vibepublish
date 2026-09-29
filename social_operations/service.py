@@ -673,7 +673,10 @@ class Application:
         action = command['kind']
         if action.startswith('emoji_'):
             return self.emojis.commands(db, actor, command, intent)
-        if action in ('resolve', 'search', 'rename_label'):
+        if action == 'resolve':
+            from .destination_resolution import admit
+            return admit(self, db, actor, command, intent)
+        if action in ('search', 'rename_label'):
             raise DomainError('capability_not_implemented', next_action='contact_owner')
         if action == 'profile_update':
             if command['alias'] not in {d['alias'] for d in self.aliases(db, actor)}:

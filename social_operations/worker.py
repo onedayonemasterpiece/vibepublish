@@ -140,6 +140,10 @@ class Worker:
                 from .unknown_resolution import run_resolution
                 await run_resolution(self, op, actor)
                 return True
+            if op['action'] == 'destinations':
+                from .destination_resolution import process
+                await process(self, op, actor)
+                return True
             if op['action'] == 'read':
                 await self.run_read(op, actor)
                 return True

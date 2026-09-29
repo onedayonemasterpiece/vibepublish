@@ -1,5 +1,7 @@
 # VibePublish Social Operations
 
+Current owner group-resolution correction: [Telegram destination discovery](telegram-destination-discovery.md).
+
 > Current remote delivery: **partial, not a runnable release**. The implemented
 > behavior and historical test counts below describe the complete archived source.
 > Three production modules remain undelivered; current evidence and exact boundaries
