@@ -4,6 +4,9 @@
 
 - Preserve all edges of finished prompt-only images during 4:5/9:16 composition;
   retain cover cropping only for separate structured-copy art layers.
+- Pass the actual target visual format into image generation so tune/compose jobs
+  outpaint for the destination aspect ratio instead of inheriting the source-photo
+  ratio and relying on a later crop/pad step.
 
 - Permit a fresh Telegram post, immediate or native-scheduled, to an active
   basic-group member when native permission readback proves default send rights;

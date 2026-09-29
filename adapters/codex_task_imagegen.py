@@ -364,9 +364,14 @@ class CodexTaskImagegen:
                     f'and {request.candidate_budget} candidates total. No retries or extra variants. '
                     'Use attached source images for the requested mode. Do not publish or access '
                     'social accounts. Follow the brief including quoted lettering; do not extract or '
-                    'rewrite it. Stop after the requested images. Task data follows as JSON:\n' +
+                    'rewrite it. Target formats are a hard output-geometry requirement: when one target '
+                    'format is supplied, ask image_gen for that portrait aspect ratio and outpaint/extend '
+                    'rather than cropping meaningful source or generated edge content. Keep all generated '
+                    'lettering/callouts comfortably inside the target frame. Stop after the requested images. '
+                    'Task data follows as JSON:\n' +
                     canonical({'mode': request.mode, 'brief': request.brief,
-                        'preset_version': request.preset_version, 'candidate_budget': request.candidate_budget}))
+                        'preset_version': request.preset_version, 'candidate_budget': request.candidate_budget,
+                        'target_formats': list(request.target_formats)}))
                 turn = await self.transport.request('turn/start', {'threadId': record['thread_id'],
                     'input': [{'type': 'text', 'text': prompt}, *source_inputs],
                     'cwd': str(work), 'approvalPolicy': 'never', 'model': MODEL})

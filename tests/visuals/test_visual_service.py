@@ -67,6 +67,7 @@ async def test_shared_standalone_service_budget_lineage_and_private_selection(ru
     assert executor.calls[0].mode == mode
     assert len(executor.calls[0].sources) == {'generate':0,'tune':1,'compose':2}[mode]
     assert executor.calls[0].candidate_budget == 1  # 2 final derivatives / 2 formats.
+    assert executor.calls[0].target_formats == ('post_4_5', 'story_9_16')
     choice = select_command(ready)
     selected = await call(app, actor, 'visual', {'command':choice, 'request_key':'choose'})
     assert selected['operation_id'] == receipt['operation_id'] and selected['state'] == 'verified'

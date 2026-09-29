@@ -238,8 +238,24 @@ class VisualService:
             brief = ('Create only the art layer, without lettering or editorial text. '
                      'Explicit structured copy is composed separately; do not bake it into the image.\n'
                      + brief)
+        else:
+            geometry = {
+                'post_4_5': 'portrait 4:5',
+                'story_9_16': 'portrait 9:16',
+            }
+            targets = [geometry.get(value, value) for value in spec['formats']]
+            brief = (
+                'OUTPUT GEOMETRY IS PART OF THE EDITORIAL REQUIREMENT. '
+                f'Target format(s): {", ".join(targets)}. '
+                'For a single target format, generate the finished composition in that target aspect ratio; '
+                'do not preserve the source-photo aspect ratio. Extend/outpaint missing canvas instead of '
+                'cropping architecture, lettering, arrows, callouts or other meaningful edge content. '
+                'Keep every visible text/callout at least 8% inside all final edges. '
+                'Do not solve aspect ratio by putting the whole design into a smaller inset frame.\n'
+                + brief
+            )
         return ImagegenRequest(job['id'], job['input_digest'], spec['kind'], brief, tuple(sources),
-                               spec['preset'], REQUESTED_ROUTE, budget, job['deadline'])
+                               spec['preset'], REQUESTED_ROUTE, budget, job['deadline'], tuple(spec['formats']))
 
     async def process(self, worker, op, actor, executor=None):
         executor = executor or UnavailableImagegen()

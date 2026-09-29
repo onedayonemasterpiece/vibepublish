@@ -8,6 +8,13 @@
 ## Finished prompt-only composition framing — 2026-09-29
 
 Requirement: `Fixed` by the Street Story owner crop report. Acceptance: `Not confirmed by user`.
+The target surface geometry must be sent into the image executor itself. A tuned
+source photo must not silently retain its source aspect ratio when the requested
+post is 4:5 or the story is 9:16. For a single prompt-only target, image generation
+must create/outpaint the finished composition for that aspect ratio and keep
+lettering/callouts at least 8% inside the final edge. This is in addition to,
+not a replacement for, deterministic no-crop containment after generation.
+
 With no structured `copy`, generated lettering and architecture belong to a complete
 composition. Preserve the entire art using aspect-ratio containment in the target
 4:5/9:16 canvas, with neutral unused space, never a destructive cover crop.
