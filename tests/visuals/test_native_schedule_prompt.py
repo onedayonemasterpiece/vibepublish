@@ -84,7 +84,9 @@ async def test_future_native_queue_defaults_auto_with_sources_quotes_and_exact_o
     selected = store.receipt(actor, accepted['operation_id'])
     assert selected['state'] == 'accepted' and selected['selected_sha256']
     assert provider.effects == 0 and len(executor.calls) == 1
-    assert executor.calls[0].brief == PROMPT
+    assert executor.calls[0].brief.endswith(PROMPT)
+    assert 'OUTPUT GEOMETRY IS PART OF THE EDITORIAL REQUIREMENT' in executor.calls[0].brief
+    assert executor.calls[0].target_formats == ('post_4_5',)
     assert len(executor.calls[0].sources) == (2 if kind == 'compose' else 1)
     assert all(c['requires_review'] for c in selected['candidates'])  # Quality remains unverified.
     assert all('selection_token' not in c for c in selected['candidates'])
