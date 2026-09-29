@@ -87,6 +87,10 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET) -> Comp
         image.verify()
     pad, bottom = 72, height-88
     art_height = (560 if format == 'post_4_5' else 960) if copy else height
+    # Prompt-only output is a finished composition: slicing loses lettering and
+    # architecture. Keep cover only for the art-only structured-copy layout.
+    art_fit = "cover" if copy else "contain"
+    aspect = "xMidYMid slice" if copy else "xMidYMid meet"
     y = art_height + 90
     placed, paths, font_hashes = [], [], {}
     for field, size, bold in fields:
@@ -116,13 +120,14 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET) -> Comp
     recipe = {'preset': PRESET, 'format': format, 'copy': copy, 'lines': placed,
               'font_sha256': font_hashes, 'safe_box': [pad, art_height+28, width-2*pad, bottom-art_height-28],
               'art_sha256': hashlib.sha256(art).hexdigest(), 'art_box': [0, 0, width, art_height],
+              'art_fit': art_fit,
               'renderer': 'svg-path-cairosvg-v1', 'human_review_required': True}
     encoded = base64.b64encode(art).decode('ascii')
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
            f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
            f'<metadata>{html.escape(canonical(recipe))}</metadata>'
            f'<rect width="{width}" height="{height}" fill="#f8fafb"/>'
-           f'<image x="0" y="0" width="{width}" height="{art_height}" preserveAspectRatio="xMidYMid slice" '
+           f'<image x="0" y="0" width="{width}" height="{art_height}" preserveAspectRatio="{aspect}" '
            f'xlink:href="data:image/png;base64,{encoded}"/>'
            f'<g fill="#172b3b">{"".join(paths)}</g></svg>').encode()
     # SVG is generated here, never user-supplied; its only URL is verified PNG data.

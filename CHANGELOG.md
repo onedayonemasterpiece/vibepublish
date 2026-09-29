@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Preserve all edges of finished prompt-only images during 4:5/9:16 composition;
+  retain cover cropping only for separate structured-copy art layers.
+
 - Permit a fresh Telegram post, immediate or native-scheduled, to an active
   basic-group member when native permission readback proves default send rights;
   forwarding, editing and deletion in basic groups remain gated.
