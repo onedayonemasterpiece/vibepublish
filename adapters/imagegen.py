@@ -41,9 +41,11 @@ class ImagegenRequest:
     requested_route: str
     candidate_budget: int
     deadline: float
+    target_formats: tuple[str, ...] = ()
 
     def __post_init__(self):
         object.__setattr__(self, 'sources', tuple(self.sources))
+        object.__setattr__(self, 'target_formats', tuple(self.target_formats))
 
 
 @dataclass(frozen=True, slots=True)

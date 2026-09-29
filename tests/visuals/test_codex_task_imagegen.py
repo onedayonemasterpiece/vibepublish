@@ -76,7 +76,8 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.adapter = CodexTaskImagegen(self.root / 'images', codex_home=self.home,
                                         transport=self.native)
         self.request = ImagegenRequest('visual_' + 'a' * 32, 'b' * 64, 'generate',
-            'Афиша с надписью "Кто я?"', (), 'art-v1', MODEL, 1, time.time() + 600)
+            'Афиша с надписью "Кто я?"', (), 'art-v1', MODEL, 1, time.time() + 600,
+            ('post_4_5',))
 
     async def asyncTearDown(self):
         await self.adapter.close()
@@ -147,6 +148,7 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         prompt = params['input'][0]['text']
         job = json.loads(prompt.split('Task data follows as JSON:\n')[1])
         self.assertEqual(self.request.brief, job['brief'])
+        self.assertEqual(['post_4_5'], job['target_formats'])
         self.assertEqual('localImage', params['input'][1]['type'])
         self.assertEqual(data, Path(params['input'][1]['path']).read_bytes())
         self.assertIn('no API fallback', prompt)

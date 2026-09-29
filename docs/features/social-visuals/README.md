@@ -5,6 +5,23 @@
 
 # Social visuals
 
+## Finished prompt-only composition framing — 2026-09-29
+
+Requirement: `Fixed` by the Street Story owner crop report. Acceptance: `Not confirmed by user`.
+The target surface geometry must be sent into the image executor itself. A tuned
+source photo must not silently retain its source aspect ratio when the requested
+post is 4:5 or the story is 9:16. For a single prompt-only target, image generation
+must create/outpaint the finished composition for that aspect ratio and keep
+lettering/callouts at least 8% inside the final edge. This is in addition to,
+not a replacement for, deterministic no-crop containment after generation.
+
+With no structured `copy`, generated lettering and architecture belong to a complete
+composition. Preserve the entire art using aspect-ratio containment in the target
+4:5/9:16 canvas, with neutral unused space, never a destructive cover crop.
+Structured-copy layouts retain their existing art-cover treatment and deterministic
+text safe areas. Record `art_fit` in the derivative recipe. This prevents compositor
+clipping; it does not certify model-generated lettering or artistic quality.
+
 Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: shared service and partial live executor acceptance `Not confirmed by user`; complete acceptance `Not done`.
 
 Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the handoff](../social-operations/analysis-handoff-20260904.md). Publication/runtime/security rules live in [implementation design](../social-operations/implementation-design-v1.md).
