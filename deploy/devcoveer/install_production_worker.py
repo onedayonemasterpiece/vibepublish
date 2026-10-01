@@ -42,7 +42,7 @@ def _validate_unit(data: bytes) -> None:
         "--telegram-api-hash-key TELEGRAM_API_HASH",
         "--providers telegram vk",
         "--vk-env-file /home/dev/.env",
-        "--vk-token-key VK_USER_TOKEN1",
+        "--vk-token-key VK_USER_TOKEN2",
     )
     if any(item not in text for item in required):
         raise SystemExit("canonical worker unit lost the approved production provider mapping")
