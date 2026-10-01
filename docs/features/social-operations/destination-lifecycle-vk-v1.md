@@ -128,6 +128,8 @@ A copied authored post or plain link is not a repost success. Scheduled VK repos
 
 A local receipt is not provider success.
 
+For VK wall deletion, exact provider absence includes the documented/observed tombstone form returned by `wall.getById`: a row for the same wall-local ID with `is_deleted=true`. That row is deletion evidence, not a live post. VibePublish must not repeat `wall.delete` merely because VK retains this tombstone.
+
 Posts, Stories and reposts complete only after exact provider readback. After the durable dispatch marker, a timeout or malformed/missing identity is `outcome_unknown`; it must be reconciled, not repeated with a new request key.
 
 Story namespace is distinct from the normal immediate wall namespace:
