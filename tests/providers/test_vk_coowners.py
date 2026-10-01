@@ -61,3 +61,17 @@ async def test_feed_and_exact_read_agree_on_coowner_id():
     assert page.items[0].native_id == exact.native_id == '16'
     with pytest.raises(DomainError):
         await a._exact('-101', '17', 'published')
+
+
+@pytest.mark.asyncio
+async def test_deleted_wall_tombstone_is_exact_absence():
+    class Transport:
+        async def invoke(self, *, role, method, params):
+            assert method == 'wall.getById'
+            return {'items': [{
+                'id': 16, 'owner_id': -101, 'text': 'Пост удалён ',
+                'is_deleted': True,
+            }]}
+    a = VKAdapter(Transport(), connection_id='connection')
+    assert await a._exact('-101', '16', 'published') is None
+    assert await a._exact_raw('-101', '16', 'published') is None

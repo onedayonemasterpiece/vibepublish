@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Treat exact VK `wall.getById` tombstones with `is_deleted=true` as provider-confirmed absence after `wall.delete`, so native repost deletion can reconcile without repeating the destructive call.
 - Generalize owner exact destination resolution from the Telegram-only overlay to a durable provider-neutral lifecycle; add fail-closed VK URL/ID resolution with provider admin/write preflight, stable persisted aliases, idempotent re-resolution and revoked-binding protection.
 - Add native VK community photo Stories through `surface=story` using `stories.getPhotoUploadServer` -> upload -> `stories.save` -> exact `stories.getById` readback, plus normal lifecycle deletion with readback.
 - Derive live capability status from current-binding-epoch provider readback evidence instead of permanently reporting `needs_review` after a verified canary.

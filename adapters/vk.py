@@ -251,6 +251,10 @@ class VKAdapter:
         rows = _items(response)
         if not rows:
             return None
+        # VK can retain a wall.getById tombstone after wall.delete. It is
+        # provider evidence of deletion, not a still-live post.
+        if len(rows) == 1 and rows[0].get('is_deleted') is True:
+            return None
         if len(rows) != 1 or str(self._wall_post_id(rows[0], namespace, target)) != ident:
             raise DomainError('vk_readback_identity_mismatch')
         return self._item(rows[0], namespace, target)
@@ -261,6 +265,8 @@ class VKAdapter:
                          if str(row['id']) == ident), None)
         rows = _items(await self._call('wall.getById', posts=f'{target}_{ident}', extended=0))
         if not rows:
+            return None
+        if len(rows) == 1 and rows[0].get('is_deleted') is True:
             return None
         if len(rows) != 1 or str(rows[0].get('id')) != ident:
             raise DomainError('vk_readback_identity_mismatch')
