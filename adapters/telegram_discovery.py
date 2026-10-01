@@ -80,5 +80,38 @@ async def resolve(adapter, url):
     observed = await adapter._rights(request)
     if peer_key(observed) != target:
         raise DomainError("telegram_peer_mismatch")
+    rights = await lifecycle_rights(adapter, target)
     return {"native_id": target, "label": str(getattr(entity, "title", "Telegram group"))[:200],
-            "handle": str(getattr(entity, "username", "") or "")}
+            "handle": str(getattr(entity, "username", "") or ""), "rights": rights}
+
+
+async def lifecycle_rights(adapter, target):
+    """Read-only provider preflight for lifecycle operations on this exact peer."""
+    rights = ["publish"]
+    probes = (
+        ("edit", SimpleNamespace(namespace="published"), None),
+        ("reschedule", SimpleNamespace(namespace="scheduled"), "2030-01-01T00:00:00+00:00"),
+        ("cancel", SimpleNamespace(namespace="scheduled"), "2030-01-01T00:00:00+00:00"),
+        ("delete", SimpleNamespace(namespace="published"), None),
+        ("forward", None, None),
+    )
+    for action, existing, scheduled_at in probes:
+        request = SimpleNamespace(
+            connection_id=adapter.connection_id,
+            account_type=adapter.account_type,
+            native_target=target,
+            action=action,
+            surface="post",
+            existing=existing,
+            scheduled_at=scheduled_at,
+            source=None,
+            assets=(),
+        )
+        try:
+            observed = await adapter._rights(request)
+        except DomainError:
+            continue
+        if peer_key(observed) != target:
+            raise DomainError("telegram_peer_mismatch")
+        rights.append(action)
+    return rights
