@@ -21,11 +21,12 @@ def chat():
 class Adapter:
     connection_id = "conn"
     account_type = "mtproto_user"
-    def __init__(self, response=None, allowed=True):
+    def __init__(self, response=None, allowed=True, allowed_actions=None):
         self.entity = chat()
         self.response = response or Already()
         self.response.chat = self.entity
         self.allowed = allowed
+        self.allowed_actions = set(allowed_actions or {"publish", "edit", "reschedule", "cancel", "delete", "forward"})
         self.calls = []
         self._entity_cache = {}
     async def _call(self, kind, **kwargs):
@@ -35,7 +36,7 @@ class Adapter:
     async def _entity(self, target):
         return self.entity
     async def _rights(self, request):
-        if not self.allowed:
+        if not self.allowed or request.action not in self.allowed_actions:
             raise DomainError("provider_access_denied")
         assert request.native_target == "-123456"
         return self.entity
@@ -62,6 +63,7 @@ async def test_read_only_exact_resolution():
     adapter = Adapter()
     result = await resolve(adapter, URL)
     assert result["native_id"] == "-123456"
+    assert result["rights"] == ["publish", "edit", "reschedule", "cancel", "delete", "forward"]
     assert adapter.calls == ["check_invite"]
 
 @pytest.mark.asyncio
@@ -102,7 +104,14 @@ async def test_owner_worker_replay_no_join_no_duplicate_binding(tmp_path):
     await worker.run_once()
     with store.connection() as db:
         assert db.execute("SELECT count(*) FROM bindings").fetchone()[0] == 1
-        assert db.execute("SELECT rights FROM bindings").fetchone()[0] == '["publish"]'
+        assert db.execute("SELECT rights FROM bindings").fetchone()[0] == '["publish","edit","reschedule","cancel","delete","forward"]'
+
+@pytest.mark.asyncio
+async def test_resolution_grants_only_provider_verified_lifecycle_rights():
+    adapter = Adapter(allowed_actions={"publish", "delete"})
+    result = await resolve(adapter, URL)
+    assert result["rights"] == ["publish", "delete"]
+
 
 @pytest.mark.asyncio
 async def test_partner_cannot_discover(tmp_path):
