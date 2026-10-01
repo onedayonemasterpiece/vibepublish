@@ -27,7 +27,7 @@ def test_worker_unit_wires_existing_codex_task_imagegen_without_provider_drift()
         "--telegram-api-hash-key TELEGRAM_API_HASH",
         "--providers telegram vk",
         "--vk-env-file /home/dev/.env",
-        "--vk-token-key VK_USER_TOKEN1",
+        "--vk-token-key VK_USER_TOKEN2",
     ):
         assert required in text
     assert "OPENAI_API_KEY" not in text
