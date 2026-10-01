@@ -18,9 +18,60 @@ adds a VK resolver using the existing role-scoped transport/admin preflight. Dur
 bindings remain in the existing SQLite ledger; deploy source is no longer treated as
 the registry. VK Story is a separate native surface with exact provider readback.
 
-Source verification at this checkpoint: focused destination/Story/native suite
-`81 passed`. Production rollout/live post, Story, repost and restart persistence
-remain required before this incident is closed.
+Source verification progressed to the production interpreter full suite:
+`512 passed + 213 subtests` after the exact VK deletion-tombstone hardening.
+
+### Live acceptance — 2026-10-01
+
+**Accepted on production** from immutable release
+`c6387644bb339695d0bc0605f6aa45bfc724f320` at
+`/home/dev/.local/share/vibepublish/releases/c6387644bb339695d0bc0605f6aa45bfc724f320/source`.
+Server and worker use that same source via `WorkingDirectory` and `PYTHONPATH`;
+the existing social/OAuth SQLite paths and owner-selected provider credential
+mapping were retained.
+
+Exact owner VK resolve is provider-backed and durable:
+
+- `https://vk.com/kenigeventsofficial` -> `vk_027d33367c33ba2599ee`
+  (native `-231828790`, «Полюбить Калининград Анонсы»);
+- `https://vk.com/klgdevents` -> `vk_972b45c6f71c0f2a1fb9`
+  (native `-231920894`, «Полюбить Калининград Афиша»).
+
+Fresh repeated resolves reused the same aliases/revisions, and explicit
+server+worker restart preserved the registry and routing revision.
+
+A pre-existing VK connection quarantine exposed an additional provider behavior:
+after successful `wall.delete`, exact `wall.getById` may return a tombstone
+row with `is_deleted=true` rather than an empty response. Runtime now accepts
+that as deletion evidence only when both owner ID and wall-local post ID exactly
+match the requested item; mismatches fail closed. The original uncertain
+operation `op_b11a84ac7820416d95060476568f8f85` was resolved by observation
+only as `deleted`; `wall.delete` was not repeated. Final VK quarantine query
+returned no unresolved attempts.
+
+Live write/readback lifecycle evidence:
+
+- dual-target wall publication `op_83303c6db9eb48a48bec14e063e75df1`
+  verified `published` in both requested VK communities after explicit safe
+  retry of the original proven never-dispatched children;
+- cleanup `op_532e03e1e4b44a8da3904d230b908280` verified `deleted`
+  for both exact wall items;
+- Story `op_42b29474bf614a3895ab8354f5757bd8` in the «Афиша» community
+  verified `published` with `media_check=provider_binding`, and
+  `op_cabe41fae9b845cf9dfb4945cb725fe7` verified Story deletion;
+- native VK repost `op_2144ed323dda4ad7be1e1a47a8dc6d32`
+  verified `forward_origin.origin_check=matched`; cleanup
+  `op_697d0ea9ebd24325af714deb1c949d55` verified deletion;
+- final bootstrap reports both requested VK destinations with wall-post and Story
+  capabilities `supported`.
+
+Telegram regression smoke used provider preflight preview
+`op_2ae3307e5eba4ffaa971238bcfd47b87`: it completed as a dry-run approval gate
+with **no provider mutation**, proving the configured Telegram target/publish path
+still preflights after the VK changes. A separate Telegram feed read encountered
+the existing strict `telegram_media_needs_review` gate on historical media; this
+is recorded as an independent read-compatibility limitation, not as evidence of a
+failed Telegram publish path.
 
 ### Telegram provider-inferred passive entities — 2026-09-27
 
