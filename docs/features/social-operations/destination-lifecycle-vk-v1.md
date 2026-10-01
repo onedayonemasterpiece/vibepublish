@@ -2,7 +2,7 @@
 
 Date: 2026-10-01. Contract: `1.7.0-runtime`.
 
-Status at source checkpoint: implementation and offline regressions complete; production rollout and live acceptance are a separate gate recorded in [runtime status](../../operations/social-runtime.md).
+Status: **production accepted on 2026-10-01**. Canonical live evidence is recorded in [runtime status](../../operations/social-runtime.md). The accepted immutable runtime release is `c6387644bb339695d0bc0605f6aa45bfc724f320`; both requested VK destinations survived explicit service restart, wall post/readback/delete passed for both, VK Story/readback/delete passed, native repost attribution/readback/delete passed, and the final VK quarantine set was empty.
 
 This document is the canonical contract for destination discovery/persistence and the first native VK Story surface. It extends the existing [MCP contract](mcp-contract-v1.md) and [native forwarding/editorial profiles](forwarding-and-editorial-profiles-v1.md) without adding a new top-level MCP tool.
 
@@ -179,3 +179,25 @@ A release is product-ready for this change only after all of the following are o
 - the deployed release identity is recorded in runtime evidence.
 
 Do not mark the live gate complete from source tests alone.
+
+### Accepted live evidence
+
+The 2026-10-01 acceptance satisfied this gate with the following durable operation
+evidence:
+
+- destination URL resolution was repeated for both owner communities and reused
+  the same aliases/revisions;
+- a server+worker restart retained those aliases from the same persistent ledger;
+- `op_83303c6db9eb48a48bec14e063e75df1` published to both VK targets with
+  exact readback, and `op_532e03e1e4b44a8da3904d230b908280` deleted both;
+- `op_42b29474bf614a3895ab8354f5757bd8` published the Story with provider
+  media binding and `op_cabe41fae9b845cf9dfb4945cb725fe7` deleted it;
+- `op_2144ed323dda4ad7be1e1a47a8dc6d32` performed a native repost with
+  matched origin attribution and `op_697d0ea9ebd24325af714deb1c949d55` deleted it;
+- the historical `wall.delete` uncertainty was reconciled from an exact
+  `is_deleted=true` tombstone without repeating the delete;
+- final `get_started` reported post and Story `supported` on both requested
+  VK destinations and the unresolved VK quarantine query returned an empty set.
+
+Source verification immediately before the accepted rollout was
+`512 passed + 213 subtests` on the production interpreter.
