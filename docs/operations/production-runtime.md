@@ -34,9 +34,12 @@ explicit existing `--vk-env-file` and `--vk-token-key`; no token guessing or
 fallback is performed. This capability is not evidence of VK connectivity:
 [VK recovery acceptance](../reports/incidents/INC-2026-09-19-vk-recovery.md)
 records the completed provider-backed read acceptance separately from publication
-acceptance. On this host VK uses `/home/dev/.env:VK_USER_TOKEN1`, selected after
-read-only verification against the historically used account and `lovekenig`
-group. `VK_USER_TOKEN2` also passed those checks but is not an automatic fallback.
+acceptance. The current owner-selected production mapping uses
+`/home/dev/.env:VK_USER_TOKEN2`. This key name is part of the deployed
+configuration contract: recovery/install tooling must preserve it and must not
+silently fall back to `VK_USER_TOKEN1` or another credential. Changing the
+selected credential requires an explicit owner decision and fresh provider
+verification.
 
 The DevCoveer2 `vibepublish-worker.service` runs the existing production worker
 with the following arguments (paths and variable names only, never secrets):
@@ -49,7 +52,7 @@ with the following arguments (paths and variable names only, never secrets):
 --telegram-api-hash-key TELEGRAM_API_HASH
 --providers telegram vk
 --vk-env-file /home/dev/.env
---vk-token-key VK_USER_TOKEN1
+--vk-token-key VK_USER_TOKEN2
 --codex-task-artifacts /home/dev/.local/state/vibepublish/imagegen
 ```
 
