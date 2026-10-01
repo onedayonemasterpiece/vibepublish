@@ -69,7 +69,7 @@ async def process(worker, op, actor):
                 if provider == "telegram":
                     from adapters.telegram_discovery import resolve
                     evidence = await resolve(adapter, args["command"]["url"])
-                    rights = ["publish"]
+                    rights = evidence["rights"]
                 else:
                     from adapters.vk_discovery import resolve
                     evidence = await resolve(adapter, args["command"])
