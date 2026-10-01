@@ -157,10 +157,13 @@ class TelegramClient:
 class VKTransport:
     def __init__(self):
         self.calls, self.effects, self.uploads = [], 0, []
-        self.groups = {101: {'id': 101, 'is_admin': 1, 'admin_level': 3, 'is_closed': 0},
-                       202: {'id': 202, 'is_admin': 0, 'admin_level': 0, 'is_closed': 0}}
-        self.posts = {}
-        self.next_id, self.next_photo = 10, 1000
+        self.groups = {101: {'id': 101, 'is_admin': 1, 'admin_level': 3, 'is_closed': 0,
+                             'screen_name': 'fixture_group', 'name': 'Fixture group'},
+                       202: {'id': 202, 'is_admin': 0, 'admin_level': 0, 'is_closed': 0,
+                             'screen_name': 'readonly_group', 'name': 'Readonly group'}}
+        self.posts, self.stories = {}, {}
+        self.next_id, self.next_photo, self.next_story = 10, 1000, 5000
+        self.pending_story_group = None
         self.denied = set()
         self.before_mutation = None
         self.after_mutation = None
@@ -176,15 +179,40 @@ class VKTransport:
         self.calls.append(('upload_photo', 'media', {'mime': mime, 'size': len(data)}))
         return {'server': 100, 'photo': '[fixture]', 'hash': 'upload-private-fixture'}
 
+    async def upload_story_photo(self, url, data, mime):
+        assert url == 'https://pu.vk.com/story-upload?fixture=1'
+        self.uploads.append(data)
+        self.calls.append(('upload_story_photo', 'media', {'mime': mime, 'size': len(data)}))
+        return 'fixture-story-upload-result'
+
     async def invoke(self, *, role, method, params):
         policy = POLICIES[method]
         assert role_allowed(role, method) and policy[1] <= params.keys() and params.keys() <= policy[2]
         assert (role, method) not in self.denied
         self.calls.append((method, role, copy.deepcopy(params)))
         if method == 'groups.getById':
-            return {'groups': [copy.deepcopy(self.groups[int(params['group_ids'])])]}
+            selector = str(params['group_ids'])
+            if selector.isdecimal():
+                group = self.groups[int(selector)]
+            else:
+                group = next(value for value in self.groups.values() if value.get('screen_name') == selector)
+            return {'groups': [copy.deepcopy(group)]}
         if method == 'photos.getWallUploadServer':
             return {'upload_url': 'https://pu.vk.com/upload?fixture=1'}
+        if method == 'stories.getPhotoUploadServer':
+            self.pending_story_group = params['group_id']
+            return {'upload_url': 'https://pu.vk.com/story-upload?fixture=1', 'user_ids': []}
+        if method == 'stories.getById':
+            if self.fail_read:
+                raise OSError('fixture read failure')
+            refs = params['stories'] if isinstance(params['stories'], (list, tuple)) else str(params['stories']).split(',')
+            rows = []
+            for ref in refs:
+                owner, ident = map(int, str(ref).split('_'))
+                story = self.stories.get((owner, ident))
+                if story is not None:
+                    rows.append(copy.deepcopy(story))
+            return {'count': len(rows), 'items': rows}
         if method == 'photos.saveWallPhoto':
             self.next_photo += 1
             return [{'id': self.next_photo, 'owner_id': -params['group_id'], 'access_key': 'private_fixture_key'}]
@@ -234,6 +262,21 @@ class VKTransport:
             result = 1
         elif method == 'wall.delete':
             self.posts.pop((params['owner_id'], params['post_id']), None)
+            result = 1
+        elif method == 'stories.save':
+            assert self.pending_story_group is not None
+            values = params['upload_results']
+            assert values == ['fixture-story-upload-result']
+            self.next_story += 1
+            self.next_photo += 1
+            owner = -self.pending_story_group
+            story = {'id': self.next_story, 'owner_id': owner, 'date': 1_800_000_000,
+                     'expires_at': 1_800_086_400, 'is_deleted': False, 'is_expired': False,
+                     'photo': {'owner_id': owner, 'id': self.next_photo}}
+            self.stories[(owner, self.next_story)] = story
+            result = {'count': 1, 'items': [copy.deepcopy(story)]}
+        elif method == 'stories.delete':
+            self.stories.pop((params['owner_id'], params['story_id']), None)
             result = 1
         else:
             raise AssertionError('Unexpected native call: ' + method)

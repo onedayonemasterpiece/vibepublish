@@ -29,10 +29,14 @@ POLICIES = {
     'wall.edit': ('editor', {'owner_id', 'post_id'}, {'owner_id', 'post_id', 'message', 'attachments', 'publish_date'}),
     'wall.delete': ('editor', {'owner_id', 'post_id'}, {'owner_id', 'post_id'}),
     'wall.repost': ('editor', {'object', 'group_id'}, {'object', 'group_id'}),
+    'stories.getPhotoUploadServer': ('media', {'group_id'}, {'group_id', 'add_to_news'}),
+    'stories.save': ('media', {'upload_results'}, {'upload_results', 'extended'}),
+    'stories.getById': ('reader', {'stories'}, {'stories', 'extended'}),
+    'stories.delete': ('editor', {'owner_id', 'story_id'}, {'owner_id', 'story_id'}),
 }
 
 
-READ_ROLES = {'groups.getById', 'wall.getById', 'wall.get', 'wall.search'}
+READ_ROLES = {'groups.getById', 'wall.getById', 'wall.get', 'wall.search', 'stories.getById'}
 
 
 def role_allowed(role: str, method: str) -> bool:
@@ -160,14 +164,26 @@ class VKHTTPTransport:
         # Recheck token constraints in the transport, not only adapter preflight.
         group_id = int(params.get('group_id') or abs(int(params.get('owner_id', 0))))
         if method == 'groups.getById':
-            group_id = int(params['group_ids'])
+            selector = str(params['group_ids'])
+            group_id = int(selector) if selector.isdecimal() else (token.group_id or 0)
         if method == 'wall.getById':
             group_id = abs(int(str(params['posts']).split('_')[0]))
+        if method == 'stories.getById':
+            stories = params['stories']
+            first = stories[0] if isinstance(stories, (list, tuple)) else str(stories).split(',')[0]
+            group_id = abs(int(str(first).split('_')[0]))
+        if method == 'stories.save':
+            group_id = token.group_id or 0
         if not self.permits(role, method, group_id=group_id, scheduled='publish_date' in params):
             raise DomainError('vk_token_role_not_permitted')
         try:
+            wire_params = {
+                key: ','.join(str(item) for item in value) if isinstance(value, (list, tuple))
+                else int(value) if isinstance(value, bool) else value
+                for key, value in params.items()
+            }
             response = await self._post('https://api.vk.com/method/' + method,
-                {**params, 'access_token': token.value, 'v': API_VERSION}, api=True)
+                {**wire_params, 'access_token': token.value, 'v': API_VERSION}, api=True)
         except DomainError:
             raise
         except Exception:
@@ -214,6 +230,27 @@ class VKHTTPTransport:
                 )
             raise DomainError('vk_upload_response_invalid', 'vk upload response invalid (' + detail + ')')
         return {k: response[k] for k in ('server', 'photo', 'hash')}
+
+    async def upload_story_photo(self, url: str, data: bytes, mime: str) -> str:
+        """Upload one verified image to a VK story upload server and return its opaque result."""
+        import aiohttp
+        if mime not in {'image/png', 'image/jpeg', 'image/webp'} or not data or len(data) > 10 * 1024 * 1024:
+            raise DomainError('vk_story_media_invalid')
+        form = aiohttp.FormData()
+        form.add_field('file', data, filename='story.' + {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}[mime], content_type=mime)
+        try:
+            response = await self._post(url, form)
+        except DomainError:
+            raise
+        except Exception:
+            raise DomainError('vk_story_upload_failed') from None
+        if isinstance(response, dict) and isinstance(response.get('response'), dict):
+            response = response['response']
+        upload_result = response.get('upload_result') if isinstance(response, dict) else None
+        if (not isinstance(upload_result, str) or not 1 <= len(upload_result) <= 65536
+                or (isinstance(response, dict) and 'error' in response)):
+            raise DomainError('vk_story_upload_response_invalid')
+        return upload_result
 
     async def image_fingerprint(self, url: str) -> dict:
         """Read provider rendition bytes without forwarding credentials or URLs."""

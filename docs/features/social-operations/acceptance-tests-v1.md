@@ -79,6 +79,23 @@ The separate [MAX handoff](../../handoffs/max-web-codex-20260904.md) owns M01-M1
 
 Critical combined scenario: start one core operation for three providers, make MAX wait inside a controlled browser fixture, and observe real MCP status output for Telegram/VK before releasing MAX. Then kill/restart the worker after MAX submit and prove the same operation is reconciled without another click.
 
+## Destination lifecycle and VK Story regressions — 2026-10-01
+
+Required executable coverage for contract 1.7:
+
+- VK exact resolve by URL handle and numeric ID;
+- repeated resolve reuses one destination/binding;
+- unauthorized group and missing publish transport permission fail before binding;
+- provider mismatch fails closed;
+- revoked binding is not reactivated by resolve;
+- persisted binding survives Store reopen / worker restart / deployment restart;
+- Telegram exact resolve remains green;
+- VK Story one-photo publish uses the native Story methods and exact readback;
+- Story item_ref deletion preserves `surface=story` and verifies provider absence;
+- post and Story capabilities are evidenced independently;
+- native VK repost retains the existing attribution/readback regression;
+- URL-handle lookup must not be coerced to an integer inside the VK transport.
+
 ## Live evidence gates
 
 L01: independently configured Telegram/VK write + media readback. L02: native scheduling verified in provider UI/queue. L03: stop every VibePublish process before due time, then observe publication at the provider (external observer/manual fixture account); service restart must not send it. L04: edit/reschedule/cancel existing native item. L05: protected/unauthorized source denied. L06: native forward/repost origin observed. L07: MAX profile/account/queue behavior verified live. L08: actual imagegen artifact return. These are targeted test destinations approved by the owner, not public marketing channels selected by the agent.

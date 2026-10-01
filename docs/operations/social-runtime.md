@@ -2,6 +2,26 @@
 
 Status: **Not confirmed by user / partial acceptance**. Keep release/full CI unaccepted.
 
+## VK destination lifecycle incident — 2026-10-01
+
+Incident: `inc_e210e168b3ca1ac45e7a8d02`.
+
+Observed production runtime `1.6.2-runtime-telegram-media-database` was a
+`group-discovery-20260929-v2` release overlay. Telegram exact resolve was wired
+through `destination_resolution.py`, but that implementation explicitly rejected
+every provider except Telegram; canonical `origin/main` also still rejected
+`resolve/search`. This created a product split where Telegram destinations could
+be discovered/persisted while VK returned `capability_not_implemented`.
+
+The 1.7 source correction moves exact resolve to one provider-neutral lifecycle and
+adds a VK resolver using the existing role-scoped transport/admin preflight. Durable
+bindings remain in the existing SQLite ledger; deploy source is no longer treated as
+the registry. VK Story is a separate native surface with exact provider readback.
+
+Source verification at this checkpoint: focused destination/Story/native suite
+`81 passed`. Production rollout/live post, Story, repost and restart persistence
+remain required before this incident is closed.
+
 ### Telegram provider-inferred passive entities — 2026-09-27
 
 Telegram may infer passive span entities from otherwise plain text, including

@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.6.2-runtime"
+VERSION = "1.7.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -345,6 +345,18 @@ tool("destinations", "List allowed aliases, update personal purpose/notes/primar
             ("alias", "label", "expected_revision"))]}, "request_key": KEY}, ("command",)),
     ref("receipt"), "destinations")
 
+# Exact discovery accepts one explicit URL or one provider-native ID. It never
+# turns discovery into account-wide enumeration.
+_destination_resolve = next(
+    branch for branch in TOOLS[-1]["inputSchema"]["properties"]["command"]["oneOf"]
+    if branch["properties"]["kind"].get("const") == "resolve"
+)
+_destination_resolve["required"] = ["kind", "provider"]
+_destination_resolve["properties"]["provider_id"] = string(20, pattern=r"^-?[1-9][0-9]{0,18}$")
+_destination_resolve["oneOf"] = [
+    {"required": ["url"], "not": {"required": ["provider_id"]}},
+    {"required": ["provider_id"], "not": {"required": ["url"]}},
+]
 
 
 # Telegram palette extensions keep the publication methods and closed grammar.

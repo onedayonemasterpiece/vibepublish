@@ -62,11 +62,17 @@ class VKAdapter:
             raise DomainError('vk_group_identity_mismatch')
         if self.account_type == 'vk_user' and (groups[0].get('is_admin') != 1 or groups[0].get('admin_level', 0) < 2):
             raise DomainError('provider_access_denied')
-        methods = {'publish': ['wall.post'], 'forward': ['wall.repost'], 'edit': ['wall.edit'],
-                   'reschedule': ['wall.edit'], 'cancel': ['wall.delete'], 'delete': ['wall.delete']}[request.action]
-        methods += ['wall.get' if request.scheduled_at or (request.existing and request.existing.namespace == 'scheduled') else 'wall.getById']
-        if request.assets:
-            methods += ['photos.getWallUploadServer', 'photos.saveWallPhoto']
+        if request.surface == 'story':
+            methods = {'publish': ['stories.getPhotoUploadServer', 'stories.save', 'stories.getById'],
+                       'delete': ['stories.delete', 'stories.getById']}.get(request.action)
+            if methods is None:
+                raise DomainError('vk_story_action_unsupported')
+        else:
+            methods = {'publish': ['wall.post'], 'forward': ['wall.repost'], 'edit': ['wall.edit'],
+                       'reschedule': ['wall.edit'], 'cancel': ['wall.delete'], 'delete': ['wall.delete']}[request.action]
+            methods += ['wall.get' if request.scheduled_at or (request.existing and request.existing.namespace == 'scheduled') else 'wall.getById']
+            if request.assets:
+                methods += ['photos.getWallUploadServer', 'photos.saveWallPhoto']
         for method in methods:
             if not self.transport.permits(POLICIES[method][0], method, group_id=group, scheduled=bool(request.scheduled_at)):
                 raise DomainError('vk_token_role_not_permitted', next_action='contact_owner')
@@ -74,33 +80,51 @@ class VKAdapter:
 
     async def inspect(self, request: ProviderRequest) -> Capability:
         try:
-            if request.surface != 'post':
+            if request.surface not in {'post', 'story'}:
                 raise DomainError('vk_surface_needs_review')
-            if request.action not in {'publish', 'forward', 'edit', 'reschedule', 'cancel', 'delete'}:
+            if request.surface == 'story':
+                if request.action not in {'publish', 'delete'}:
+                    raise DomainError('vk_story_action_unsupported')
+                if request.scheduled_at or request.source:
+                    raise DomainError('vk_story_native_schedule_or_forward_unsupported')
+                if request.action == 'publish':
+                    if plain_text(request, limit=16000).strip():
+                        raise DomainError('vk_story_text_unsupported')
+                    if (len(request.assets) != 1
+                            or request.assets[0].mime not in {'image/png', 'image/jpeg', 'image/webp'}
+                            or request.assets[0].size > 10 * 1024 * 1024):
+                        raise DomainError('vk_story_media_invalid')
+                if request.existing:
+                    if request.existing.native_target != request.native_target or request.existing.namespace != 'story':
+                        raise DomainError('vk_story_target_mismatch')
+                elif request.action != 'publish':
+                    raise DomainError('remote_item_required')
+            elif request.action not in {'publish', 'forward', 'edit', 'reschedule', 'cancel', 'delete'}:
                 raise DomainError('vk_action_unsupported')
-            if request.action == 'forward' and request.scheduled_at:
+            if request.surface == 'post' and request.action == 'forward' and request.scheduled_at:
                 raise DomainError('vk_scheduled_repost_unsupported')
-            if request.source and request.selection == 'message':
+            if request.surface == 'post' and request.source and request.selection == 'message':
                 raise DomainError('vk_wall_repost_is_whole_post')
             plain_text(request, limit=16000)
             verify_assets(request)
             schedule_guard(request, self.clock())
-            if request.scheduled_at and parse_time(request.scheduled_at) % 60:
+            if request.surface == 'post' and request.scheduled_at and parse_time(request.scheduled_at) % 60:
                 raise DomainError('vk_schedule_minute_precision',
                                   'VK scheduled lifecycle requires a whole minute; specify HH:MM')
             await self._rights(request)
-            if request.existing:
-                existing = request.existing
-                if existing.native_target != request.native_target:
-                    raise DomainError('remote_target_mismatch')
-                if existing.namespace not in {'published', 'scheduled'}:
-                    raise DomainError('vk_namespace_unsupported')
-                if request.action in {'reschedule', 'cancel'} and existing.namespace != 'scheduled':
-                    raise DomainError('native_queue_item_required')
-                if request.action == 'delete' and existing.namespace != 'published':
-                    raise DomainError('delete_requires_published')
-            elif request.action not in {'publish', 'forward'}:
-                raise DomainError('remote_item_required')
+            if request.surface == 'post':
+                if request.existing:
+                    existing = request.existing
+                    if existing.native_target != request.native_target:
+                        raise DomainError('remote_target_mismatch')
+                    if existing.namespace not in {'published', 'scheduled'}:
+                        raise DomainError('vk_namespace_unsupported')
+                    if request.action in {'reschedule', 'cancel'} and existing.namespace != 'scheduled':
+                        raise DomainError('native_queue_item_required')
+                    if request.action == 'delete' and existing.namespace != 'published':
+                        raise DomainError('delete_requires_published')
+                elif request.action not in {'publish', 'forward'}:
+                    raise DomainError('remote_item_required')
         except DomainError as exc:
             return Capability('unsupported', exc.code, evidence='not_canary_verified')
         return Capability('supported', 'Scoped token-role/target preflight; live canary not performed', evidence='provider_read_preflight_only')
@@ -164,6 +188,35 @@ class VKAdapter:
                           member_ids=(str(ident),), metrics=metrics,
                           url=f'https://vk.ru/wall{target}_{ident}' if namespace == 'published' else None)
         return replace(item, fingerprint=identity(item))
+
+    def _story_item(self, raw, target):
+        owner, ident = _int(raw.get('owner_id')), _int(raw.get('id'))
+        if str(owner) != target or ident <= 0:
+            raise DomainError('vk_story_read_target_mismatch')
+        if raw.get('is_deleted') or raw.get('is_expired'):
+            return None
+        photo = raw.get('photo')
+        provider_media = f'story{target}_{ident}'
+        if isinstance(photo, dict) and type(photo.get('owner_id')) is int and type(photo.get('id')) is int:
+            provider_media = f"photo{photo['owner_id']}_{photo['id']}"
+        item = RemoteItem(
+            str(ident), 'story', '', '', timestamp(self.clock()),
+            native_target=target, provider_media=(provider_media,), member_ids=(str(ident),),
+            url=f'https://vk.com/story{target}_{ident}',
+        )
+        return replace(item, fingerprint=identity(item))
+
+    async def _story_exact(self, target, ident):
+        response = await self._call('stories.getById', stories=[f'{target}_{ident}'], extended=0)
+        rows = _items(response)
+        if not rows:
+            return None
+        if len(rows) != 1:
+            raise DomainError('vk_story_readback_identity_mismatch')
+        item = self._story_item(rows[0], target)
+        if item is not None and item.native_id != str(ident):
+            raise DomainError('vk_story_readback_identity_mismatch')
+        return item
 
     async def _queue(self, target, *, include_raw=False):
         # A bounded complete read; never report absence from an incomplete page.
@@ -339,7 +392,9 @@ class VKAdapter:
             raise DomainError(capability.reason, next_action='contact_owner')
         state = {}
         if request.existing:
-            observed = await self._exact(request.native_target, request.existing.native_id, request.existing.namespace)
+            observed = (await self._story_exact(request.native_target, request.existing.native_id)
+                        if request.surface == 'story'
+                        else await self._exact(request.native_target, request.existing.native_id, request.existing.namespace))
             if observed is None:
                 raise DomainError('remote_item_missing', next_action='refresh')
             same_existing(request.existing, observed)
@@ -351,6 +406,8 @@ class VKAdapter:
         r = prepared.request
         group = await self._rights(r)
         state = json.loads(prepared.state_json)
+        if r.surface == 'story':
+            return await self._execute_story(r, group, hooks)
         if r.existing:
             observed = await self._exact(r.native_target, r.existing.native_id, r.existing.namespace)
             if observed is None:
@@ -437,6 +494,58 @@ class VKAdapter:
             raise OutcomeUnknown('vk_mutation_acknowledgement_missing')
         await hooks.checkpoint('vk_response', saved_checkpoint(r, **checkpoint))
         return await self._observe(r, checkpoint, hooks)
+
+    async def _execute_story(self, r, group, hooks):
+        if r.existing:
+            observed = await self._story_exact(r.native_target, r.existing.native_id)
+            if observed is None:
+                raise DomainError('remote_item_missing', next_action='refresh')
+            same_existing(r.existing, observed)
+        checkpoint = {'id': r.existing.native_id if r.existing else None, 'media': []}
+        if r.action == 'publish':
+            asset = r.assets[0]
+            await hooks.emit_progress('uploading', 'started', 'Staging VK Story image')
+            server = await self._call('stories.getPhotoUploadServer', group_id=group)
+            if not isinstance(server, dict) or not isinstance(server.get('upload_url'), str):
+                raise DomainError('vk_story_upload_server_invalid')
+            validated_url(server['upload_url'])
+            upload_result = await self.transport.upload_story_photo(server['upload_url'], asset.data, asset.mime)
+            await hooks.checkpoint('vk_story_prepared', saved_checkpoint(r, **checkpoint))
+            await hooks.before_effect(r.attempt_id, r.plan_digest)
+            response = await self._call('stories.save', upload_results=[upload_result], extended=0)
+            rows = _items(response)
+            if len(rows) != 1:
+                raise OutcomeUnknown('vk_story_response_identity_missing')
+            item = self._story_item(rows[0], r.native_target)
+            if item is None:
+                raise OutcomeUnknown('vk_story_response_identity_missing')
+            checkpoint['id'] = item.native_id
+            checkpoint['media'] = list(item.provider_media)
+        else:
+            await hooks.checkpoint('vk_story_prepared', saved_checkpoint(r, **checkpoint))
+            await hooks.before_effect(r.attempt_id, r.plan_digest)
+            response = await self._call(
+                'stories.delete', owner_id=int(r.native_target), story_id=int(r.existing.native_id)
+            )
+            if response != 1:
+                raise OutcomeUnknown('vk_story_mutation_acknowledgement_missing')
+        await hooks.checkpoint('vk_story_response', saved_checkpoint(r, **checkpoint))
+        return await self._observe_story(r, checkpoint, hooks)
+
+    async def _observe_story(self, r, checkpoint, hooks):
+        await hooks.emit_progress('reading_back', 'started', 'Reading exact VK Story identity')
+        if not checkpoint.get('id'):
+            raise OutcomeUnknown('vk_story_response_identity_missing')
+        item = await self._story_exact(r.native_target, checkpoint['id'])
+        if r.action == 'delete':
+            if item is not None:
+                raise OutcomeUnknown('vk_story_deletion_unconfirmed')
+            return Observation('deleted', (replace(r.existing, observed_at=timestamp(self.clock())),))
+        if item is None:
+            raise OutcomeUnknown('vk_story_readback_missing')
+        if tuple(checkpoint.get('media') or ()) != item.provider_media:
+            raise OutcomeUnknown('vk_story_media_binding_mismatch')
+        return Observation('published', (bind_media(r, item, list(item.provider_media)),))
 
     async def _observe(self, r, checkpoint, hooks):
         await hooks.emit_progress('reading_back', 'started', 'Reading exact VK wall or postponed queue identity')

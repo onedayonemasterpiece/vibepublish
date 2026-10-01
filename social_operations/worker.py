@@ -396,7 +396,7 @@ class Worker:
                 raise OutcomeUnknown('native_schedule_not_observed')
         elif observation.observed not in ({'published', 'edited'} if action == 'edit' else {'published'}):
             raise OutcomeUnknown('publication_outcome_mismatch')
-        elif remote.namespace != 'published':
+        elif remote.namespace != ('story' if plan.get('surface') == 'story' else 'published'):
             raise OutcomeUnknown('published_namespace_mismatch')
         if action in ('reply','react'):
             subject=plan.get('subject')
