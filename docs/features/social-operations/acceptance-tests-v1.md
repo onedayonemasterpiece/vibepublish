@@ -94,7 +94,7 @@ Required executable coverage for contract 1.7:
 - Story item_ref deletion preserves `surface=story` and verifies provider absence;
 - post and Story capabilities are evidenced independently;
 - native VK repost retains the existing attribution/readback regression;
-- VK `wall.delete` readback accepts exact `is_deleted=true` tombstones as deletion evidence and never retries the delete;
+- VK `wall.delete` readback accepts `is_deleted=true` tombstones only when owner/id exactly match the requested wall item; mismatches fail closed and the delete is never retried;
 - URL-handle lookup must not be coerced to an integer inside the VK transport.
 
 ## Live evidence gates
