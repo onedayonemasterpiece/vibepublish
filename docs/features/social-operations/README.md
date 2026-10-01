@@ -1,11 +1,14 @@
 # VibePublish Social Operations
 
+Current destination lifecycle correction: [VK/Telegram durable destination lifecycle and VK Stories](destination-lifecycle-vk-v1.md).
+Telegram-specific discovery history remains in [Telegram destination discovery](telegram-destination-discovery.md).
+
 > Current remote delivery: **partial, not a runnable release**. The implemented
 > behavior and historical test counts below describe the complete archived source.
 > Three production modules remain undelivered; current evidence and exact boundaries
 > are in [runtime status](../../operations/social-runtime.md).
 
-Current bounded runtime contract/skill: **1.5.0-runtime**, eight tools unchanged.
+Current bounded runtime contract/skill: **1.7.0-runtime**, eight tools unchanged.
 [Telegram custom emoji](telegram-custom-emoji-v1.md) now has private catalogs,
 numbered visual selection, frozen aliases/rules and semantic native entities.
 This is offline implementation, **Not confirmed by user**, not a live Telegram

@@ -140,6 +140,10 @@ class Worker:
                 from .unknown_resolution import run_resolution
                 await run_resolution(self, op, actor)
                 return True
+            if op['action'] == 'destinations':
+                from .destination_resolution import process
+                await process(self, op, actor)
+                return True
             if op['action'] == 'read':
                 await self.run_read(op, actor)
                 return True
@@ -392,7 +396,7 @@ class Worker:
                 raise OutcomeUnknown('native_schedule_not_observed')
         elif observation.observed not in ({'published', 'edited'} if action == 'edit' else {'published'}):
             raise OutcomeUnknown('publication_outcome_mismatch')
-        elif remote.namespace != 'published':
+        elif remote.namespace != ('story' if plan.get('surface') == 'story' else 'published'):
             raise OutcomeUnknown('published_namespace_mismatch')
         if action in ('reply','react'):
             subject=plan.get('subject')

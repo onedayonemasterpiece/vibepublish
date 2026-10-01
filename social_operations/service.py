@@ -237,6 +237,32 @@ class Application:
                 return True
         return False
 
+    def _recent_verified_capability(self, db, actor, binding, surface):
+        """Durable provider-readback proof for the current binding epoch."""
+        rows = db.execute(
+            """SELECT a.plan,a.observed FROM attempts a
+               JOIN operations o ON o.id=a.operation_id
+               WHERE a.binding_id=? AND a.binding_epoch=?
+                 AND a.state IN ('verified','scheduled')
+                 AND a.observed IN ('published','provider_scheduled')
+                 AND o.tenant_id=? AND o.principal_id=? AND o.actor_epoch=?
+                 AND o.action='publish' AND o.error IS NULL
+                 AND o.created>=?
+               ORDER BY o.created DESC LIMIT 16""",
+            (binding['id'], binding['epoch'], actor.tenant_id, actor.principal_id,
+             actor.epoch, self.store.clock()-30*86400),
+        ).fetchall()
+        for row in rows:
+            try:
+                plan = json.loads(row['plan'])
+            except (TypeError, ValueError):
+                continue
+            if (plan.get('provider') == binding['provider']
+                    and plan.get('action') == 'publish'
+                    and plan.get('surface', 'post') == surface):
+                return True
+        return False
+
     def bootstrap(self, actor, args):
         skill = SKILL.read_text()
         if args.get('section') == 'emoji':
@@ -248,7 +274,7 @@ class Application:
             all_dest = self.aliases(db, actor)
             page = all_dest[offset:offset+50]
             bindings = {r['alias']: r for r in self.store.bindings(db, actor)}
-            result = {'version': '1.6.2-runtime-telegram-media-database', 'schema_version': VERSION,
+            result = {'version': '1.7.0-runtime-vk-destinations-stories', 'schema_version': VERSION,
                       'skill_sha256': hashlib.sha256(skill.encode()).hexdigest(), 'skill': skill,
                       'estimated_tokens': (len(skill) + 2)//3, 'server_time': timestamp(self.store.clock()),
                       'timezone': actor.timezone, 'policy_epoch': actor.epoch, 'routing_revision': actor.routing_revision,
@@ -258,17 +284,23 @@ class Application:
             for d in page:
                 row = bindings.get(d['alias'])
                 if row:
-                    preview_verified = self._recent_preview_preflight(db, actor, row)
-                    if preview_verified:
-                        status = 'supported'
-                        reason = 'Recent preview completed Telegram provider/target preflight without provider dispatch'
-                    else:
-                        status = 'needs_review' if row['account_type'] in {'fake','mtproto_user','mtproto_bot','vk_user','vk_group'} else 'needs_auth'
-                        reason = 'Offline fixture only; no live capability verified' if row['account_type'] == 'fake' else 'Native implementation requires explicit worker wiring and target preflight; no live canary verified'
-                    result['capabilities'].append({'destination': row['alias'], 'operation': 'publish', 'surface': 'post',
-                        'status': status,
-                        'observed_at': timestamp(self.store.clock()),
-                        'reason': reason})
+                    surfaces = ('post', 'story') if row['provider'] == 'vk' else ('post',)
+                    for surface in surfaces:
+                        live_verified = self._recent_verified_capability(db, actor, row, surface)
+                        preview_verified = surface == 'post' and self._recent_preview_preflight(db, actor, row)
+                        if live_verified:
+                            status = 'supported'
+                            reason = 'Recent provider mutation was confirmed by exact provider readback for this binding epoch'
+                        elif preview_verified:
+                            status = 'supported'
+                            reason = 'Recent preview completed Telegram provider/target preflight without provider dispatch'
+                        else:
+                            status = 'needs_review' if row['account_type'] in {'fake','mtproto_user','mtproto_bot','vk_user','vk_group'} else 'needs_auth'
+                            reason = 'Offline fixture only; no live capability verified' if row['account_type'] == 'fake' else 'Native implementation requires explicit target preflight; no recent live readback verified'
+                        result['capabilities'].append({'destination': row['alias'], 'operation': 'publish', 'surface': surface,
+                            'status': status,
+                            'observed_at': timestamp(self.store.clock()),
+                            'reason': reason})
             if offset+50 < len(all_dest):
                 result['next_cursor'] = self.store.cursor(db, actor, 'bootstrap', scope, offset+50)
             return result
@@ -563,17 +595,20 @@ class Application:
         change, kind = args['change'], args['change']['kind']
         if kind not in {'edit', 'reschedule', 'cancel', 'delete'}:
             raise DomainError('native_item_change_unsupported')
-        if remote['namespace'] not in {'scheduled', 'published'}:
+        if remote['namespace'] not in {'scheduled', 'published', 'story'}:
             raise DomainError('native_item_not_active', next_action='refresh')
         if kind in {'cancel', 'reschedule'} and remote['namespace'] != 'scheduled':
             raise DomainError('native_queue_item_required')
-        if kind == 'delete' and remote['namespace'] != 'published':
+        if remote['namespace'] == 'story' and kind != 'delete':
+            raise DomainError('vk_story_item_change_unsupported')
+        if kind == 'delete' and remote['namespace'] not in {'published', 'story'}:
             raise DomainError('delete_requires_published')
         if remote.get('origin') and kind in {'edit', 'reschedule'}:
             raise DomainError('forward_lifecycle_not_enabled', next_action='contact_owner')
         if 'media' in change:
             raise DomainError('external_media_replace_needs_review', next_action='contact_owner')
-        target = {'content': {'text': remote['text']}, 'media': [], 'surface': 'post',
+        target = {'content': {'text': remote['text']}, 'media': [],
+                  'surface': 'story' if remote['namespace'] == 'story' else 'post',
                   'delivery': {'kind': 'at', 'at': remote['scheduled_at']} if remote.get('scheduled_at') else {'kind': 'now'}}
         if (b['provider'] == 'telegram' or (b['provider'] == 'max' and b['account_type'] == 'max_web')) and remote.get('entities_json', '[]') != '[]':
             target['content'] = {'text': remote['text'], 'format': 'telegram_entities' if b['provider'] == 'telegram' else 'max_entities', 'entities': json.loads(remote['entities_json'])}
@@ -673,7 +708,10 @@ class Application:
         action = command['kind']
         if action.startswith('emoji_'):
             return self.emojis.commands(db, actor, command, intent)
-        if action in ('resolve', 'search', 'rename_label'):
+        if action == 'resolve':
+            from .destination_resolution import admit
+            return admit(self, db, actor, command, intent)
+        if action in ('search', 'rename_label'):
             raise DomainError('capability_not_implemented', next_action='contact_owner')
         if action == 'profile_update':
             if command['alias'] not in {d['alias'] for d in self.aliases(db, actor)}:
@@ -779,7 +817,8 @@ class Application:
     def project_item(self, db, actor, binding, remote, *, source='provider', publication=None, media_assets=()):
         ref = new_id('item')
         db.execute('INSERT INTO item_refs VALUES(?,?,?,?,?,?,?,?)', (ref, actor.tenant_id, actor.principal_id, binding['id'], binding['epoch'], remote['native_id'], remote['namespace'], canonical(remote)))
-        item = {'ref': ref, 'kind': 'post', 'destination': binding['alias'], 'observed_at': remote['observed_at'],
+        item = {'ref': ref, 'kind': 'story' if remote['namespace'] == 'story' else 'post',
+                'destination': binding['alias'], 'observed_at': remote['observed_at'],
                 'source': source, 'freshness': 'current' if source == 'provider' else 'cached',
                 'origin': 'provider_client', 'publication_kind': 'forward' if remote.get('origin') else 'original'}
         if remote.get('entities_json', '[]') != '[]':

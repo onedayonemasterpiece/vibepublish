@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Generalize owner exact destination resolution from the Telegram-only overlay to a durable provider-neutral lifecycle; add fail-closed VK URL/ID resolution with provider admin/write preflight, stable persisted aliases, idempotent re-resolution and revoked-binding protection.
+- Add native VK community photo Stories through `surface=story` using `stories.getPhotoUploadServer` -> upload -> `stories.save` -> exact `stories.getById` readback, plus normal lifecycle deletion with readback.
+- Derive live capability status from current-binding-epoch provider readback evidence instead of permanently reporting `needs_review` after a verified canary.
+- Preserve Story namespace through core verification and `item_ref` lifecycle; keep ordinary VK wall post/repost invariants unchanged.
+
+- Implement owner-only provider-verified Telegram group/invite resolution and ordinary member posting; never join groups or grant partner access.
+
 - Treat VK wall-upload receipts with a positive server, valid hash, and empty `photo` as a transient upload-server response. Retry at most three times with a fresh upload server before `wall.post`; all other upload failures remain non-retried.
 - Bind a single VK community-wall photo copy after exact post/slot/owner readback without requiring byte-identical provider media. The narrow compatibility gate keeps MIME equal, one image edge exact, and the other edge within 80–100% of the verified pre-copy rendition; multi-image posts keep strict ordered proof.
 - Require the production worker's `PYTHONPATH` to point at the same immutable release source as `ExecStart` and `WorkingDirectory`, preventing adapters from silently importing an older installed package.

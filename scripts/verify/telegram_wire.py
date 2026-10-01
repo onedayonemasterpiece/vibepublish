@@ -39,6 +39,7 @@ def cases():
     album = [t.InputSingleMedia(media=media, random_id=11, message=TEXT, entities=entities),
              t.InputSingleMedia(media=media, random_id=12, message="", entities=[])]
     values = {
+        "check_invite": (f.messages.CheckChatInviteRequest, dict(hash="fixture_invite_hash")),
         "emoji_set": (f.messages.GetStickerSetRequest, dict(stickerset=t.InputStickerSetShortName(short_name="Fixture"), hash=0)),
         "emoji_documents": (f.messages.GetCustomEmojiDocumentsRequest, dict(document_id=[int(e["document_id"]) for e in ENTITY_SPECS])),
         "app_config": (f.help.GetAppConfigRequest, dict(hash=0)),

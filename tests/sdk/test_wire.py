@@ -19,7 +19,7 @@ def test_eight_byte_config_request_is_valid_native_tl():
 
 def test_all_actual_adapter_requests_and_custom_entities_roundtrip():
     result = verify(core=True)
-    assert len(result['requests']) == 16
+    assert len(result['requests']) == 17
     assert result['evidence'] == 'real_sdk_and_core_compiler'
     assert result['live_provider_verified'] is False
 
@@ -40,7 +40,7 @@ def test_original_sdk_entrypoint_now_checks_full_core():
     script = Path(__file__).parents[2]/'scripts/verify/telegram_sdk.py'
     result = subprocess.run([sys.executable, str(script)], check=True, capture_output=True, text=True, timeout=20)
     receipt = json.loads(result.stdout)
-    assert len(receipt['requests']) == 16
+    assert len(receipt['requests']) == 17
     assert receipt['native_entities'] == 3
     assert receipt['network_calls'] == 0
 
