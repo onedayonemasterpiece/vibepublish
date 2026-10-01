@@ -75,3 +75,19 @@ async def test_deleted_wall_tombstone_is_exact_absence():
     a = VKAdapter(Transport(), connection_id='connection')
     assert await a._exact('-101', '16', 'published') is None
     assert await a._exact_raw('-101', '16', 'published') is None
+
+
+@pytest.mark.asyncio
+async def test_deleted_wall_tombstone_must_match_exact_owner_and_id():
+    class Transport:
+        async def invoke(self, *, role, method, params):
+            assert method == 'wall.getById'
+            return {'items': [{
+                'id': 17, 'owner_id': -101, 'text': 'Пост удалён ',
+                'is_deleted': True,
+            }]}
+    a = VKAdapter(Transport(), connection_id='connection')
+    with pytest.raises(DomainError, match='identity'):
+        await a._exact('-101', '16', 'published')
+    with pytest.raises(DomainError, match='identity'):
+        await a._exact_raw('-101', '16', 'published')
