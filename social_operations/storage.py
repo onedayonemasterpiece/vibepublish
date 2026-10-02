@@ -156,7 +156,7 @@ class Store:
 
     def grant_binding_rights(self, owner: Actor, binding_id: str, rights):
         """Owner-only additive grant; never revokes epochs or clears quarantine."""
-        allowed={'publish','edit','reschedule','cancel','delete','forward','reply','react'}
+        allowed={'publish','edit','reschedule','cancel','delete','forward','reply','react','basic_group_schedule'}
         if not isinstance(rights,(list,tuple)) or not rights or any(r not in allowed for r in rights):
             raise DomainError('invalid_binding_rights')
         with self.tx() as db:

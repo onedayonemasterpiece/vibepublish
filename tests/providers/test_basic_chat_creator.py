@@ -134,7 +134,17 @@ async def test_other_group_actions_remain_gated(action):
 
 
 @pytest.mark.asyncio
-async def test_active_member_can_schedule_fresh_basic_group_post():
+async def test_basic_group_schedule_stays_gated_without_explicit_binding_right():
+    adapter, client, _ = setup()
+    r = publish(scheduled_at=timestamp(NOW + 3600))
+    capability = await adapter.inspect(r)
+    assert capability.status == 'unsupported'
+    assert capability.reason == 'telegram_group_mutations_needs_review'
+    assert client.effects == 0
+
+
+@pytest.mark.asyncio
+async def test_owner_authorized_active_member_can_schedule_fresh_basic_group_post():
     adapter, client, journal = setup(basic_chat(creator=False))
     client.permissions = obj(
         'Permissions',
@@ -144,7 +154,10 @@ async def test_active_member_can_schedule_fresh_basic_group_post():
         is_banned=False,
         has_left=False,
     )
-    r = publish(scheduled_at=timestamp(NOW + 3600))
+    r = publish(
+        scheduled_at=timestamp(NOW + 3600),
+        basic_group_schedule_authorized=True,
+    )
     assert (await adapter.inspect(r)).status == 'supported'
     prepared = await adapter.prepare(r, journal.hooks)
     result = await adapter.execute(prepared, journal.hooks)
