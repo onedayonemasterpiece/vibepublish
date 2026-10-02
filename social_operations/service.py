@@ -107,10 +107,13 @@ class Application:
             self._purge_media_store_assets(db)
         command = args['command']
         if command['kind'] == 'put':
-            return self.accept(actor, 'media_store', {
+            intent = {
                 'to': [command['to']], 'thread_ref': command['thread_ref'],
                 'content': command['content'], 'media': command['media'],
-                'request_key': args['request_key']})
+                'request_key': args['request_key']}
+            if command.get('origin') is not None:
+                intent['origin'] = command['origin']
+            return self.accept(actor, 'media_store', intent)
         get_ref = None
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
@@ -159,7 +162,9 @@ class Application:
 
     def _media_store_items(self, db, actor, *, publication_id=None, binding=None, topic=None, text=''):
         params = [actor.tenant_id, actor.principal_id]
-        sql = ("SELECT f.*,p.id AS entry_ref,p.revision FROM facts f JOIN publications p ON p.id=f.publication_id "
+        sql = ("SELECT f.*,p.id AS entry_ref,p.revision,r.intent AS revision_intent "
+               "FROM facts f JOIN publications p ON p.id=f.publication_id "
+               "JOIN revisions r ON r.publication_id=p.id AND r.revision=p.revision "
                "WHERE p.tenant_id=? AND p.principal_id=? AND p.kind='media_store'")
         if publication_id:
             sql += ' AND p.id=?'; params.append(publication_id)
@@ -183,12 +188,14 @@ class Application:
                     or not str(remote.get('reply_to_native_id', '')).isdigit()):
                 continue
             channel = native_target[4:]
+            origin = json.loads(row['revision_intent']).get('origin')
             output.append({'entry_ref': row['entry_ref'], 'text': row['text'],
                            'observed_at': remote['observed_at'], 'native_id': remote['native_id'],
                            'destination': item_binding['alias'],
                            'thread_ref': f"https://t.me/c/{channel}/{remote['reply_to_native_id']}",
                            'telegram_url': f"https://t.me/c/{channel}/{remote['native_id']}",
-                           'sha256': list(remote['media_hashes'])})
+                           'sha256': list(remote['media_hashes']),
+                           **({'origin': origin} if origin else {})})
         return output
 
     def aliases(self, db, actor):
