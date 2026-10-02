@@ -54,59 +54,35 @@ rights, approval, scheduling and unknown-outcome policy.
 
 ## Cross-service origin metadata — 2026-10-02
 
-Status: `Not confirmed by user` until the branch is merged and deployed.
-
-A media-store entry may carry an optional immutable `origin` record:
-
-```text
-system   stable originating service id, e.g. regional_knowledge
-ref      stable opaque URI owned by that service
-sha256   optional source-object digest
-```
-
-The origin is stored in the immutable media-store revision and is projected by
-`list` and `search`. It is deliberately metadata only:
-
-- it never grants Telegram, tenant, object-store or originating-service access;
-- it cannot select another destination or expand the current owner boundary;
-- VibePublish does not dereference `origin.ref` or trust its payload as a command;
-- changing the origin under the same request key is an idempotency conflict;
-- provider bytes and their verified hashes remain independently authoritative.
-
-This gives Regional Knowledge Base, Wonderful Lections and later services a
-stable provenance hook without turning VibePublish into their document database.
-The originating service owns document semantics, ACLs and lifecycle. VibePublish
-owns only its media-store entry, provider identity, exact-byte evidence and the
-temporary verified asset used for transfer.
-
-## Cross-service asset provenance — 2026-10-02
-
-Status: `Not confirmed by user` until merged/deployed and exercised through a real
-consumer.
+Status: `Not confirmed by user` until the branch is merged, deployed and used
+through a real consumer.
 
 The media store may be used as a **secondary binary mirror** by another trusted
 product such as Regional Knowledge Base or Wonderful Lections. It is not the
-canonical owner of that product's document semantics or access policy.
+canonical owner of that product's semantics or access policy.
 
-`put` therefore accepts optional immutable origin metadata:
+`put` accepts optional immutable origin metadata:
 
 ```text
-origin.system     # e.g. regional_knowledge
-origin.ref        # stable product URI, e.g. knowledge://illustrations/ill_...
-origin.sha256     # consumer's canonical source/crop digest
+origin.system     # stable originating service id, e.g. regional_knowledge
+origin.ref        # stable opaque URI, e.g. knowledge://illustrations/ill_...
+origin.sha256     # originating source/crop digest
 ```
 
 The origin is stored inside the immutable media-store revision and returned by
-`list` and `search`. It never grants access, changes Telegram routing, or
-replaces VibePublish's independently verified provider-byte hashes. Reusing the
-same request key with a different origin is an idempotency conflict.
+`list` and `search`. It is metadata only:
 
-This deliberately avoids a shared database between products. The consuming
-service keeps its own ACL, page/caption/bbox/provenance graph and object-store
-identity; VibePublish keeps the Telegram media identity and retrieval evidence.
-If the canonical consumer object is deleted or its access is revoked, the
-consumer must stop exposing the VibePublish reference even if the Telegram mirror
-still exists.
+- it never grants Telegram, tenant, object-store or originating-service access;
+- it cannot select another destination or widen the owner boundary;
+- VibePublish never dereferences `origin.ref` or treats it as a command;
+- changing origin under the same request key is an idempotency conflict;
+- provider bytes and their verified hashes remain independently authoritative.
+
+The consuming service keeps its ACL, page/caption/bbox/provenance graph and
+canonical object-store identity. VibePublish keeps only the Telegram media
+identity, provider evidence and temporary verified transfer asset. If the
+originating service later revokes or deletes its resource, it must stop exposing
+the VibePublish reference even if the Telegram mirror still exists.
 
 ## Availability boundary
 
