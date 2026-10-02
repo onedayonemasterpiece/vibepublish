@@ -58,7 +58,6 @@ features:
     local_text_index: required
     verified_staging_purge: required
     provider_byte_read: required
-    cross_service_origin: optional_immutable_provenance
     cross_service_origin: immutable_revision_metadata
   llm_gateway:
     status: existing_code_audit_findings_not_verified
