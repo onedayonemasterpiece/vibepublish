@@ -14,11 +14,20 @@ Partners cannot discover or acquire destinations; revoked bindings stay revoked.
 Ambiguous Telegram connections fail closed. Resolve never sends a message.
 
 Basic-group members with current default sending permission may publish an
-ordinary immediate post; other basic-group lifecycle operations remain gated.
-Every actual publication retains existing native preflight, dispatch marker,
-reconciliation, provider readback, and request-key idempotency. Link previews are
-already disabled by the normal Telegram text adapter. No alternate account,
-manual ledger surgery, joined chats, or destination-specific hardcoding is used.
+ordinary immediate post. Provider-native scheduled publish remains gated by
+default and is enabled only when the owner explicitly adds the additive
+`basic_group_schedule` right to that exact binding. The right is not part of
+default bind/resolve rights, is frozen into the immutable attempt plan, and is
+revalidated immediately before provider effect. A scheduled basic-group request
+without that trusted plan authorization remains
+`telegram_group_mutations_needs_review`.
+
+Edit/reschedule/cancel/delete/forward remain separately gated by their existing
+provider/lifecycle contracts. Every actual publication retains native preflight,
+dispatch marker, reconciliation, provider readback, and request-key idempotency.
+Link previews are already disabled by the normal Telegram text adapter. No
+alternate account, manual ledger surgery, joined chats, or native-target
+hardcoding is used.
 
 ## Verification and live boundary — 2026-09-29
 
@@ -35,4 +44,6 @@ blocked, no destination binding was created, and no message was submitted.
 This is live fail-closed evidence, not successful publication acceptance.
 An account actually authorized in the requested group remains necessary.
 
-Regression tests: `tests/runtime/test_destination_resolution.py`.
+Regression tests: `tests/runtime/test_destination_resolution.py`,
+`tests/providers/test_basic_chat_creator.py`,
+`tests/runtime/test_service.py`, and `tests/runtime/test_engagement.py`.

@@ -70,6 +70,44 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['error']['code'], 'history_cursor_not_enabled')
         self.assertNotIn('operation_id', result)
 
+    async def test_basic_group_schedule_authorization_is_explicit_in_plan(self):
+        self.store.grant_binding_rights(
+            self.actor,
+            self.bindings['telegram'],
+            ['basic_group_schedule'],
+        )
+        accepted = await self.publish(delivery=self.scheduled())
+        with self.store.connection() as db:
+            row = db.execute(
+                "SELECT plan FROM attempts WHERE operation_id=? AND provider='telegram'",
+                (accepted['operation_id'],),
+            ).fetchone()
+        plan = json.loads(row[0])
+        self.assertTrue(plan['basic_group_schedule_authorized'])
+
+    async def test_basic_group_schedule_authorization_is_revalidated_before_effect(self):
+        self.store.grant_binding_rights(
+            self.actor,
+            self.bindings['telegram'],
+            ['basic_group_schedule'],
+        )
+        accepted = await self.publish(delivery=self.scheduled())
+        with self.store.tx() as db:
+            row = db.execute(
+                "SELECT rights FROM bindings WHERE id=?",
+                (self.bindings['telegram'],),
+            ).fetchone()
+            rights = [right for right in json.loads(row[0]) if right != 'basic_group_schedule']
+            db.execute(
+                "UPDATE bindings SET rights=? WHERE id=?",
+                (canonical(rights), self.bindings['telegram']),
+            )
+        await self.worker.run_once()
+        result = self.result(accepted)
+        self.assertEqual(result['state'], 'blocked')
+        self.assertEqual(result['error']['code'], 'access_revoked')
+        self.assertEqual(self.providers['telegram'].count('effect'), 0)
+
     async def test_accepted_receipt_precedes_provider_and_restart_preserves_result(self):
         start = time.monotonic()
         r = await self.publish(to=['telegram', 'vk', 'max'], delivery=self.scheduled())

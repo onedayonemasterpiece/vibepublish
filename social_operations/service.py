@@ -400,7 +400,8 @@ class Application:
 
     def _plan(self, db, actor, binding, target, action, existing=None, *, pending_visual=False, topic_root_id=None):
         required = 'publish' if action in ('publish', 'approve') else action
-        if required not in json.loads(binding['rights']):
+        binding_rights = json.loads(binding['rights'])
+        if required not in binding_rights:
             raise DomainError('access_denied', 'Binding does not allow this command', 'contact_owner')
         if target.get('visual') and not pending_visual:
             raise DomainError('visual_requires_visual_service')
@@ -431,6 +432,7 @@ class Application:
                 'action': action, 'surface': target.get('surface', 'post'), 'content_json': canonical(content), 'assets': assets,
                 'scheduled_at': scheduled, 'mode': target.get('mode', 'execute'), 'existing': existing,
                 'selection': target.get('selection', 'post'), 'source': None, 'source_authorized': False,
+                'basic_group_schedule_authorized': 'basic_group_schedule' in binding_rights,
                 **({'topic_root_id': topic_root_id} if topic_root_id else {}),
                 **({'admission_error': admission_error} if admission_error else {})}
 

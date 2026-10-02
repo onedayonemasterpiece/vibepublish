@@ -28,13 +28,19 @@ def parse_destination_url(url):
 
 
 async def basic_publish_rights(adapter, request, entity, me):
-    # Broaden only the supported ordinary immediate post, not lifecycle rights.
+    # Ordinary basic-group posts stay immediate-only unless trusted core proves
+    # this exact binding has the owner-granted basic_group_schedule right.
+    schedule_allowed = (
+        request.scheduled_at is None
+        or bool(getattr(request, "basic_group_schedule_authorized", False))
+    )
     if not (type(entity).__name__ == "Chat"
             and not getattr(entity, "deactivated", False)
             and getattr(entity, "migrated_to", None) is None
             and adapter.account_type == "mtproto_user"
             and request.action == "publish" and request.surface == "post"
-            and request.existing is None and request.scheduled_at is None
+            and request.existing is None
+            and schedule_allowed
             and request.source is None):
         raise DomainError("telegram_group_mutations_needs_review", next_action="contact_owner")
     permissions = await adapter.client.get_permissions(entity, me)

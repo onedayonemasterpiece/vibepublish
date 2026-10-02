@@ -137,6 +137,9 @@ class ProviderRequest:
     reaction: str | None = None
     reaction_mode: str | None = None
     topic_root_id: str | None = field(default=None, repr=False)
+    # Trusted core authorization derived from an explicit owner-granted binding right.
+    # It is never accepted from public tool input or inferred by the provider adapter.
+    basic_group_schedule_authorized: bool = field(default=False, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

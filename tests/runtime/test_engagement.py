@@ -99,8 +99,10 @@ async def test_wrong_native_social_evidence_does_not_become_success(runtime,kind
 def test_additive_grant_preserves_binding_epoch_and_never_changes_attempts(runtime):
     store,actor,binding,p,app,worker=runtime
     with store.connection() as db:before=dict(db.execute('SELECT * FROM bindings WHERE id=?',(binding,)).fetchone())
-    rights=store.grant_binding_rights(actor,binding,['reply'])
+    assert 'basic_group_schedule' not in json.loads(before['rights'])
+    rights=store.grant_binding_rights(actor,binding,['reply','basic_group_schedule'])
     assert set(json.loads(before['rights']))<=set(rights)
+    assert 'basic_group_schedule' in rights
     with store.connection() as db:
         after=dict(db.execute('SELECT * FROM bindings WHERE id=?',(binding,)).fetchone())
         assert after['epoch']==before['epoch'] and db.execute('SELECT count(*) FROM attempts').fetchone()[0]==0

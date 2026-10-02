@@ -71,7 +71,13 @@ class Worker:
                 plan = json.loads(child['plan'])
                 self.app.emojis.frozen_access(db, actor, json.loads(plan['content_json']))
                 required = 'publish' if plan['action'] == 'publish' else plan['action']
-                if b['epoch'] != child['binding_epoch'] or required not in json.loads(b['rights']):
+                current_rights = json.loads(b['rights'])
+                special_schedule_revoked = (
+                    bool(plan.get('basic_group_schedule_authorized'))
+                    and 'basic_group_schedule' not in current_rights
+                )
+                if (b['epoch'] != child['binding_epoch'] or required not in current_rights
+                        or special_schedule_revoked):
                     raise DomainError('access_revoked', next_action='reauthorize')
                 if current['lease_until'] < self.store.clock():
                     raise DomainError('stale_worker', next_action='refresh')
@@ -112,7 +118,8 @@ class Worker:
                                NativeSource(**plan['source']) if plan['source'] else None, plan['source_authorized'], plan['selection'],
                                subject=RemoteItem(**plan['subject']) if plan.get('subject') else None,
                                reaction=plan.get('reaction'),reaction_mode=plan.get('reaction_mode'),
-                               topic_root_id=plan.get('topic_root_id'))
+                               topic_root_id=plan.get('topic_root_id'),
+                               basic_group_schedule_authorized=bool(plan.get('basic_group_schedule_authorized')))
 
     async def heartbeat(self, op):
         while True:
