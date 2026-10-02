@@ -79,6 +79,35 @@ The originating service owns document semantics, ACLs and lifecycle. VibePublish
 owns only its media-store entry, provider identity, exact-byte evidence and the
 temporary verified asset used for transfer.
 
+## Cross-service asset provenance — 2026-10-02
+
+Status: `Not confirmed by user` until merged/deployed and exercised through a real
+consumer.
+
+The media store may be used as a **secondary binary mirror** by another trusted
+product such as Regional Knowledge Base or Wonderful Lections. It is not the
+canonical owner of that product's document semantics or access policy.
+
+`put` therefore accepts optional immutable origin metadata:
+
+```text
+origin.system     # e.g. regional_knowledge
+origin.ref        # stable product URI, e.g. knowledge://illustrations/ill_...
+origin.sha256     # consumer's canonical source/crop digest
+```
+
+The origin is stored inside the immutable media-store revision and returned by
+`list` and `search`. It never grants access, changes Telegram routing, or
+replaces VibePublish's independently verified provider-byte hashes. Reusing the
+same request key with a different origin is an idempotency conflict.
+
+This deliberately avoids a shared database between products. The consuming
+service keeps its own ACL, page/caption/bbox/provenance graph and object-store
+identity; VibePublish keeps the Telegram media identity and retrieval evidence.
+If the canonical consumer object is deleted or its access is revoked, the
+consumer must stop exposing the VibePublish reference even if the Telegram mirror
+still exists.
+
 ## Availability boundary
 
 No software can guarantee Telegram byte reads during a provider or
