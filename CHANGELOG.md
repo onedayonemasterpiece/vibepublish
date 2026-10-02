@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Keep Telegram basic-group native scheduling fail-closed by default and add an
+  owner-only additive `basic_group_schedule` binding right. The trusted right is
+  frozen into the attempt plan and revalidated immediately before provider
+  mutation; unrelated groups and lifecycle actions retain existing gates.
+
 - Add immutable optional cross-service origin metadata to private media-store
   entries so Regional Knowledge Base and other MCP services can bind Telegram
   media to stable service-owned resource references without changing binary
