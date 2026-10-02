@@ -71,10 +71,13 @@ def runtime(tmp_path):
     return store,actor,asset,provider,app,worker
 
 
-def args(asset,key='vault-1', *, topic='5', text='Луноход — техническая подпись'):
-    return {'command':{'kind':'put','to':'vault','thread_ref':f'https://t.me/c/4379835477/{topic}',
+def args(asset,key='vault-1', *, topic='5', text='Луноход — техническая подпись', origin=None):
+    command={'kind':'put','to':'vault','thread_ref':f'https://t.me/c/4379835477/{topic}',
         'content':{'text':text},
-        'media':[{'source':{'kind':'asset','id':asset},'role':'document'}]},'request_key':key}
+        'media':[{'source':{'kind':'asset','id':asset},'role':'document'}]}
+    if origin is not None:
+        command['origin']=origin
+    return {'command':command,'request_key':key}
 
 
 @pytest.mark.asyncio
@@ -120,6 +123,37 @@ async def test_put_is_separate_idempotent_and_purges_verified_staging(tmp_path):
         'thread_ref':'https://t.me/c/4379835477/5'}})
     assert mismatch['error']['code']=='media_store_destination_mismatch'
     assert mismatch['next_action']=='fix_input'
+
+
+@pytest.mark.asyncio
+async def test_media_store_preserves_cross_service_origin_without_changing_binary_identity(tmp_path):
+    store,actor,asset,provider,app,worker=runtime(tmp_path)
+    source_hash=hashlib.sha256(png()).hexdigest()
+    origin={'system':'regional_knowledge',
+            'ref':'knowledge://illustrations/ill_0001',
+            'sha256':source_hash}
+    accepted=await app.call(actor,'vibepublish_media_store',
+                            args(asset,'knowledge-origin',text='Иллюстрация из региональной базы',origin=origin))
+    assert 'operation_id' in accepted, accepted
+    await worker.run_once()
+    assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
+
+    listed=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'list',
+        'thread_ref':'https://t.me/c/4379835477/5','text':'региональной'}})
+    item,=listed['media_store_items']
+    assert item['origin']==origin
+    assert item['sha256']==[hashlib.sha256(verify_image(png(),'image/png').data).hexdigest()]
+
+    searched=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'search','text':'иллюстрация'}})
+    assert searched['media_store_items'][0]['origin']==origin
+
+    replay=await app.call(actor,'vibepublish_media_store',
+                          args(asset,'knowledge-origin',text='Иллюстрация из региональной базы',origin=origin))
+    assert replay['operation_id']==accepted['operation_id']
+    conflict=await app.call(actor,'vibepublish_media_store',
+                            args(asset,'knowledge-origin',text='Иллюстрация из региональной базы',
+                                 origin={**origin,'ref':'knowledge://illustrations/ill_0002'}))
+    assert conflict['error']['code']=='idempotency_conflict'
 
 
 @pytest.mark.asyncio

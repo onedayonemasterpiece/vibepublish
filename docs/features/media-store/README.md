@@ -52,6 +52,38 @@ rights, approval, scheduling and unknown-outcome policy.
   Exact Telegram text, topic and document binding remain required for verification;
   provider-normalized entity metadata is observational only.
 
+## Cross-service origin metadata — 2026-10-02
+
+Status: `Not confirmed by user` until the branch is merged, deployed and used
+through a real consumer.
+
+The media store may be used as a **secondary binary mirror** by another trusted
+product such as Regional Knowledge Base or Wonderful Lections. It is not the
+canonical owner of that product's semantics or access policy.
+
+`put` accepts optional immutable origin metadata:
+
+```text
+origin.system     # stable originating service id, e.g. regional_knowledge
+origin.ref        # stable opaque URI, e.g. knowledge://illustrations/ill_...
+origin.sha256     # originating source/crop digest
+```
+
+The origin is stored inside the immutable media-store revision and returned by
+`list` and `search`. It is metadata only:
+
+- it never grants Telegram, tenant, object-store or originating-service access;
+- it cannot select another destination or widen the owner boundary;
+- VibePublish never dereferences `origin.ref` or treats it as a command;
+- changing origin under the same request key is an idempotency conflict;
+- provider bytes and their verified hashes remain independently authoritative.
+
+The consuming service keeps its ACL, page/caption/bbox/provenance graph and
+canonical object-store identity. VibePublish keeps only the Telegram media
+identity, provider evidence and temporary verified transfer asset. If the
+originating service later revokes or deletes its resource, it must stop exposing
+the VibePublish reference even if the Telegram mirror still exists.
+
 ## Availability boundary
 
 No software can guarantee Telegram byte reads during a provider or

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Add immutable optional cross-service origin metadata to private media-store
+  entries so Regional Knowledge Base and other MCP services can bind Telegram
+  media to stable service-owned resource references without changing binary
+  identity, granting access, or introducing provider I/O into list/search.
+
 - Hydrate owner-resolved Telegram bindings with lifecycle rights proven by read-only provider preflight instead of persisting publish-only bindings, so tracked posts can be edited/deleted without re-adding the destination.
 
 - Treat exact VK `wall.getById` tombstones with `is_deleted=true` as provider-confirmed absence after `wall.delete`, so native repost deletion can reconcile without repeating the destructive call.

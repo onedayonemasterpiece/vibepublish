@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.7.0-runtime"
+VERSION = "1.8.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -117,6 +117,11 @@ DEFS["forward_origin"] = obj({"source_ref": ID, "provider": enum("telegram", "vk
     "origin_check": enum("matched", "pending", "incomplete")},
     ("source_ref", "provider", "mode", "origin_check"))
 DEFS["delivery_result"]["properties"]["forward_origin"] = ref("forward_origin")
+DEFS["media_store_origin"] = obj({
+    "system": string(80, pattern=r"^[a-z][a-z0-9._-]*$"),
+    "ref": string(1000, pattern=r"^[a-z][a-z0-9+.-]*://"),
+    "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+}, ("system", "ref"))
 
 # Exact typography is data, not text inferred from a generation prompt.
 DEFS["visual_copy"] = obj({"title": string(160), "subtitle": string(240),
@@ -182,6 +187,7 @@ DEFS["media_store_item"] = obj({
     "native_id": string(128), "destination": ALIAS,
     "thread_ref": TELEGRAM_THREAD_URL, "telegram_url": TELEGRAM_THREAD_URL,
     "sha256": array(string(64, pattern=r"^[a-f0-9]{64}$"), 0, 20),
+    "origin": ref("media_store_origin"),
 }, ("entry_ref", "text", "observed_at", "native_id", "destination",
     "thread_ref", "telegram_url", "sha256"))
 DEFS["receipt"]["properties"]["media_store_items"] = array(ref("media_store_item"), 0, 50)
@@ -222,10 +228,11 @@ TOOLS[-1]["inputSchema"]["anyOf"] = [
     {"required": ["content"]}, {"required": ["visual"]},
     {"required": ["media"], "properties": {"media": {"minItems": 1}}}]
 
-tool("media_store", "Single-owner Telegram media database, not social publication. Put verified images as Telegram DOCUMENTs; list one thread or search every indexed thread without provider I/O; get exact bytes from Telegram into short-lived cache.",
+tool("media_store", "Single-owner Telegram media database, not social publication. Put verified images as Telegram DOCUMENTs with optional stable cross-service origin metadata; list one thread or search every indexed thread without provider I/O; get exact bytes from Telegram into short-lived cache.",
     obj({"command": {"oneOf": [
         arm("put", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
-            "content": ref("content"), "media": array(ref("media"), 1, 20)},
+            "content": ref("content"), "media": array(ref("media"), 1, 20),
+            "origin": ref("media_store_origin")},
             ("to", "thread_ref", "content", "media")),
         arm("list", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
             "text": {**string(1000), "minLength": 0}}, ("thread_ref",)),
