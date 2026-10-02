@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Let the private media store retain an optional immutable cross-service origin (`system`, stable URI, source SHA-256) so Regional Knowledge Base and other products can mirror images into Telegram without making VibePublish the owner of their ACL/document semantics.
+
 - Add immutable optional cross-service origin metadata to private media-store
   entries so Regional Knowledge Base and other MCP services can bind Telegram
   media to stable service-owned resource references without changing binary
