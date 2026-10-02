@@ -28,13 +28,14 @@ def parse_destination_url(url):
 
 
 async def basic_publish_rights(adapter, request, entity, me):
-    # Broaden only the supported ordinary immediate post, not lifecycle rights.
+    # Broaden only a fresh ordinary post, immediate or provider-native scheduled.
+    # Existing-item lifecycle mutations and forwards stay gated.
     if not (type(entity).__name__ == "Chat"
             and not getattr(entity, "deactivated", False)
             and getattr(entity, "migrated_to", None) is None
             and adapter.account_type == "mtproto_user"
             and request.action == "publish" and request.surface == "post"
-            and request.existing is None and request.scheduled_at is None
+            and request.existing is None
             and request.source is None):
         raise DomainError("telegram_group_mutations_needs_review", next_action="contact_owner")
     permissions = await adapter.client.get_permissions(entity, me)
