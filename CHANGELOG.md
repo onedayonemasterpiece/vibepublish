@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Make concurrent SQLite startup converge on WAL with a bounded retry for the
+  journal-mode transition, avoiding a transient `database is locked` failure
+  when several workers open or migrate the same ledger simultaneously.
+
 - Keep Telegram basic-group native scheduling fail-closed by default and add an
   owner-only additive `basic_group_schedule` binding right. The trusted right is
   frozen into the attempt plan and revalidated immediately before provider

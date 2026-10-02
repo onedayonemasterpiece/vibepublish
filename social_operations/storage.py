@@ -31,7 +31,7 @@ class Store:
             version = db.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, 1, 2, 3, 4, 5, 6):
                 raise RuntimeError("Unsupported VibePublish database version")
-            db.execute("PRAGMA journal_mode=WAL")
+            self._enable_wal(db)
             if version == 0:
                 db.executescript(Path(__file__).with_name("schema.sql").read_text())
             if version < 2:
@@ -47,6 +47,22 @@ class Store:
                 db.executescript(Path(__file__).with_name("recovery_schema.sql").read_text())
             if version < 6:
                 db.executescript(Path(__file__).with_name("media_store_schema.sql").read_text())
+
+    @staticmethod
+    def _enable_wal(db: sqlite3.Connection) -> None:
+        """Converge concurrent Store initializers on WAL without masking other DB errors."""
+        deadline = time.monotonic() + 5.0
+        while True:
+            try:
+                mode = str(db.execute("PRAGMA journal_mode=WAL").fetchone()[0]).lower()
+                if mode == "wal":
+                    return
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(f"Unable to enable SQLite WAL mode: {mode}")
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or time.monotonic() >= deadline:
+                    raise
+            time.sleep(0.01)
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
