@@ -329,5 +329,14 @@ async def test_knowledge_origin_sha_is_independent_but_provider_hash_stays_autho
     accepted=await app.call(actor,'vibepublish_media_store',args(asset,'changed-rendition',origin=origin))
     await worker.run_once()
     done=store.receipt(actor,accepted['operation_id'])
-    assert done['state']=='outcome_unknown'
-    assert done['error']['code']=='media_readback_mismatch'
+    # A saved native message is reconciled by observation, never sent again.
+    assert done['state']=='running'
+    with store.tx() as db:
+        child=db.execute('SELECT * FROM attempts WHERE operation_id=?',(accepted['operation_id'],)).fetchone()
+        assert child['state']=='running'
+        assert child['stage']=='waiting_connection'
+        assert 'media_readback_mismatch' in json.loads(child['result'])['missing_checks']
+        db.execute('UPDATE operations SET lease_until=0 WHERE id=?',(accepted['operation_id'],))
+    await worker.run_once()
+    assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
+    assert provider.effects==1
