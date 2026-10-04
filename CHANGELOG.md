@@ -471,3 +471,6 @@
 - Existing Google limiter findings are documented, not fixed by this batch.
 - Schema-valid forbidden calls carry runtime-oracle requirements; schema tests
   do not claim that an absent runtime enforced those permission/timing rules.
+
+- Preserve exact document ingress replay for legacy in-flight source publications
+  after byte purge by reading their immutable owner-scoped ingress intent.

@@ -343,7 +343,8 @@ async def test_knowledge_origin_sha_is_independent_but_provider_hash_stays_autho
 
 
 @pytest.mark.asyncio
-async def test_source_document_original_and_clone_purge_preserve_lost_response_replay(tmp_path):
+@pytest.mark.parametrize('legacy_in_flight',[False,True])
+async def test_source_document_original_and_clone_purge_preserve_lost_response_replay(tmp_path,legacy_in_flight):
     from social_operations.asset_ingress import upload_image
     store,actor,_,provider,app,worker=runtime(tmp_path)
     data=b'%PDF-1.7\nExact synthetic source bytes.\n'
@@ -352,6 +353,9 @@ async def test_source_document_original_and_clone_purge_preserve_lost_response_r
         db.execute("update operations set result=json_remove(result,'$.document_receipt') where action='asset_ingress'")
     command=args(ingress['asset_id'],key='source-put',origin={'system':'regional_knowledge','ref':'knowledge://documents/control/source','sha256':hashlib.sha256(data).hexdigest()})
     accepted=await app.call(actor,'vibepublish_media_store',command)
+    if legacy_in_flight:
+        with store.tx() as db:
+            db.execute("update operations set result=json_remove(result,'$.document_receipt') where action='asset_ingress'")
     await worker.run_once();assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
     with store.connection() as db:
         assert db.execute("select count(*) from assets where mime='application/pdf'").fetchone()[0]==0
