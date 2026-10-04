@@ -108,7 +108,7 @@ def test_knowledge_session_is_an_explicit_independent_lane(tmp_path):
 
 
 def test_same_chat_topic_selects_explicit_kb_or_preserved_ordinary_connection(tmp_path):
-    from social_operations.service import Application
+    from social_operations.ingress import IngressApplication as Application
     store=Store(tmp_path/'ledger.sqlite');actor=store.authenticate(store.create_principal('test','owner',owner=True))
     store.add_connection(actor,'ordinary','telegram',account_type='mtproto_user',secret_ref=production.TG_REFERENCE)
     store.add_connection(actor,'kb','telegram',account_type='mtproto_user',secret_ref=production.KB_REFERENCE)

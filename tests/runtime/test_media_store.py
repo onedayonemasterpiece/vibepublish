@@ -340,3 +340,22 @@ async def test_knowledge_origin_sha_is_independent_but_provider_hash_stays_autho
     await worker.run_once()
     assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
     assert provider.effects==1
+
+
+@pytest.mark.asyncio
+async def test_source_document_original_and_clone_purge_preserve_lost_response_replay(tmp_path):
+    from social_operations.asset_ingress import upload_image
+    store,actor,_,provider,app,worker=runtime(tmp_path)
+    data=b'%PDF-1.7\nExact synthetic source bytes.\n'
+    ingress=upload_image(app,actor,data,'application/pdf','source-upload')
+    command=args(ingress['asset_id'],key='source-put',origin={'system':'regional_knowledge','ref':'knowledge://documents/control/source','sha256':hashlib.sha256(data).hexdigest()})
+    accepted=await app.call(actor,'vibepublish_media_store',command)
+    await worker.run_once();assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
+    with store.connection() as db:
+        assert db.execute("select count(*) from assets where mime='application/pdf'").fetchone()[0]==0
+    assert upload_image(app,actor,data,'application/pdf','source-upload')==ingress
+    assert (await app.call(actor,'vibepublish_media_store',command))['operation_id']==accepted['operation_id']
+    assert provider.effects==1
+    listed=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'list','to':'vault','thread_ref':'https://t.me/c/4379835477/5'}})
+    read=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'get','entry_ref':listed['media_store_items'][0]['entry_ref']}})
+    await worker.run_once();assert store.receipt(actor,read['operation_id'])['state']=='verified'

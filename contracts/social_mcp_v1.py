@@ -147,8 +147,8 @@ DEFS["progress"] = obj({"events": array(ref("event"), 0, 50),
 DEFS["downloaded_media"] = obj({
     "kind": {"const": "download_sha256"}, "slot": {"type": "integer", "minimum": 0, "maximum": 9},
     "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
-    "mime": enum("image/png", "image/jpeg", "image/webp", "video/mp4"),
-    "size": {"type": "integer", "minimum": 1, "maximum": 20*1024*1024},
+    "mime": enum("image/png", "image/jpeg", "image/webp", "video/mp4", "application/pdf", "image/vnd.djvu"),
+    "size": {"type": "integer", "minimum": 1, "maximum": 128*1024*1024},
     "asset_ref": ID, "resource_uri": string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$"),
     "media_kind": enum("photo", "document")},
     ("kind", "slot", "sha256", "mime", "size"))
@@ -228,7 +228,7 @@ TOOLS[-1]["inputSchema"]["anyOf"] = [
     {"required": ["content"]}, {"required": ["visual"]},
     {"required": ["media"], "properties": {"media": {"minItems": 1}}}]
 
-tool("media_store", "Single-owner Telegram media database, not social publication. Put verified images as Telegram DOCUMENTs with optional stable cross-service origin metadata; list one thread or search every indexed thread without provider I/O; get exact bytes from Telegram into short-lived cache.",
+tool("media_store", "Single-owner Telegram media database, not social publication. Put verified images or exact PDF/DjVu sources as Telegram DOCUMENTs with optional stable cross-service origin metadata; list one thread or search every indexed thread without provider I/O; get exact bytes from Telegram into short-lived cache.",
     obj({"command": {"oneOf": [
         arm("put", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
             "content": ref("content"), "media": array(ref("media"), 1, 20),

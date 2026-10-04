@@ -352,6 +352,9 @@ class IngressApplication(Application):
                 sql += " AND d.connection_id=?"
                 params.append(selector["connection_id"])
             existing = [dict(row) for row in db.execute(sql, params)]
+            if selector is None and len(existing)>1:
+                ordinary=[row for row in existing if row['secret_ref']!='VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE']
+                if len(ordinary)==1:existing=ordinary
             if len(existing) == 1:
                 return existing[0]["alias"]
             if len(existing) > 1:
@@ -369,6 +372,9 @@ class IngressApplication(Application):
                     "AND account_type IN ('mtproto_user','mtproto_bot') AND active=1 ORDER BY id",
                     (actor.tenant_id,),
                 )]
+                if len(connections)>1:
+                    ordinary=[row for row in connections if row['secret_ref']!='VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE']
+                    if len(ordinary)==1:connections=ordinary
                 if len(connections) != 1:
                     raise DomainError(
                         "telegram_connection_ambiguous" if connections else "telegram_connection_unavailable",
@@ -423,7 +429,7 @@ class IngressApplication(Application):
                 )
             return alias
 
-    def _telegram_thread(self, db, actor, ref):
+    def _telegram_thread(self, db, actor, ref, *, alias=None):
         """Owner-direct Telegram links are routes; they never grant partner access."""
         if ref.startswith("https://"):
             target = _parse_direct_telegram_target(ref)
@@ -431,15 +437,21 @@ class IngressApplication(Application):
                 dict(row) for row in self.store.bindings(db, actor)
                 if row["provider"] == "telegram"
                 and target.selector in (row["native_id"], row["handle"])
+                and (alias is None or row["alias"]==alias)
             ]
+            if alias is None and len(matches)>1:
+                ordinary=[row for row in matches if row['secret_ref']!='VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE']
+                if len(ordinary)==1:matches=ordinary
             if len(matches) != 1:
                 raise DomainError(
                     "access_denied",
                     "The Telegram group is not bound for this principal",
                     "contact_owner",
                 )
+            import logging
+            logging.getLogger(__name__).info(canonical({'event':'telegram_topic_connection_selected','connection_id':matches[0]['connection_id'],'explicit_alias':alias is not None}))
             return matches[0], target.item
-        return super()._telegram_thread(db, actor, ref)
+        return super()._telegram_thread(db, actor, ref,alias=alias)
 
     def _rewrite_direct_thread(self, actor, name: str, arguments: dict) -> dict:
         result = json.loads(canonical(arguments))

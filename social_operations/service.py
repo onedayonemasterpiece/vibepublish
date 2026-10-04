@@ -601,6 +601,10 @@ class Application:
                         for asset in plan['assets']:
                             db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
                                        (asset['ref'], publication, 'staging', staging_expires))
+                    for media in intent['media']:
+                        original=db.execute('select mime from assets where id=?',(media['source']['id'],)).fetchone()
+                        if original and original['mime'] in {'application/pdf','image/vnd.djvu'}:
+                            db.execute("INSERT INTO media_store_assets VALUES(?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET publication_id=excluded.publication_id,expires=excluded.expires",(media['source']['id'],publication,'staging',staging_expires))
                 if args.get('request_key'):
                     self._key(db, actor, args['request_key'], digest([action, intent]), op)
         return self.store.receipt(actor, op)

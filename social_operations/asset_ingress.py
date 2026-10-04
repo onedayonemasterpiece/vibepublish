@@ -53,6 +53,9 @@ def upload_image(service, actor, data: bytes, mime: str, key: str | None):
         else:
             ident = insert_verified_image(store, db, actor, image)
         result = {'resource_id': ident}
+        if document:
+            result['document_receipt']=_response(db,actor,ident,key)
+            db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',(ident,None,'staging',store.clock()+30*86400+3600))
         op = service._new_operation(db, actor, ACTION, intent, complete=True, result=result)
         service._key(db, actor, key, digest([ACTION, intent]), op)
         return _response(db, actor, ident, key)
@@ -62,6 +65,12 @@ def _response(db, actor, ident, key):
     row = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
                      (ident, actor.tenant_id, actor.principal_id)).fetchone()
     if not row:
+        # Verified document staging may be gone; retain the immutable ingress receipt
+        # so a lost put response can replay its original asset identity safely.
+        replay=db.execute('SELECT o.result FROM request_keys k JOIN operations o ON o.id=k.operation_id WHERE k.tenant_id=? AND k.principal_id=? AND k.key=?',(actor.tenant_id,actor.principal_id,key)).fetchone()
+        if replay:
+            receipt=json.loads(replay['result']).get('document_receipt')
+            if receipt and receipt['asset_id']==ident:return receipt
         raise DomainError('asset_not_available')
     return {'asset_id': ident, 'sha256': row['sha256'], 'source_sha256': row['source_sha256'],
             'mime': row['mime'], 'width': row['width'], 'height': row['height'], 'idempotency_key': key}

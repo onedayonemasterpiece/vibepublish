@@ -18,7 +18,7 @@ rights, approval, scheduling and unknown-outcome policy.
 
 ## Contract
 
-- `vibepublish_media_store put` accepts one or more already verified image assets,
+- `vibepublish_media_store put` accepts one or more verified image or exact PDF/DjVu assets,
   always sends them to the exact private Telegram topic as DOCUMENT, and requires
   a stable request key. It does not accept schedules, previews, forwards, edits,
   fan-out, non-Telegram targets or non-owner callers.
@@ -201,3 +201,10 @@ alias when two sessions bind the same forum. Existing URL-only topic calls retai
 the unique ordinary connection; a dedicated KB binding does not change that
 default. Other ambiguous ordinary bindings still fail closed. Connection selection
 emits a structured event without provider credentials or private captions.
+
+PDF/DjVu ingress originals and transfer clones are temporary staging: native
+verified delivery purges both. Immutable document ingress receipts remain in the
+key registry after byte deletion, so a lost-response replay still resolves the
+original asset/put identity and creates no additional provider file. Unsubmitted
+or failed source assets expire after the bounded 30-day delivery window plus one
+hour; admitted outage staging remains recoverable until then.

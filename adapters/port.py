@@ -39,8 +39,8 @@ class DownloadedMedia:
         import re
         if (self.kind != 'download_sha256' or type(self.slot) is not int or not 0 <= self.slot < 10
                 or not isinstance(self.sha256, str) or not re.fullmatch(r'[0-9a-f]{64}', self.sha256)
-                or self.mime not in {'image/png', 'image/jpeg', 'image/webp', 'video/mp4'}
-                or type(self.size) is not int or not 0 < self.size <= 20*1024*1024):
+                or self.mime not in {'image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'application/pdf', 'image/vnd.djvu'}
+                or type(self.size) is not int or not 0 < self.size <= (128*1024*1024 if self.mime in {'application/pdf','image/vnd.djvu'} else 20*1024*1024)):
             raise DomainError('download_media_evidence_invalid')
 
 
@@ -70,8 +70,8 @@ class MediaDownload:
                 or self.media_kind not in {'photo', 'document'}
                 or not isinstance(self.provider_ref, str)
                 or not self.provider_ref.startswith(self.media_kind + ':')
-                or self.mime not in {'image/png', 'image/jpeg', 'image/webp'}
-                or not isinstance(self.data, bytes) or not 0 < len(self.data) <= 20*1024*1024):
+                or self.mime not in {'image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'image/vnd.djvu'}
+                or not isinstance(self.data, bytes) or not 0 < len(self.data) <= (128*1024*1024 if self.mime in {'application/pdf','image/vnd.djvu'} else 20*1024*1024)):
             raise DomainError('download_media_payload_invalid')
 
 
