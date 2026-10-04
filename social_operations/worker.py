@@ -253,7 +253,11 @@ class Worker:
             waits=[json.loads(row['result'])['media_budget_retry_at'] for row in db.execute("SELECT result FROM attempts WHERE operation_id=? AND state='accepted' AND stage='waiting_connection'",(op['id'],)) if 'media_budget_retry_at' in json.loads(row['result'])]
             if not waits:return
             self.store.fence(db,op['id'],self.id,op['fence'])
-            db.execute("UPDATE operations SET lease_owner=NULL,lease_until=?,error=NULL WHERE id=?",(min(waits),op['id']))
+            retry_at=min(waits)
+            db.execute(
+                "UPDATE operations SET lease_owner=NULL,lease_until=?,"
+                "deadline=MAX(deadline,?),error=NULL WHERE id=?",
+                (retry_at,retry_at+120,op['id']))
             self.store.event(db,op['id'],'waiting_connection','started','Shared Telegram media budget deferred; original request identity retained')
 
     async def run_child(self, op, child, actor, prepared):
