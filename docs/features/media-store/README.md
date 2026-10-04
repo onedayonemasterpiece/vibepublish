@@ -161,28 +161,14 @@ file after a failed upload.
 Insufficient capacity leaves the original attempt undispatched and its operation
 in durable working state until the earliest capacity timestamp. It releases the
 lane and does not sleep, fail the media, drop staging, or change the request key.
-Native scheduling lead/deadline checks and FloodWait/SlowMode recovery remain
-independent. Existing unknown publication outcomes remain observation-only;
+Capacity deferral extends only the internal command lifetime until the reserved retry can run; native scheduling lead-time remains an independent fail-closed rule. FloodWait/SlowMode recovery also remains independent. Existing unknown publication outcomes remain observation-only;
 capacity never authorizes a resend.
 
 Regional Knowledge image identity is the stable illustration resource reference
-and request key. Optional origin SHA is provenance metadata, never an admission
-or image-similarity gate. Mirrors accept ordinary verified/sanitized image assets;
-compression or a changed crop rendition does not require byte equality. Native
-message, destination/topic and DOCUMENT binding still establish successful
-storage, and replay preserves the same entry. Images are not compared as a
-blocking delivery step. Perceptual similarity, when needed for discovery, belongs
-to the existing image-matching workflows rather than cryptographic hashes.
+and request key. Optional origin SHA is immutable source provenance; it is not
+required to equal VibePublish's sanitized asset hash and is never used as an
+image-similarity gate. That separation does not weaken provider evidence: the
+actual DOCUMENT planned by VibePublish must still match exact Telegram readback
+and provider byte/hash evidence. Native message, destination/topic and DOCUMENT
+identity establish successful storage, and replay preserves the same entry.
 List/search and completed get receipts retain immutable origin metadata.
-
-
-### Explicit owner correction: image comparison is optional
-
-Requirements: `Fixed` by the owner's 2026-10-04 instruction: do not make SHA or
-image sameness a blocking check for Regional Knowledge image mirrors. This
-supersedes the earlier exact-crop-SHA delivery requirement in the execution
-prompt. Neither origin SHA nor equality of provider/source image hashes gates
-that private mirror. Stable resource/request identity, actor authorization and
-native message/topic/DOCUMENT binding remain required. Stored hashes still
-protect each local asset's own integrity and describe observed provider bytes.
-Public publication and its existing checks are outside this narrow correction.
