@@ -469,8 +469,7 @@ class Worker:
                         raise OutcomeUnknown('download_media_lifecycle_changed')
                 if remote.observed_media and (remote.provider_media or remote.media_check != 'download_binding'):
                     raise OutcomeUnknown('download_media_binding_missing')
-            resource_mirror=plan.get('workload')=='media_store' and plan.get('media_identity')=='resource_ref'
-            if not resource_mirror and tuple(remote.media_hashes) != tuple(a['sha256'] for a in plan['assets']):
+            if tuple(remote.media_hashes) != tuple(a['sha256'] for a in plan['assets']):
                 raise OutcomeUnknown('media_readback_mismatch')
         if observation.observed == 'provider_scheduled' and (remote.namespace != 'scheduled' or remote.scheduled_at != plan['scheduled_at']):
             raise OutcomeUnknown('native_time_mismatch')
