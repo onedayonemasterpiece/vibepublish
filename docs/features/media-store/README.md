@@ -70,7 +70,7 @@ origin.sha256     # originating source/crop digest
 ```
 
 The origin is stored inside the immutable media-store revision and returned by
-`list` and `search`. It is metadata only:
+`list`, `search` and completed `get` receipts. It is metadata only:
 
 - it never grants Telegram, tenant, object-store or originating-service access;
 - it cannot select another destination or widen the owner boundary;
@@ -143,22 +143,27 @@ the product's durable media store.
 ## Regional Knowledge origin and shared media budget — 2026-10-04
 
 Requirements: `Fixed` by the linked owner execution prompt. Implementation:
-`Not confirmed by user` pending acceptance in the user's client.
+`Not confirmed by user` pending deployed acceptance.
 
 All Telegram media-producing publication and media-store attempts share a budget
-of at most 20 files/images in every inclusive rolling 60-second window of their
-connection. Albums count each file. Text-only messages, unchanged-media edits
-and native forwards consume zero. Another connection has an independent budget.
-The existing cross-process connection lane checks capacity before uploads and
-again in the durable before-effect transaction. Accepted and unknown dispatches
-are counted from persisted attempt timestamps and immutable media plans;
-restart never resets the window. A partial dispatch index accelerates the lookup.
+of at most 20 files/images in every rolling 60-second window of one connection.
+Albums count each file. Text-only messages, unchanged-media edits and native
+forwards consume zero. Different Telegram connections have independent budgets.
+
+Admission is persisted in `telegram_media_admissions` while the existing
+cross-process connection lane is held, immediately before `adapter.execute()`
+and therefore before the first Telegram upload. This is deliberately separate
+from the later publication dispatch marker: a failed or interrupted pre-dispatch
+upload conservatively consumes its admitted capacity for the rolling window.
+Worker restart therefore cannot reset the budget or accidentally admit a 21st
+file after a failed upload.
 
 Insufficient capacity leaves the original attempt undispatched and its operation
 in durable working state until the earliest capacity timestamp. It releases the
 lane and does not sleep, fail the media, drop staging, or change the request key.
-Native scheduling lead/deadline checks and FloodWait recovery remain independent.
-Existing public unknown attempts are observed; capacity never authorizes resend.
+Native scheduling lead/deadline checks and FloodWait/SlowMode recovery remain
+independent. Existing unknown publication outcomes remain observation-only;
+capacity never authorizes a resend.
 
 A `regional_knowledge` origin identifies one exact already verified source image.
 Its SHA must match the scoped asset's original verified bytes; the private DOCUMENT
