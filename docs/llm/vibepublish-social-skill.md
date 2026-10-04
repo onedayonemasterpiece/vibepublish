@@ -1,6 +1,6 @@
 # VibePublish social skill
 
-Version: `1.7.0`. Target: `contracts/social_mcp_v1.py`.
+Version: `1.7.1`. Target: `contracts/social_mcp_v1.py`.
 Owner native-queue/read/progress corrections are Fixed. This is the canonical task skill, not proof of a deployed connection. The runtime may return a typed capability gate; never replace an unavailable feature with another action.
 
 ## Start and choose a task
