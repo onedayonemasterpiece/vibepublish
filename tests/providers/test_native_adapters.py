@@ -73,6 +73,24 @@ def setup(provider):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('mime,data,name', [('application/pdf', b'%PDF-1.7\nfixture', 'book.pdf'),
+                                          ('image/vnd.djvu', b'AT&TFORM\x00\x00\x00\x04DJVU', 'book.djvu')])
+async def test_telegram_source_document_native_prepare(mime, data, name):
+    adapter, transport, journal = setup('telegram')
+    source = Asset('source', hashlib.sha256(data).hexdigest(), mime, len(data),
+                   role='document', alt_text=name, data=data)
+    await adapter.prepare(request('telegram', assets=(source,)), journal.hooks)
+    assert transport.effects == 0
+    for invalid in (replace(source, role='image'), replace(source, alt_text='../book.pdf'),
+                    replace(source, caption='caption'), replace(source, sha256='0'*64)):
+        with pytest.raises(DomainError):
+            await adapter.prepare(request('telegram', assets=(invalid,)), journal.hooks)
+    vk, _, vk_journal = setup('vk')
+    with pytest.raises(DomainError):
+        await vk.prepare(request('vk', assets=(source,)), vk_journal.hooks)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('provider', ['telegram', 'vk'])
 @pytest.mark.parametrize('scheduled', [False, True])
 @pytest.mark.parametrize('images', [0, 1, 2])

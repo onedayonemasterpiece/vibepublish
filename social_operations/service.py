@@ -604,6 +604,11 @@ class Application:
                     for media in intent['media']:
                         original=db.execute('select mime from assets where id=?',(media['source']['id'],)).fetchone()
                         if original and original['mime'] in {'application/pdf','image/vnd.djvu'}:
+                            from .asset_ingress import _response
+                            ingress_keys=db.execute("SELECT o.id,k.key FROM operations o JOIN request_keys k ON k.operation_id=o.id WHERE o.tenant_id=? AND o.principal_id=? AND o.action='asset_ingress' AND json_extract(o.result,'$.resource_id')=?",(actor.tenant_id,actor.principal_id,media['source']['id'])).fetchall()
+                            for ingress in ingress_keys:
+                                receipt=_response(db,actor,media['source']['id'],ingress['key'])
+                                db.execute("UPDATE operations SET result=json_set(result,'$.document_receipt',json(?)) WHERE id=?",(canonical(receipt),ingress['id']))
                             db.execute("INSERT INTO media_store_assets VALUES(?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET publication_id=excluded.publication_id,expires=excluded.expires",(media['source']['id'],publication,'staging',staging_expires))
                 if args.get('request_key'):
                     self._key(db, actor, args['request_key'], digest([action, intent]), op)

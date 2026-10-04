@@ -30,9 +30,12 @@ def verify_assets(request: ProviderRequest, *, allow_video: bool = False, allow_
     for asset in request.assets:
         video = allow_video and asset.role == 'video' and asset.mime == 'video/mp4'
         image = asset.role in ({'image', 'auto', 'document'} if allow_document else {'image', 'auto'}) and asset.mime in {'image/png', 'image/jpeg', 'image/webp'}
-        if ((not video and not image) or asset.caption or asset.alt_text):
+        document = allow_document and asset.role == 'document' and asset.mime in {'application/pdf', 'image/vnd.djvu'}
+        filename = document and (not asset.alt_text or (len(asset.alt_text) <= 160
+                    and not any(c in '/\\' or ord(c) < 32 for c in asset.alt_text)))
+        if ((not video and not image and not document) or asset.caption or (asset.alt_text and not filename)):
             raise DomainError('media_rendering_needs_review', next_action='contact_owner')
-        if (not 0 < asset.size <= 20 * 1024 * 1024 or len(asset.data) != asset.size
+        if (not 0 < asset.size <= (128 if document else 20) * 1024 * 1024 or len(asset.data) != asset.size
                 or hashlib.sha256(asset.data).hexdigest() != asset.sha256):
             raise DomainError('asset_integrity')
 
