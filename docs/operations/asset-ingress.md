@@ -70,3 +70,8 @@ absent for publish-only principals. It is now present strictly for attachment
 import. Real MCP transport tests enforce the import-only schema and reject direct
 generate/tune/select calls, while retaining existing private-asset isolation and
 inline-generation denial checks. This is not an additional visual generation grant.
+
+Private source DOCUMENT extension: PDF/DjVu exact assets use the same authenticated
+endpoint, principal-scoped key registry and tenant quota. See
+[the canonical media-store contract](../features/media-store/README.md#knowledge-base-source-archive-and-independent-lane--2026-10-04).
+Image ingress limits and sanitization remain unchanged.

@@ -83,3 +83,10 @@ Trusted browser artifacts are imported only from the configured root `/var/lib/m
 MAX Web passive queue/history decoding in `adapters/max/wire.py` is a production runtime path and therefore requires the direct pinned dependencies `msgpack==1.2.2` and `lz4==4.4.5`. They belong in both the canonical direct dependency graph and `requirements.lock`; an acceptance virtualenv must not be relied on to supply them.
 
 After changing the permanent runtime, acceptance is read-only unless a write is explicitly required: verify the known Telegram topic, the bound VK destination and the bound MAX destination. MAX sanity checks must reuse the existing authorized profile and must not create a new authorization or rotate tokens.
+
+## Dedicated Knowledge Base session — 2026-10-04
+
+The additive `--knowledge-base` flag enables the existing worker's second,
+concurrent connection lane. Its selected secret is exactly
+`/home/dev/.env:TELEGRAM_KNOWLEDGE_BASE`; the ordinary session and VK flags remain
+unchanged. See the [media-store contract](../features/media-store/README.md#knowledge-base-source-archive-and-independent-lane--2026-10-04).

@@ -49,9 +49,9 @@ class AuthBoundary:
             scope['vibepublish.actor'] = self.authenticate(authorization[7:])
             if scope['method'] in ('POST', 'PUT', 'PATCH'):
                 image_upload = scope['method'] == 'POST' and scope['path'] == '/v1/assets'
-                body_limit = MAX_UPLOAD_BYTES if image_upload else 512*1024
+                body_limit = (MAX_UPLOAD_BYTES if headers.get('content-type') in {'application/pdf','image/vnd.djvu'} else 20*1024*1024) if image_upload else 512*1024
                 body = bytearray()
-                async with asyncio.timeout(10):
+                async with asyncio.timeout(45 if image_upload and body_limit==MAX_UPLOAD_BYTES else 10):
                     while True:
                         message = await receive()
                         if message['type'] == 'http.disconnect':

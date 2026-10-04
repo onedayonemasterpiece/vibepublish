@@ -172,3 +172,26 @@ actual DOCUMENT planned by VibePublish must still match exact Telegram readback
 and provider byte/hash evidence. Native message, destination/topic and DOCUMENT
 identity establish successful storage, and replay preserves the same entry.
 List/search and completed get receipts retain immutable origin metadata.
+
+## Knowledge Base source archive and independent lane — 2026-10-04
+
+Status: `Not confirmed by user`. Owner execution task is RKB
+`docs/prompts/telegram-source-archive-pdf-djvu-storage-20261004.md`.
+
+Private DOCUMENT assets additionally accept PDF (`application/pdf`) and DjVu
+(`image/vnd.djvu`) via authenticated `/v1/assets`. Container signatures are checked;
+bytes are never decoded, OCRed, sanitized or semantically parsed. Exact ingress and
+provider SHA remain authoritative. Document ingress/read is bounded at 128 MiB;
+images keep their existing 20 MiB ingress policy. Non-image assets are restricted
+to private DOCUMENT use. A bounded safe `alt_text` filename is preserved on source
+DOCUMENT upload. The provider read/download cache still expires after one hour.
+
+`production_worker.py --knowledge-base` explicitly adds exactly one Telegram
+connection with secret reference `VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE`, resolving
+only `/home/dev/.env:TELEGRAM_KNOWLEDGE_BASE`. The ordinary connection still resolves
+`TELEGRAM_VIBE_PUBLISH`. Both sessions retain separate exclusive process locks.
+Two concurrent existing Worker instances claim only their own connection's work;
+unrouted product operations remain with the ordinary worker. Connection lane
+locks and rolling media admission state remain isolated by connection ID. The
+KB topic binding, not the request's origin, determines routing. No scheduler or
+second durable queue is added. Telegram account-wide FloodWait remains possible.

@@ -96,3 +96,12 @@ def test_vk_exact_key_and_no_fallback(tmp_path):
     with pytest.raises(DomainError) as exc:
         production.vk_credentials(env, 'MISSING')
     assert exc.value.code == 'approved_vk_user_token_missing'
+
+
+def test_knowledge_session_is_an_explicit_independent_lane(tmp_path):
+    store=Store(tmp_path/'ledger.sqlite')
+    actor=store.authenticate(store.create_principal('test','owner',owner=True))
+    store.add_connection(actor,'ordinary','telegram',account_type='mtproto_user',secret_ref=production.TG_REFERENCE)
+    store.add_connection(actor,'kb','telegram',account_type='mtproto_user',secret_ref=production.KB_REFERENCE)
+    with pytest.raises(DomainError):production.production_connections(store,telegram_only=True)
+    assert production.production_connections(store,telegram_only=True,knowledge_base=True)=={'telegram':'ordinary','knowledge_base':'kb'}

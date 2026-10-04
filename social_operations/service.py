@@ -391,7 +391,7 @@ class Application:
                 if not allow_video or row['mime'] != 'video/mp4':
                     raise DomainError('media_role_not_enabled')
             elif role == 'document':
-                if not allow_document or row['mime'] not in {'image/png', 'image/jpeg', 'image/webp'}:
+                if not allow_document or row['mime'] not in {'image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'image/vnd.djvu'}:
                     raise DomainError('media_role_not_enabled')
             elif role != 'image' or not row['mime'].startswith('image/'):
                 raise DomainError('media_role_not_enabled')
