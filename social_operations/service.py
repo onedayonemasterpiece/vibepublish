@@ -573,10 +573,6 @@ class Application:
                         if len(plans) != 1 or plans[0]['provider'] != 'telegram' or plans[0].get('scheduled_at'):
                             raise DomainError('media_store_target_invalid')
                         plans[0]['workload'] = 'media_store'
-                        if intent.get('origin',{}).get('system')=='regional_knowledge':
-                            # Owner correction 2026-10-04: image sameness is not
-                            # a mirror delivery gate; resource/request identity is.
-                            plans[0]['media_identity']='resource_ref'
                     publication, revision = new_id('pub'), 1
                     kind = 'media_store' if action == 'media_store' else actual
                     db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)', (publication, actor.tenant_id, actor.principal_id, revision, kind, self.store.clock()))
