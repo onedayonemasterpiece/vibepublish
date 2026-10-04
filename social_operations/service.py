@@ -134,7 +134,7 @@ class Application:
                 projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
                 get_ref = projected['ref']
             elif command['kind'] == 'list':
-                binding, topic = self._telegram_thread(db, actor, command['thread_ref'])
+                binding, topic = self._telegram_thread(db, actor, command['thread_ref'],alias=command.get('to'))
                 if command.get('to') is not None and binding['alias'] != command['to']:
                     raise DomainError('media_store_destination_mismatch',
                                       'The destination does not match thread_ref', 'fix_input')
@@ -437,16 +437,21 @@ class Application:
                 **({'topic_root_id': topic_root_id} if topic_root_id else {}),
                 **({'admission_error': admission_error} if admission_error else {})}
 
-    def _telegram_thread(self, db, actor, ref):
+    def _telegram_thread(self, db, actor, ref, *, alias=None):
         """Resolve a topic through an existing scoped binding; never create a grant."""
         if ref.startswith('https://'):
             source = parse_source(ref)
             if source.provider != 'telegram' or source.public_candidate:
                 raise DomainError('telegram_thread_reference_required')
             matches = [dict(row) for row in self.store.bindings(db, actor)
-                       if row['provider'] == 'telegram' and row['native_id'] == source.channel]
+                       if row['provider'] == 'telegram' and row['native_id'] == source.channel and (alias is None or row['alias']==alias)]
+            if alias is None and len(matches)>1:
+                ordinary=[row for row in matches if row['secret_ref']!='VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE']
+                if len(ordinary)==1:matches=ordinary
             if len(matches) != 1:
                 raise DomainError('access_denied', 'The Telegram group is not bound for this principal', 'contact_owner')
+            import logging
+            logging.getLogger(__name__).info(canonical({'event':'telegram_topic_connection_selected','connection_id':matches[0]['connection_id'],'explicit_alias':alias is not None}))
             return matches[0], source.item
         item = self.resolve_item(db, actor, ref)
         binding = dict(self.store.binding(db, actor, binding_id=item['binding_id']))
@@ -523,7 +528,7 @@ class Application:
                             target = {**target, 'media': staged}
                         target_bindings = self._targets(db, actor, target['to'])
                         if actual == 'publish' and target.get('thread_ref'):
-                            thread_binding, topic_root_id = self._telegram_thread(db, actor, target['thread_ref'])
+                            thread_binding, topic_root_id = self._telegram_thread(db, actor, target['thread_ref'],alias=target_bindings[0]['alias'] if len(target_bindings)==1 else None)
                             if (len(target_bindings) != 1 or target_bindings[0]['id'] != thread_binding['id']
                                     or 'publish' not in json.loads(thread_binding['rights'])):
                                 raise DomainError('access_denied', 'Thread target must belong to the single authorized destination', 'contact_owner')

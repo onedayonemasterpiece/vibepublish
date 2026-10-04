@@ -105,3 +105,18 @@ def test_knowledge_session_is_an_explicit_independent_lane(tmp_path):
     store.add_connection(actor,'kb','telegram',account_type='mtproto_user',secret_ref=production.KB_REFERENCE)
     with pytest.raises(DomainError):production.production_connections(store,telegram_only=True)
     assert production.production_connections(store,telegram_only=True,knowledge_base=True)=={'telegram':'ordinary','knowledge_base':'kb'}
+
+
+def test_same_chat_topic_selects_explicit_kb_or_preserved_ordinary_connection(tmp_path):
+    from social_operations.service import Application
+    store=Store(tmp_path/'ledger.sqlite');actor=store.authenticate(store.create_principal('test','owner',owner=True))
+    store.add_connection(actor,'ordinary','telegram',account_type='mtproto_user',secret_ref=production.TG_REFERENCE)
+    store.add_connection(actor,'kb','telegram',account_type='mtproto_user',secret_ref=production.KB_REFERENCE)
+    store.bind(actor,actor.principal_id,'ordinary','ordinary','-1004368830579')
+    store.bind(actor,actor.principal_id,'kb','kb','-1004368830579')
+    app=Application(store)
+    with store.connection() as db:
+        binding,topic=app._telegram_thread(db,actor,'https://t.me/c/4368830579/2',alias='kb')
+        assert binding['connection_id']=='kb' and topic=='2'
+        assert app._telegram_thread(db,actor,'https://t.me/c/4368830579/4')[0]['connection_id']=='ordinary'
+        with pytest.raises(DomainError):app._telegram_thread(db,actor,'https://t.me/c/9999/2',alias='kb')

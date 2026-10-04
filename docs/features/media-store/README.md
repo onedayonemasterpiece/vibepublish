@@ -195,3 +195,9 @@ unrouted product operations remain with the ordinary worker. Connection lane
 locks and rolling media admission state remain isolated by connection ID. The
 KB topic binding, not the request's origin, determines routing. No scheduler or
 second durable queue is added. Telegram account-wide FloodWait remains possible.
+
+Same-chat connection selection is explicit: put/list use the authorized `to`
+alias when two sessions bind the same forum. Existing URL-only topic calls retain
+the unique ordinary connection; a dedicated KB binding does not change that
+default. Other ambiguous ordinary bindings still fail closed. Connection selection
+emits a structured event without provider credentials or private captions.
