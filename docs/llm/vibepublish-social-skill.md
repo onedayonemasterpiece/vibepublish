@@ -79,18 +79,31 @@ For Telegram forum topics, `thread_ref` is an exact scoped topic reference, not 
 This owner-only workflow is storage, not public publication. After importing a
 browser/chat image, call `vibepublish_media_store` with `command.kind=put`, one
 bound Telegram destination, its exact private `thread_ref`, a descriptive caption,
-document media and a stable request key. VibePublish retains bytes only as staging
-until exact Telegram readback; Telegram holds the durable original document.
+document media and a stable request key. A trusted cross-service mirror may also
+supply immutable `origin.system`, opaque `origin.ref` and `origin.sha256`.
+For `regional_knowledge`, the SHA binds the exact verified crop bytes used for
+the Telegram DOCUMENT mirror; VibePublish never dereferences the origin URI and
+origin never grants access. VibePublish retains bytes only as staging until exact
+Telegram readback; Telegram holds the durable mirrored document.
 
 Use `command.kind=list` with the exact `thread_ref` to inspect one already bound
-topic. Omit `to` unless you are deliberately checking one known matching alias. Use
-`command.kind=search` with text to search captions across every indexed topic in
-the owner's Telegram media database. Both are local metadata operations and must
-not download media. Results return `entry_ref`, caption, hashes, destination,
-topic link and exact Telegram message link. Use `command.kind=get` with the
-returned `entry_ref` only when bytes are required; it downloads the exact Telegram
-document into short-lived cache and returns an asset resource. Do not use ordinary
-social `read` or public `publish` as substitutes.
+topic. Omit `to` unless you are deliberately checking one known matching alias.
+Use `command.kind=search` with text to search captions across every indexed topic
+in the owner's Telegram media database. Both are local metadata operations and
+must not download media. Results return `entry_ref`, caption, hashes, destination,
+topic link, exact Telegram message link and stored origin when present. Use
+`command.kind=get` with the returned `entry_ref` only when bytes are required;
+it downloads the exact Telegram document into short-lived cache, returns an asset
+resource and repeats the immutable origin in `media_store_items`.
+
+All Telegram media-producing workloads on the same connection share one durable
+budget of at most 20 files/images in every rolling 60 seconds. The budget counts
+files, not operations; text-only messages and native forwards consume zero.
+Admission is committed before the first Telegram upload. When capacity is full,
+VibePublish durably defers the original operation without holding the connection
+lane or changing its request identity. FloodWait/SlowMode remains an independent
+provider safety layer. Do not use ordinary social `read` or public `publish` as
+substitutes for the media-store workflow.
 
 
 ### Current visual runtime boundary
