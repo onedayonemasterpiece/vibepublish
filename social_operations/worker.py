@@ -13,7 +13,7 @@ from pathlib import Path
 from adapters.port import Asset, Hooks, NativeSource, Observation, ProviderRequest, ReadRequest, RemoteItem, UnavailableAdapter
 from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time, timestamp
 from .service import Application
-from .media_budget import MediaBudgetDeferred, wait_until
+from .media_budget import MediaBudgetDeferred, reserve
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled'}
 
@@ -98,9 +98,6 @@ class Worker:
                     raise DomainError('connection_outcome_unknown', next_action='review_outcome')
                 if attempt_id != child['id'] or plan_digest != child['plan_digest']:
                     raise DomainError('plan_mismatch')
-                if child['provider']=='telegram':
-                    until=wait_until(db,plan,self.store.clock())
-                    if until is not None:raise MediaBudgetDeferred(until)
                 changed = db.execute('UPDATE attempts SET dispatched=1,dispatch_at=?,state=\'running\',stage=\'submitting\' WHERE id=? AND dispatched=0', (self.store.clock(), attempt_id)).rowcount
                 if changed != 1:
                     raise OutcomeUnknown('already_dispatched')
@@ -266,12 +263,11 @@ class Worker:
             adapter = self.adapter(child['provider'], request.connection_id)
             async with self.lane(request.connection_id):
                 # A lease fence is NOT proof that an old remote request is gone.
-                with self.store.connection() as db:
+                with self.store.tx() as db:
                     self.store.fence(db, op['id'], self.id, op['fence'])
                     current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
                     if not current['dispatched'] and child['provider']=='telegram':
-                        until=wait_until(db,json.loads(child['plan']),self.store.clock())
-                        if until is not None:raise MediaBudgetDeferred(until)
+                        reserve(db, json.loads(child['plan']), child['id'], self.store.clock())
                     if current['dispatched']:
                         self.recovery_authority(db, op, child, actor)
                 checkpoint = current['checkpoint']
