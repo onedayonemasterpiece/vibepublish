@@ -411,31 +411,36 @@ async def test_telegram_media_budget_25_files_survives_restart_and_respects_roll
 
 
 @pytest.mark.asyncio
-async def test_telegram_media_budget_is_shared_with_publication_but_ignores_text(tmp_path):
+async def test_telegram_media_budget_is_shared_with_concurrent_publication_but_ignores_text(tmp_path):
     clock,store,actor,asset,provider,app,worker=budget_runtime(tmp_path)
-    for i in range(20):
+    for i in range(19):
         await app.call(actor,'vibepublish_media_store',
                        media_put(asset,f'fill-{i}',text=f'Fill {i}'))
-    await run_count(worker,20)
-    assert sum(row['media_count'] for row in media_admissions(store,'connection'))==20
 
     media_publication=await app.call(actor,'vibepublish_publish',{
         'to':['vault'],'content':{'text':'ordinary media'},
-        'media':[{'source':{'kind':'asset','id':asset},'role':'document'}],
+        'media':[
+            {'source':{'kind':'asset','id':asset},'role':'document'},
+            {'source':{'kind':'asset','id':asset},'role':'document'},
+        ],
         'request_key':'ordinary-media',
     })
-    await worker.run_once()
-    assert store.receipt(actor,media_publication['operation_id'])['state']=='running'
-    assert provider.effects==20
-
     text_publication=await app.call(actor,'vibepublish_publish',{
         'to':['vault'],'content':{'text':'text only'},
         'request_key':'text-only',
     })
+
+    await run_count(worker,19)
+    assert sum(row['media_count'] for row in media_admissions(store,'connection'))==19
+
+    await worker.run_once()
+    assert store.receipt(actor,media_publication['operation_id'])['state']=='running'
+    assert provider.effects==19
+
     await worker.run_once()
     assert store.receipt(actor,text_publication['operation_id'])['state']=='verified'
-    assert provider.effects==21
-    assert sum(row['media_count'] for row in media_admissions(store,'connection'))==20
+    assert provider.effects==20
+    assert sum(row['media_count'] for row in media_admissions(store,'connection'))==19
 
     clock.advance(60.01)
     await Worker(Store(store.path,clock=clock),{'telegram':provider}).run_once()
