@@ -166,11 +166,11 @@ independent. Existing unknown publication outcomes remain observation-only;
 capacity never authorizes a resend.
 
 Regional Knowledge image identity is the stable illustration resource reference
-and request key. Optional origin SHA is provenance metadata, never an admission
-or image-similarity gate. Mirrors accept ordinary verified/sanitized image assets;
-compression or a changed crop rendition does not require byte equality. Native
-message, destination/topic and DOCUMENT binding still establish successful
-storage, and replay preserves the same entry. Images are not compared as a
-blocking delivery step. Perceptual similarity, when needed for discovery, belongs
-to the existing image-matching workflows rather than cryptographic hashes.
-List/search and completed get receipts retain immutable origin metadata.
+and request key. Optional origin SHA is provenance metadata and is not required
+to equal VibePublish's sanitized asset hash. The actual DOCUMENT bytes sent by
+VibePublish still require exact provider readback/hash binding; origin provenance
+never weakens binary verification. Native message, destination/topic and DOCUMENT
+identity establish successful storage, and request-key replay preserves the same
+entry. Perceptual similarity, when needed for discovery, belongs to separate
+image-matching workflows rather than this storage contract. List/search and
+completed get receipts retain immutable origin metadata.
