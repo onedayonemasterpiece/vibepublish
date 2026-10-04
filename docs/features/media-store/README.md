@@ -174,3 +174,15 @@ storage, and replay preserves the same entry. Images are not compared as a
 blocking delivery step. Perceptual similarity, when needed for discovery, belongs
 to the existing image-matching workflows rather than cryptographic hashes.
 List/search and completed get receipts retain immutable origin metadata.
+
+
+### Explicit owner correction: image comparison is optional
+
+Requirements: `Fixed` by the owner's 2026-10-04 instruction: do not make SHA or
+image sameness a blocking check for Regional Knowledge image mirrors. This
+supersedes the earlier exact-crop-SHA delivery requirement in the execution
+prompt. Neither origin SHA nor equality of provider/source image hashes gates
+that private mirror. Stable resource/request identity, actor authorization and
+native message/topic/DOCUMENT binding remain required. Stored hashes still
+protect each local asset's own integrity and describe observed provider bytes.
+Public publication and its existing checks are outside this narrow correction.
