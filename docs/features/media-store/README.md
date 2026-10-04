@@ -70,7 +70,7 @@ origin.sha256     # originating source/crop digest
 ```
 
 The origin is stored inside the immutable media-store revision and returned by
-`list` and `search`. It is metadata only:
+`list`, `search` and `get`. It is metadata only:
 
 - it never grants Telegram, tenant, object-store or originating-service access;
 - it cannot select another destination or widen the owner boundary;
@@ -83,6 +83,27 @@ canonical object-store identity. VibePublish keeps only the Telegram media
 identity, provider evidence and temporary verified transfer asset. If the
 originating service later revokes or deletes its resource, it must stop exposing
 the VibePublish reference even if the Telegram mirror still exists.
+
+## Telegram media budget — 2026-10-04
+
+Every Telegram connection/account has one shared provider-boundary media budget:
+at most **20 uploaded files/images in any rolling 60-second window**.
+
+- The budget counts provider media files, not operations. A one-file media-store
+  put consumes 1 and a 10-file album consumes 10.
+- Ordinary Telegram publication uploads and media-store puts use the same
+  connection budget. Text-only messages and native forwards consume 0.
+- Admission is durable SQLite state recorded immediately before the first
+  provider media upload. A worker restart therefore does not reset the window.
+- When the next media effect would exceed the window, the original attempt stays
+  undispatched, the operation is durably deferred until the earliest capacity
+  time, and the connection lane is released immediately. No new request key is
+  created and there is no busy wait.
+- Telegram FloodWait/SlowMode remains a separate provider safety layer. A
+  reservation may conservatively consume capacity even if a later provider
+  pre-send step fails; this can delay work but cannot allow the 20-file ceiling
+  to be exceeded.
+- Different Telegram connections have independent windows.
 
 ## Availability boundary
 
