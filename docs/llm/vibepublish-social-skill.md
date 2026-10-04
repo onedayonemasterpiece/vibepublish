@@ -79,18 +79,29 @@ For Telegram forum topics, `thread_ref` is an exact scoped topic reference, not 
 This owner-only workflow is storage, not public publication. After importing a
 browser/chat image, call `vibepublish_media_store` with `command.kind=put`, one
 bound Telegram destination, its exact private `thread_ref`, a descriptive caption,
-document media and a stable request key. VibePublish retains bytes only as staging
-until exact Telegram readback; Telegram holds the durable original document.
+document media and a stable request key. An optional immutable `origin` may carry
+`system`, opaque `ref` and `sha256` for a trusted cross-service mirror such as
+Regional Knowledge; it never grants access and VibePublish never dereferences it.
+VibePublish retains bytes only as staging until exact Telegram readback; Telegram
+holds the durable original document.
 
 Use `command.kind=list` with the exact `thread_ref` to inspect one already bound
 topic. Omit `to` unless you are deliberately checking one known matching alias. Use
 `command.kind=search` with text to search captions across every indexed topic in
 the owner's Telegram media database. Both are local metadata operations and must
 not download media. Results return `entry_ref`, caption, hashes, destination,
-topic link and exact Telegram message link. Use `command.kind=get` with the
-returned `entry_ref` only when bytes are required; it downloads the exact Telegram
-document into short-lived cache and returns an asset resource. Do not use ordinary
-social `read` or public `publish` as substitutes.
+topic link, exact Telegram message link and stored origin when present. Use
+`command.kind=get` with the returned `entry_ref` only when bytes are required; it
+downloads the exact Telegram document into short-lived cache, returns an asset
+resource and preserves the same origin metadata in `media_store_items`. Do not use
+ordinary social `read` or public `publish` as substitutes.
+
+All Telegram media-producing workloads on one connection share a durable provider
+budget of at most 20 files/images in any rolling 60 seconds. The budget counts
+files, not operations; text-only messages and native forwards consume no media
+capacity. When full, VibePublish durably defers the original operation without
+holding the connection lane or changing its request identity. FloodWait/SlowMode
+handling remains an independent second safety layer.
 
 
 ### Current visual runtime boundary
@@ -135,7 +146,7 @@ Identifiers here are fixtures; use real server-returned values in production.
 ### `vibepublish_media_store` — save, global search, retrieve
 
 ```json
-{"command":{"kind":"put","to":"pka_tg","thread_ref":"https://t.me/c/4379835477/5","content":{"text":"Луноход — архивная фотография и описание источника"},"media":[{"source":{"kind":"asset","id":"asset_1"},"role":"document"}]},"request_key":"media-lunokhod-1"}
+{"command":{"kind":"put","to":"pka_tg","thread_ref":"https://t.me/c/4379835477/5","content":{"text":"Луноход — архивная фотография и описание источника"},"media":[{"source":{"kind":"asset","id":"asset_1"},"role":"document"}],"origin":{"system":"regional_knowledge","ref":"knowledge://illustrations/ill_0001","sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},"request_key":"media-lunokhod-1"}
 ```
 
 ```json
