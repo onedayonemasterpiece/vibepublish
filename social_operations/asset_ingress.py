@@ -67,10 +67,23 @@ def _response(db, actor, ident, key):
     if not row:
         # Verified document staging may be gone; retain the immutable ingress receipt
         # so a lost put response can replay its original asset identity safely.
-        replay=db.execute('SELECT o.result FROM request_keys k JOIN operations o ON o.id=k.operation_id WHERE k.tenant_id=? AND k.principal_id=? AND k.key=?',(actor.tenant_id,actor.principal_id,key)).fetchone()
+        replay=db.execute('SELECT o.result,o.request,o.action,o.complete FROM request_keys k JOIN operations o ON o.id=k.operation_id WHERE k.tenant_id=? AND k.principal_id=? AND k.key=?',(actor.tenant_id,actor.principal_id,key)).fetchone()
         if replay:
             receipt=json.loads(replay['result']).get('document_receipt')
             if receipt and receipt['asset_id']==ident:return receipt
+            # Legacy admitted operations may have been recovered after a rollout
+            # and purged without passing the new-admission receipt upgrade.
+            # Exact document ingress intent already proves these scalar values;
+            # return its original identity, never reconstruct bytes or resend.
+            intent=json.loads(replay['request'])
+            import re
+            sha=intent.get('source_sha256')
+            if (replay['action']==ACTION and replay['complete']
+                    and json.loads(replay['result']).get('resource_id')==ident
+                    and intent.get('mime') in DOCUMENT_MIMES
+                    and isinstance(sha,str) and re.fullmatch(r'[0-9a-f]{64}',sha)):
+                return {'asset_id':ident,'sha256':sha,'source_sha256':sha,
+                        'mime':intent['mime'],'width':0,'height':0,'idempotency_key':key}
         raise DomainError('asset_not_available')
     return {'asset_id': ident, 'sha256': row['sha256'], 'source_sha256': row['source_sha256'],
             'mime': row['mime'], 'width': row['width'], 'height': row['height'], 'idempotency_key': key}
