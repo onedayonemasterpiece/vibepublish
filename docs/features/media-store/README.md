@@ -165,10 +165,12 @@ Native scheduling lead/deadline checks and FloodWait/SlowMode recovery remain
 independent. Existing unknown publication outcomes remain observation-only;
 capacity never authorizes a resend.
 
-A `regional_knowledge` origin identifies one exact already verified source image.
-Its SHA must match the scoped asset's original verified bytes; the private DOCUMENT
-mirror uses those bytes rather than its sanitized publication derivative. Other
-origin metadata remains observational. No reference is dereferenced and origin
-never widens access. Generic publication still uses its existing sanitized assets.
-List/search and completed get receipts expose immutable origin metadata; provider
-hashes remain separate authoritative byte evidence.
+Regional Knowledge image identity is the stable illustration resource reference
+and request key. Optional origin SHA is provenance metadata, never an admission
+or image-similarity gate. Mirrors accept ordinary verified/sanitized image assets;
+compression or a changed crop rendition does not require byte equality. Native
+message, destination/topic and DOCUMENT binding still establish successful
+storage, and replay preserves the same entry. Images are not compared as a
+blocking delivery step. Perceptual similarity, when needed for discovery, belongs
+to the existing image-matching workflows rather than cryptographic hashes.
+List/search and completed get receipts retain immutable origin metadata.

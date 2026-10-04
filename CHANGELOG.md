@@ -4,7 +4,8 @@
 
 - Share a durable rolling 20-files/60s Telegram connection budget across publication
   and private media-store work, defer before upload without changing request keys,
-  preserve exact verified Regional Knowledge mirror bytes and return origin on get.
+  use stable Regional Knowledge resource identity without blocking image-SHA checks,
+  and return origin on get.
 
 - Make concurrent SQLite startup converge on WAL with a bounded retry for the
   journal-mode transition, avoiding a transient `database is locked` failure

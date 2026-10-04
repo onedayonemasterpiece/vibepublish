@@ -81,10 +81,11 @@ browser/chat image, call `vibepublish_media_store` with `command.kind=put`, one
 bound Telegram destination, its exact private `thread_ref`, a descriptive caption,
 document media and a stable request key. A trusted cross-service mirror may also
 supply immutable `origin.system`, opaque `origin.ref` and `origin.sha256`.
-For `regional_knowledge`, the SHA binds the exact verified crop bytes used for
-the Telegram DOCUMENT mirror; VibePublish never dereferences the origin URI and
-origin never grants access. VibePublish retains bytes only as staging until exact
-Telegram readback; Telegram holds the durable mirrored document.
+For `regional_knowledge`, illustration resource identity and the stable request
+key bind the mirror. Optional SHA records provenance; it does not require byte
+identical images after compression/cropping. No image comparison blocks storage.
+VibePublish never dereferences the origin URI and origin never grants access.
+Telegram message/topic/DOCUMENT readback confirms delivery.
 
 Use `command.kind=list` with the exact `thread_ref` to inspect one already bound
 topic. Omit `to` unless you are deliberately checking one known matching alias.
