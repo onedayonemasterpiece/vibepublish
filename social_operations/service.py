@@ -115,6 +115,7 @@ class Application:
                 intent['origin'] = command['origin']
             return self.accept(actor, 'media_store', intent)
         get_ref = None
+        get_item = None
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             if command['kind'] == 'get':
@@ -130,6 +131,12 @@ class Application:
                 if binding is None:
                     raise DomainError('access_denied', next_action='contact_owner')
                 remote = json.loads(fact['snapshot'])
+                metadata = self._media_store_items(
+                    db, actor, publication_id=command['entry_ref']
+                )
+                if len(metadata) != 1:
+                    raise DomainError('media_store_entry_not_found', next_action='refresh')
+                get_item = metadata[0]
                 projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
                 get_ref = projected['ref']
             elif command['kind'] == 'list':
@@ -151,7 +158,8 @@ class Application:
                                          complete=True, result=result)
         if get_ref:
             return self.read(actor, {'query': {'kind': 'item', 'item_ref': get_ref},
-                                     '_media_store_get': True})
+                                     '_media_store_get': True,
+                                     '_media_store_item': get_item})
         return self.store.receipt(actor, op)
 
     def _purge_media_store_assets(self, db):
