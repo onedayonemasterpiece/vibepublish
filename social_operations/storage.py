@@ -48,6 +48,8 @@ class Store:
             if version < 6:
                 db.executescript(Path(__file__).with_name("media_store_schema.sql").read_text())
 
+            db.execute("CREATE INDEX IF NOT EXISTS attempts_telegram_media_window ON attempts(dispatch_at) WHERE provider='telegram' AND dispatched=1")
+
     @staticmethod
     def _enable_wal(db: sqlite3.Connection) -> None:
         """Converge concurrent Store initializers on WAL without masking other DB errors."""

@@ -138,3 +138,32 @@ Retained evidence and source catalog:
 `/home/dev/artifacts/vibepublish/20260919T074931Z-media-bank-recovery-20260919`.
 These recovery copies are incident evidence, not a replacement for Telegram as
 the product's durable media store.
+
+
+## Regional Knowledge origin and shared media budget — 2026-10-04
+
+Requirements: `Fixed` by the linked owner execution prompt. Implementation:
+`Not confirmed by user` pending acceptance in the user's client.
+
+All Telegram media-producing publication and media-store attempts share a budget
+of at most 20 files/images in every inclusive rolling 60-second window of their
+connection. Albums count each file. Text-only messages, unchanged-media edits
+and native forwards consume zero. Another connection has an independent budget.
+The existing cross-process connection lane checks capacity before uploads and
+again in the durable before-effect transaction. Accepted and unknown dispatches
+are counted from persisted attempt timestamps and immutable media plans;
+restart never resets the window. A partial dispatch index accelerates the lookup.
+
+Insufficient capacity leaves the original attempt undispatched and its operation
+in durable working state until the earliest capacity timestamp. It releases the
+lane and does not sleep, fail the media, drop staging, or change the request key.
+Native scheduling lead/deadline checks and FloodWait recovery remain independent.
+Existing public unknown attempts are observed; capacity never authorizes resend.
+
+A `regional_knowledge` origin identifies one exact already verified source image.
+Its SHA must match the scoped asset's original verified bytes; the private DOCUMENT
+mirror uses those bytes rather than its sanitized publication derivative. Other
+origin metadata remains observational. No reference is dereferenced and origin
+never widens access. Generic publication still uses its existing sanitized assets.
+List/search and completed get receipts expose immutable origin metadata; provider
+hashes remain separate authoritative byte evidence.
