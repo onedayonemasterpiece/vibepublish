@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import fcntl
 import json
 import os
@@ -26,6 +26,7 @@ from social_operations.domain import DomainError
 from social_operations.storage import Store
 from social_operations.worker import Worker
 
+KB_REFERENCE = "VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE"
 TG_REFERENCE = "VIBEPUBLISH_TELEGRAM_AUTH_BUNDLE"
 VK_REFERENCE = "VIBEPUBLISH_VK_USER_AUTH_BUNDLE"
 MAX_REFERENCE = "VIBEPUBLISH_MAX_PROFILE"
@@ -105,7 +106,7 @@ def telegram_factory(credentials, **kwargs):
     )
 
 
-def production_connections(store: Store, *, telegram_only=False, providers=None):
+def production_connections(store: Store, *, telegram_only=False, providers=None, knowledge_base=False):
     expected = {
         "telegram": ("mtproto_user", TG_REFERENCE),
         "vk": ("vk_user", VK_REFERENCE),
@@ -128,6 +129,13 @@ def production_connections(store: Store, *, telegram_only=False, providers=None)
                 "FROM connections WHERE active=1"
             )
         ]
+    kb_rows=[row for row in rows if row['secret_ref']==KB_REFERENCE]
+    if knowledge_base:
+        if len(kb_rows)!=1 or kb_rows[0]['provider']!='telegram' or kb_rows[0]['account_type']!='mtproto_user':
+            raise DomainError('knowledge_base_connection_topology_invalid')
+        rows=[row for row in rows if row['secret_ref']!=KB_REFERENCE]
+    elif kb_rows:
+        raise DomainError('knowledge_base_lane_not_configured')
     if any(row['provider'] not in expected for row in rows):
         raise DomainError('production_connection_topology_invalid', next_action='contact_owner')
     selected = {}
@@ -144,6 +152,7 @@ def production_connections(store: Store, *, telegram_only=False, providers=None)
                 next_action="contact_owner",
             )
         selected[provider] = matches[0]["id"]
+    if knowledge_base:selected["knowledge_base"]=kb_rows[0]["id"]
     return selected
 
 
@@ -154,6 +163,7 @@ async def run(
     *,
     vk_token_key: str,
     codex_task_artifacts: Path | None = None,
+    knowledge_base: bool = False,
     once: bool = False,
     telegram_only: bool = False,
     providers: tuple[str, ...] | None = None,
@@ -162,12 +172,14 @@ async def run(
     telegram_api_hash_key: str = "TG_API_HASH",
 ):
     store = Store(db)
-    selected = production_connections(store, telegram_only=telegram_only, providers=providers)
+    selected = production_connections(store, telegram_only=telegram_only, providers=providers, knowledge_base=knowledge_base)
     bundles = {
         TG_REFERENCE: json.dumps(telegram_credentials(
             telegram_env_file, session_key=telegram_session_key,
             api_id_key=telegram_api_id_key, api_hash_key=telegram_api_hash_key)),
     }
+    if knowledge_base:
+        bundles[KB_REFERENCE]=json.dumps(telegram_credentials(telegram_env_file, session_key='TELEGRAM_KNOWLEDGE_BASE', api_id_key=telegram_api_id_key, api_hash_key=telegram_api_hash_key))
     if 'vk' in selected:
         if vk_env_file is None or not vk_token_key:
             raise DomainError('approved_vk_configuration_missing')
@@ -178,7 +190,9 @@ async def run(
             raise DomainError("max_profile_config_missing")
         bundles[MAX_REFERENCE] = max_profile
 
-    with exclusive_session_owner(db.parent / 'telegram-session.lock'):
+    with ExitStack() as owners:
+        owners.enter_context(exclusive_session_owner(db.parent / 'telegram-session.lock'))
+        if knowledge_base:owners.enter_context(exclusive_session_owner(db.parent / 'telegram-knowledge-base-session.lock'))
         async with native_adapters(
             store,
             env=bundles,
@@ -192,14 +206,17 @@ async def run(
                     codex_task_artifacts,
                     codex_home=Path("/home/dev/.codex"),
                 )
-            worker = Worker(store, wiring, imagegen=imagegen)
-            try:
+            ordinary=[value for key,value in selected.items() if key!='knowledge_base']
+            workers=[Worker(store,wiring,imagegen=imagegen,connection_ids=ordinary)]
+            if knowledge_base:
+                workers.append(Worker(store,wiring,connection_ids=[selected['knowledge_base']],include_unrouted=False))
+            async def loop(worker):
                 while True:
-                    worked = await worker.run_once()
-                    if once:
-                        return
-                    if not worked:
-                        await asyncio.sleep(0.25)
+                    worked=await worker.run_once()
+                    if once:return
+                    if not worked:await asyncio.sleep(0.25)
+            try:
+                await asyncio.gather(*(loop(worker) for worker in workers))
             finally:
                 if imagegen is not None:
                     await imagegen.close()
@@ -220,6 +237,7 @@ def main():
     parser.add_argument("--telegram-api-id-key", default="TG_API_ID")
     parser.add_argument("--telegram-api-hash-key", default="TG_API_HASH")
     parser.add_argument("--codex-task-artifacts", type=Path)
+    parser.add_argument("--knowledge-base", action="store_true")
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     try:
@@ -231,6 +249,7 @@ def main():
                 vk_token_key=args.vk_token_key,
                 codex_task_artifacts=args.codex_task_artifacts,
                 once=args.once,
+                knowledge_base=args.knowledge_base,
                 telegram_only=args.telegram_only,
                 providers=tuple(args.providers) if args.providers is not None else None,
                 telegram_session_key=args.telegram_session_key,

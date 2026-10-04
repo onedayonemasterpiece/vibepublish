@@ -18,7 +18,7 @@ rights, approval, scheduling and unknown-outcome policy.
 
 ## Contract
 
-- `vibepublish_media_store put` accepts one or more already verified image assets,
+- `vibepublish_media_store put` accepts one or more verified image or exact PDF/DjVu assets,
   always sends them to the exact private Telegram topic as DOCUMENT, and requires
   a stable request key. It does not accept schedules, previews, forwards, edits,
   fan-out, non-Telegram targets or non-owner callers.
@@ -172,3 +172,39 @@ actual DOCUMENT planned by VibePublish must still match exact Telegram readback
 and provider byte/hash evidence. Native message, destination/topic and DOCUMENT
 identity establish successful storage, and replay preserves the same entry.
 List/search and completed get receipts retain immutable origin metadata.
+
+## Knowledge Base source archive and independent lane — 2026-10-04
+
+Status: `Not confirmed by user`. Owner execution task is RKB
+`docs/prompts/telegram-source-archive-pdf-djvu-storage-20261004.md`.
+
+Private DOCUMENT assets additionally accept PDF (`application/pdf`) and DjVu
+(`image/vnd.djvu`) via authenticated `/v1/assets`. Container signatures are checked;
+bytes are never decoded, OCRed, sanitized or semantically parsed. Exact ingress and
+provider SHA remain authoritative. Document ingress/read is bounded at 128 MiB;
+images keep their existing 20 MiB ingress policy. Non-image assets are restricted
+to private DOCUMENT use. A bounded safe `alt_text` filename is preserved on source
+DOCUMENT upload. The provider read/download cache still expires after one hour.
+
+`production_worker.py --knowledge-base` explicitly adds exactly one Telegram
+connection with secret reference `VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE`, resolving
+only `/home/dev/.env:TELEGRAM_KNOWLEDGE_BASE`. The ordinary connection still resolves
+`TELEGRAM_VIBE_PUBLISH`. Both sessions retain separate exclusive process locks.
+Two concurrent existing Worker instances claim only their own connection's work;
+unrouted product operations remain with the ordinary worker. Connection lane
+locks and rolling media admission state remain isolated by connection ID. The
+KB topic binding, not the request's origin, determines routing. No scheduler or
+second durable queue is added. Telegram account-wide FloodWait remains possible.
+
+Same-chat connection selection is explicit: put/list use the authorized `to`
+alias when two sessions bind the same forum. Existing URL-only topic calls retain
+the unique ordinary connection; a dedicated KB binding does not change that
+default. Other ambiguous ordinary bindings still fail closed. Connection selection
+emits a structured event without provider credentials or private captions.
+
+PDF/DjVu ingress originals and transfer clones are temporary staging: native
+verified delivery purges both. Immutable document ingress receipts remain in the
+key registry after byte deletion, so a lost-response replay still resolves the
+original asset/put identity and creates no additional provider file. Unsubmitted
+or failed source assets expire after the bounded 30-day delivery window plus one
+hour; admitted outage staging remains recoverable until then.

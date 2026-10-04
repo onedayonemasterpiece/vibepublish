@@ -231,11 +231,19 @@ class Store:
             raise DomainError("stale_worker", next_action="refresh")
         return row
 
-    def claim(self, worker: str):
+    def claim(self, worker: str, *, connection_ids=None, include_unrouted=True):
         with self.tx() as db:
             now = self.clock()
-            row = db.execute("SELECT * FROM operations WHERE work_state='ready' OR "
-                             "(work_state='working' AND lease_until<?) ORDER BY created,id LIMIT 1", (now,)).fetchone()
+            query="SELECT o.* FROM operations o WHERE (work_state='ready' OR (work_state='working' AND lease_until<?))"
+            values=[now]
+            if connection_ids is not None:
+                marks=','.join('?' for _ in connection_ids)
+                routed="(SELECT json_extract(a.plan,'$.connection_id') FROM attempts a WHERE a.operation_id=o.id LIMIT 1)"
+                read="(SELECT d.connection_id FROM bindings b JOIN destinations d ON d.id=b.destination_id WHERE b.id=json_extract(o.request,'$._binding_id'))"
+                route=f'coalesce({routed},{read})'
+                query+=f' AND ({route} IN ({marks})'+(f' OR {route} IS NULL' if include_unrouted else '')+')'
+                values.extend(connection_ids)
+            row=db.execute(query+' ORDER BY created,id LIMIT 1',values).fetchone()
             if not row:
                 return None
             db.execute("UPDATE operations SET work_state='working',state='running',lease_owner=?,"

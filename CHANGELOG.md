@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add exact private PDF/DjVu DOCUMENT ingress/readback and an explicit independent Knowledge Base Telegram worker lane without replacing ordinary publishing credentials.
+
 - Share a durable rolling 20-files/60s Telegram connection budget across publication
   and private media-store work, defer before upload without changing request keys,
   use stable Regional Knowledge resource identity without blocking image-SHA checks,

@@ -310,13 +310,18 @@ class TelegramAdapter:
             declared = getattr(document, 'mime_type', None) if document else None
             if kind == 'document':
                 declared_size = getattr(document, 'size', None)
-                if type(declared_size) is int and (declared_size <= 0 or declared_size > 20*1024*1024):
+                if type(declared_size) is int and (declared_size <= 0 or declared_size > 128*1024*1024):
                     continue
             data = await self.client.download_media(message, file=bytes)
-            if not isinstance(data, bytes) or not 0 < len(data) <= 20*1024*1024:
+            if not isinstance(data, bytes) or not 0 < len(data) <= 128*1024*1024:
                 raise DomainError('telegram_download_media_invalid')
             try:
-                mime = _image_mime(data)
+                if kind=='document' and data.startswith(b'%PDF-'):
+                    mime='application/pdf'
+                elif kind=='document' and data[:8]==b'AT&TFORM' and data[12:16] in (b'DJVU',b'DJVM'):
+                    mime='image/vnd.djvu'
+                else:
+                    mime = _image_mime(data)
             except DomainError:
                 if kind == 'document':
                     continue
@@ -471,8 +476,12 @@ class TelegramAdapter:
             for ordinal, asset in enumerate(r.assets):
                 await hooks.emit_progress('uploading', 'started', f'Staging media {ordinal+1}/{len(r.assets)}')
                 stream = io.BytesIO(asset.data)
-                extension = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}[asset.mime]
+                extension = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'application/pdf':'pdf', 'image/vnd.djvu':'djvu'}[asset.mime]
                 stream.name = f'verified-{ordinal+1}.{extension}'
+                if asset.role=='document' and asset.mime in {'application/pdf','image/vnd.djvu'} and asset.alt_text:
+                    candidate=asset.alt_text
+                    if len(candidate)<=160 and '/' not in candidate and '\\' not in candidate and all(ord(c)>=32 for c in candidate):
+                        stream.name=candidate
                 uploaded = await self.client.upload_file(stream, file_size=asset.size, file_name=stream.name)
                 if asset.role == 'document':
                     uploaded_media = self.tl.type('InputMediaUploadedDocument', file=uploaded, mime_type=asset.mime,

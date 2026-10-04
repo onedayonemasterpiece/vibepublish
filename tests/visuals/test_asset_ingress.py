@@ -154,3 +154,20 @@ async def test_total_read_deadline(env, monkeypatch):
     await create_app(store)({'type':'http','method':'POST','path':'/v1/assets',
         'headers':[(b'host',b'testserver'),(b'authorization',('Bearer '+token).encode())]}, receive, send)
     assert messages[0]['status'] == 408
+
+
+@pytest.mark.parametrize('data,mime',[(b'%PDF-1.7\nfixture exact source\n','application/pdf'),(b'AT&TFORM\x00\x00\x00\x10DJVUfixture','image/vnd.djvu')])
+def test_exact_document_ingress_replay_and_authorized_read(env,data,mime):
+    store,_,client=env
+    response=upload(client,data,key='book',mime=mime)
+    assert response.status_code==200,response.text
+    receipt=response.json();assert receipt['sha256']==hashlib.sha256(data).hexdigest()
+    assert client.get('/v1/assets/'+receipt['asset_id']).content==data
+    assert upload(client,data,key='book',mime=mime).json()==receipt
+    assert upload(client,data+b'changed',key='book',mime=mime).status_code==409
+    with store.connection() as db:assert db.execute('select count(*) from assets').fetchone()[0]==1
+
+
+def test_false_document_signature_is_rejected(env):
+    _,_,client=env
+    assert upload(client,b'not pdf',mime='application/pdf').status_code==422

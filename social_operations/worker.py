@@ -19,12 +19,13 @@ TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'ca
 
 
 class Worker:
-    def __init__(self, store, adapters=None, *, worker_id=None, imagegen=None):
+    def __init__(self, store, adapters=None, *, worker_id=None, imagegen=None, connection_ids=None, include_unrouted=True):
         self.store = store
         self.adapters = adapters or {}
         self.id = worker_id or new_id('worker')
         self.app = Application(store)
         self.imagegen = imagegen
+        self.connection_ids=connection_ids;self.include_unrouted=include_unrouted
         self.next_media_store_purge = 0
         self.lock_root = store.path.parent / (store.path.name+'.locks')
         self.lock_root.mkdir(mode=0o700, exist_ok=True)
@@ -134,7 +135,7 @@ class Worker:
             with self.store.tx() as db:
                 self.app._purge_media_store_assets(db)
             self.next_media_store_purge = self.store.clock() + 60
-        op = self.store.claim(self.id)
+        op = self.store.claim(self.id, connection_ids=self.connection_ids, include_unrouted=self.include_unrouted)
         if not op:
             return False
         pulse = asyncio.create_task(self.heartbeat(op))
@@ -665,7 +666,7 @@ class Worker:
                               topic_root_id=args.get('_topic_root_id'))
         # Browser reads include account verification, native history and exact
         # media readback. Keep them bounded without applying the API-only 30s cap.
-        budget = 90 if b['provider']=='max' and b['account_type']=='max_web' else 30
+        budget = 120 if args.get('_media_store_get') else 90 if b['provider']=='max' and b['account_type']=='max_web' else 30
         budget = max(0.1, min(budget, op['deadline']-self.store.clock()))
         try:
             async with self.lane(b['connection_id']):
@@ -693,7 +694,13 @@ class Worker:
                             or evidence.slot != media.slot or evidence.sha256 != hashlib.sha256(media.data).hexdigest()
                             or evidence.mime != media.mime or evidence.size != len(media.data)):
                         raise DomainError('download_media_binding_invalid')
-                    verified = verify_image(media.data, media.mime)
+                    if media.mime in {'application/pdf','image/vnd.djvu'}:
+                        if not args.get('_media_store_get'):
+                            raise DomainError('document_download_private_store_only')
+                        from types import SimpleNamespace
+                        verified=SimpleNamespace(width=0,height=0)
+                    else:
+                        verified = verify_image(media.data, media.mime)
                     if args.get('_media_store_get'):
                         asset_ref = new_id('asset')
                         db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',

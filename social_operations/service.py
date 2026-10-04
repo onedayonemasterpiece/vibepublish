@@ -134,7 +134,12 @@ class Application:
                 projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
                 get_ref = projected['ref']
             elif command['kind'] == 'list':
-                binding, topic = self._telegram_thread(db, actor, command['thread_ref'])
+                try:
+                    binding, topic = self._telegram_thread(db, actor, command['thread_ref'],alias=command.get('to'))
+                except DomainError as error:
+                    if command.get('to') is not None and error.code=='access_denied':
+                        raise DomainError('media_store_destination_mismatch','The destination does not match thread_ref','fix_input') from None
+                    raise
                 if command.get('to') is not None and binding['alias'] != command['to']:
                     raise DomainError('media_store_destination_mismatch',
                                       'The destination does not match thread_ref', 'fix_input')
@@ -391,7 +396,7 @@ class Application:
                 if not allow_video or row['mime'] != 'video/mp4':
                     raise DomainError('media_role_not_enabled')
             elif role == 'document':
-                if not allow_document or row['mime'] not in {'image/png', 'image/jpeg', 'image/webp'}:
+                if not allow_document or row['mime'] not in {'image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'image/vnd.djvu'}:
                     raise DomainError('media_role_not_enabled')
             elif role != 'image' or not row['mime'].startswith('image/'):
                 raise DomainError('media_role_not_enabled')
@@ -437,16 +442,21 @@ class Application:
                 **({'topic_root_id': topic_root_id} if topic_root_id else {}),
                 **({'admission_error': admission_error} if admission_error else {})}
 
-    def _telegram_thread(self, db, actor, ref):
+    def _telegram_thread(self, db, actor, ref, *, alias=None):
         """Resolve a topic through an existing scoped binding; never create a grant."""
         if ref.startswith('https://'):
             source = parse_source(ref)
             if source.provider != 'telegram' or source.public_candidate:
                 raise DomainError('telegram_thread_reference_required')
             matches = [dict(row) for row in self.store.bindings(db, actor)
-                       if row['provider'] == 'telegram' and row['native_id'] == source.channel]
+                       if row['provider'] == 'telegram' and row['native_id'] == source.channel and (alias is None or row['alias']==alias)]
+            if alias is None and len(matches)>1:
+                ordinary=[row for row in matches if row['secret_ref']!='VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE']
+                if len(ordinary)==1:matches=ordinary
             if len(matches) != 1:
                 raise DomainError('access_denied', 'The Telegram group is not bound for this principal', 'contact_owner')
+            import logging
+            logging.getLogger(__name__).info(canonical({'event':'telegram_topic_connection_selected','connection_id':matches[0]['connection_id'],'explicit_alias':alias is not None}))
             return matches[0], source.item
         item = self.resolve_item(db, actor, ref)
         binding = dict(self.store.binding(db, actor, binding_id=item['binding_id']))
@@ -523,7 +533,7 @@ class Application:
                             target = {**target, 'media': staged}
                         target_bindings = self._targets(db, actor, target['to'])
                         if actual == 'publish' and target.get('thread_ref'):
-                            thread_binding, topic_root_id = self._telegram_thread(db, actor, target['thread_ref'])
+                            thread_binding, topic_root_id = self._telegram_thread(db, actor, target['thread_ref'],alias=target_bindings[0]['alias'] if len(target_bindings)==1 else None)
                             if (len(target_bindings) != 1 or target_bindings[0]['id'] != thread_binding['id']
                                     or 'publish' not in json.loads(thread_binding['rights'])):
                                 raise DomainError('access_denied', 'Thread target must belong to the single authorized destination', 'contact_owner')
@@ -591,6 +601,15 @@ class Application:
                         for asset in plan['assets']:
                             db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
                                        (asset['ref'], publication, 'staging', staging_expires))
+                    for media in intent['media']:
+                        original=db.execute('select mime from assets where id=?',(media['source']['id'],)).fetchone()
+                        if original and original['mime'] in {'application/pdf','image/vnd.djvu'}:
+                            from .asset_ingress import _response
+                            ingress_keys=db.execute("SELECT o.id,k.key FROM operations o JOIN request_keys k ON k.operation_id=o.id WHERE o.tenant_id=? AND o.principal_id=? AND o.action='asset_ingress' AND json_extract(o.result,'$.resource_id')=?",(actor.tenant_id,actor.principal_id,media['source']['id'])).fetchall()
+                            for ingress in ingress_keys:
+                                receipt=_response(db,actor,media['source']['id'],ingress['key'])
+                                db.execute("UPDATE operations SET result=json_set(result,'$.document_receipt',json(?)) WHERE id=?",(canonical(receipt),ingress['id']))
+                            db.execute("INSERT INTO media_store_assets VALUES(?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET publication_id=excluded.publication_id,expires=excluded.expires",(media['source']['id'],publication,'staging',staging_expires))
                 if args.get('request_key'):
                     self._key(db, actor, args['request_key'], digest([action, intent]), op)
         return self.store.receipt(actor, op)
