@@ -134,7 +134,12 @@ class Application:
                 projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
                 get_ref = projected['ref']
             elif command['kind'] == 'list':
-                binding, topic = self._telegram_thread(db, actor, command['thread_ref'],alias=command.get('to'))
+                try:
+                    binding, topic = self._telegram_thread(db, actor, command['thread_ref'],alias=command.get('to'))
+                except DomainError as error:
+                    if command.get('to') is not None and error.code=='access_denied':
+                        raise DomainError('media_store_destination_mismatch','The destination does not match thread_ref','fix_input') from None
+                    raise
                 if command.get('to') is not None and binding['alias'] != command['to']:
                     raise DomainError('media_store_destination_mismatch',
                                       'The destination does not match thread_ref', 'fix_input')
