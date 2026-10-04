@@ -318,7 +318,7 @@ async def test_origin_metadata_does_not_require_byte_identical_image(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_knowledge_mirror_accepts_changed_image_hash_without_similarity_gate(tmp_path):
+async def test_knowledge_origin_sha_is_independent_but_provider_hash_stays_authoritative(tmp_path):
     store,actor,asset,provider,app,worker=runtime(tmp_path)
     execute=provider.execute
     async def transformed(prepared,hooks):
@@ -327,5 +327,7 @@ async def test_knowledge_mirror_accepts_changed_image_hash_without_similarity_ga
     provider.execute=transformed
     origin={'system':'regional_knowledge','ref':'knowledge://illustrations/changed-rendition'}
     accepted=await app.call(actor,'vibepublish_media_store',args(asset,'changed-rendition',origin=origin))
-    await worker.run_once();assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
-    replay=await app.call(actor,'vibepublish_media_store',args(asset,'changed-rendition',origin=origin));assert replay['operation_id']==accepted['operation_id'];assert provider.effects==1
+    await worker.run_once()
+    done=store.receipt(actor,accepted['operation_id'])
+    assert done['state']=='outcome_unknown'
+    assert done['error']['code']=='media_readback_mismatch'
