@@ -112,21 +112,41 @@ class Application:
                 'content': command['content'], 'media': command['media'],
                 'request_key': args['request_key']}
             if command.get('origin') is not None:
-                intent['origin'] = command['origin']
-                if command['origin']['system']=='regional_knowledge':
-                    # A private origin-bound binary mirror must retain exact source
-                    # bytes, rather than the ordinary sanitized publication derivative.
-                    # Both assets already passed decoding/size checks and actor scope.
-                    if len(command['media'])!=1:raise DomainError('origin_requires_one_media')
-                    source=command['media'][0]['source']
-                    if source['kind']!='asset':raise DomainError('origin_requires_verified_asset')
+                origin = command['origin']
+                intent['origin'] = origin
+                if origin['system'] == 'regional_knowledge':
+                    # Regional Knowledge owns crop identity; Telegram is an exact
+                    # secondary binary mirror, not a sanitized publication derivative.
+                    source_hash = origin.get('sha256')
+                    if source_hash is None:
+                        raise DomainError('origin_source_hash_required')
+                    if len(command['media']) != 1:
+                        raise DomainError('origin_requires_one_media')
+                    source = command['media'][0]['source']
+                    if source['kind'] != 'asset':
+                        raise DomainError('origin_requires_verified_asset')
                     with self.store.connection() as db:
-                        self.store.current(db,actor)
-                        admitted=db.execute('SELECT source_sha256 FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',(source['id'],actor.tenant_id,actor.principal_id)).fetchone()
-                        if not admitted or admitted['source_sha256']!=command['origin']['sha256']:raise DomainError('origin_source_hash_mismatch')
-                        original=db.execute('SELECT id FROM assets WHERE tenant_id=? AND principal_id=? AND source_sha256=? AND sha256=? ORDER BY created,id LIMIT 1',(actor.tenant_id,actor.principal_id,command['origin']['sha256'],command['origin']['sha256'])).fetchone()
-                        if not original:raise DomainError('origin_source_bytes_unavailable')
-                        intent['media']=[{**command['media'][0],'source':{'kind':'asset','id':original['id']}}]
+                        self.store.current(db, actor)
+                        admitted = db.execute(
+                            'SELECT source_sha256 FROM assets '
+                            'WHERE id=? AND tenant_id=? AND principal_id=?',
+                            (source['id'], actor.tenant_id, actor.principal_id),
+                        ).fetchone()
+                        if not admitted or admitted['source_sha256'] != source_hash:
+                            raise DomainError('origin_source_hash_mismatch')
+                        original = db.execute(
+                            'SELECT id FROM assets '
+                            'WHERE tenant_id=? AND principal_id=? '
+                            'AND source_sha256=? AND sha256=? '
+                            'ORDER BY created,id LIMIT 1',
+                            (actor.tenant_id, actor.principal_id, source_hash, source_hash),
+                        ).fetchone()
+                        if not original:
+                            raise DomainError('origin_source_bytes_unavailable')
+                        intent['media'] = [{
+                            **command['media'][0],
+                            'source': {'kind': 'asset', 'id': original['id']},
+                        }]
             return self.accept(actor, 'media_store', intent)
         get_ref = None
         with self.store.tx() as db:
@@ -295,7 +315,7 @@ class Application:
             all_dest = self.aliases(db, actor)
             page = all_dest[offset:offset+50]
             bindings = {r['alias']: r for r in self.store.bindings(db, actor)}
-            result = {'version': '1.7.0-runtime-vk-destinations-stories-tombstone-fix', 'schema_version': VERSION,
+            result = {'version': '1.7.1-runtime-rkb-media-budget', 'schema_version': VERSION,
                       'skill_sha256': hashlib.sha256(skill.encode()).hexdigest(), 'skill': skill,
                       'estimated_tokens': (len(skill) + 2)//3, 'server_time': timestamp(self.store.clock()),
                       'timezone': actor.timezone, 'policy_epoch': actor.epoch, 'routing_revision': actor.routing_revision,
