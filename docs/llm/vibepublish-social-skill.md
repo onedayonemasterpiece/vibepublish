@@ -82,10 +82,9 @@ bound Telegram destination, its exact private `thread_ref`, a descriptive captio
 document media and a stable request key. A trusted cross-service mirror may also
 supply immutable `origin.system`, opaque `origin.ref` and `origin.sha256`.
 For `regional_knowledge`, illustration resource identity and the stable request
-key bind the mirror. Optional SHA records provenance; it does not require byte
-identical images after compression/cropping. No image comparison blocks storage.
-VibePublish never dereferences the origin URI and origin never grants access.
-Telegram message/topic/DOCUMENT readback confirms delivery.
+key bind the mirror. Optional SHA records provenance; no source/provider image
+hash equality blocks storage. Native message/topic/DOCUMENT readback confirms
+delivery. VibePublish never dereferences the origin URI or widens access.
 
 Use `command.kind=list` with the exact `thread_ref` to inspect one already bound
 topic. Omit `to` unless you are deliberately checking one known matching alias.
