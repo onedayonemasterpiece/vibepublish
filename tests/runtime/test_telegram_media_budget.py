@@ -134,6 +134,12 @@ async def test_27_files_shared_budget_durable_defer_restart_and_independent_conn
             ).fetchone()["complete"] == 0
             for row in waiting
         )
+        for row in waiting:
+            operation = db.execute(
+                "SELECT deadline,lease_until FROM operations WHERE id=?",
+                (row["operation_id"],),
+            ).fetchone()
+            assert operation["deadline"] >= operation["lease_until"] + 120
 
     # A restarted worker sees the same durable admission window and due time.
     store = Store(store.path, clock=lambda: clock[0])
