@@ -15,6 +15,15 @@ from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, pars
 from .service import Application
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled'}
+TELEGRAM_MEDIA_LIMIT = 20
+TELEGRAM_MEDIA_WINDOW_SECONDS = 60.0
+TELEGRAM_MEDIA_RETRY_EPSILON = 0.001
+
+
+class TelegramMediaBudgetDeferred(Exception):
+    def __init__(self, retry_at):
+        self.retry_at = retry_at
+        super().__init__('telegram media budget deferred')
 
 
 class Worker:
@@ -47,6 +56,91 @@ class Worker:
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
+
+    @staticmethod
+    def telegram_media_file_count(child, request):
+        """Count provider files that the Telegram adapter will upload."""
+        if child['provider'] != 'telegram':
+            return 0
+        if request.action == 'publish':
+            return len(request.assets)
+        if (request.action == 'edit' and request.existing and request.assets
+                and tuple(asset.sha256 for asset in request.assets)
+                != tuple(request.existing.media_hashes)):
+            return len(request.assets)
+        return 0
+
+    def reserve_telegram_media(self, op, child, request):
+        """Atomically admit Telegram media before the first provider upload."""
+        media_count = self.telegram_media_file_count(child, request)
+        if not media_count:
+            return
+        if media_count > TELEGRAM_MEDIA_LIMIT:
+            raise DomainError('telegram_media_budget_request_too_large')
+        with self.store.tx() as db:
+            self.store.fence(db, op['id'], self.id, op['fence'])
+            current = db.execute(
+                'SELECT dispatched FROM attempts WHERE id=?', (child['id'],)
+            ).fetchone()
+            if not current:
+                raise DomainError('attempt_not_found')
+            if current['dispatched']:
+                return
+            now = self.store.clock()
+            rows = list(db.execute(
+                'SELECT admitted_at,media_count FROM telegram_media_admissions '
+                'WHERE connection_id=? AND admitted_at>? ORDER BY admitted_at,id',
+                (request.connection_id, now - TELEGRAM_MEDIA_WINDOW_SECONDS),
+            ))
+            used = sum(row['media_count'] for row in rows)
+            if used + media_count > TELEGRAM_MEDIA_LIMIT:
+                needed = used + media_count - TELEGRAM_MEDIA_LIMIT
+                released = 0
+                retry_at = None
+                for row in rows:
+                    released += row['media_count']
+                    if released >= needed:
+                        retry_at = (
+                            row['admitted_at'] + TELEGRAM_MEDIA_WINDOW_SECONDS
+                            + TELEGRAM_MEDIA_RETRY_EPSILON
+                        )
+                        break
+                if retry_at is None:
+                    raise DomainError('telegram_media_budget_state_invalid')
+                raise TelegramMediaBudgetDeferred(retry_at)
+            db.execute(
+                'INSERT INTO telegram_media_admissions'
+                '(id,connection_id,attempt_id,media_count,admitted_at) '
+                'VALUES(?,?,?,?,?)',
+                (new_id('tgmedia'), request.connection_id, child['id'],
+                 media_count, now),
+            )
+
+    def defer_telegram_media_budget(self, op, child, retry_at):
+        with self.store.tx() as db:
+            self.store.fence(db, op['id'], self.id, op['fence'])
+            attempt = db.execute(
+                'SELECT dispatched FROM attempts WHERE id=?', (child['id'],)
+            ).fetchone()
+            if not attempt or attempt['dispatched']:
+                raise OutcomeUnknown('telegram_media_budget_after_dispatch')
+            retry_at = max(retry_at, self.store.clock() + TELEGRAM_MEDIA_RETRY_EPSILON)
+            db.execute(
+                "UPDATE attempts SET state='accepted',stage='waiting_connection',"
+                "observed='not_attempted' WHERE id=?",
+                (child['id'],),
+            )
+            db.execute(
+                "UPDATE operations SET state='running',complete=0,"
+                "work_state='working',lease_until=?,error=NULL WHERE id=?",
+                (retry_at, op['id']),
+            )
+            self.store.event(
+                db, op['id'], 'waiting_connection', 'started',
+                'Telegram media budget is full; durable retry scheduled '
+                'without holding the connection lane',
+                child['alias'],
+            )
 
     def hooks(self, op, child=None, min_lead=60):
         async def emit(stage, status, message):
@@ -126,7 +220,8 @@ class Worker:
             await asyncio.sleep(5)
             with self.store.tx() as db:
                 self.store.fence(db, op['id'], self.id, op['fence'])
-                db.execute('UPDATE operations SET lease_until=?,worker_seen=? WHERE id=?', (self.store.clock()+30, self.store.clock(), op['id']))
+                db.execute('UPDATE operations SET lease_until=MAX(lease_until,?),worker_seen=? WHERE id=?',
+                           (self.store.clock()+30, self.store.clock(), op['id']))
 
     async def run_once(self):
         if self.store.clock() >= self.next_media_store_purge:
@@ -256,6 +351,8 @@ class Worker:
                     current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
                     if current['dispatched']:
                         self.recovery_authority(db, op, child, actor)
+                if not current['dispatched']:
+                    self.reserve_telegram_media(op, child, request)
                 checkpoint = current['checkpoint']
                 if current['dispatched']:
                     with self.store.tx() as db:
@@ -272,6 +369,8 @@ class Worker:
                 self.finish_child(op, child, actor, observation, needs_finalize=callable(getattr(adapter, 'finalize', None)))
         except asyncio.CancelledError:
             raise
+        except TelegramMediaBudgetDeferred as exc:
+            self.defer_telegram_media_budget(op, child, exc.retry_at)
         except Exception as exc:
             try:
                 self.fail(op, child, exc if isinstance(exc, DomainError) else DomainError('provider_command_failed', next_action='contact_owner'))
