@@ -799,6 +799,8 @@ class Worker:
                     item['media_evidence'] = []
                 items.append(item)
             result = {'items': items, 'truncated': page.cursor is not None}
+            if args.get('_media_store_item'):
+                result['media_store_items'] = [args['_media_store_item']]
             if page.cursor:
                 result['next_cursor'] = self.store.cursor(db, actor, 'read', digest(query), page.cursor)
             db.execute('UPDATE operations SET state=\'verified\',complete=1,work_state=\'done\',result=? WHERE id=?', (canonical(result), op['id']))
