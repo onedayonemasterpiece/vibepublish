@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Enforce a durable Telegram media admission budget of at most 20 uploaded
+  files/images in any rolling 60-second window per connection. Media-store puts
+  and ordinary Telegram publications share the same budget; text-only messages
+  and native forwards do not consume it. Capacity waits are deferred without
+  holding the connection lane and survive worker restarts.
+- Return immutable cross-service origin metadata from media-store `get` as well
+  as `list` and `search`.
+
 - Make concurrent SQLite startup converge on WAL with a bounded retry for the
   journal-mode transition, avoiding a transient `database is locked` failure
   when several workers open or migrate the same ledger simultaneously.
