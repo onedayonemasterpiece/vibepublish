@@ -112,7 +112,8 @@ class Application:
                 'content': command['content'], 'media': command['media'],
                 'request_key': args['request_key']}
             if command.get('origin') is not None:
-                intent['origin'] = command['origin']
+                origin = command['origin']
+                intent['origin'] = origin
             return self.accept(actor, 'media_store', intent)
         get_ref = None
         with self.store.tx() as db:
@@ -151,7 +152,7 @@ class Application:
                                          complete=True, result=result)
         if get_ref:
             return self.read(actor, {'query': {'kind': 'item', 'item_ref': get_ref},
-                                     '_media_store_get': True})
+                                     '_media_store_get': True, '_media_store_entry_ref': command['entry_ref']})
         return self.store.receipt(actor, op)
 
     def _purge_media_store_assets(self, db):
@@ -281,7 +282,7 @@ class Application:
             all_dest = self.aliases(db, actor)
             page = all_dest[offset:offset+50]
             bindings = {r['alias']: r for r in self.store.bindings(db, actor)}
-            result = {'version': '1.7.0-runtime-vk-destinations-stories-tombstone-fix', 'schema_version': VERSION,
+            result = {'version': '1.7.1-runtime-rkb-media-budget', 'schema_version': VERSION,
                       'skill_sha256': hashlib.sha256(skill.encode()).hexdigest(), 'skill': skill,
                       'estimated_tokens': (len(skill) + 2)//3, 'server_time': timestamp(self.store.clock()),
                       'timezone': actor.timezone, 'policy_epoch': actor.epoch, 'routing_revision': actor.routing_revision,

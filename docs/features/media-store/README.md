@@ -70,7 +70,7 @@ origin.sha256     # originating source/crop digest
 ```
 
 The origin is stored inside the immutable media-store revision and returned by
-`list` and `search`. It is metadata only:
+`list`, `search` and completed `get` receipts. It is metadata only:
 
 - it never grants Telegram, tenant, object-store or originating-service access;
 - it cannot select another destination or widen the owner boundary;
@@ -138,3 +138,37 @@ Retained evidence and source catalog:
 `/home/dev/artifacts/vibepublish/20260919T074931Z-media-bank-recovery-20260919`.
 These recovery copies are incident evidence, not a replacement for Telegram as
 the product's durable media store.
+
+
+## Regional Knowledge origin and shared media budget — 2026-10-04
+
+Requirements: `Fixed` by the linked owner execution prompt. Implementation:
+`Not confirmed by user` pending deployed acceptance.
+
+All Telegram media-producing publication and media-store attempts share a budget
+of at most 20 files/images in every rolling 60-second window of one connection.
+Albums count each file. Text-only messages, unchanged-media edits and native
+forwards consume zero. Different Telegram connections have independent budgets.
+
+Admission is persisted in `telegram_media_admissions` while the existing
+cross-process connection lane is held, immediately before `adapter.execute()`
+and therefore before the first Telegram upload. This is deliberately separate
+from the later publication dispatch marker: a failed or interrupted pre-dispatch
+upload conservatively consumes its admitted capacity for the rolling window.
+Worker restart therefore cannot reset the budget or accidentally admit a 21st
+file after a failed upload.
+
+Insufficient capacity leaves the original attempt undispatched and its operation
+in durable working state until the earliest capacity timestamp. It releases the
+lane and does not sleep, fail the media, drop staging, or change the request key.
+Capacity deferral extends only the internal command lifetime until the reserved retry can run; native scheduling lead-time remains an independent fail-closed rule. FloodWait/SlowMode recovery also remains independent. Existing unknown publication outcomes remain observation-only;
+capacity never authorizes a resend.
+
+Regional Knowledge image identity is the stable illustration resource reference
+and request key. Optional origin SHA is immutable source provenance; it is not
+required to equal VibePublish's sanitized asset hash and is never used as an
+image-similarity gate. That separation does not weaken provider evidence: the
+actual DOCUMENT planned by VibePublish must still match exact Telegram readback
+and provider byte/hash evidence. Native message, destination/topic and DOCUMENT
+identity establish successful storage, and replay preserves the same entry.
+List/search and completed get receipts retain immutable origin metadata.

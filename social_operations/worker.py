@@ -13,6 +13,7 @@ from pathlib import Path
 from adapters.port import Asset, Hooks, NativeSource, Observation, ProviderRequest, ReadRequest, RemoteItem, UnavailableAdapter
 from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time, timestamp
 from .service import Application
+from .media_budget import MediaBudgetDeferred, reserve
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled'}
 
@@ -196,6 +197,7 @@ class Worker:
             await self.finalize_pending(op, actor)
             self.aggregate(op)
             self.schedule_media_store_retry(op)
+            self.schedule_media_budget_retry(op)
         except asyncio.CancelledError:
             # A stopped worker leaves its durable claim for observation-only recovery.
             raise
@@ -244,6 +246,20 @@ class Worker:
             self.store.event(db, op['id'], 'waiting_connection', 'started',
                              'Private media-store retry scheduled without blocking the connection')
 
+    def schedule_media_budget_retry(self, op):
+        with self.store.tx() as db:
+            current=db.execute('SELECT * FROM operations WHERE id=?',(op['id'],)).fetchone()
+            if not current or current['complete']:return
+            waits=[json.loads(row['result'])['media_budget_retry_at'] for row in db.execute("SELECT result FROM attempts WHERE operation_id=? AND state='accepted' AND stage='waiting_connection'",(op['id'],)) if 'media_budget_retry_at' in json.loads(row['result'])]
+            if not waits:return
+            self.store.fence(db,op['id'],self.id,op['fence'])
+            retry_at=min(waits)
+            db.execute(
+                "UPDATE operations SET lease_owner=NULL,lease_until=?,"
+                "deadline=MAX(deadline,?),error=NULL WHERE id=?",
+                (retry_at,retry_at+120,op['id']))
+            self.store.event(db,op['id'],'waiting_connection','started','Shared Telegram media budget deferred; original request identity retained')
+
     async def run_child(self, op, child, actor, prepared):
         try:
             request = self.request(op, child, actor)
@@ -251,9 +267,11 @@ class Worker:
             adapter = self.adapter(child['provider'], request.connection_id)
             async with self.lane(request.connection_id):
                 # A lease fence is NOT proof that an old remote request is gone.
-                with self.store.connection() as db:
+                with self.store.tx() as db:
                     self.store.fence(db, op['id'], self.id, op['fence'])
                     current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
+                    if not current['dispatched'] and child['provider']=='telegram':
+                        reserve(db, json.loads(child['plan']), child['id'], self.store.clock())
                     if current['dispatched']:
                         self.recovery_authority(db, op, child, actor)
                 checkpoint = current['checkpoint']
@@ -270,6 +288,12 @@ class Worker:
                     observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
                                    await adapter.execute(prepared, hooks))
                 self.finish_child(op, child, actor, observation, needs_finalize=callable(getattr(adapter, 'finalize', None)))
+        except MediaBudgetDeferred as deferred:
+            with self.store.tx() as db:
+                self.store.fence(db,op['id'],self.id,op['fence'])
+                changed=db.execute("UPDATE attempts SET state='accepted',stage='waiting_connection',result=? WHERE id=? AND dispatched=0",(canonical({'media_budget_retry_at':deferred.until}),child['id'])).rowcount
+                if changed!=1:raise OutcomeUnknown('media_budget_after_dispatch')
+                self.store.event(db,op['id'],'waiting_connection','started','Telegram media capacity unavailable before provider upload',child['alias'])
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -700,6 +724,8 @@ class Worker:
                     item['media_evidence'] = []
                 items.append(item)
             result = {'items': items, 'truncated': page.cursor is not None}
+            if args.get('_media_store_entry_ref'):
+                result['media_store_items']=self.app._media_store_items(db,actor,publication_id=args['_media_store_entry_ref'])
             if page.cursor:
                 result['next_cursor'] = self.store.cursor(db, actor, 'read', digest(query), page.cursor)
             db.execute('UPDATE operations SET state=\'verified\',complete=1,work_state=\'done\',result=? WHERE id=?', (canonical(result), op['id']))

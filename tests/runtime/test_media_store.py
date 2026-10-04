@@ -147,6 +147,10 @@ async def test_media_store_preserves_cross_service_origin_without_changing_binar
     searched=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'search','text':'иллюстрация'}})
     assert searched['media_store_items'][0]['origin']==origin
 
+    retrieved=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'get','entry_ref':item['entry_ref']}})
+    await worker.run_once()
+    assert store.receipt(actor,retrieved['operation_id'])['media_store_items'][0]['origin']==origin
+
     replay=await app.call(actor,'vibepublish_media_store',
                           args(asset,'knowledge-origin',text='Иллюстрация из региональной базы',origin=origin))
     assert replay['operation_id']==accepted['operation_id']
@@ -295,3 +299,44 @@ async def test_media_store_and_publication_unknowns_do_not_quarantine_each_other
     public_after=await app.call(actor,'vibepublish_publish',{'to':['vault'],
         'content':{'text':'public after private unknown'}})
     await worker.run_once(); assert store.receipt(actor,public_after['operation_id'])['state']=='verified'
+
+
+@pytest.mark.asyncio
+async def test_origin_metadata_does_not_require_byte_identical_image(tmp_path):
+    store,actor,asset,provider,app,worker=runtime(tmp_path)
+    raw=io.BytesIO();Image.new('RGB',(40,30),'orange').save(raw,format='PNG',compress_level=9)
+    data=raw.getvalue();verified=verify_image(data,'image/png');assert verified.data!=data
+    with store.tx() as db:derivative=insert_verified_image(store,db,actor,verified)
+    origin={'system':'regional_knowledge','ref':'knowledge://illustrations/synthetic','sha256':hashlib.sha256(data).hexdigest()}
+    accepted=await app.call(actor,'vibepublish_media_store',args(derivative,'exact-origin-bytes',origin=origin))
+    assert 'operation_id' in accepted,accepted;await worker.run_once()
+    done=store.receipt(actor,accepted['operation_id']);assert done['state']=='verified'
+    assert next(iter(provider.items.values()))[1]==(verified.data,)
+    replay=await app.call(actor,'vibepublish_media_store',args(derivative,'exact-origin-bytes',origin=origin));assert replay['operation_id']==accepted['operation_id']
+    mismatch=await app.call(actor,'vibepublish_media_store',args(derivative,'different-hash',origin={**origin,'sha256':'a'*64}));assert 'operation_id' in mismatch,mismatch
+    no_hash=await app.call(actor,'vibepublish_media_store',args(derivative,'no-image-hash',origin={k:v for k,v in origin.items() if k!='sha256'}));assert 'operation_id' in no_hash,no_hash
+
+
+@pytest.mark.asyncio
+async def test_knowledge_origin_sha_is_independent_but_provider_hash_stays_authoritative(tmp_path):
+    store,actor,asset,provider,app,worker=runtime(tmp_path)
+    execute=provider.execute
+    async def transformed(prepared,hooks):
+        observation=await execute(prepared,hooks)
+        return replace(observation,items=(replace(observation.items[0],media_hashes=('a'*64,)),))
+    provider.execute=transformed
+    origin={'system':'regional_knowledge','ref':'knowledge://illustrations/changed-rendition'}
+    accepted=await app.call(actor,'vibepublish_media_store',args(asset,'changed-rendition',origin=origin))
+    await worker.run_once()
+    done=store.receipt(actor,accepted['operation_id'])
+    # A saved native message is reconciled by observation, never sent again.
+    assert done['state']=='running'
+    with store.tx() as db:
+        child=db.execute('SELECT * FROM attempts WHERE operation_id=?',(accepted['operation_id'],)).fetchone()
+        assert child['state']=='running'
+        assert child['stage']=='waiting_connection'
+        assert 'media_readback_mismatch' in json.loads(child['result'])['missing_checks']
+        db.execute('UPDATE operations SET lease_until=0 WHERE id=?',(accepted['operation_id'],))
+    await worker.run_once()
+    assert store.receipt(actor,accepted['operation_id'])['state']=='verified'
+    assert provider.effects==1
