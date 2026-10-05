@@ -397,10 +397,10 @@ class OAuthBoundary:
             return await respond('request_timeout',408)
 
 
-def create_oauth_app(store, *, auth_db, issuer, resource=None):
+def create_oauth_app(store, *, auth_db, issuer, resource=None, visual_dispatch_proof=None):
     """Build opt-in server. issuer is exact HTTPS origin WITHOUT trailing slash."""
     provider = OAuthProvider(store,auth_db,issuer,resource or issuer+'/mcp/')
-    protected = create_app(store,allowed_hosts=(urlsplit(issuer).hostname,),authenticate=provider.authenticate,oauth_scopes=(SCOPE,))
+    protected = create_app(store,allowed_hosts=(urlsplit(issuer).hostname,),authenticate=provider.authenticate,oauth_scopes=(SCOPE,),visual_dispatch_proof=visual_dispatch_proof)
     registration = ClientRegistrationOptions(enabled=True,valid_scopes=[SCOPE],default_scopes=[SCOPE])
     routes = create_auth_routes(provider,AnyHttpUrl(issuer),client_registration_options=registration,revocation_options=RevocationOptions(enabled=True))
     async def metadata(request):

@@ -5,6 +5,13 @@
 
 # Social visuals
 
+Explicit `reconcile_dispatch` closes only a terminal unknown for which the
+original locked executor receipt proves no generation turn was sent. It seals
+the operation's worker fence and returns `retry_safe=true`; it never resubmits,
+reopens work or publishes. Paths/proof claims cannot come from the client.
+Server opt-in, exact CAS and remaining unknown-outcome rules are documented in
+[the task executor runbook](../../operations/codex-task-imagegen.md#durability-and-recovery).
+
 Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: shared service and partial live executor acceptance `Not confirmed by user`; complete acceptance `Not done`.
 
 Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the handoff](../social-operations/analysis-handoff-20260904.md). Publication/runtime/security rules live in [implementation design](../social-operations/implementation-design-v1.md).

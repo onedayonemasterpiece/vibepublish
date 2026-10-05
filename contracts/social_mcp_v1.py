@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.8.0-runtime"
+VERSION = "1.8.1-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -177,6 +177,7 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
                      "actual_model": {"type": ["string", "null"], "maxLength": 160}, "fixture": {"type": "boolean"}},
                     ("requested_route", "actual_executor", "actual_model", "fixture")),
     "next_action": NEXT, "retry_safe": {"type": "boolean"}, "receipt_ref": ID,
+    "generation_dispatch": enum("not_sent"),
     "deliveries": array(ref("delivery_result"), 0, 100),
     "candidates": array(ref("candidate"), 0, 4), "destinations": array(ref("destination"), 0, 100),
     "review_token": string(512), "poll_after_seconds": {"type": "integer", "minimum": 1},
@@ -266,11 +267,14 @@ browser_artifact_uri = string(47, pattern=r"^artifact://[0-9a-f]{8}-[0-9a-f]{4}-
 visual_cmd = {"oneOf": [arm("import"),
     arm("import_browser_artifact", {"uri": browser_artifact_uri}, ("uri",)),
     ref("visual_spec"),
+    arm("reconcile_dispatch", {"operation_id": ID, "job_id": ID,
+        "expected_revision": REV, "expected_visual_revision": REV},
+        ("operation_id", "job_id", "expected_revision", "expected_visual_revision")),
     arm("select", {"job_id": ID, "candidate_id": ID, "expected_revision": REV, "token": string(512)},
         ("job_id", "candidate_id", "expected_revision", "token")),
     arm("feedback", {"job_id": ID, "candidate_id": ID, "rating": enum("accepted", "rejected"), "reason": string(2000)},
         ("job_id", "candidate_id", "rating"))]}
-tool("visual", "Import a chat attachment or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Generate allows optional source references. Selection resumes only its exact authorized parent.",
+tool("visual", "Import a chat attachment or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Generate allows optional source references. Selection resumes only its exact authorized parent. Explicit reconcile_dispatch seals an original terminal unknown only with trusted executor proof of no generation dispatch; it never resubmits or publishes.",
     obj({"command": visual_cmd, "request_key": KEY,
          "file": obj({"download_url": string(8192), "file_id": string(512),
                       "mime_type": enum("image/png", "image/jpeg", "image/webp"),

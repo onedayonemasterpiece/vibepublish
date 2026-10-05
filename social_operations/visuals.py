@@ -8,11 +8,10 @@ import asyncio
 import hashlib
 import json
 import secrets
-from dataclasses import asdict
 
 from adapters.imagegen import ImagegenRequest, ImagegenSource, UnavailableImagegen
 from .assets import insert_verified_image, verify_image
-from .compositor import PRESET, FORMATS, render
+from .compositor import PRESET, render
 from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time
 from .visual_artifacts import verified_artifact
 
@@ -136,6 +135,8 @@ class VisualService:
         intent = json.loads(canonical(args))
         intent.pop('request_key', None)
         command = intent['command']
+        if command['kind'] == 'reconcile_dispatch':
+            return self.reconcile_dispatch(actor, args, intent)
         if command['kind'] in {'generate', 'tune', 'compose'}:
             command = intent['command'] = self.normalize_spec(command)
         with self.store.tx() as db:
@@ -159,6 +160,72 @@ class VisualService:
                 if args.get('request_key'):
                     self.app._key(db, actor, args['request_key'], digest(['visual', intent]), op)
         return self.store.receipt(actor, op)
+
+    def reconcile_dispatch(self, actor, args, intent):
+        """Close only a terminal unknown whose original executor proves no turn.
+
+        No submit, reopen, candidate creation, publication, or generic SQL repair.
+        Lock + transaction invalidate even an expired worker's historical fence.
+        """
+        if not args.get('request_key'):
+            raise DomainError('reconciliation_requires_request_key')
+        command = intent['command']
+        with self.store.tx() as db:
+            actor = self.store.current(db, actor)
+            previous = self.app._replay(db, actor, 'visual', intent, args, implicit=False)
+            if not previous:
+                job = dict(self.job(db, actor, command['job_id']))
+                original = self.store.private_operation(db, actor, command['operation_id'])
+                if job['operation_id'] != original['id']:
+                    raise DomainError('visual_operation_conflict', next_action='refresh')
+        if previous:
+            return self.store.receipt(actor, previous)
+        reader = self.app.visual_dispatch_proof
+        if reader is None:
+            raise DomainError('imagegen_dispatch_proof_unavailable', next_action='review_outcome')
+        with reader.locked_no_turn_proof(job['id'], job['input_digest']) as proof:
+            with self.store.tx() as db:
+                actor = self.store.current(db, actor)
+                previous = self.app._replay(db, actor, 'visual', intent, args, implicit=False)
+                if previous:
+                    op_id = previous
+                else:
+                    current = self.job(db, actor, job['id'])
+                    op = self.store.private_operation(db, actor, command['operation_id'])
+                    if (current['operation_id'] != op['id'] or current['input_digest'] != proof['input_digest']
+                            or current['revision'] != command['expected_visual_revision']
+                            or op['revision'] != command['expected_revision']):
+                        raise DomainError('visual_revision_conflict', next_action='refresh')
+                    if ('visual' not in actor.scopes or op['state'] != 'outcome_unknown'
+                            or not op['complete'] or op['work_state'] != 'done'
+                            or op['lease_until'] > self.store.clock() or current['dispatched'] != 1
+                            or current['execution_ref'] != current['id'] or current['selected_candidate']
+                            or db.execute('SELECT 1 FROM visual_candidates WHERE job_id=?', (current['id'],)).fetchone()
+                            or db.execute('SELECT 1 FROM attempts WHERE operation_id=?', (op['id'],)).fetchone()):
+                        raise DomainError('imagegen_dispatch_reconciliation_conflict', next_action='review_outcome')
+                    # Recheck frozen parent grants/revisions without renewing an
+                    # expired generation deadline or requesting any remote effect.
+                    self._parent_authority(db, actor, current)
+                    result = json.loads(op['result'])
+                    result.update(retry_safe=True, generation_dispatch='not_sent',
+                                  visual_revision=current['revision'] + 1)
+                    error = DomainError('imagegen_not_dispatched',
+                        'Original executor proves generation was not sent; a separate authorized request may retry',
+                        'fix_input').output()
+                    changed = db.execute("UPDATE operations SET state='failed',revision=revision+1,"
+                        "fence=fence+1,lease_owner=NULL,lease_until=0,result=?,error=? "
+                        "WHERE id=? AND revision=? AND fence=? AND state='outcome_unknown' "
+                        "AND complete=1 AND work_state='done' AND lease_until<=?",
+                        (canonical(result), canonical(error), op['id'], op['revision'], op['fence'], self.store.clock())).rowcount
+                    if changed != 1:
+                        raise DomainError('stale_worker', next_action='refresh')
+                    db.execute("UPDATE visual_jobs SET state='failed',revision=revision+1,observation=? WHERE id=? AND revision=?",
+                        (canonical({'dispatch_reconciliation': proof}), current['id'], current['revision']))
+                    self.store.event(db, op['id'], 'finished', 'failed',
+                        'Original generation not sent; executor lock and core fence sealed; receipt SHA256 ' + proof['receipt_sha256'])
+                    self.app._key(db, actor, args['request_key'], digest(['visual', intent]), op['id'])
+                    op_id = op['id']
+        return self.store.receipt(actor, op_id)
 
     def select(self, db, actor, command, *, automatic=False):
         job = self.job(db, actor, command['job_id'])
