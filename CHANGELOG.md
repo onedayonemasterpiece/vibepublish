@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Accept the inspected Codex CLI 0.160.0 native task protocol alongside 0.153.0,
+  rejecting uninspected versions before server startup and preserving the
+  requested `gpt-5.6-luna` model and existing unknown-outcome receipts.
+
 - Add explicit same-operation visual dispatch reconciliation for an original
   Codex task whose locked fsynced receipt proves no generation turn was sent.
   Seal the terminal operation with revision/fence CAS and `retry_safe=true`;

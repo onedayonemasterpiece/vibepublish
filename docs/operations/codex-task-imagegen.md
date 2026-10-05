@@ -37,7 +37,9 @@ work, not an instruction to modify shared Codex services or copy authentication
 credentials.
 
 The client launches its own `/home/dev/.local/bin/codex app-server --stdio`,
-checks `codex-cli 0.153.0`, and initializes the native protocol. It does not import,
+accepts only the inspected exact versions `codex-cli 0.153.0` and
+`codex-cli 0.160.0`, and initializes the native protocol. Other versions fail
+before an app-server process or thread is started. It does not import,
 modify, attach to, or stop the shared DevCoveer bridge. It passes only an explicit
 HOME/CODEX_HOME/PATH/LANG environment. API keys and social-service environment
 variables are not inherited. Codex reads its existing authentication itself;
@@ -133,7 +135,7 @@ No reasoning or full private thread transcript is written into receipts.
 
 ## Verification evidence
 
-The installed 0.153.0 schemas establish native `localImage` inputs and
+The inspected 0.153.0 and 0.160.0 schemas establish native `localImage` inputs and
 `imageGeneration` items. The implementation uses the ordinary initialize,
 thread/start, turn/start, thread/read and turn/interrupt protocol seen in the
 installed bridge, without importing that service.
@@ -151,6 +153,23 @@ Fixture pixels are not evidence of real generation or publication readiness.
 
 Official references: [App-server protocol](https://learn.chatgpt.com/docs/app-server)
 and [built-in image generation](https://learn.chatgpt.com/docs/image-generation).
+
+### CLI compatibility correction — 2026-10-05
+
+The installed CLI reports `codex-cli 0.160.0`; the previous 0.153.0-only gate
+rejected it before initialization or thread creation. The finite version
+allowlist now retains 0.153.0 and adds the inspected 0.160.0 protocol. Static
+schema generation confirms `initialize.codexHome`, the existing `--stdio`
+transport, native `localImage` inputs and completed `imageGeneration` receipt
+fields. Offline tests exercise initialization before a saved-thread read for
+both versions, and reject uninspected versions before spawning the server.
+
+The existing model catalog cache from CLI 0.160.0 lists `gpt-5.6-luna` with text
+and image inputs. The requested model stays unchanged. Catalog presence and
+schema compatibility do not prove model entitlement or successful generation;
+no app-server, thread, turn or inference was started for this compatibility
+inspection. Live acceptance remains **Not confirmed by user**. Existing unknown
+receipts are preserved and do not become automatic retries after this fix.
 
 Lane validation on 2026-09-05: full repository pytest passed (434 tests and
 199 subtests; two existing dependency-deprecation warnings); visual suite passed

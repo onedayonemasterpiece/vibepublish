@@ -548,6 +548,61 @@ class VisualServiceTaskIntegration(unittest.IsolatedAsyncioTestCase):
 
 
 class AppServerInitializationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_inspected_versions_initialize_before_saved_thread_read(self):
+        from unittest.mock import AsyncMock, Mock
+        from adapters.codex_task_imagegen import SUPPORTED_VERSIONS
+
+        self.assertEqual({'codex-cli 0.153.0', 'codex-cli 0.160.0'}, set(SUPPORTED_VERSIONS))
+        for version in SUPPORTED_VERSIONS:
+            with self.subTest(version=version):
+                client = AppServer(Path('/fixture/codex'))
+                check = Mock(returncode=0, communicate=AsyncMock(return_value=(version.encode(), b'')))
+                process = Mock(returncode=None, wait=AsyncMock(return_value=-15))
+                process.terminate.side_effect = lambda: setattr(process, 'returncode', -15)
+                client._exchange = AsyncMock(side_effect=[
+                    {'codexHome': '/fixture/codex', 'platformFamily': 'unix',
+                     'platformOs': 'linux', 'userAgent': version},
+                    {'thread': {'id': THREAD}},
+                ])
+                client._write = AsyncMock()
+                async def drain(_process):
+                    await asyncio.Event().wait()
+                client._drain = drain
+                with patch('adapters.codex_task_imagegen.asyncio.create_subprocess_exec',
+                           side_effect=[check, process]) as spawn:
+                    try:
+                        result = await client.request('thread/read', {'threadId': THREAD})
+                        self.assertEqual(THREAD, result['thread']['id'])
+                        self.assertTrue(client.initialized)
+                        self.assertEqual(['initialize', 'thread/read'],
+                            [call.args[0] for call in client._exchange.await_args_list])
+                        client._write.assert_awaited_once_with({'method': 'initialized', 'params': {}})
+                        self.assertEqual(('app-server', '--stdio'), spawn.call_args.args[1:3])
+                    finally:
+                        await client.close()
+                    process.terminate.assert_called_once()
+
+    async def test_uninspected_versions_and_nonzero_version_exit_never_start_server(self):
+        from unittest.mock import AsyncMock, Mock
+
+        for version, code in [('codex-cli 0.159.0', 0), ('codex-cli 0.161.0', 0),
+                              ('codex-cli 0.160.1', 0), ('codex-cli 0.160.0-dev', 0),
+                              ('codex-cli 0.160.0', 1)]:
+            with self.subTest(version=version, exit_code=code):
+                client = AppServer(Path('/fixture/codex'))
+                check = Mock(returncode=code, communicate=AsyncMock(return_value=(version.encode(), b'')))
+                client._exchange = AsyncMock()
+                with patch('adapters.codex_task_imagegen.asyncio.create_subprocess_exec',
+                           return_value=check) as spawn:
+                    with self.assertRaises(DomainError) as error:
+                        await client.request('thread/read', {'threadId': THREAD})
+                    self.assertEqual('codex_task_version_changed', error.exception.code)
+                    spawn.assert_awaited_once()
+                    client._exchange.assert_not_awaited()
+                    self.assertFalse(client.initialized)
+                    self.assertIsNone(client.process)
+                    self.assertIsNone(client.reader)
+
     async def test_failed_initialize_cleans_owned_process_then_fresh_read_initializes(self):
         from unittest.mock import AsyncMock, Mock
         from adapters.codex_task_imagegen import VERSION

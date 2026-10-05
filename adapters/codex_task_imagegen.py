@@ -25,7 +25,10 @@ from social_operations.assets import verify_image
 from social_operations.domain import DomainError, OutcomeUnknown, canonical
 
 MODEL = 'gpt-5.6-luna'
-VERSION = 'codex-cli 0.153.0'
+VERSION = 'codex-cli 0.160.0'
+# Exact versions with the required native protocol inspected. Future upgrades
+# remain closed until their handshake, inputs and image receipts are reviewed.
+SUPPORTED_VERSIONS = frozenset({'codex-cli 0.153.0', VERSION})
 MAX_IMAGE = 20 * 1024 * 1024
 MAX_SOURCE_IMAGE = 32 * 1024 * 1024
 MAX_SKILL = 64 * 1024
@@ -211,7 +214,7 @@ class AppServer:
             finally:
                 if check.returncode is None:
                     check.kill(); await check.wait()
-            if check.returncode or output.decode().strip() != VERSION:
+            if check.returncode or output.decode().strip() not in SUPPORTED_VERSIONS:
                 raise DomainError('codex_task_version_changed')
             self.process = await asyncio.create_subprocess_exec(self.binary, 'app-server', '--stdio',
                 env=self.environment(), cwd=str(self.home), stdin=asyncio.subprocess.PIPE,
