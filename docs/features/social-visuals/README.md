@@ -57,6 +57,44 @@ No shell fragments, arbitrary repository paths or raw model-selected commands co
 
 ## Visual recipe and exact text
 
+### Whole-art recomposition correction — 2026-10-05
+
+Requirement: `Fixed`; implementation and rendered acceptance: `Not confirmed by user`.
+The production compositor cropped native side annotations when fitting landscape
+art into a portrait candidate. New derivatives must contain the entire immutable
+art image, centered with neutral margins, including when structured copy occupies
+the lower region. Recipes record the fit policy, source dimensions and visible
+content box; existing assets, recipes and selected choices remain immutable.
+
+Explicit standalone `recompose` is deterministic and uses a stored candidate's
+verified original art. It requires a stable `request_key`, exact source job visual
+revision and candidate SHA256. It creates a separate job and candidate requiring
+selection; it never invokes Imagegen, reopens the original operation, changes a
+selected asset or resumes/publishes an original parent. Existing AI `compose`
+retains its meaning. Source actor/tenant grants, fixture flags, storage quotas,
+immutable lineage and selection CAS remain enforced.
+
+```json
+{"command":{"kind":"recompose","job_id":"visual_original","candidate_id":"candidate_original","expected_visual_revision":2,"expected_sha256":"<original candidate SHA256>","format":"post_4_5"},"request_key":"owner-local-recompose-v1"}
+```
+
+`format` defaults to the source candidate's format; copy comes from the frozen
+source job and cannot be silently replaced. The source operation must be locally
+complete in `needs_selection` or `verified`, with no active worker lease. Its
+frozen input digest, candidate choice binding and both original/final stored
+hashes are rechecked. A finished worker may retain its historical 30-second lease;
+wait for that lease to expire rather than reopening or altering it. The new
+receipt includes `local_recomposition=true`, `recompose_from` and a fresh normal
+selection token. Select that new candidate through the existing `select` command
+to obtain its immutable selected asset. Publication or another product's content
+replacement requires a separate authorized action using the new asset hash.
+
+The compatible `editorial-card-v1` preset identifier is retained; new recipes
+identify `svg-path-cairosvg-v2`, `art_fit=contain`, `art_source_size` and
+`art_content_box`. Centered margins preserve content at the cost of a smaller
+visible image; readable lettering and artistic quality still require rendered
+review. Old v1 recipes retain their historical crop evidence.
+
 The art layer carries atmosphere/background/illustration. When optional exact editorial copy is supplied, Russian text, dates, venue names, addresses, logos and branded safe areas are composed deterministically from those structured fields using SVG/HTML/CSS or an equivalent layout engine. Presets own fonts, text overflow rules, safe zones, crops and allowed art treatments.
 
 `4:5` and `9:16` are required output families. Text is reflowed for each family rather than cropped away. Source originals remain immutable. Resize/masks/metadata can use PIL; it is not the entire design system.

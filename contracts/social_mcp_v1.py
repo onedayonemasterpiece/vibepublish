@@ -166,12 +166,17 @@ DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url":
     "metrics_observed_at": DATE, "error": ref("error"),
     "metrics": array(obj({"name": string(100), "value": {"type": "number"}, "unit": string(40)},
                          ("name", "value")), 0, 100)}, ("ref", "kind", "observed_at", "source", "freshness"))
+DEFS["recompose_lineage"] = obj({"job_id": ID, "candidate_id": ID, "visual_revision": REV,
+    **{key: string(64, pattern=r"^[a-f0-9]{64}$") for key in
+       ("candidate_sha256", "input_digest", "art_sha256")}},
+    ("job_id", "candidate_id", "visual_revision", "candidate_sha256", "input_digest", "art_sha256"))
 DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
     "action": string(80), "state": STATE, "message": string(1500),
     "operation_complete": {"type": "boolean"}, "progress": ref("progress"),
     "items": array(ref("read_item"), 0, 50), "next_cursor": string(512), "worker_seen_at": DATE,
     "truncated": {"type": "boolean"},
     "visual_job_id": ID, "visual_revision": REV, "selected_asset_ref": ID,
+    "local_recomposition": {"type": "boolean"}, "recompose_from": ref("recompose_lineage"),
     "selected_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
     "executor": obj({"requested_route": string(120), "actual_executor": {"type": ["string", "null"], "maxLength": 160},
                      "actual_model": {"type": ["string", "null"], "maxLength": 160}, "fixture": {"type": "boolean"}},
@@ -267,6 +272,10 @@ browser_artifact_uri = string(47, pattern=r"^artifact://[0-9a-f]{8}-[0-9a-f]{4}-
 visual_cmd = {"oneOf": [arm("import"),
     arm("import_browser_artifact", {"uri": browser_artifact_uri}, ("uri",)),
     ref("visual_spec"),
+    arm("recompose", {"job_id": ID, "candidate_id": ID,
+        "expected_visual_revision": REV, "expected_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+        "format": enum("post_4_5", "story_9_16")},
+        ("job_id", "candidate_id", "expected_visual_revision", "expected_sha256")),
     arm("reconcile_dispatch", {"operation_id": ID, "job_id": ID,
         "expected_revision": REV, "expected_visual_revision": REV},
         ("operation_id", "job_id", "expected_revision", "expected_visual_revision")),
@@ -274,7 +283,7 @@ visual_cmd = {"oneOf": [arm("import"),
         ("job_id", "candidate_id", "expected_revision", "token")),
     arm("feedback", {"job_id": ID, "candidate_id": ID, "rating": enum("accepted", "rejected"), "reason": string(2000)},
         ("job_id", "candidate_id", "rating"))]}
-tool("visual", "Import a chat attachment or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Generate allows optional source references. Selection resumes only its exact authorized parent. Explicit reconcile_dispatch seals an original terminal unknown only with trusted executor proof of no generation dispatch; it never resubmits or publishes.",
+tool("visual", "Import a chat attachment or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Explicit recompose creates a separate standalone candidate from verified stored art without AI, fenced by source visual revision and candidate SHA256; it never changes an existing choice or publishes. Generate allows optional source references. Selection resumes only its exact authorized parent. Explicit reconcile_dispatch seals an original terminal unknown only with trusted executor proof of no generation dispatch; it never resubmits or publishes.",
     obj({"command": visual_cmd, "request_key": KEY,
          "file": obj({"download_url": string(8192), "file_id": string(512),
                       "mime_type": enum("image/png", "image/jpeg", "image/webp"),
@@ -287,7 +296,10 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
     "else": {"not": {"required": ["file"]}}},
     {"if": {"properties": {"command": {"properties": {"kind": {"const": "import_browser_artifact"}},
                                         "required": ["kind"]}}},
-     "then": {"required": ["request_key"]}}
+     "then": {"required": ["request_key"]}},
+    {"if": {"properties": {"command": {"properties": {"kind": {"const": "recompose"}},
+                                        "required": ["kind"]}}},
+       "then": {"required": ["request_key"]}}
 ]
 
 tool("asset_preview", "Return a small metadata-free WebP preview of one authorized VibePublish image so the model can inspect it before deciding whether to reuse it. The existing vibepublish://assets/{asset_id} URI remains the immutable source reference.",

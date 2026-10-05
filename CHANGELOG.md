@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Preserve complete native artwork and side annotations in portrait composites
+  using centered contain-fit and versioned geometry evidence. Add explicit
+  revision/hash-fenced standalone recomposition from stored original art without
+  another model call, changing an old selection, or publishing.
+
 - Validate Codex task compatibility through the native handshake and effective
   thread profile before generation, with version output as optional diagnostics.
   Record bounded protocol failure codes without exposing private payloads;

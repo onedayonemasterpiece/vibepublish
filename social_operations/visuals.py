@@ -148,6 +148,10 @@ class VisualService:
                     self.create(db, actor, command, op)
                 elif command['kind'] == 'select':
                     op = self.select(db, actor, command)
+                elif command['kind'] == 'recompose':
+                    if not args.get('request_key'):
+                        raise DomainError('recomposition_requires_request_key')
+                    op = self.recompose(db, actor, command, intent)
                 else:
                     job = self.job(db, actor, command['job_id'])
                     candidate = db.execute('SELECT id FROM visual_candidates WHERE id=? AND job_id=?', (command['candidate_id'], job['id'])).fetchone()
@@ -160,6 +164,88 @@ class VisualService:
                 if args.get('request_key'):
                     self.app._key(db, actor, args['request_key'], digest(['visual', intent]), op)
         return self.store.receipt(actor, op)
+
+    def recompose(self, db, actor, command, intent):
+        """New immutable standalone derivative from owned stored art, no executor.
+
+        Source CAS and original frozen input identity are checked in the same
+        transaction as assets/candidate insertion. No original job is reopened.
+        """
+        if 'visual' not in actor.scopes:
+            raise DomainError('visual_scope_required', next_action='contact_owner')
+        source = self.job(db, actor, command['job_id'])
+        if source['revision'] != command['expected_visual_revision']:
+            raise DomainError('visual_revision_conflict', next_action='refresh')
+        original = self.store.private_operation(db, actor, source['operation_id'])
+        if (source['state'] not in {'needs_selection', 'selected'} or not original['complete']
+                or original['work_state'] != 'done' or original['lease_until'] > self.store.clock()
+                or original['state'] not in {'needs_selection', 'verified'}):
+            raise DomainError('visual_recomposition_source_not_complete', next_action='check_status')
+        frozen_digest = digest([source['tenant_id'], source['principal_id'], source['actor_epoch'],
+            source['routing_revision'], source['parent_publication'], source['parent_revision'],
+            json.loads(source['spec']), json.loads(source['sources']), json.loads(source['plans']), REQUESTED_ROUTE])
+        if not secrets.compare_digest(source['input_digest'], frozen_digest):
+            raise DomainError('visual_input_integrity')
+        candidate = db.execute('SELECT * FROM visual_candidates WHERE id=? AND job_id=?',
+            (command['candidate_id'], source['id'])).fetchone()
+        if not candidate:
+            raise DomainError('visual_candidate_not_available')
+        if not secrets.compare_digest(candidate['sha256'], command['expected_sha256']):
+            raise DomainError('visual_candidate_hash_conflict', next_action='refresh')
+        source_provenance = json.loads(candidate['provenance'])
+        choice_revision = source['revision'] - int(source['selected_candidate'] is not None)
+        if (source_provenance.get('input_digest') != source['input_digest']
+                or source_provenance.get('choice_binding') != digest([
+                    source['input_digest'], candidate['id'], candidate['sha256'], candidate['format'], choice_revision])):
+            raise DomainError('visual_input_integrity')
+        for ref, sha in [(candidate['asset_ref'], candidate['sha256']),
+                         (candidate['art_ref'], candidate['art_sha256'])]:
+            stored = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
+                (ref, actor.tenant_id, actor.principal_id)).fetchone()
+            if not stored or hashlib.sha256(stored['bytes']).hexdigest() != sha or stored['sha256'] != sha:
+                raise DomainError('asset_integrity')
+        art = verify_image(stored['bytes'], stored['mime'])
+        if hashlib.sha256(art.data).hexdigest() != candidate['art_sha256']:
+            raise DomainError('asset_integrity')
+        spec = json.loads(source['spec'])
+        format = command.get('format', candidate['format'])
+        composite = render(art.data, spec['copy'], format)
+        final = verify_image(composite.png, 'image/png')
+        lineage = {'job_id': source['id'], 'candidate_id': candidate['id'],
+            'visual_revision': source['revision'], 'candidate_sha256': candidate['sha256'],
+            'input_digest': source['input_digest'], 'art_sha256': candidate['art_sha256']}
+        new_spec = {'kind': 'recompose', 'brief': spec['brief'], 'copy': spec['copy'],
+            'formats': [format], 'candidates': 1, 'selection': 'human', 'recompose_from': lineage,
+            'sources': [{'source': {'kind': 'asset', 'id': candidate['art_ref']}}]}
+        op = self.app._new_operation(db, actor, 'visual', intent)
+        job_id = self.create(db, actor, new_spec, op)
+        job = self.job(db, actor, job_id)
+        asset_ref = insert_verified_image(self.store, db, actor, final)
+        # A byte-identical derivative may reuse an existing immutable asset.
+        db.execute('INSERT OR IGNORE INTO visual_asset_origins VALUES(?,?,?,?)',
+            (asset_ref, job_id, candidate['fixture'], 'final'))
+        sha = hashlib.sha256(final.data).hexdigest()
+        token, candidate_id = secrets.token_urlsafe(32), new_id('candidate')
+        provenance = {**source_provenance, 'recompose_from': lineage,
+            'local_recomposition': True, 'input_digest': job['input_digest'],
+            'sources': json.loads(job['sources']),
+            'choice_binding': digest([job['input_digest'], candidate_id, sha, format, job['revision']])}
+        db.execute('INSERT INTO visual_candidates VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            (candidate_id, job_id, 0, asset_ref, sha, candidate['art_ref'], candidate['art_sha256'],
+             final.width, final.height, format, composite.recipe_json, canonical(provenance),
+             self.store.token_hash(token), candidate['fixture'], candidate['requires_review']))
+        result = {'resource_id': job_id, 'visual_job_id': job_id, 'visual_revision': job['revision'],
+            'local_recomposition': True, 'recompose_from': lineage,
+            'candidates': [{'id': candidate_id, 'asset_ref': asset_ref, 'sha256': sha,
+                'width': final.width, 'height': final.height, 'format': format,
+                'selection_token': token, 'requires_review': bool(candidate['requires_review'])}]}
+        db.execute("UPDATE visual_jobs SET state='needs_selection',observation=? WHERE id=?",
+            (canonical(provenance), job_id))
+        db.execute("UPDATE operations SET state='needs_selection',complete=1,work_state='done',result=? WHERE id=?",
+            (canonical(result), op))
+        self.store.event(db, op, 'rendering', 'completed',
+            'Whole stored art recomposed locally into a new immutable candidate; no executor or social effect')
+        return op
 
     def reconcile_dispatch(self, actor, args, intent):
         """Close only a terminal unknown whose original executor proves no turn.
