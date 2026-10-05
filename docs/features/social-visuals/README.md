@@ -62,8 +62,9 @@ No shell fragments, arbitrary repository paths or raw model-selected commands co
 Requirement: `Fixed`; implementation and rendered acceptance: `Not confirmed by user`.
 The production compositor cropped native side annotations when fitting landscape
 art into a portrait candidate. New derivatives must contain the entire immutable
-art image, centered with neutral margins, including when structured copy occupies
-the lower region. Recipes record the fit policy, source dimensions and visible
+art image. With structured copy it is centered in the card's upper region;
+with empty copy the canvas follows the artwork's aspect ratio without margins.
+Recipes record the fit policy, source dimensions and visible
 content box; existing assets, recipes and selected choices remain immutable.
 
 Explicit standalone `recompose` is deterministic and uses a stored candidate's
@@ -90,10 +91,10 @@ to obtain its immutable selected asset. Publication or another product's content
 replacement requires a separate authorized action using the new asset hash.
 
 The compatible `editorial-card-v1` preset identifier is retained; new recipes
-identify `svg-path-cairosvg-v2`, `art_fit=contain`, `art_source_size` and
-`art_content_box`. Centered margins preserve content at the cost of a smaller
-visible image; readable lettering and artistic quality still require rendered
-review. Old v1 recipes retain their historical crop evidence.
+identify `svg-path-cairosvg-v3`, `art_fit=contain`, `art_source_size`,
+`art_content_box` and `canvas_fit`. Readable lettering and artistic quality still
+require rendered review. Old v1 recipes retain their historical crop evidence;
+old v2 recipes retain their historical padded canvas.
 
 The art layer carries atmosphere/background/illustration. When optional exact editorial copy is supplied, Russian text, dates, venue names, addresses, logos and branded safe areas are composed deterministically from those structured fields using SVG/HTML/CSS or an equivalent layout engine. Presets own fonts, text overflow rules, safe zones, crops and allowed art treatments.
 

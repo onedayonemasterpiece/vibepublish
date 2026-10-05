@@ -132,7 +132,16 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET) -> Comp
               'art_content_box': content_box,
               'canvas_fit': 'fixed' if copy else 'art_aspect',
               'renderer': 'svg-path-cairosvg-v3', 'human_review_required': True}
-    encoded = base64.b64encode(art).decode('ascii')
+    image_layer = art
+    if not copy:
+        # Resize once to integer pixel dimensions before SVG composition so
+        # Cairo cannot blend a fractional image edge into the card background.
+        with Image.open(io.BytesIO(art)) as source:
+            resized = source.resize((width, height), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            resized.save(output, format='PNG')
+            image_layer = output.getvalue()
+    encoded = base64.b64encode(image_layer).decode('ascii')
     # The native-aspect dimensions are rounded to whole pixels. Filling that
     # box avoids fractional-pixel antialiased borders from SVG's meet fitting.
     aspect_fit = 'xMidYMid meet' if copy else 'none'

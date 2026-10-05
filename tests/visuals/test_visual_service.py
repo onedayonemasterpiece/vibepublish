@@ -288,7 +288,7 @@ def test_compositor_preserves_all_four_edge_markers(format, size, copy):
     assert recipe['art_fit'] == 'contain' and recipe['art_source_size'] == list(size)
     assert recipe['renderer'] == 'svg-path-cairosvg-v3'
     x, y, cw, ch = recipe['art_content_box']
-    assert cw/ch == pytest.approx(w/h)
+    assert cw/ch == pytest.approx(w/h, abs=1/min(cw, ch))
     with Image.open(io.BytesIO(composite.png)) as output:
         if not copy:
             assert composite.width/composite.height == pytest.approx(w/h, abs=1/min(composite.width, composite.height))
