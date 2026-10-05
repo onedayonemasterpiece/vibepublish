@@ -97,7 +97,14 @@ review. Old v1 recipes retain their historical crop evidence.
 
 The art layer carries atmosphere/background/illustration. When optional exact editorial copy is supplied, Russian text, dates, venue names, addresses, logos and branded safe areas are composed deterministically from those structured fields using SVG/HTML/CSS or an equivalent layout engine. Presets own fonts, text overflow rules, safe zones, crops and allowed art treatments.
 
-`4:5` and `9:16` are required output families. Text is reflowed for each family rather than cropped away. Source originals remain immutable. Resize/masks/metadata can use PIL; it is not the entire design system.
+`4:5` and `9:16` are required output families for cards with structured copy. Text is reflowed for each family rather than cropped away. Finished artwork with empty structured copy retains its source aspect ratio within the requested family's maximum dimensions, without added letterboxing. Source originals remain immutable. Resize/masks/metadata can use PIL; it is not the entire design system.
+
+Owner correction 2026-10-05 (`Fixed`; live acceptance `Not done`): white bars
+above and below Street Story's finished artwork are a defect. Renderer v3 uses
+`canvas_fit=art_aspect` for empty-copy visuals, preserving the entire image and
+baked-in fact labels. Cards with explicit structured copy retain their fixed
+canvas and typography. A deterministic `recompose` of a verified original uses
+the same rule without new inference; previous candidates remain immutable.
 
 If a draft contains baked-in text, do not blindly draw new text over old generated lettering. Separate or reconstruct the art layer and validate the complete composite. Editorial facts must come from explicit user inputs or confirmed source extraction, not unchecked OCR. Facts ambiguous in a source produce a review blocker. Automated checks can establish dimensions, overflow, font/layout and supplied text; they cannot universally prove absence of accidental lettering or artistic quality. Initial presets and uncertain candidates retain an honest quality-review flag.
 The owner's explicit execute-publication authorization below waives mandatory manual

@@ -86,11 +86,19 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET) -> Comp
     with Image.open(io.BytesIO(art)) as image:
         image.verify()
         source_width, source_height = image.size
+    # Finished artwork already carries its lettering. Keep its aspect ratio
+    # instead of adding a blank card around it; the format bounds its size.
+    if not copy:
+        scale = min(width/source_width, height/source_height)
+        width = max(1, round(source_width*scale))
+        height = max(1, round(source_height*scale))
     pad, bottom = 72, height-88
     art_height = (560 if format == 'post_4_5' else 960) if copy else height
     art_scale = min(width/source_width, art_height/source_height)
     content_width, content_height = source_width*art_scale, source_height*art_scale
     content_box = [(width-content_width)/2, (art_height-content_height)/2, content_width, content_height]
+    if not copy:
+        content_box = [0, 0, width, height]
     y = art_height + 90
     placed, paths, font_hashes = [], [], {}
     for field, size, bold in fields:
@@ -122,13 +130,17 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET) -> Comp
               'art_sha256': hashlib.sha256(art).hexdigest(), 'art_box': [0, 0, width, art_height],
               'art_fit': 'contain', 'art_source_size': [source_width, source_height],
               'art_content_box': content_box,
-              'renderer': 'svg-path-cairosvg-v2', 'human_review_required': True}
+              'canvas_fit': 'fixed' if copy else 'art_aspect',
+              'renderer': 'svg-path-cairosvg-v3', 'human_review_required': True}
     encoded = base64.b64encode(art).decode('ascii')
+    # The native-aspect dimensions are rounded to whole pixels. Filling that
+    # box avoids fractional-pixel antialiased borders from SVG's meet fitting.
+    aspect_fit = 'xMidYMid meet' if copy else 'none'
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
            f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
            f'<metadata>{html.escape(canonical(recipe))}</metadata>'
            f'<rect width="{width}" height="{height}" fill="#f8fafb"/>'
-           f'<image x="0" y="0" width="{width}" height="{art_height}" preserveAspectRatio="xMidYMid meet" '
+           f'<image x="0" y="0" width="{width}" height="{art_height}" preserveAspectRatio="{aspect_fit}" '
            f'xlink:href="data:image/png;base64,{encoded}"/>'
            f'<g fill="#172b3b">{"".join(paths)}</g></svg>').encode()
     # SVG is generated here, never user-supplied; its only URL is verified PNG data.
