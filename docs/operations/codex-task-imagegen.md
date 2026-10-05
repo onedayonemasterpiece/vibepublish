@@ -65,6 +65,32 @@ multiple or missing turns remain unknown. No `thread/resume`, `turn/start`, or
 history search is used by recovery. A lost thread-creation response with no saved
 thread ID remains unknown and is not recreated automatically.
 
+An explicit `visual.command.kind=reconcile_dispatch` can close this narrow
+settings-only failure after the operation is terminal. The server opts in with
+`--codex-task-control-root` pointing to the trusted existing executor's private
+`<name>-tasks` root. It constructs only a transport-free proof reader. Callers
+supply the original operation/job IDs, exact operation/visual revisions and a
+stable request key, never a path or a claim that dispatch did not occur.
+
+The proof reader acquires the existing executor file lock without creating it
+and requires the same job/input digest, `thread_start_pending`, null native IDs
+and no images/artifacts. This dispatcher's fsynced `turn_start_pending` marker
+precedes its sole `turn/start`, while `thread/start` contains settings only. A
+trusted root must contain only receipts from this audited dispatcher protocol.
+Missing/ambiguous receipts, other phases, busy locks, a live core lease,
+candidates, provider attempts and authority/revision changes fail closed. The
+lock remains held through the core transaction.
+
+The core increments its revision and worker fence, clears the old lease and
+records the receipt digest in an append-only event. The original job remains
+dispatched and its private receipt stays unchanged. The terminal result becomes
+`failed / imagegen_not_dispatched`, `generation_dispatch=not_sent`,
+`retry_safe=true`; it does not reopen work or submit generation/publication.
+Only a separate authorized command can retry after this authoritative result.
+Other terminal unknown outcomes still require observation and remain unsafe to
+repeat. Offline regressions validate closure, stale-worker rejection, idempotent
+replay and negative proof/authority cases; they are not live evidence.
+
 Codex app-server may transiently expose a saved turn as `interrupted` while a
 built-in image generation is still converging. That status is terminal only
 after this executor has first persisted its own `interrupt_pending` intent.
@@ -151,7 +177,9 @@ by this integration test; the service catch discards the original exception
 class. Do not equate it with the confirmed usage validation failure.
 
 After a core operation is terminal `outcome_unknown`, adapter readback can still
-recover the same native thread, but cannot reopen that core operation. Current
+recover the same native thread, but cannot reopen that core operation. The
+explicit no-turn reconciliation above only closes proven unsent generation;
+it does not recover/import completed native results. Current
 worker crash recovery applies to unfinished leased work, not `complete=1` /
 `work_state=done` operations. No automatic resend or database status edit is
 performed by this adapter. A future authorized core reconcile action would need

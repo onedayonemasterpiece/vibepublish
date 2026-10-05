@@ -20,8 +20,9 @@ if not SKILL.exists():
 
 
 class Application:
-    def __init__(self, store):
+    def __init__(self, store, *, visual_dispatch_proof=None):
         self.store = store
+        self.visual_dispatch_proof = visual_dispatch_proof
         from .visuals import VisualService
         self.visuals = VisualService(self)
         from .emojis import EmojiService

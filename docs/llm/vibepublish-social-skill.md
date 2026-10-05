@@ -37,6 +37,16 @@ Use next_action and operation_complete to stop, request selection/approval, repo
 
 After disconnect or timeout, recover status using the original identity. `outcome_unknown` and retry_safe=false prohibit another publish/click/generation as a substitute. Only retry_failed may retry server-proven unperformed children.
 
+For an original terminal visual unknown, `visual` command `reconcile_dispatch`
+accepts its `operation_id`, `job_id`, exact `expected_revision` and
+`expected_visual_revision`, plus a stable request key. A configured trusted
+executor reader may prove no generation turn was sent and seal that same
+operation as `failed / imagegen_not_dispatched` with `retry_safe=true` and
+`generation_dispatch=not_sent`. This command never generates or publishes.
+Do not invent proof, receipt paths or another identity when proof is unavailable.
+A later generation requires its own explicit authorization and this verified
+safe result; all other unknown-outcome restrictions remain.
+
 ## Read access, history and statistics
 
 A partner may freely read all provider-visible posts and the entire native scheduled queue in each channel where they have active publishing access, including other editors' posts. No extra read grant is needed. Searches stay inside those destinations. A link to another channel does not grant access; do not enumerate the operator's unrelated dialogs or the whole linked discussion chat.

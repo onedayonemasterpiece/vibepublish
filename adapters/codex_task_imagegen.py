@@ -111,6 +111,74 @@ def _exception_frames(exc):
     return {'class': type(exc).__name__[:160], 'frames': frames[-16:]}
 
 
+class CodexTaskNoTurnProof:
+    """Transport-free proof reader for the existing fsynced dispatcher protocol.
+
+    Only an operator supplies this trusted root. Never constructs AppServer,
+    creates a directory/lock, changes a receipt, or requests thread history.
+    The original executor lock remains held through the core's fencing CAS.
+    """
+    def __init__(self, control_root: Path):
+        self.control_root = Path(control_root).absolute()
+        self._directory(self.control_root)
+
+    @staticmethod
+    def _directory(path):
+        try:
+            st = path.lstat()
+            if (path.resolve(strict=True) != path or not stat.S_ISDIR(st.st_mode)
+                    or st.st_uid != os.getuid() or st.st_mode & 0o077):
+                raise ValueError('untrusted directory')
+        except (OSError, ValueError):
+            raise DomainError('imagegen_dispatch_proof_unavailable', next_action='review_outcome') from None
+
+    @contextmanager
+    def locked_no_turn_proof(self, job_key, input_digest):
+        if (not isinstance(job_key, str) or not re.fullmatch(r'visual_[a-f0-9]{32}', job_key)
+                or not isinstance(input_digest, str) or not re.fullmatch(r'[a-f0-9]{64}', input_digest)):
+            raise DomainError('imagegen_dispatch_proof_conflict', next_action='review_outcome')
+        directory = self.control_root / job_key
+        self._directory(directory)
+        # Pin every ancestor: no symlink, replacement lock, or creating a new
+        # inode that the original executor would not actually be locking.
+        ancestor = os.open('/', os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW)
+        lock = None
+        try:
+            for part in directory.parts[1:]:
+                child = os.open(part, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=ancestor)
+                os.close(ancestor)
+                ancestor = child
+            lock = os.open('lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=ancestor)
+            st = os.fstat(lock)
+            if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid()
+                    or st.st_nlink != 1 or st.st_mode & 0o077):
+                raise ValueError('untrusted lock')
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise DomainError('imagegen_dispatch_proof_busy', next_action='check_status') from None
+            raw = _read(directory / 'receipt.json', 65536)
+            record = json.loads(raw)
+            if (record.get('job_key') != job_key or record.get('input_digest') != input_digest
+                    or record.get('phase') != 'thread_start_pending' or record.get('state') != 'unknown'
+                    or 'thread_id' not in record or record['thread_id'] is not None
+                    or 'turn_id' not in record or record['turn_id'] is not None
+                    or record.get('artifacts') != [] or record.get('native_image_items', []) != []
+                    or record.get('task_model') is not None or record.get('actual_model') is not None):
+                raise DomainError('imagegen_dispatch_not_proven', next_action='review_outcome')
+            # submit() fsyncs turn_start_pending BEFORE the sole turn/start.
+            # Existing receipt prevents any second submit for this identity.
+            yield {'protocol': 'codex_task_fsync_before_turn_v1', 'job_key': job_key,
+                   'input_digest': input_digest, 'receipt_sha256': hashlib.sha256(raw).hexdigest(),
+                   'phase': 'thread_start_pending', 'generation_dispatch': 'not_sent'}
+        except (OSError, ValueError, TypeError):
+            raise DomainError('imagegen_dispatch_proof_unavailable', next_action='review_outcome') from None
+        finally:
+            if lock is not None:
+                os.close(lock)
+            os.close(ancestor)
+
+
 class AppServer:
     """One owned, drained stdio process; never attaches to or kills a shared bot."""
     def __init__(self, codex_home: Path, binary='/home/dev/.local/bin/codex'):

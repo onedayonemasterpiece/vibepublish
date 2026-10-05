@@ -289,8 +289,8 @@ def _widen_owner_telegram_links(value):
 class IngressApplication(Application):
     """Application facade for safe public media and owner direct Telegram links."""
 
-    def __init__(self, store, *, fetcher=None):
-        super().__init__(store)
+    def __init__(self, store, *, fetcher=None, visual_dispatch_proof=None):
+        super().__init__(store, visual_dispatch_proof=visual_dispatch_proof)
         self._fetcher = fetcher or fetch_public_image
 
     def aliases(self, db, actor):

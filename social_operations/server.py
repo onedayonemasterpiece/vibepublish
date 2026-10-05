@@ -84,8 +84,8 @@ class AuthBoundary:
             return await JSONResponse(DomainError('request_timeout').output(), status_code=408)(scope, receive, send)
 
 
-def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'), authenticate=None, oauth_scopes=()):
-    service = IngressApplication(store)
+def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'), authenticate=None, oauth_scopes=(), visual_dispatch_proof=None):
+    service = IngressApplication(store, visual_dispatch_proof=visual_dispatch_proof)
     mcp = Server('VibePublish', version='0.1.0')
 
     def actor():

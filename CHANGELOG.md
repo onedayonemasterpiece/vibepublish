@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Add explicit same-operation visual dispatch reconciliation for an original
+  Codex task whose locked fsynced receipt proves no generation turn was sent.
+  Seal the terminal operation with revision/fence CAS and `retry_safe=true`;
+  preserve its dispatched marker and receipt without any automatic resend.
+
 - Add exact private PDF/DjVu DOCUMENT ingress/readback and an explicit independent Knowledge Base Telegram worker lane without replacing ordinary publishing credentials.
 
 - Share a durable rolling 20-files/60s Telegram connection budget across publication
