@@ -286,12 +286,30 @@ def test_compositor_preserves_all_four_edge_markers(format, size, copy):
     composite = render(data.getvalue(), copy, format)
     recipe = json.loads(composite.recipe_json)
     assert recipe['art_fit'] == 'contain' and recipe['art_source_size'] == list(size)
-    assert recipe['renderer'] == 'svg-path-cairosvg-v2'
+    assert recipe['renderer'] == 'svg-path-cairosvg-v3'
     x, y, cw, ch = recipe['art_content_box']
-    assert cw/ch == pytest.approx(w/h)
+    assert cw/ch == pytest.approx(w/h, abs=1/min(cw, ch))
     with Image.open(io.BytesIO(composite.png)) as output:
+        if not copy:
+            assert composite.width/composite.height == pytest.approx(w/h, abs=1/min(composite.width, composite.height))
+            assert x == pytest.approx(0, abs=1) and y == pytest.approx(0, abs=1)
         for (sx, sy), color in zip(centers, colors):
             assert output.getpixel((round(x+sx*cw/w), round(y+sy*ch/h)))[:3] == color
+
+
+@pytest.mark.parametrize('format', list(FORMATS))
+@pytest.mark.parametrize('size', [(1448, 1086), (480, 1920)])
+def test_finished_art_has_no_added_letterbox(format, size):
+    art = Image.new('RGB', size, (45, 86, 123))
+    data = io.BytesIO(); art.save(data, format='PNG')
+    composite = render(data.getvalue(), {}, format)
+    recipe = json.loads(composite.recipe_json)
+    assert recipe['canvas_fit'] == 'art_aspect'
+    assert composite.width <= FORMATS[format][0] and composite.height <= FORMATS[format][1]
+    with Image.open(io.BytesIO(composite.png)) as output:
+        w, h = output.size
+        for point in [(w//2, 0), (w//2, h-1), (0, h//2), (w-1, h//2)]:
+            assert output.getpixel(point)[:3] == (45, 86, 123)
 
 
 def recompose_command(ready):

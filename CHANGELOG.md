@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Preserve finished artwork's aspect ratio when no structured editorial copy is
+  supplied, removing added top/bottom bars while keeping the full image and fact
+  labels; deterministic recomposition uses the same renderer without inference.
+
 - Preserve complete native artwork and side annotations in portrait composites
   using centered contain-fit and versioned geometry evidence. Add explicit
   revision/hash-fenced standalone recomposition from stored original art without
