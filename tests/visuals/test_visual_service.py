@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from adapters.fake import FakeProvider
 from adapters.imagegen import FakeImagegen, ImagegenArtifact
@@ -269,6 +269,113 @@ def test_deterministic_svg_exact_copy_glyphs_safe_regions_and_reflow(format):
         assert line['x']>=72 and line['x']+line['width']<=a.width-72
         assert line['baseline']+line['font_size']*.25<=a.height-88
     with Image.open(io.BytesIO(a.png)) as image: assert image.size==FORMATS[format]
+
+
+@pytest.mark.parametrize('format', list(FORMATS))
+@pytest.mark.parametrize('size', [(1448, 1086), (480, 1920)])
+@pytest.mark.parametrize('copy', [{}, {'title': 'Полный кадр'}])
+def test_compositor_preserves_all_four_edge_markers(format, size, copy):
+    art = Image.new('RGB', size, 'white')
+    draw = ImageDraw.Draw(art)
+    colors = [(255, 0, 0), (0, 190, 0), (0, 0, 255), (230, 0, 230)]
+    w, h = size
+    centers = [(w*.06, h*.06), (w*.94, h*.06), (w*.06, h*.94), (w*.94, h*.94)]
+    for (x, y), color in zip(centers, colors):
+        draw.rectangle((x-w*.04, y-h*.04, x+w*.04, y+h*.04), fill=color)
+    data = io.BytesIO(); art.save(data, format='PNG')
+    composite = render(data.getvalue(), copy, format)
+    recipe = json.loads(composite.recipe_json)
+    assert recipe['art_fit'] == 'contain' and recipe['art_source_size'] == list(size)
+    assert recipe['renderer'] == 'svg-path-cairosvg-v2'
+    x, y, cw, ch = recipe['art_content_box']
+    assert cw/ch == pytest.approx(w/h)
+    with Image.open(io.BytesIO(composite.png)) as output:
+        for (sx, sy), color in zip(centers, colors):
+            assert output.getpixel((round(x+sx*cw/w), round(y+sy*ch/h)))[:3] == color
+
+
+def recompose_command(ready):
+    candidate = ready['candidates'][0]
+    return {'kind': 'recompose', 'job_id': ready['visual_job_id'], 'candidate_id': candidate['id'],
+            'expected_visual_revision': ready['visual_revision'], 'expected_sha256': candidate['sha256']}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('select_original', [False, True])
+async def test_recompose_uses_original_art_without_executor_and_keeps_choices_immutable(runtime, select_original):
+    store, actor, app, worker, executor, provider, clock, *_ = runtime
+    first = await call(app, actor, 'visual', {'command': {'kind': 'generate', 'brief': 'Offline art',
+        'copy': {'title': 'Исходная подпись'}}})
+    await worker.run_once()
+    clock[0] += 31  # The finished worker's retained historical lease must expire.
+    ready = store.receipt(actor, first['operation_id'])
+    if select_original:
+        ready = await call(app, actor, 'visual', {'command': select_command(ready)})
+    original_bytes = app.read_asset(actor, ready['candidates'][0]['asset_ref'])[0]
+    with store.connection() as db:
+        original_job = dict(db.execute('SELECT * FROM visual_jobs WHERE id=?', (ready['visual_job_id'],)).fetchone())
+    command = {**recompose_command(ready), 'format': 'story_9_16'}
+    args = {'command': command, 'request_key': 'local-recompose'}
+    local = await call(app, actor, 'visual', args)
+    assert local['state'] == 'needs_selection' and local['local_recomposition'] is True
+    assert local['operation_id'] != first['operation_id'] and local['deliveries'] == []
+    assert len(executor.calls) == 1 and provider.count('effect') == 0
+    assert not await worker.run_once()
+    assert (await call(app, actor, 'visual', args))['operation_id'] == local['operation_id']
+    with store.connection() as db:
+        assert dict(db.execute('SELECT * FROM visual_jobs WHERE id=?', (ready['visual_job_id'],)).fetchone()) == original_job
+        new = db.execute('SELECT * FROM visual_jobs WHERE id=?', (local['visual_job_id'],)).fetchone()
+        candidate = db.execute('SELECT * FROM visual_candidates WHERE job_id=?', (new['id'],)).fetchone()
+        assert new['dispatched'] == 0 and new['execution_ref'] is None and new['parent_publication'] is None
+        assert json.loads(candidate['recipe'])['copy'] == {'title': 'Исходная подпись'}
+        assert json.loads(candidate['recipe'])['art_sha256'] == local['recompose_from']['art_sha256']
+        assert json.loads(candidate['provenance'])['local_recomposition'] is True
+    selected = await call(app, actor, 'visual', {'command': select_command(local), 'request_key': 'local-select'})
+    assert selected['state'] == 'verified' and selected['deliveries'] == []
+    assert app.read_asset(actor, ready['candidates'][0]['asset_ref'])[0] == original_bytes
+    # A derivative can itself be recomposed with its own frozen input digest.
+    again = await call(app, actor, 'visual', {'command': recompose_command(selected), 'request_key': 'local-again'})
+    assert again['local_recomposition'] and len(executor.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mutation,error', [
+    ('revision', 'visual_revision_conflict'), ('hash', 'visual_candidate_hash_conflict'),
+    ('candidate', 'visual_candidate_not_available'), ('pending', 'visual_recomposition_source_not_complete'),
+    ('lease', 'visual_recomposition_source_not_complete'), ('other_principal', 'visual_not_available'),
+    ('scope', 'access_denied'), ('key', 'invalid_input'), ('input_digest', 'visual_input_integrity'),
+    ('asset_hash', 'asset_integrity')])
+async def test_recompose_rechecks_cas_authority_complete_source_and_integrity(runtime, mutation, error):
+    store, actor, app, worker, executor, provider, clock, *_ = runtime
+    first = await call(app, actor, 'visual', {'command': {'kind': 'generate', 'brief': 'Offline art'}})
+    await worker.run_once(); ready = store.receipt(actor, first['operation_id'])
+    clock[0] += 31
+    command = recompose_command(ready)
+    args = {'command': command, 'request_key': 'local'}
+    if mutation == 'revision': command['expected_visual_revision'] += 1
+    elif mutation == 'hash': command['expected_sha256'] = '0'*64
+    elif mutation == 'candidate': command['candidate_id'] = 'candidate_other'
+    elif mutation == 'key': args.pop('request_key')
+    elif mutation == 'other_principal':
+        actor = store.authenticate(store.create_principal(actor.tenant_id, 'other', scopes=['visual']))
+    elif mutation == 'scope':
+        with store.tx() as db:
+            db.execute("UPDATE principals SET scopes='[]' WHERE id=?", (actor.principal_id,))
+    else:
+        with store.tx() as db:
+            if mutation == 'pending': db.execute("UPDATE operations SET complete=0,work_state='ready' WHERE id=?", (first['operation_id'],))
+            elif mutation == 'lease': db.execute('UPDATE operations SET lease_until=? WHERE id=?', (store.clock()+10, first['operation_id']))
+            elif mutation == 'input_digest':
+                db.execute('DROP TRIGGER visual_job_frozen')
+                db.execute("UPDATE visual_jobs SET input_digest=? WHERE id=?", ('0'*64, ready['visual_job_id']))
+            elif mutation == 'asset_hash':
+                db.execute('DROP TRIGGER asset_bytes_immutable')
+                db.execute("UPDATE assets SET bytes=X'00' WHERE id=(SELECT art_ref FROM visual_candidates WHERE id=?)", (command['candidate_id'],))
+    denied = await app.call(actor, 'vibepublish_visual', args)
+    assert denied['error']['code'] == error, denied
+    assert len(executor.calls) == 1 and provider.count('effect') == 0
+    with store.connection() as db:
+        assert db.execute('SELECT count(*) FROM visual_jobs').fetchone()[0] == 1
 
 
 @pytest.mark.parametrize('mutation', ['path','symlink','hash','mime','dimensions','size'])
