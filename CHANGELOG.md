@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Validate Codex task compatibility through the native handshake and effective
+  thread profile before generation, with version output as optional diagnostics.
+  Record bounded protocol failure codes without exposing private payloads;
+  preserve `gpt-5.6-luna`, native artifact checks and unknown-outcome receipts.
+
 - Add explicit same-operation visual dispatch reconciliation for an original
   Codex task whose locked fsynced receipt proves no generation turn was sent.
   Seal the terminal operation with revision/fence CAS and `retry_safe=true`;

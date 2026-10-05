@@ -37,7 +37,10 @@ work, not an instruction to modify shared Codex services or copy authentication
 credentials.
 
 The client launches its own `/home/dev/.local/bin/codex app-server --stdio`,
-checks `codex-cli 0.153.0`, and initializes the native protocol. It does not import,
+initializes and checks the native protocol rather than requiring a particular
+CLI version. A bounded best-effort `--version` observation is diagnostic only:
+missing, nonzero, empty or reformatted version output cannot reject a compatible
+server. It does not import,
 modify, attach to, or stop the shared DevCoveer bridge. It passes only an explicit
 HOME/CODEX_HOME/PATH/LANG environment. API keys and social-service environment
 variables are not inherited. Codex reads its existing authentication itself;
@@ -133,7 +136,7 @@ No reasoning or full private thread transcript is written into receipts.
 
 ## Verification evidence
 
-The installed 0.153.0 schemas establish native `localImage` inputs and
+The inspected 0.153.0 and 0.160.0 schemas establish native `localImage` inputs and
 `imageGeneration` items. The implementation uses the ordinary initialize,
 thread/start, turn/start, thread/read and turn/interrupt protocol seen in the
 installed bridge, without importing that service.
@@ -151,6 +154,39 @@ Fixture pixels are not evidence of real generation or publication readiness.
 
 Official references: [App-server protocol](https://learn.chatgpt.com/docs/app-server)
 and [built-in image generation](https://learn.chatgpt.com/docs/image-generation).
+
+### CLI compatibility correction — 2026-10-05
+
+The installed CLI reports `codex-cli 0.160.0`; the former version gate rejected
+it before initialization or thread creation. Compatibility now depends on the
+required native message profile, without an equality, version range or allowlist:
+
+- Initialization must return an object with the same canonical `codexHome`, and
+  the client must successfully send `initialized`. Version, user-agent and
+  platform metadata are not admission gates; unknown future fields are allowed.
+- Before `turn/start`, the settings-only `thread/start` must return a valid saved
+  thread ID, the requested model and cwd, `approvalPolicy=never` and a
+  `workspaceWrite` sandbox. Missing or incompatible values block the generation
+  turn. The existing `forced_login_method=chatgpt` and image-generation feature
+  request remain unchanged. The returned profile does not expose effective
+  image-feature configuration, so it is not called feature attestation.
+- Protocol failures retain and log only a fixed failure code, method and stage,
+  without raw responses, settings, authentication, user brief or model-selected
+  paths. An ambiguous response keeps the receipt unknown and cannot resubmit.
+  Failed initialization closes only the owned app-server process.
+
+The installed CLI's static schemas confirm the required message shapes, native
+`localImage` inputs and completed `imageGeneration` receipt fields. Offline tests
+accept future/reformatted version metadata when the actual profile is compatible,
+and reject malformed handshakes, disconnections and wrong thread profiles before
+generation. Only verified native images and artifact bytes establish success.
+
+The existing model catalog cache from CLI 0.160.0 lists `gpt-5.6-luna` with text
+and image inputs. The requested model stays unchanged. Catalog presence and
+schema compatibility do not prove model entitlement or successful generation;
+no app-server, thread, turn or inference was started for this compatibility
+inspection. Live acceptance remains **Not confirmed by user**. Existing unknown
+receipts are preserved and do not become automatic retries after this fix.
 
 Lane validation on 2026-09-05: full repository pytest passed (434 tests and
 199 subtests; two existing dependency-deprecation warnings); visual suite passed

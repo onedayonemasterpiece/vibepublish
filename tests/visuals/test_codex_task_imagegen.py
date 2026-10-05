@@ -46,6 +46,7 @@ class NativeFixture:
         self.calls.append((method, params))
         if method == 'thread/start':
             return {'thread': {'id': THREAD}, 'cwd': params['cwd'],
+                    'approvalPolicy': 'never', 'sandbox': {'type': 'workspaceWrite'},
                     'model': 'wrong-model' if self.bad_model else MODEL}
         if method == 'turn/start':
             if self.marker_check: self.marker_check()
@@ -173,6 +174,41 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         key = await self.adapter.submit(self.request)
         self.assertEqual('unknown', (await self.adapter.inspect(key)).state)
         self.assertFalse(any(m == 'turn/start' for m, _ in self.native.calls))
+
+    async def test_required_thread_profile_blocks_generation_with_safe_diagnostics(self):
+        original = self.native.request
+        cases = [('missing_response', None), ('missing_thread', {}), ('missing_id', {'thread': {}}),
+                 ('wrong_model', {'model': 'PRIVATE_UNEXPECTED_MODEL'}),
+                 ('wrong_cwd', {'cwd': '/PRIVATE_UNEXPECTED_DIRECTORY'}),
+                 ('wrong_approval', {'approvalPolicy': 'on-request'}),
+                 ('wrong_sandbox', {'sandbox': {'type': 'dangerFullAccess'}})]
+        for name, change in cases:
+            with self.subTest(profile=name):
+                self.native.calls.clear()
+                async def incompatible(method, params):
+                    response = await original(method, params)
+                    if method == 'thread/start':
+                        if name == 'missing_response': return None
+                        if name == 'missing_thread': return {}
+                        return {**response, **change}
+                    return response
+                self.native.request = incompatible
+                request = replace(self.request, job_key='visual_' + hashlib.md5(name.encode()).hexdigest())
+                with self.assertLogs('adapters.codex_task_imagegen', level='WARNING') as captured:
+                    key = await self.adapter.submit(request)
+                receipt = self.adapter._load(self.adapter._directory(key))
+                self.assertEqual('unknown', receipt['state'])
+                self.assertEqual('thread_start_pending', receipt['phase'])
+                self.assertIsNone(receipt['turn_id'])
+                self.assertEqual('thread/start', receipt['protocol_failure']['method'])
+                self.assertEqual('profile', receipt['protocol_failure']['stage'])
+                self.assertIn(receipt['protocol_failure']['code'],
+                    ('codex_task_protocol_invalid', 'codex_task_thread_profile_mismatch'))
+                self.assertFalse(any(m == 'turn/start' for m, _ in self.native.calls))
+                self.assertNotIn('PRIVATE_UNEXPECTED', json.dumps(receipt))
+                self.assertNotIn('PRIVATE_UNEXPECTED', str(captured.output))
+                await self.adapter.submit(request)
+                self.assertEqual(1, len(self.native.calls), 'Unknown protocol failure must not resubmit')
 
     async def test_text_report_without_native_image_is_not_success(self):
         key = await self.adapter.submit(self.request)
@@ -548,12 +584,114 @@ class VisualServiceTaskIntegration(unittest.IsolatedAsyncioTestCase):
 
 
 class AppServerInitializationTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def version_process(output=b'future-compatible-cli', code=0):
+        from unittest.mock import AsyncMock, Mock
+        return Mock(returncode=code, stdout=Mock(read=AsyncMock(side_effect=[output, b''])),
+                    wait=AsyncMock(return_value=code))
+
+    async def test_future_versions_and_reformatted_or_empty_metadata_initialize(self):
+        from unittest.mock import AsyncMock, Mock
+
+        for version, code in [('codex-cli 0.161.0', 0), ('codex-cli 0.160.1', 0),
+                              ('future vendor format', 0), ('', 0), ('', 1), ('x' * 512, 0)]:
+            with self.subTest(version=version, exit_code=code):
+                client = AppServer(Path('/fixture/codex'))
+                check = self.version_process(version.encode(), code)
+                process = Mock(returncode=None, wait=AsyncMock(return_value=-15))
+                process.terminate.side_effect = lambda: setattr(process, 'returncode', -15)
+                client._exchange = AsyncMock(side_effect=[
+                    {'codexHome': '/fixture/codex', 'unknownFutureField': {'accepted': True}},
+                    {'thread': {'id': THREAD}},
+                ])
+                client._write = AsyncMock()
+                async def drain(_process):
+                    await asyncio.Event().wait()
+                client._drain = drain
+                with patch('adapters.codex_task_imagegen.asyncio.create_subprocess_exec',
+                           side_effect=[check, process]) as spawn:
+                    try:
+                        result = await client.request('thread/read', {'threadId': THREAD})
+                        self.assertEqual(THREAD, result['thread']['id'])
+                        self.assertTrue(client.initialized)
+                        self.assertLessEqual(len(client.cli_version or ''), 160)
+                        self.assertEqual(['initialize', 'thread/read'],
+                            [call.args[0] for call in client._exchange.await_args_list])
+                        client._write.assert_awaited_once_with({'method': 'initialized', 'params': {}})
+                        self.assertEqual(('app-server', '--stdio'), spawn.call_args.args[1:3])
+                    finally:
+                        await client.close()
+                    process.terminate.assert_called_once()
+
+    async def test_unavailable_or_timed_out_version_probe_does_not_block_protocol(self):
+        from unittest.mock import AsyncMock, Mock
+
+        for probe_error in [OSError(), asyncio.TimeoutError()]:
+            with self.subTest(error=type(probe_error).__name__):
+                client = AppServer(Path('/fixture/codex'))
+                process = Mock(returncode=None, wait=AsyncMock(return_value=-15))
+                process.terminate.side_effect = lambda: setattr(process, 'returncode', -15)
+                version = self.version_process()
+                version.returncode = None
+                version.stdout.read.side_effect = probe_error
+                version.kill.side_effect = lambda: setattr(version, 'returncode', -9)
+                spawn_results = [probe_error, process] if type(probe_error) is OSError else [version, process]
+                client._exchange = AsyncMock(side_effect=[{'codexHome': '/fixture/codex'}, {'thread': {'id': THREAD}}])
+                client._write = AsyncMock()
+                async def drain(_process):
+                    await asyncio.Event().wait()
+                client._drain = drain
+                with patch('adapters.codex_task_imagegen.asyncio.create_subprocess_exec',
+                           side_effect=spawn_results):
+                    try:
+                        self.assertEqual(THREAD, (await client.request('thread/read', {'threadId': THREAD}))['thread']['id'])
+                        self.assertTrue(client.initialized)
+                        self.assertIsNone(client.cli_version)
+                        if isinstance(probe_error, asyncio.TimeoutError): version.kill.assert_called_once()
+                    finally:
+                        await client.close()
+
+    async def test_malformed_initialize_never_sends_caller_request_and_cleans_owned_process(self):
+        from unittest.mock import AsyncMock, Mock
+
+        for response in [None, [], {}, {'codexHome': 12}, {'codexHome': ''}]:
+            with self.subTest(response=response):
+                client = AppServer(Path('/fixture/codex'))
+                process = Mock(returncode=None, wait=AsyncMock(return_value=-15))
+                process.terminate.side_effect = lambda: setattr(process, 'returncode', -15)
+                client._exchange = AsyncMock(return_value=response)
+                client._write = AsyncMock()
+                async def drain(_process):
+                    await asyncio.Event().wait()
+                client._drain = drain
+                with patch('adapters.codex_task_imagegen.asyncio.create_subprocess_exec',
+                           side_effect=[self.version_process(), process]):
+                    with self.assertRaises(DomainError) as error:
+                        await client.request('thread/start', {})
+                self.assertEqual('codex_task_protocol_invalid', error.exception.code)
+                self.assertEqual({'code': 'codex_task_protocol_invalid', 'method': 'initialize', 'stage': 'handshake'}, client.last_protocol_failure)
+                self.assertEqual(1, client._exchange.await_count)
+                client._write.assert_not_awaited()
+                self.assertFalse(client.initialized)
+                self.assertIsNone(client.process)
+                self.assertIsNone(client.reader)
+                process.terminate.assert_called_once()
+
+    async def test_malformed_stdio_notification_rejects_pending_request_without_hanging(self):
+        from unittest.mock import AsyncMock, Mock
+        client = AppServer(Path('/fixture/codex'))
+        waiter = asyncio.get_running_loop().create_future()
+        client.pending[1] = waiter
+        process = Mock(stdout=Mock(readline=AsyncMock(side_effect=[b'[]\n'])))
+        await client._drain(process)
+        with self.assertRaises(ConnectionError):
+            await waiter
+
     async def test_failed_initialize_cleans_owned_process_then_fresh_read_initializes(self):
         from unittest.mock import AsyncMock, Mock
-        from adapters.codex_task_imagegen import VERSION
 
         def version_process():
-            return Mock(returncode=0, communicate=AsyncMock(return_value=(VERSION.encode(), b'')))
+            return self.version_process()
 
         def server_process():
             process = Mock(returncode=None, wait=AsyncMock(return_value=-15))
@@ -590,18 +728,18 @@ class AppServerInitializationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_home_mismatch_notification_failure_and_cancellation_reset_ready(self):
         from unittest.mock import AsyncMock, Mock
-        from adapters.codex_task_imagegen import VERSION
 
         for stage, error in [('home', DomainError), ('notification', ConnectionError),
-                             ('cancelled', asyncio.CancelledError)]:
+                             ('cancelled', asyncio.CancelledError), ('disconnected', ConnectionError)]:
             with self.subTest(stage=stage):
                 client = AppServer(Path('/fixture/codex'))
-                version = Mock(returncode=0, communicate=AsyncMock(return_value=(VERSION.encode(), b'')))
+                version = self.version_process()
                 process = Mock(returncode=None, wait=AsyncMock(return_value=-15))
                 process.terminate.side_effect = lambda: setattr(process, 'returncode', -15)
                 client._exchange = AsyncMock(return_value={'codexHome':
                     '/wrong/home' if stage == 'home' else '/fixture/codex'})
                 if stage == 'cancelled': client._exchange.side_effect = asyncio.CancelledError()
+                if stage == 'disconnected': client._exchange.side_effect = ConnectionError()
                 client._write = AsyncMock(side_effect=ConnectionError() if stage == 'notification' else None)
                 async def drain(process):
                     await asyncio.Event().wait()

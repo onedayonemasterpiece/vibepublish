@@ -12,6 +12,7 @@ from dataclasses import asdict
 import fcntl
 import hashlib
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -25,7 +26,7 @@ from social_operations.assets import verify_image
 from social_operations.domain import DomainError, OutcomeUnknown, canonical
 
 MODEL = 'gpt-5.6-luna'
-VERSION = 'codex-cli 0.153.0'
+LOG = logging.getLogger(__name__)
 MAX_IMAGE = 20 * 1024 * 1024
 MAX_SOURCE_IMAGE = 32 * 1024 * 1024
 MAX_SKILL = 64 * 1024
@@ -111,6 +112,22 @@ def _exception_frames(exc):
     return {'class': type(exc).__name__[:160], 'frames': frames[-16:]}
 
 
+def _protocol_failure(exc, method, stage):
+    if isinstance(exc, DomainError):
+        code = exc.code
+    elif isinstance(exc, asyncio.TimeoutError):
+        code = 'codex_task_protocol_timeout'
+    elif isinstance(exc, ConnectionError):
+        code = 'codex_task_protocol_disconnected'
+    elif isinstance(exc, asyncio.CancelledError):
+        code = 'codex_task_protocol_cancelled'
+    elif isinstance(exc, OSError):
+        code = 'codex_task_protocol_unavailable'
+    else:
+        code = 'codex_task_protocol_exchange_failed'
+    return {'code': code, 'method': method, 'stage': stage}
+
+
 class CodexTaskNoTurnProof:
     """Transport-free proof reader for the existing fsynced dispatcher protocol.
 
@@ -189,12 +206,48 @@ class AppServer:
         self.serial = 0
         self.start_lock = asyncio.Lock()
         self.initialized = False
+        self.cli_version = None
+        self.last_protocol_failure = None
 
     def environment(self):
         # Existing approved Codex auth is read by Codex, never by this adapter.
         # In particular OPENAI_API_KEY/CODEX_API_KEY and social env do not pass.
         return {'HOME': str(Path.home()), 'CODEX_HOME': str(self.home),
                 'PATH': '/home/dev/.local/bin:/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8'}
+
+    async def _observe_cli_version(self):
+        """Optional bounded diagnostics; version output is never admission policy."""
+        self.cli_version = None
+        check = None
+        status = 'unavailable'
+        try:
+            check = await asyncio.create_subprocess_exec(self.binary, '--version',
+                env=self.environment(), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            async def drain_version():
+                kept = bytearray()
+                while chunk := await check.stdout.read(512):
+                    kept.extend(chunk[:max(0, 512 - len(kept))])
+                await check.wait()
+                return bytes(kept)
+            output = await asyncio.wait_for(drain_version(), 1.0)
+            if check.returncode == 0:
+                self.cli_version = ' '.join(output.decode('utf-8', 'replace').split())[:160] or None
+                status = 'observed' if self.cli_version else 'empty'
+            else:
+                status = 'nonzero_exit'
+        except asyncio.TimeoutError:
+            status = 'timeout'
+        except (OSError, RuntimeError, ValueError):
+            pass
+        finally:
+            if check is not None and check.returncode is None:
+                try:
+                    check.kill()
+                    await asyncio.wait_for(check.wait(), 1.0)
+                except (OSError, RuntimeError, asyncio.TimeoutError):
+                    pass
+        LOG.info('codex_task_version_observation status=%s output_chars=%s',
+                 status, len(self.cli_version or ''))
 
     async def _start(self):
         async with self.start_lock:
@@ -204,31 +257,33 @@ class AppServer:
             # Clear stale or partly initialized owned state before a fresh call.
             if self.process is not None or self.reader is not None:
                 await self.close()
-            check = await asyncio.create_subprocess_exec(self.binary, '--version',
-                env=self.environment(), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            await self._observe_cli_version()
+            self.last_protocol_failure = None
+            stage = 'spawn'
             try:
-                output, _ = await asyncio.wait_for(check.communicate(), 10)
-            finally:
-                if check.returncode is None:
-                    check.kill(); await check.wait()
-            if check.returncode or output.decode().strip() != VERSION:
-                raise DomainError('codex_task_version_changed')
-            self.process = await asyncio.create_subprocess_exec(self.binary, 'app-server', '--stdio',
-                env=self.environment(), cwd=str(self.home), stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, limit=MAX_MESSAGE)
-            self.reader = asyncio.create_task(self._drain(self.process))
-            try:
+                self.process = await asyncio.create_subprocess_exec(self.binary, 'app-server', '--stdio',
+                    env=self.environment(), cwd=str(self.home), stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, limit=MAX_MESSAGE)
+                self.reader = asyncio.create_task(self._drain(self.process))
+                stage = 'handshake'
                 result = await self._exchange('initialize', {'clientInfo': {
                     'name': 'vibepublish-image-task', 'version': '1'},
                     'capabilities': {'experimentalApi': True}})
-                if result.get('codexHome') != str(self.home):
+                if (not isinstance(result, dict) or not isinstance(result.get('codexHome'), str)
+                        or not result['codexHome']):
+                    raise DomainError('codex_task_protocol_invalid')
+                if result['codexHome'] != str(self.home):
                     raise DomainError('codex_task_home_mismatch')
+                stage = 'acknowledgement'
                 await self._write({'method': 'initialized', 'params': {}})
                 self.initialized = True
-            except BaseException:
+            except BaseException as exc:
                 # Includes cancellation/timeouts during either handshake step.
                 # Cleanup only our process, then propagate; never replay the
                 # caller's request or silently restart an uncertain mutation.
+                self.last_protocol_failure = _protocol_failure(exc, 'initialize', stage)
+                LOG.warning('codex_task_protocol_failed code=%s method=initialize stage=%s',
+                            self.last_protocol_failure['code'], stage)
                 await self.close()
                 raise
 
@@ -244,6 +299,8 @@ class AppServer:
                 if len(line) > MAX_MESSAGE:
                     raise ValueError('oversize protocol message')
                 message = json.loads(line)
+                if not isinstance(message, dict):
+                    raise ValueError('invalid protocol message')
                 if 'id' in message and 'method' not in message:
                     waiter = self.pending.get(message['id'])
                     if waiter and not waiter.done(): waiter.set_result(message)
@@ -267,8 +324,8 @@ class AppServer:
         try:
             await self._write({'id': ident, 'method': method, 'params': params})
             response = await asyncio.wait_for(waiter, 30)
-            if 'error' in response or not isinstance(response.get('result'), dict):
-                raise RuntimeError('app-server request failed')
+            if not isinstance(response, dict) or 'error' in response or not isinstance(response.get('result'), dict):
+                raise DomainError('codex_task_protocol_request_failed')
             return response['result']
         finally:
             self.pending.pop(ident, None)
@@ -407,19 +464,26 @@ class CodexTaskImagegen:
                 'phase': 'thread_start_pending', 'thread_id': None, 'turn_id': None,
                 'task_model': None, 'actual_model': None, 'artifacts': []}
             self._record(directory, record)  # durable before any uncertain remote write
+            method, stage = 'thread/start', 'request'
             try:
                 started = await self.transport.request('thread/start', {
                     'cwd': str(work), 'approvalPolicy': 'never', 'sandbox': 'workspace-write',
                     'threadSource': 'appServer', 'model': MODEL,
                     'developerInstructions': developer_instructions,
                     'config': {'forced_login_method': 'chatgpt', 'features.image_generation': True}})
-                record['thread_id'] = started['thread']['id']
+                stage = 'profile'
+                if (not isinstance(started, dict) or not isinstance(started.get('thread'), dict)):
+                    raise DomainError('codex_task_protocol_invalid')
+                record['thread_id'] = started['thread'].get('id')
                 if not isinstance(record['thread_id'], str) or not re.fullmatch(r'[a-f0-9-]{36}', record['thread_id']):
                     record['thread_id'] = None
-                    raise ValueError('invalid thread identity')
+                    raise DomainError('codex_task_protocol_invalid')
                 self._record(directory, record)
-                if started.get('model') != MODEL or started.get('cwd') != str(work):
-                    raise ValueError('unexpected task model or cwd')
+                if (started.get('model') != MODEL or started.get('cwd') != str(work)
+                        or started.get('approvalPolicy') != 'never'
+                        or not isinstance(started.get('sandbox'), dict)
+                        or started['sandbox'].get('type') != 'workspaceWrite'):
+                    raise DomainError('codex_task_thread_profile_mismatch')
                 record['task_model'] = started['model']
                 # Image model is not inferred from the orchestration model.
                 if time.time() >= record['deadline']:
@@ -435,6 +499,7 @@ class CodexTaskImagegen:
                     'rewrite it. Stop after the requested images. Task data follows as JSON:\n' +
                     canonical({'mode': request.mode, 'brief': request.brief,
                         'preset_version': request.preset_version, 'candidate_budget': request.candidate_budget}))
+                method, stage = 'turn/start', 'request'
                 turn = await self.transport.request('turn/start', {'threadId': record['thread_id'],
                     'input': [{'type': 'text', 'text': prompt}, *source_inputs],
                     'cwd': str(work), 'approvalPolicy': 'never', 'model': MODEL})
@@ -443,8 +508,17 @@ class CodexTaskImagegen:
             except asyncio.CancelledError:
                 self._record(directory, record)
                 raise
-            except (OSError, RuntimeError, ValueError, TypeError, KeyError, DomainError, asyncio.TimeoutError):
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError, DomainError, asyncio.TimeoutError) as exc:
                 record['state'] = 'unknown'
+                diagnostic = getattr(self.transport, 'last_protocol_failure', None)
+                if not isinstance(diagnostic, dict):
+                    diagnostic = _protocol_failure(exc, method, stage)
+                record['protocol_failure'] = {key: value if isinstance(value := diagnostic.get(key), str)
+                    and re.fullmatch(r'[a-z0-9_/]{1,80}', value) else 'unknown'
+                    for key in ('code', 'method', 'stage')}
+                LOG.warning('codex_task_submission_unknown job_key=%s code=%s method=%s stage=%s',
+                    request.job_key, record['protocol_failure']['code'],
+                    record['protocol_failure']['method'], record['protocol_failure']['stage'])
             self._record(directory, record)
         if record['state'] == 'running':
             self.timers[request.job_key] = asyncio.create_task(self._expire(request.job_key, record['deadline']))
