@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- Add explicit same-operation visual observation recovery for a terminal unknown
+  whose original dispatched executor task later completed. Recheck actor/parent
+  authority, revisions, worker fence, frozen source hashes and candidate CAS;
+  inspect the saved execution reference once within a separate bounded read
+  window, preserving generation deadlines and immutable inputs. Never resubmit,
+  create another task, select automatically or publish during recovery.
+
+- Keep a submitted Codex image turn observation pending across bounded early
+  thread/read RPC rejections until its original deadline. Distinguish malformed
+  protocol from closed RPC errors; preserve exact identity, interrupt fences,
+  native artifact validation and no-resubmit guarantees.
+
 - Preserve finished artwork's aspect ratio when no structured editorial copy is
   supplied, removing added top/bottom bars while keeping the full image and fact
   labels; deterministic recomposition uses the same renderer without inference.

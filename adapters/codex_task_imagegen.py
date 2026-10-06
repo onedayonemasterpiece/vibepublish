@@ -324,8 +324,19 @@ class AppServer:
         try:
             await self._write({'id': ident, 'method': method, 'params': params})
             response = await asyncio.wait_for(waiter, 30)
-            if not isinstance(response, dict) or 'error' in response or not isinstance(response.get('result'), dict):
+            if not isinstance(response, dict):
+                raise DomainError('codex_task_protocol_invalid')
+            if 'error' in response:
+                error = response['error']
+                if ('result' in response or not isinstance(error, dict)
+                        or type(error.get('code')) is not int
+                        or not isinstance(error.get('message'), str)):
+                    raise DomainError('codex_task_protocol_invalid')
+                # The server rejected this RPC. Keep only a fixed code; no raw
+                # server message, transcript or provider-selected path persists.
                 raise DomainError('codex_task_protocol_request_failed')
+            if not isinstance(response.get('result'), dict):
+                raise DomainError('codex_task_protocol_invalid')
             return response['result']
         finally:
             self.pending.pop(ident, None)
@@ -574,7 +585,9 @@ class CodexTaskImagegen:
             try:
                 return await asyncio.wait_for(self.transport.request('thread/read', {
                     'threadId': record['thread_id'], 'includeTurns': True}), THREAD_READ_TIMEOUT)
-            except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
+            except (OSError, RuntimeError, asyncio.TimeoutError, DomainError) as exc:
+                if isinstance(exc, DomainError) and exc.code != 'codex_task_protocol_request_failed':
+                    raise
                 record['last_thread_read_error'] = _exception_frames(exc)
                 self._record(directory, record)
                 if attempt == len(THREAD_READ_BACKOFF):
@@ -600,6 +613,7 @@ class CodexTaskImagegen:
                     raise
             try:
                 response = await self._read_thread(directory, record)
+                record.pop('last_thread_read_state', None)
                 thread = response['thread']
                 if thread.get('id') != record['thread_id']: raise ValueError('thread mismatch')
                 turns = thread.get('turns', [])
@@ -631,6 +645,21 @@ class CodexTaskImagegen:
                 record['last_observation_error'] = _exception_frames(exc)
                 self._record(directory, record)
                 raise
+            except DomainError as exc:
+                # A known accepted generation can outlive an early read-RPC
+                # rejection (e.g. native turn_context is not persisted yet).
+                # Continue SAME identity observation within its frozen deadline;
+                # neither pending reads nor a new process authorize generation.
+                pending = (exc.code == 'codex_task_protocol_request_failed'
+                    and record.get('phase') == 'submitted'
+                    and bool(record.get('thread_id')) and bool(record.get('turn_id'))
+                    and time.time() < record['deadline'])
+                record['state'] = 'running' if pending else 'unknown'
+                record['last_observation_error'] = _exception_frames(exc)
+                if pending:
+                    record['last_thread_read_state'] = 'request_rejected_pending'
+                    LOG.info('codex_task_read_pending job=%s method=thread/read attempts=%s code=%s',
+                        execution_ref, record.get('last_thread_read_attempts'), exc.code)
             except Exception as exc:
                 record['state'] = 'unknown'
                 record['last_observation_error'] = _exception_frames(exc)

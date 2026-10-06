@@ -795,3 +795,68 @@ class SecureTraversalTests(unittest.TestCase):
                 self.assertEqual(b'fixture', _read(path, 100))
             finally:
                 parent.chmod(0o700)
+
+
+from adapters import codex_task_imagegen as module
+
+class ReadRpcFixture(module.AppServer):
+    """Actual request/_exchange boundary, fake JSON-RPC replies; no subprocess."""
+    def __init__(self, home, native, errors=1, malformed=None):
+        super().__init__(home);self.native=native;self.errors=errors;self.malformed=malformed;self.calls=[]
+    async def _start(self):pass
+    async def _write(self,payload):
+        assert payload['method']=='thread/read', 'read recovery cannot submit/start/resume/interrupt'
+        self.calls.append((payload['method'],payload['params']))
+        if self.malformed is not None:reply=self.malformed
+        elif self.errors:
+            self.errors-=1;reply={'error':{'code':-32600,'message':'PRIVATE_READ_REJECTION_FIXTURE'}}
+        else:reply={'result':{'thread':{'id':THREAD,'turns':[{'id':TURN,'status':self.native.status,'items':self.native.items}]}}}
+        self.pending[payload['id']].set_result(reply)
+    async def close(self):pass
+
+class NativeReadRpcContract(unittest.IsolatedAsyncioTestCase):
+    asyncSetUp=CodexTaskTests.asyncSetUp
+    asyncTearDown=CodexTaskTests.asyncTearDown
+    async def test_actual_request_rejection_retries_only_saved_read_then_imports(self):
+        key=await self.adapter.submit(self.request)
+        rpc=ReadRpcFixture(self.home,self.native);self.adapter.transport=rpc
+        with patch.object(module,'THREAD_READ_BACKOFF',(.001,.002)):
+            observed=await self.adapter.inspect(key)
+        self.assertEqual(observed.state,'succeeded')
+        self.assertEqual(rpc.calls,[('thread/read',{'threadId':THREAD,'includeTurns':True})]*2)
+        self.assertEqual(sum(m=='turn/start' for m,_ in self.native.calls),1)
+        self.assertEqual(len(observed.artifacts),1)
+        self.assertNotIn('PRIVATE_READ_REJECTION',json.dumps(self.adapter._load(self.adapter._directory(key))))
+    async def test_closed_rejections_remain_pending_until_later_same_turn_completed(self):
+        key=await self.adapter.submit(self.request);directory=self.adapter._directory(key)
+        initial=self.adapter._load(directory);rpc=ReadRpcFixture(self.home,self.native,errors=3);self.adapter.transport=rpc
+        with patch.object(module,'THREAD_READ_BACKOFF',(.001,.002)):
+            first=await self.adapter.inspect(key)
+            self.assertEqual(first.state,'running')
+            receipt=self.adapter._load(directory)
+            self.assertEqual(receipt['deadline'],initial['deadline'])
+            self.assertEqual(receipt['thread_id'],THREAD);self.assertEqual(receipt['turn_id'],TURN)
+            await self.adapter.submit(self.request)
+            recovered=await self.adapter.find(key)
+        self.assertEqual(recovered.state,'succeeded')
+        self.assertEqual(len(rpc.calls),4);self.assertTrue(all(m=='thread/read' for m,_ in rpc.calls))
+        self.assertEqual(sum(m=='turn/start' for m,_ in self.native.calls),1)
+        self.assertEqual(sum(m=='thread/start' for m,_ in self.native.calls),1)
+    async def test_expired_or_interrupt_intent_rejection_never_remains_running(self):
+        key=await self.adapter.submit(self.request);directory=self.adapter._directory(key)
+        for field,value in [('deadline',0),('phase','interrupt_pending')]:
+            original=self.adapter._load(directory);record=dict(original);record[field]=value;self.adapter._record(directory,record)
+            rpc=ReadRpcFixture(self.home,self.native,errors=3);self.adapter.transport=rpc
+            with patch.object(module,'THREAD_READ_BACKOFF',(.001,.002)):
+                observed=await self.adapter.inspect(key)
+            self.assertEqual(observed.state,'unknown')
+            self.assertEqual(len(rpc.calls),3)
+            self.adapter._record(directory,original)
+    async def test_invalid_rpc_result_is_distinct_and_not_retried_or_pending(self):
+        key=await self.adapter.submit(self.request)
+        for malformed in [{'result':None},{'error':{'message':'malformed'}},{'result':{},'error':{'code':-1,'message':'ambiguous'}}]:
+            rpc=ReadRpcFixture(self.home,self.native,malformed=malformed);self.adapter.transport=rpc
+            observed=await self.adapter.inspect(key)
+            self.assertEqual(observed.state,'unknown');self.assertEqual(len(rpc.calls),1)
+            with self.assertRaises(DomainError) as rejected:await rpc.request('thread/read',{'threadId':THREAD,'includeTurns':True})
+            self.assertEqual(rejected.exception.code,'codex_task_protocol_invalid')
