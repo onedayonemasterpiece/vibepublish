@@ -12,6 +12,33 @@ reopens work or publishes. Paths/proof claims cannot come from the client.
 Server opt-in, exact CAS and remaining unknown-outcome rules are documented in
 [the task executor runbook](../../operations/codex-task-imagegen.md#durability-and-recovery).
 
+### Explicit completed-observation recovery — 2026-10-06
+
+Requirement: `Fixed`; implementation/offline checks: `Not confirmed by user`;
+live acceptance: `Not done`. A terminal `outcome_unknown` can hide an original
+native task that subsequently completed. `reconcile_observation` queues the SAME
+operation and dispatched visual job for one bounded `inspect(execution_ref)` read.
+It requires a stable request key, exact operation/visual revisions, current actor
+scopes/epochs/routing/parent authority, an expired worker lease, and no candidates,
+choice or provider attempts. It seals the previous worker fence before queueing.
+
+```json
+{"command":{"kind":"reconcile_observation","operation_id":"op_original","job_id":"visual_original","expected_revision":1,"expected_visual_revision":1},"request_key":"owner-original-observation-v1"}
+```
+
+Read the revisions from current status; the illustrative values are not defaults.
+The receipt exposes `observation_recovery` with the original execution identity,
+input digest and generation deadline, revisions, and a separate 120-second read
+deadline. It grants no new submit, key lookup, turn or generation deadline. The
+worker reads once (at most 15 seconds), verifies the original observation and
+job-scoped artifact bytes, rechecks authority, frozen source hashes and candidate
+CAS, then imports using the existing immutable lineage and compositor. Recovery
+stops at `needs_selection`, including an originally automatic job: selection and
+any parent continuation require their existing separate authorization. A late
+result can be imported within this read window without making generation valid
+again. Unknown/unfinished/mismatched reads stay terminal; replaying the same key
+only returns current status and does not queue another read.
+
 Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: shared service and partial live executor acceptance `Not confirmed by user`; complete acceptance `Not done`.
 
 Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the handoff](../social-operations/analysis-handoff-20260904.md). Publication/runtime/security rules live in [implementation design](../social-operations/implementation-design-v1.md).

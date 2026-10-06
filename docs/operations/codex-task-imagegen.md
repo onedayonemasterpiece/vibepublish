@@ -213,14 +213,20 @@ by this integration test; the service catch discards the original exception
 class. Do not equate it with the confirmed usage validation failure.
 
 After a core operation is terminal `outcome_unknown`, adapter readback can still
-recover the same native thread, but cannot reopen that core operation. The
-explicit no-turn reconciliation above only closes proven unsent generation;
-it does not recover/import completed native results. Current
-worker crash recovery applies to unfinished leased work, not `complete=1` /
-`work_state=done` operations. No automatic resend or database status edit is
-performed by this adapter. A future authorized core reconcile action would need
-fencing, authority rechecks, the same saved execution identity, dispatched-only
-readback and candidate CAS; this fix does not introduce that action.
+observe completion of the same native thread. Explicit `reconcile_observation`
+now handles this separate core-terminal case through the existing typed visual
+command; [the feature contract](../features/social-visuals/README.md#explicit-completed-observation-recovery--2026-10-06)
+specifies its same-operation revision/fence CAS, current authority checks, frozen
+source/artifact integrity and bounded saved-reference read window. It never calls
+submit/find, creates another job/turn, renews the generation deadline or selects/
+publishes automatically. The existing no-turn `reconcile_dispatch` remains a
+different proof: it closes only proven unsent generation. Normal unfinished-lease
+worker recovery is unchanged. No production SQL status repair is required.
+
+Incident `inc_f0750cc89b3e498b4b5f48da`: the completed-observation/core-terminal
+recovery implementation is offline-verified; deployment and actual same-native-
+artifact import are `Not done` in this source lane. The reported completed task
+is not resubmitted by offline validation.
 
 Fix validation: 18 focused adapter/service tests passed; all 127 visual tests
 passed (two existing dependency deprecations); compileall and diff checks passed.
@@ -342,3 +348,33 @@ with no candidates. Each case starts exactly one native turn. Additional fixture
 cover all retryable exception classes, bounded timeout cancellation, and binding/
 artifact failures without retries. These are offline fixtures; no live native
 request, generation, production DB change or social write was made for this fix.
+
+
+### Early same-turn read rejection — 2026-10-06
+
+Status: **Not confirmed by user**; the reported premature terminal unknown
+requires runtime verification after integration. The observed early read failed
+before native `turn_context` was persisted, while the exact submitted turn later
+completed. The original server error payload was not retained; no specific
+provider error string is inferred or reconstructed.
+
+A well-formed JSON-RPC `error` response is classified separately from malformed
+protocol or invalid result data. Only the saved `thread/read` RPC rejection may
+use the existing three bounded read attempts. If those reads remain rejected,
+a receipt with both saved thread and turn IDs, `phase=submitted`, no executor
+interrupt intent and an unexpired original deadline remains observation pending
+(`running`). The existing worker polls the same immutable identity. No deadline
+is renewed and no thread, turn, image request or API fallback is submitted.
+
+Malformed replies, profile/binding failures and artifact-validation failures
+remain unknown and do not receive this classification. Expired deadlines or
+`interrupt_pending` retain their existing unknown/terminal semantics. Diagnostics
+contain fixed codes and bounded exception frames, never raw RPC messages.
+
+Previously sealed core `outcome_unknown` operations do not automatically reopen.
+An explicit owner-authorized observation recovery must validate the original
+actor/parent authority, dispatched job, immutable input/identity and absence of
+already committed candidates, then advance the worker fence using a revision CAS.
+It must retain `dispatched=1` and the same execution reference. The existing
+verified candidate importer is reused only under that new worker fence; no raw
+SQL/manual asset injection or new executor submission is authorized.

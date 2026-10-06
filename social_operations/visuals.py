@@ -17,6 +17,7 @@ from .visual_artifacts import verified_artifact
 
 REQUESTED_ROUTE = 'gpt-5.6-luna'
 VISUAL_EXECUTION_SECONDS = 600
+VISUAL_OBSERVATION_RECOVERY_SECONDS = 120
 
 
 class VisualService:
@@ -137,6 +138,8 @@ class VisualService:
         command = intent['command']
         if command['kind'] == 'reconcile_dispatch':
             return self.reconcile_dispatch(actor, args, intent)
+        if command['kind'] == 'reconcile_observation':
+            return self.reconcile_observation(actor, args, intent)
         if command['kind'] in {'generate', 'tune', 'compose'}:
             command = intent['command'] = self.normalize_spec(command)
         with self.store.tx() as db:
@@ -313,6 +316,97 @@ class VisualService:
                     op_id = op['id']
         return self.store.receipt(actor, op_id)
 
+    def _recovery_input_integrity(self, db, actor, job):
+        frozen = digest([job['tenant_id'], job['principal_id'], job['actor_epoch'],
+            job['routing_revision'], job['parent_publication'], job['parent_revision'],
+            json.loads(job['spec']), json.loads(job['sources']), json.loads(job['plans']), REQUESTED_ROUTE])
+        if not secrets.compare_digest(job['input_digest'], frozen):
+            raise DomainError('visual_input_integrity')
+        for source in json.loads(job['sources']):
+            asset = db.execute('SELECT bytes,sha256 FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
+                (source['ref'], actor.tenant_id, actor.principal_id)).fetchone()
+            if not asset or asset['sha256'] != source['sha256'] or hashlib.sha256(asset['bytes']).hexdigest() != source['sha256']:
+                raise DomainError('asset_integrity')
+
+    def _observation_recovery(self, db, actor, op, job):
+        actor = self.store.current(db, actor)
+        recovery = json.loads(op['result']).get('observation_recovery')
+        if recovery is None:
+            return None
+        if (not isinstance(recovery, dict) or recovery.get('job_id') != job['id']
+                or recovery.get('execution_ref') != job['execution_ref']
+                or recovery.get('input_digest') != job['input_digest']
+                or recovery.get('operation_revision') != op['revision']
+                or recovery.get('visual_revision') != job['revision']
+                or recovery.get('generation_deadline') != job['deadline']
+                or job['dispatched'] != 1 or job['execution_ref'] != job['id']):
+            raise DomainError('stale_worker', next_action='refresh')
+        if 'visual' not in actor.scopes or actor.routing_revision != job['routing_revision']:
+            raise DomainError('access_revoked', next_action='reauthorize')
+        self._parent_authority(db, actor, job)
+        if (job['selected_candidate'] or job['state'] != 'running'
+                or db.execute('SELECT 1 FROM visual_candidates WHERE job_id=?', (job['id'],)).fetchone()
+                or db.execute('SELECT 1 FROM attempts WHERE operation_id=?', (op['id'],)).fetchone()):
+            raise DomainError('imagegen_observation_reconciliation_conflict', next_action='review_outcome')
+        if self.store.clock() >= recovery['read_deadline']:
+            raise OutcomeUnknown('imagegen_observation_recovery_expired')
+        return recovery
+
+    def reconcile_observation(self, actor, args, intent):
+        """Requeue the SAME dispatched job for one bounded saved-reference read.
+
+        This grants no submit, find, new job/turn, or automatic publication.
+        Original immutable request/input and generation deadlines remain intact.
+        """
+        if not args.get('request_key'):
+            raise DomainError('reconciliation_requires_request_key')
+        command = intent['command']
+        with self.store.tx() as db:
+            actor = self.store.current(db, actor)
+            previous = self.app._replay(db, actor, 'visual', intent, args, implicit=False)
+            if previous:
+                op_id = previous
+            else:
+                job = self.job(db, actor, command['job_id'])
+                op = self.store.private_operation(db, actor, command['operation_id'])
+                if (job['operation_id'] != op['id'] or job['revision'] != command['expected_visual_revision']
+                        or op['revision'] != command['expected_revision']):
+                    raise DomainError('visual_revision_conflict', next_action='refresh')
+                if ('visual' not in actor.scopes or actor.routing_revision != job['routing_revision']
+                        or op['state'] != 'outcome_unknown' or job['state'] != 'outcome_unknown'
+                        or not op['complete'] or op['work_state'] != 'done'
+                        or op['lease_until'] > self.store.clock() or job['dispatched'] != 1
+                        or job['execution_ref'] != job['id'] or job['selected_candidate']
+                        or db.execute('SELECT 1 FROM visual_candidates WHERE job_id=?', (job['id'],)).fetchone()
+                        or db.execute('SELECT 1 FROM attempts WHERE operation_id=?', (op['id'],)).fetchone()):
+                    raise DomainError('imagegen_observation_reconciliation_conflict', next_action='review_outcome')
+                self._parent_authority(db, actor, job)
+                self._recovery_input_integrity(db, actor, job)
+                result = json.loads(op['result'])
+                if result.get('candidates'):
+                    raise DomainError('imagegen_observation_reconciliation_conflict', next_action='review_outcome')
+                result.update(visual_revision=job['revision'] + 1, observation_recovery={
+                    'job_id': job['id'], 'execution_ref': job['execution_ref'], 'input_digest': job['input_digest'],
+                    'operation_revision': op['revision'] + 1, 'visual_revision': job['revision'] + 1,
+                    'generation_deadline': job['deadline'],
+                    'read_deadline': self.store.clock() + VISUAL_OBSERVATION_RECOVERY_SECONDS})
+                changed = db.execute("UPDATE operations SET state='accepted',complete=0,work_state='ready',"
+                    "revision=revision+1,fence=fence+1,lease_owner=NULL,lease_until=0,result=?,error=NULL "
+                    "WHERE id=? AND revision=? AND fence=? AND state='outcome_unknown' "
+                    "AND complete=1 AND work_state='done' AND lease_until<=?",
+                    (canonical(result), op['id'], op['revision'], op['fence'], self.store.clock())).rowcount
+                if changed != 1:
+                    raise DomainError('stale_worker', next_action='refresh')
+                changed = db.execute("UPDATE visual_jobs SET state='running',revision=revision+1 WHERE id=? AND revision=? AND dispatched=1",
+                    (job['id'], job['revision'])).rowcount
+                if changed != 1:
+                    raise DomainError('stale_worker', next_action='refresh')
+                self.store.event(db, op['id'], 'validating', 'started',
+                    'Explicit saved-reference observation recovery queued; dispatch marker and generation deadline unchanged')
+                self.app._key(db, actor, args['request_key'], digest(['visual', intent]), op['id'])
+                op_id = op['id']
+        return self.store.receipt(actor, op_id)
+
     def select(self, db, actor, command, *, automatic=False):
         job = self.job(db, actor, command['job_id'])
         selection_digest = digest(command)
@@ -402,6 +496,8 @@ class VisualService:
                 return False
             job = dict(found)
         try:
+            with self.store.connection() as db:
+                recovery = self._observation_recovery(db, actor, op, job)
             request = self._request(job, actor)
             if not job['dispatched']:
                 if isinstance(executor, UnavailableImagegen):
@@ -437,18 +533,26 @@ class VisualService:
                 execution_ref = job['execution_ref']
             # Durable key lookup is a READ. Never submit again after a lost response.
             async def inspect(ref=None):
-                async with asyncio.timeout(15):
+                timeout = min(15, recovery['read_deadline'] - self.store.clock()) if recovery else 15
+                if timeout <= 0:
+                    raise OutcomeUnknown('imagegen_observation_recovery_expired')
+                async with asyncio.timeout(timeout):
+                    if recovery:
+                        return await executor.inspect(job['execution_ref'])
                     return await executor.inspect(ref) if ref else await executor.find(job['id'])
             read_deadline = asyncio.get_running_loop().time()+max(.1, min(VISUAL_EXECUTION_SECONDS, job['deadline']-self.store.clock()))
             observation = await inspect(execution_ref)
             if observation is None:
                 raise OutcomeUnknown('imagegen_submit_outcome_unknown')
+            if recovery and observation.state in {'queued', 'running'}:
+                raise OutcomeUnknown('imagegen_observation_not_complete')
             while observation.state in {'queued','running'}:
                 if self.store.clock() >= job['deadline'] or asyncio.get_running_loop().time() >= read_deadline:
                     raise OutcomeUnknown('imagegen_deadline_unknown')
                 await asyncio.sleep(.1)
                 observation = await inspect(observation.execution_ref)
-            if observation.job_key != job['id'] or observation.input_digest != job['input_digest']:
+            if (observation.job_key != job['id'] or observation.input_digest != job['input_digest']
+                    or (recovery and observation.execution_ref != job['execution_ref'])):
                 raise OutcomeUnknown('imagegen_observation_binding_mismatch')
             if (type(observation.fixture) is not bool or not isinstance(observation.execution_ref, str)
                     or not 1 <= len(observation.execution_ref) <= 512 or len(observation.usage_json) > 8192
@@ -479,10 +583,13 @@ class VisualService:
                 raise DomainError('imagegen_candidate_count_mismatch')
             automatic = None
             with self.store.tx() as db:
-                self.store.fence(db, op['id'], worker.id, op['fence'])
+                current_op = self.store.fence(db, op['id'], worker.id, op['fence'])
                 row = self.job(db, actor, job['id'])
                 self._parent_authority(db, actor, row)
-                if self.store.clock() > job['deadline']:
+                if recovery:
+                    self._observation_recovery(db, actor, current_op, row)
+                    self._recovery_input_integrity(db, actor, row)
+                elif self.store.clock() > job['deadline']:
                     raise DomainError('command_expired')
                 if db.execute('SELECT 1 FROM visual_candidates WHERE job_id=?', (job['id'],)).fetchone():
                     raise DomainError('visual_candidates_already_committed', next_action='refresh')
@@ -523,7 +630,7 @@ class VisualService:
                            (observation.execution_ref, canonical(provenance), job['id']))
                 db.execute("UPDATE operations SET state='needs_selection',complete=1,work_state='done',result=?,error=NULL WHERE id=?", (canonical(result), op['id']))
                 self.store.event(db, op['id'], 'awaiting_selection', 'completed', 'Candidate hashes and private lineage committed; no social effect yet')
-                if spec['selection'] == 'automatic' and self._automatic_context(json.loads(job['plans']), observation.fixture):
+                if not recovery and spec['selection'] == 'automatic' and self._automatic_context(json.loads(job['plans']), observation.fixture):
                     self.select(db, actor, automatic, automatic=True)
             return True
         except asyncio.CancelledError:

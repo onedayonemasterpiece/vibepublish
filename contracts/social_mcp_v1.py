@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.8.1-runtime"
+VERSION = "1.9.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -183,6 +183,11 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
                     ("requested_route", "actual_executor", "actual_model", "fixture")),
     "next_action": NEXT, "retry_safe": {"type": "boolean"}, "receipt_ref": ID,
     "generation_dispatch": enum("not_sent"),
+    "observation_recovery": obj({"job_id": ID, "execution_ref": ID,
+        "input_digest": string(64, pattern=r"^[a-f0-9]{64}$"),
+        "operation_revision": REV, "visual_revision": REV,
+        "generation_deadline": {"type": "number"}, "read_deadline": {"type": "number"}},
+        ("job_id", "execution_ref", "input_digest", "operation_revision", "visual_revision", "generation_deadline", "read_deadline")),
     "deliveries": array(ref("delivery_result"), 0, 100),
     "candidates": array(ref("candidate"), 0, 4), "destinations": array(ref("destination"), 0, 100),
     "review_token": string(512), "poll_after_seconds": {"type": "integer", "minimum": 1},
@@ -279,11 +284,14 @@ visual_cmd = {"oneOf": [arm("import"),
     arm("reconcile_dispatch", {"operation_id": ID, "job_id": ID,
         "expected_revision": REV, "expected_visual_revision": REV},
         ("operation_id", "job_id", "expected_revision", "expected_visual_revision")),
+    arm("reconcile_observation", {"operation_id": ID, "job_id": ID,
+        "expected_revision": REV, "expected_visual_revision": REV},
+        ("operation_id", "job_id", "expected_revision", "expected_visual_revision")),
     arm("select", {"job_id": ID, "candidate_id": ID, "expected_revision": REV, "token": string(512)},
         ("job_id", "candidate_id", "expected_revision", "token")),
     arm("feedback", {"job_id": ID, "candidate_id": ID, "rating": enum("accepted", "rejected"), "reason": string(2000)},
         ("job_id", "candidate_id", "rating"))]}
-tool("visual", "Import a chat attachment or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Explicit recompose creates a separate standalone candidate from verified stored art without AI, fenced by source visual revision and candidate SHA256; it never changes an existing choice or publishes. Generate allows optional source references. Selection resumes only its exact authorized parent. Explicit reconcile_dispatch seals an original terminal unknown only with trusted executor proof of no generation dispatch; it never resubmits or publishes.",
+tool("visual", "Import a chat attachment or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Explicit recompose creates a separate standalone candidate from verified stored art without AI, fenced by source visual revision and candidate SHA256; it never changes an existing choice or publishes. Generate allows optional source references. Selection resumes only its exact authorized parent. Explicit reconcile_dispatch seals an original terminal unknown only with trusted executor proof of no generation dispatch; it never resubmits or publishes. Explicit reconcile_observation queues one bounded read of the SAME saved dispatched execution to import completed artifacts; it never submits, starts another turn, renews generation deadlines, or automatically selects/publishes.",
     obj({"command": visual_cmd, "request_key": KEY,
          "file": obj({"download_url": string(8192), "file_id": string(512),
                       "mime_type": enum("image/png", "image/jpeg", "image/webp"),
