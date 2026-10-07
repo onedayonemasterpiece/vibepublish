@@ -197,7 +197,6 @@ Implementation status: **Not confirmed by user**. This is the shared-core part o
 the active MAX completion task; browser capability and live readback remain PR #2.
 Only a `max` / `max_web` binding enables these additions. Telegram/VK and fake-MAX
 defaults are not widened; unsupported provider content still fails closed.
-
 The existing public semantic `paragraphs` input supports labeled links and
 `bold`, `italic`, `code`, `spoiler` text styles. For example:
 
@@ -363,7 +362,7 @@ Actual later publication requires an observed published item or a proven provide
 
 Parent uncertainty cannot be hidden by partial success. Verified/scheduled children remain intact and are never repeated. Core never substitutes a second publication or a new request identity for an uncertain attempted child. `retry_failed` remains limited to explicitly named, proven-safe failures and rechecks native timing.
 
-For ordinary VK `post` fan-out, the original operation has one additional bounded completion path. A transient failure before the durable dispatch boundary may re-admit only the same immutable VK attempt. After dispatch, only a scheduled `wall.post` whose prepared checkpoint proves exact replayability may continue: the VK adapter first reads the complete postponed queue and then, only if needed, repeats the identical frozen `wall.post` under the same provider-native `guid`. Authority, plan digest, target, content, media IDs and native time remain frozen. Ambiguous queue identity, non-reconstructable attachment capability, exhausted bounded attempts or any non-idempotent lifecycle action remain `outcome_unknown`. The model must observe this same operation; it must not issue another publish as a workaround.
+For ordinary VK `post` fan-out, the original operation has one additional bounded completion path. A transient failure before the durable dispatch boundary may re-admit only the same immutable VK attempt. After dispatch, only a scheduled `wall.post` whose prepared checkpoint proves exact replayability may continue: the VK adapter first reads the complete postponed queue and then, only if needed, repeats the identical frozen `wall.post` under the same provider-native `guid`. Authority, plan digest, target, content, media IDs and native time remain frozen. Ambiguous queue identity, non-reconstructable attachment capability, exhausted bounded attempts or any non-idempotent lifecycle action remain `outcome_unknown`. The model must observe this same operation; it must not issue another publish as a workaround. While this bounded continuation is active, receipts may expose `vk_completion_retry_at` and a bounded `vk_completion_retry_counts` map keyed by attempt ID; these are diagnostics for polling the original operation, not authority to create a retry.
 
 Transport disconnect/cancellation stops the response wait, not accepted business work or a native scheduled post; use explicit domain cancellation.
 
@@ -398,9 +397,7 @@ Command run locally on 2026-09-04 with jsonschema 4.26.0:
 ```bash
 python tests/contracts/test_social_mcp_design.py
 ```
-
 Result: **14 test methods passed**, **16 input/output schemas**, **105 golden calls**, **30 negative calls**. Added checks cover rejected backend/local-late fields; required progress receipts; mixed Telegram-complete/VK-uploading/MAX-waiting snapshots; scheduled-command completion distinct from publication; event cursor argument boundaries; inherited partner read projection and hidden owner dialog enumeration; history and exact-item statistics grammar.
-
 These tests validate schema/projection design and corpus coverage. Runtime-oracle labels for permissions, event timing, provider behavior and crash recovery are requirements, not simulated passes. The historical design-only validation did not execute runtime tests. The current runtime runbook separately records actual database/process and MCP ClientSession tests. Live weak-model comparisons, provider/native-queue canaries and MAX browser runs remain unverified. The input schemas and corpus can be rendered with their Python entrypoints; generated JSON is not another source of truth.
 
 Required integration tests additionally prove: prompt acceptance during a stalled provider; first-child events while others run; no progress-token use after response; operation replay after disconnect; full queue reads of other editors' posts inside the allowed channel; denial outside it including cache; and provider execution after all VibePublish processes are stopped. Real weak-agent comparison remains required before releasing the server; no model accuracy percentage is claimed.

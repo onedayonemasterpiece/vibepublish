@@ -134,6 +134,24 @@ class ContractDesignTests(unittest.TestCase):
         event["stage"] = "wait_until_publish_time"
         self.assertTrue(list(validator("vibepublish_publish", "outputSchema").iter_errors(receipt)))
 
+    def test_vk_completion_retry_diagnostics_are_bounded_receipt_fields(self):
+        receipt = {"operation_id": "op_1", "resource_id": "pub_1", "revision": 1,
+            "action": "publish", "state": "running", "message": "Command running",
+            "operation_complete": False, "next_action": "check_status",
+            "retry_safe": False, "receipt_ref": "receipt_1",
+            "progress": {"events": [], "cursor": "event_cursor_1", "has_more": False},
+            "deliveries": [],
+            "vk_completion_retry_at": "2026-10-07T15:07:26Z",
+            "vk_completion_retry_counts": {
+                "attempt_59e9dff7da75466cabde1dd028696aca": 1,
+            }}
+        validator("vibepublish_publish", "outputSchema").validate(receipt)
+        validator("vibepublish_status", "outputSchema").validate({"receipts": [receipt]})
+        receipt["vk_completion_retry_counts"]["attempt_59e9dff7da75466cabde1dd028696aca"] = 4
+        self.assertTrue(list(validator("vibepublish_status", "outputSchema").iter_errors(
+            {"receipts": [receipt]}
+        )))
+
     def test_schedule_finished_is_not_published(self):
         receipt = {"operation_id": "op_1", "action": "schedule", "state": "scheduled",
             "message": "Confirmed in provider queue", "operation_complete": True,
