@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Describe bounded VK completion diagnostics in the public receipt schema so `status` remains schema-valid while the original TG+VK operation is automatically recovering.
+
 - Keep the production worker alive through bounded local SQLite write-lock contention: retry only the pre-transaction `BEGIN IMMEDIATE` boundary and return to the worker loop on a transient claim lock. No provider effect is retried by this path.
 
 - Fix Telegram+VK fan-out completion so a recoverable VK child no longer leaves
@@ -396,7 +398,6 @@
   MAX change, delegated task, real generation or deployment.
 
 ### Dependency and native SDK qualification — 2026-09-05
-
 - Added an independent real Telethon 1.44 wire-roundtrip gate (14 request kinds,
   exact custom emoji IDs and UTF-16 spans), without credentials or provider RPCs.
 - Added dependency graph/wheelhouse validation and 10 regression cases; extended

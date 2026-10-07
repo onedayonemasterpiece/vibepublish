@@ -204,6 +204,16 @@ DEFS["media_store_item"] = obj({
 DEFS["receipt"]["properties"]["media_store_items"] = array(ref("media_store_item"), 0, 50)
 DEFS["receipt"]["properties"]["media_store_retry_count"] = {"type": "integer", "minimum": 1}
 DEFS["receipt"]["properties"]["media_store_retry_at"] = DATE
+DEFS["receipt"]["properties"]["vk_completion_retry_at"] = DATE
+DEFS["receipt"]["properties"]["vk_completion_retry_counts"] = {
+    "type": "object",
+    "minProperties": 1,
+    "maxProperties": 100,
+    "patternProperties": {
+        r"^attempt_[a-f0-9]{32}$": {"type": "integer", "minimum": 1, "maximum": 3},
+    },
+    "additionalProperties": False,
+}
 
 TOOLS = []
 
@@ -388,8 +398,6 @@ _destination_resolve["oneOf"] = [
     {"required": ["url"], "not": {"required": ["provider_id"]}},
     {"required": ["provider_id"], "not": {"required": ["url"]}},
 ]
-
-
 # Telegram palette extensions keep the publication methods and closed grammar.
 DEFS["emoji_part"] = obj({"document_id": string(19, pattern=r"^[1-9][0-9]{0,18}$"),
     "alt": string(128), "preview_sha256": string(64, pattern=r"^[a-f0-9]{64}$")},
