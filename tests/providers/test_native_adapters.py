@@ -217,6 +217,39 @@ async def test_vk_restart_reconcile_replays_same_guid_only_after_complete_queue_
 
 
 @pytest.mark.asyncio
+async def test_vk_restart_reconcile_uses_native_time_after_rpc_deadline_expired():
+    adapter, transport, journal = setup('vk')
+    r = request(
+        'vk',
+        scheduled_at=timestamp(NOW+3600),
+        deadline=NOW+10,
+    )
+    prepared = await adapter.prepare(r, journal.hooks)
+    original_invoke = transport.invoke
+    failures = {'count': 0}
+
+    async def fail_wall_post(*, role, method, params):
+        if method == 'wall.post' and failures['count'] < 3:
+            failures['count'] += 1
+            raise DomainError('vk_http_failed')
+        return await original_invoke(role=role, method=method, params=params)
+
+    transport.invoke = fail_wall_post
+    with pytest.raises(DomainError) as error:
+        await adapter.execute(prepared, journal.hooks)
+    assert error.value.code == 'vk_http_failed'
+    assert transport.effects == 0
+
+    transport.invoke = original_invoke
+    restarted = VKAdapter(
+        transport, connection_id='connection', clock=lambda: NOW+120
+    )
+    observed = await restarted.reconcile(r, journal.checkpoint_json, journal.hooks)
+    assert observed.observed == 'provider_scheduled'
+    assert transport.effects == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('provider', ['telegram', 'vk'])
 async def test_response_checkpoint_recovers_after_adapter_restart(provider):
     adapter, transport, journal = setup(provider)

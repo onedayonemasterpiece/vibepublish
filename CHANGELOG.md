@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Resolve historical id-less VK scheduled-publish quarantine without a replacement write: owner-only absence resolution accepts a bound `vk_prepared` checkpoint only for the original dispatched scheduled publish, exhausts the native postponed queue plus bounded published search, and records `scheduled_intent_absent` with `native_id: null` only when both scopes prove no matching effect. Also keep recovery eligible after the initiating RPC deadline while the frozen native schedule still satisfies provider lead time, and repair the VK photo-copy regression test syntax so CI can collect the suite again.
+
 - Describe bounded VK completion diagnostics in the public receipt schema so `status` remains schema-valid while the original TG+VK operation is automatically recovering.
 
 - Keep the production worker alive through bounded local SQLite write-lock contention: retry only the pre-transaction `BEGIN IMMEDIATE` boundary and return to the worker loop on a transient claim lock. No provider effect is retried by this path.

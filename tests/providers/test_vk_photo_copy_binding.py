@@ -197,7 +197,8 @@ async def test_copy_proof_detects_post_change_during_download():
 
     assert error.value.code == 'vk_photo_binding_item_changed'
 
-@pytest.mark.asyncioasync def test_cdn_reader_does_not_accept_arbitrary_urls():
+@pytest.mark.asyncio
+async def test_cdn_reader_does_not_accept_arbitrary_urls():
     t = VKHTTPTransport(tokens={})
     for url in ('http://cdn.userapi.com/a', 'https://localhost/a', 'https://userapi.com.evil.test/a',
                 'https://u:<redacted>@userapi.com/a', 'https://userapi.com:444/a'):
