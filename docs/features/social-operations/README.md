@@ -32,6 +32,29 @@ VisualService, selected-asset hashes, scoped binary resources and single parent
 continuation. It does not add a ninth method. Real executor, initial-preset human
 acceptance and live capabilities remain unverified; see [visuals](../social-visuals/README.md).
 
+## TG+VK fan-out completion reliability - 2026-10-07
+
+Status: **Not confirmed by user**. Source/runtime regressions are green; the
+production rollout and live TG+VK acceptance below are still required.
+
+`Fixed` One execute publication that explicitly targets Telegram and VK is one
+business operation. If one child succeeds and the other has a provably safe
+continuation path, VibePublish must continue the same immutable operation
+automatically instead of ending at partial delivery and requiring a new owner
+command. A successful sibling must never be repeated.
+
+Before provider dispatch, only the same frozen VK attempt may be re-admitted.
+After dispatch, scheduled `wall.post` may continue only through its frozen
+provider-native `guid`, complete postponed-queue observation and bounded exact
+readback. No generic post-effect retry is introduced. Ambiguity, changed
+authority or payload, non-idempotent lifecycle actions, and exhausted evidence
+remain fail-closed.
+
+Restart recovery must continue the same durable operation and attempt. The model
+must not work around an unresolved attempt by issuing a second publication with
+a new request key.
+
+
 ## Telegram P0 source hardening — 2026-09-12
 
 Status: `Not confirmed by user`. The source fix is internally verified but has not
@@ -95,7 +118,6 @@ An operation that successfully placed all requested items in provider queues is 
 `Fixed` A partner with active publication access to a bound channel can read all provider-visible content in that channel, including its entire scheduled queue, regardless of which editor or client created the posts. A separate social-read grant is not required for that channel.
 
 The partner can read/search only such destinations, not arbitrary public channels, the operator's unrelated chats, dialogs or account-wide search. Exact links, IDs, cross-post links, media handles, cache entries and pagination cursors cannot expand this boundary. Comments/replies tied to an authorized post can be read where supported; this does not grant the whole linked discussion chat. Provider limitations still apply and are shown honestly.
-
 `Fixed` The system owner may request any chat, channel, dialog or item actually visible to the connected provider account, without a predeclared publishing shortlist. This is bounded by real provider access, not an invented ability to read inaccessible resources.
 
 Read access to shared channel content does not expose another tenant's private drafts, source assets, prompts, credentials, operation logs or generation candidates. The channel-visible projection is distinct from those private records. Revoking a binding invalidates access to cached channel content too.

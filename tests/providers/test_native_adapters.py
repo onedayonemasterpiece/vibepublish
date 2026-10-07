@@ -16,7 +16,7 @@ from adapters.port import Asset, Hooks, ProviderRequest, ReadRequest, RemoteItem
 from adapters.telegram import TelegramAdapter, peer_key
 from adapters.vk import VKAdapter
 from adapters.vk_transport import VKHTTPTransport, VKToken, decoded_json, validated_url
-from social_operations.domain import DomainError, OutcomeUnknown, canonical, parse_source, timestamp
+from social_operations.domain import DomainError, OutcomeUnknown, canonical, digest, parse_source, timestamp
 from .scripted import ScriptedTL, TelegramClient, VKTransport, channel, obj, tg_message
 
 NOW = 1_800_000_000
@@ -127,10 +127,9 @@ async def test_exact_native_publish_and_ordered_uploads(provider, scheduled, ima
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('provider', ['telegram', 'vk'])
-async def test_lost_response_is_readonly_reconcile_never_blind_retry(provider):
-    adapter, transport, journal = setup(provider)
-    r = request(provider)
+async def test_telegram_lost_response_is_readonly_reconcile_never_blind_retry():
+    adapter, transport, journal = setup('telegram')
+    r = request('telegram')
     prepared = await adapter.prepare(r, journal.hooks)
     def dropped(_):
         raise OSError('Lost mutation response (fixture)')
@@ -142,6 +141,79 @@ async def test_lost_response_is_readonly_reconcile_never_blind_retry(provider):
         with pytest.raises(OutcomeUnknown, match='requires observation'):
             await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
     assert transport.effects == 1
+
+
+@pytest.mark.asyncio
+async def test_vk_same_guid_recovers_lost_wall_post_response_without_duplicate_effect():
+    adapter, transport, journal = setup('vk')
+    r = request('vk', scheduled_at=timestamp(NOW+3600))
+    prepared = await adapter.prepare(r, journal.hooks)
+    dropped = {'count': 0}
+    def drop_once(method):
+        if method == 'wall.post' and dropped['count'] == 0:
+            dropped['count'] += 1
+            raise OSError('Lost first wall.post response (fixture)')
+    transport.after_mutation = drop_once
+    result = await adapter.execute(prepared, journal.hooks)
+    assert result.observed == 'provider_scheduled'
+    assert transport.effects == 1
+    posts = [params for name, _, params in transport.calls if name == 'wall.post']
+    assert len(posts) == 2
+    assert posts[0]['guid'] == posts[1]['guid'] == digest([r.operation_id, r.attempt_id])
+    assert result.items[0].native_id == str(transport.wall_guids[posts[0]['guid']])
+
+
+@pytest.mark.asyncio
+async def test_vk_restart_reconcile_reads_complete_queue_before_same_guid_replay():
+    adapter, transport, journal = setup('vk')
+    r = request('vk', scheduled_at=timestamp(NOW+3600))
+    prepared = await adapter.prepare(r, journal.hooks)
+    def always_drop(method):
+        if method == 'wall.post':
+            raise OSError('Lost wall.post response (fixture)')
+    transport.after_mutation = always_drop
+    with pytest.raises(OutcomeUnknown):
+        await adapter.execute(prepared, journal.hooks)
+    assert transport.effects == 1
+    before_calls = len([call for call in transport.calls if call[0] == 'wall.post'])
+    assert before_calls == 3
+
+    transport.after_mutation = None
+    restarted = VKAdapter(transport, connection_id='connection', clock=lambda: NOW)
+    observed = await restarted.reconcile(r, journal.checkpoint_json, journal.hooks)
+    assert observed.observed == 'provider_scheduled'
+    assert transport.effects == 1
+    assert len([call for call in transport.calls if call[0] == 'wall.post']) == before_calls
+
+
+@pytest.mark.asyncio
+async def test_vk_restart_reconcile_replays_same_guid_only_after_complete_queue_absence():
+    adapter, transport, journal = setup('vk')
+    r = request('vk', scheduled_at=timestamp(NOW+3600))
+    prepared = await adapter.prepare(r, journal.hooks)
+    original_invoke = transport.invoke
+    failures = {'count': 0}
+
+    async def fail_wall_post(*, role, method, params):
+        if method == 'wall.post' and failures['count'] < 3:
+            failures['count'] += 1
+            raise DomainError('vk_http_failed')
+        return await original_invoke(role=role, method=method, params=params)
+
+    transport.invoke = fail_wall_post
+    with pytest.raises(DomainError) as error:
+        await adapter.execute(prepared, journal.hooks)
+    assert error.value.code == 'vk_http_failed'
+    assert transport.effects == 0
+
+    transport.invoke = original_invoke
+    restarted = VKAdapter(transport, connection_id='connection', clock=lambda: NOW)
+    observed = await restarted.reconcile(r, journal.checkpoint_json, journal.hooks)
+    assert observed.observed == 'provider_scheduled'
+    assert transport.effects == 1
+    posts = [params for name, _, params in transport.calls if name == 'wall.post']
+    assert len(posts) == 1
+    assert posts[0]['guid'] == digest([r.operation_id, r.attempt_id])
 
 
 @pytest.mark.asyncio

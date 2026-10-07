@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Keep the production worker alive through bounded local SQLite write-lock contention: retry only the pre-transaction `BEGIN IMMEDIATE` boundary and return to the worker loop on a transient claim lock. No provider effect is retried by this path.
+
+- Fix Telegram+VK fan-out completion so a recoverable VK child no longer leaves
+  an otherwise successful publication partial and owner-dependent. Pre-dispatch
+  VK transport/provider failures re-admit only the same durable attempt with
+  bounded backoff; scheduled post-dispatch recovery reads the complete postponed
+  queue and may replay only the identical frozen `wall.post` under the same VK
+  native `guid`. Successful Telegram siblings remain untouched, worker restarts
+  preserve the operation, and ambiguous/non-idempotent cases still fail closed.
+
 - Add explicit same-operation visual observation recovery for a terminal unknown
   whose original dispatched executor task later completed. Recheck actor/parent
   authority, revisions, worker fence, frozen source hashes and candidate CAS;

@@ -169,6 +169,7 @@ class VKTransport:
         self.after_mutation = None
         self.fail_read = False
         self.queue_override = None
+        self.wall_guids = {}
 
     def permits(self, role, method, *, group_id, scheduled=False):
         return role_allowed(role, method) and (role, method) not in self.denied
@@ -232,6 +233,12 @@ class VKTransport:
             return {'count': len(rows), 'items': rows[params['offset']:params['offset']+params['count']]}
         if self.before_mutation:
             self.before_mutation(method)
+        if method == 'wall.post' and params.get('guid') in self.wall_guids:
+            ident = self.wall_guids[params['guid']]
+            result = {'post_id': ident}
+            if self.after_mutation:
+                self.after_mutation(method)
+            return result
         self.effects += 1
         if method == 'wall.post':
             self.next_id += 1
@@ -242,6 +249,7 @@ class VKTransport:
                 aowner, aid = map(int, item.removeprefix('photo').split('_')[:2])
                 post['attachments'].append({'type': 'photo', 'photo': {'owner_id': aowner, 'id': aid}})
             self.posts[(owner, ident)] = post
+            self.wall_guids[params['guid']] = ident
             result = {'post_id': ident}
         elif method == 'wall.repost':
             src_owner, src_id = map(int, params['object'].removeprefix('wall').split('_'))

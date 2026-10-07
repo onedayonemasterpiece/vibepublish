@@ -361,7 +361,11 @@ All-target deterministic preflight still blocks unsafe mutations but emits its p
 
 Actual later publication requires an observed published item or a proven provider identity mapping. The database keeps both queued and published identities. Queue disappearance, elapsed time or local uptime is not publication evidence. Provider-side video processing is represented separately as provider_processing.
 
-Parent uncertainty cannot be hidden by partial success. Verified/scheduled children remain intact; an uncertain attempted child is never resent. `retry_failed` applies only to explicitly named, proven safe failures and rechecks native timing. Transport disconnect/cancellation stops the response wait, not accepted business work or a native scheduled post; use explicit domain cancellation.
+Parent uncertainty cannot be hidden by partial success. Verified/scheduled children remain intact and are never repeated. Core never substitutes a second publication or a new request identity for an uncertain attempted child. `retry_failed` remains limited to explicitly named, proven-safe failures and rechecks native timing.
+
+For ordinary VK `post` fan-out, the original operation has one additional bounded completion path. A transient failure before the durable dispatch boundary may re-admit only the same immutable VK attempt. After dispatch, only a scheduled `wall.post` whose prepared checkpoint proves exact replayability may continue: the VK adapter first reads the complete postponed queue and then, only if needed, repeats the identical frozen `wall.post` under the same provider-native `guid`. Authority, plan digest, target, content, media IDs and native time remain frozen. Ambiguous queue identity, non-reconstructable attachment capability, exhausted bounded attempts or any non-idempotent lifecycle action remain `outcome_unknown`. The model must observe this same operation; it must not issue another publish as a workaround.
+
+Transport disconnect/cancellation stops the response wait, not accepted business work or a native scheduled post; use explicit domain cancellation.
 
 ## 5. Access and bootstrap
 

@@ -81,7 +81,19 @@ class Store:
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
         with self.connection() as db:
-            db.execute("BEGIN IMMEDIATE")
+            # busy_timeout handles ordinary short contention. If another local
+            # VibePublish process still owns the writer lock after that wait,
+            # retry only BEGIN IMMEDIATE. No transaction/provider effect exists
+            # yet, so this is safe and prevents the worker process from dying.
+            deadline = time.monotonic() + 15.0
+            while True:
+                try:
+                    db.execute("BEGIN IMMEDIATE")
+                    break
+                except sqlite3.OperationalError as exc:
+                    if "locked" not in str(exc).lower() or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.05)
             try:
                 yield db
                 db.commit()
@@ -198,7 +210,6 @@ class Store:
             db.execute("UPDATE bindings SET active=0,epoch=epoch+1 WHERE id=?", (binding_id,))
             db.execute("UPDATE principals SET epoch=epoch+1,routing_revision=routing_revision+1 WHERE id=?", (row["principal_id"],))
             # Revocation never silently cancels already-native scheduled posts.
-
     def binding(self, db, actor: Actor, *, alias: str | None = None, binding_id: str | None = None):
         self.current(db, actor)
         rows = self.bindings(db, actor)

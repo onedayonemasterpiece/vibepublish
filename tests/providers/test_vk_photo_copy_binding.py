@@ -197,12 +197,10 @@ async def test_copy_proof_detects_post_change_during_download():
 
     assert error.value.code == 'vk_photo_binding_item_changed'
 
-
-@pytest.mark.asyncio
-async def test_cdn_reader_does_not_accept_arbitrary_urls():
+@pytest.mark.asyncioasync def test_cdn_reader_does_not_accept_arbitrary_urls():
     t = VKHTTPTransport(tokens={})
     for url in ('http://cdn.userapi.com/a', 'https://localhost/a', 'https://userapi.com.evil.test/a',
-                'https://u:p@userapi.com/a', 'https://userapi.com:444/a'):
+                'https://u:<redacted>@userapi.com/a', 'https://userapi.com:444/a'):
         with pytest.raises(DomainError):
             await t.image_fingerprint(url)
 
@@ -317,3 +315,58 @@ async def test_vk_second_precision_schedule_is_rejected_before_effect():
         await a.prepare(r, j.hooks)
     assert error.value.code == 'vk_schedule_minute_precision'
     assert not t.uploads and not t.effects
+
+@pytest.mark.asyncio
+async def test_copy_restart_recovers_existing_queue_without_reupload():
+    a, t, j, r = setup_copy()
+    prepared = await a.prepare(r, j.hooks)
+
+    def drop_wall_post(method):
+        if method == 'wall.post':
+            raise OSError('lost wall.post response')
+
+    t.after_mutation = drop_wall_post
+    with pytest.raises(OutcomeUnknown):
+        await a.execute(prepared, j.hooks)
+    checkpoint = j.checkpoint_json
+    assert t.effects == 1
+    assert len(t.uploads) == 2
+
+    t.after_mutation = None
+    restarted = VKAdapter(t, connection_id='connection', clock=lambda: NOW)
+    observed = await restarted.reconcile(r, checkpoint, j.hooks)
+    assert observed.observed == 'provider_scheduled'
+    assert observed.items[0].media_hashes == tuple(asset.sha256 for asset in r.assets)
+    assert t.effects == 1
+    assert len(t.uploads) == 2
+
+
+@pytest.mark.asyncio
+async def test_copy_no_effect_restart_restages_frozen_media_before_same_guid_publish():
+    a, t, j, r = setup_copy()
+    prepared = await a.prepare(r, j.hooks)
+    original = t.invoke
+    failures = {'count': 0}
+
+    async def fail_wall_post_before_effect(**args):
+        if args['method'] == 'wall.post' and failures['count'] < 3:
+            failures['count'] += 1
+            raise DomainError('vk_http_failed')
+        return await original(**args)
+
+    t.invoke = fail_wall_post_before_effect
+    with pytest.raises(DomainError) as error:
+        await a.execute(prepared, j.hooks)
+    assert error.value.code == 'vk_http_failed'
+    checkpoint = j.checkpoint_json
+    assert t.effects == 0
+    assert len(t.uploads) == 2
+
+    t.invoke = original
+    restarted = VKAdapter(t, connection_id='connection', clock=lambda: NOW)
+    observed = await restarted.reconcile(r, checkpoint, j.hooks)
+    assert observed.observed == 'provider_scheduled'
+    assert observed.items[0].media_hashes == tuple(asset.sha256 for asset in r.assets)
+    assert t.effects == 1
+    assert len(t.uploads) == 4
+    assert len(t.posts) == 1

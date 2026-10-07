@@ -69,3 +69,19 @@ and actions other than publish/edit/reschedule are ineligible. All original
 actor/binding epoch fences remain; no lifecycle call is retried and the original
 unknown attempt is preserved. This enables safe reconciliation after an owner
 separately removed the exact test object, not a generic quarantine bypass.
+
+
+## R18 - same-operation VK scheduled fan-out completion
+
+Status: **Not confirmed by user**. Source/runtime regressions are green; live TG+VK acceptance is still required before owner confirmation.
+
+This is distinct from `reconcile_removed`. It never declares an unknown object externally removed and never authorizes a new publication. For one original ordinary VK scheduled `wall.post` attempt:
+
+- a pre-dispatch transient provider/transport failure may re-admit only that same immutable attempt, with bounded retry count and short durable backoff;
+- after the durable dispatch marker, the adapter may first read the complete postponed queue and recover one exact frozen match;
+- if no exact frozen match exists, the adapter may repeat only the identical `wall.post` under the same deterministic VK `guid`, and only when the prepared checkpoint proves that the attachment list is capability-free and exactly reconstructable;
+- the same operation/attempt identity, plan digest, target, text, media IDs and requested provider-native time remain fixed;
+- successful Telegram or other siblings are terminal and are never re-executed while VK recovery proceeds;
+- worker restart preserves this recovery path because retry count, attempt checkpoint and operation identity are durable.
+
+Multiple exact queue matches, changed authority, expired native submission window, unsafe/non-reconstructable media, lifecycle actions, exhausted bounded attempts or any mismatch stay `outcome_unknown`. Agent-side resubmission with a fresh key remains forbidden.
