@@ -35,7 +35,7 @@ Use `progress.cursor` as `after_event` with that one operation ID. `wait_seconds
 
 Use next_action and operation_complete to stop, request selection/approval, report a blocker or continue observation. Respect poll_after_seconds when supplied. Optional MCP notifications may be absent or invisible to the model; structured receipts/status are the reliable path. Do not claim a host will push unsolicited updates after this conversation ends.
 
-After disconnect or timeout, recover status using the original identity. `outcome_unknown` and retry_safe=false prohibit another publish/click/generation as a substitute. Only retry_failed may retry server-proven unperformed children.
+After disconnect or timeout, recover status using the original identity. Never substitute another publish/click/generation or a fresh request key for an unresolved effect. VibePublish itself may keep the **same** ordinary VK publish operation running when it has server-proven safe continuation: a pre-dispatch transient child can be re-admitted, and a scheduled VK `wall.post` can use complete native-queue observation plus the same frozen provider `guid`. Treat those as continuation of the original operation and keep observing its status. A terminal `outcome_unknown` with `retry_safe=false` still prohibits agent-side resubmission. `retry_failed` remains the explicit path for other server-proven unperformed children.
 
 For an original terminal visual unknown, `visual` command `reconcile_dispatch`
 accepts its `operation_id`, `job_id`, exact `expected_revision` and

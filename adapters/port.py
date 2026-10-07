@@ -1,10 +1,15 @@
 """Canonical core/MAX boundary v1. No adapter owns auth, ledger or retry policy.
 
 All objects are immutable snapshots. Secret references are resolved by trusted
-wiring, never supplied by a tool caller. prepare/read/reconcile must not publish.
-execute must await before_effect immediately before the single mutation. After
-that boundary an exception is uncertain unless exact provider evidence resolves
-it. Progress/checkpoints must be sanitized; do not include cookies, DOM or tokens.
+wiring, never supplied by a tool caller. prepare/read must not publish. Reconcile
+is observation-only except for an adapter contract that proves an identical
+provider-idempotent continuation under the original immutable attempt (currently
+scheduled VK wall.post with its frozen native guid). execute must await
+before_effect immediately before the first provider mutation. Any repeated native
+request after that marker must preserve the same provider idempotency identity and
+frozen payload; it is never a new publication. Otherwise an exception after the
+boundary is uncertain unless exact provider evidence resolves it.
+Progress/checkpoints must be sanitized; do not include cookies, DOM or tokens.
 """
 from __future__ import annotations
 

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import secrets
+import sqlite3
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -131,11 +132,23 @@ class Worker:
                 db.execute('UPDATE operations SET lease_until=?,worker_seen=? WHERE id=?', (self.store.clock()+30, self.store.clock(), op['id']))
 
     async def run_once(self):
-        if self.store.clock() >= self.next_media_store_purge:
-            with self.store.tx() as db:
-                self.app._purge_media_store_assets(db)
-            self.next_media_store_purge = self.store.clock() + 60
-        op = self.store.claim(self.id, connection_ids=self.connection_ids, include_unrouted=self.include_unrouted)
+        try:
+            if self.store.clock() >= self.next_media_store_purge:
+                with self.store.tx() as db:
+                    self.app._purge_media_store_assets(db)
+                self.next_media_store_purge = self.store.clock() + 60
+            op = self.store.claim(
+                self.id,
+                connection_ids=self.connection_ids,
+                include_unrouted=self.include_unrouted,
+            )
+        except sqlite3.OperationalError as exc:
+            # BEGIN IMMEDIATE contention happens before a claim and therefore
+            # before any provider effect. Do not crash the production worker;
+            # the outer loop will retry the same durable work on its next pass.
+            if 'locked' not in str(exc).lower():
+                raise
+            return False
         if not op:
             return False
         pulse = asyncio.create_task(self.heartbeat(op))
@@ -197,6 +210,7 @@ class Worker:
                 await asyncio.gather(*(self.run_child(op, c, actor, prepared.get(c['id'])) for c in pending))
             await self.finalize_pending(op, actor)
             self.aggregate(op)
+            self.schedule_vk_completion_retry(op)
             self.schedule_media_store_retry(op)
             self.schedule_media_budget_retry(op)
         except asyncio.CancelledError:
@@ -211,6 +225,92 @@ class Worker:
             pulse.cancel()
             await asyncio.gather(pulse, return_exceptions=True)
         return True
+
+    def schedule_vk_completion_retry(self, op):
+        """Continue only the same VK publish attempt under bounded safe evidence."""
+        before_dispatch = {
+            'vk_http_failed', 'vk_transport_failed', 'vk_api_failed',
+            'vk_cooldown', 'provider_command_failed', 'provider_preflight_failed',
+        }
+        after_dispatch = before_dispatch | {
+            'vk_response_identity_missing', 'vk_response_invalid',
+        }
+        with self.store.tx() as db:
+            current = db.execute('SELECT * FROM operations WHERE id=?', (op['id'],)).fetchone()
+            if not current or current['complete'] == 0:
+                return
+            result = json.loads(current['result'])
+            counts = result.get('vk_completion_retry_counts', {})
+            if not isinstance(counts, dict):
+                counts = {}
+            candidates = []
+            children = [dict(row) for row in db.execute(
+                'SELECT * FROM attempts WHERE operation_id=?', (op['id'],)
+            )]
+            for child in children:
+                plan = json.loads(child['plan'])
+                if (child['provider'] != 'vk' or plan.get('action') != 'publish'
+                        or plan.get('surface', 'post') != 'post'):
+                    continue
+                try:
+                    count = int(counts.get(child['id'], 0))
+                except (TypeError, ValueError):
+                    count = 0
+                if count >= 3:
+                    continue
+                missing = set(json.loads(child['result']).get('missing_checks', ()))
+                if not child['dispatched']:
+                    safe = child['state'] == 'blocked' and bool(missing & before_dispatch)
+                    next_state = 'accepted'
+                else:
+                    payload = json.loads(child['checkpoint'])
+                    checkpoint = payload.get('adapter', payload)
+                    safe = (
+                        child['state'] == 'outcome_unknown'
+                        and bool(plan.get('scheduled_at'))
+                        and checkpoint.get('version') == 1
+                        and checkpoint.get('attempt') == child['id']
+                        and checkpoint.get('plan') == child['plan_digest']
+                        and checkpoint.get('target') == plan.get('native_target')
+                        and checkpoint.get('id') is None
+                        and bool(missing & after_dispatch)
+                    )
+                    next_state = 'running'
+                if safe:
+                    candidates.append((child, next_state, count + 1))
+            if not candidates:
+                return
+
+            reopen = list(candidates)
+            if any(not child['dispatched'] for child, _, _ in candidates):
+                selected = {child['id'] for child, _, _ in reopen}
+                for sibling in children:
+                    if (sibling['id'] not in selected and not sibling['dispatched']
+                            and sibling['state'] in {'blocked', 'failed'}):
+                        reopen.append((sibling, 'accepted', None))
+
+            now = self.store.clock()
+            delays = []
+            for child, next_state, count in reopen:
+                if count is not None:
+                    counts[child['id']] = count
+                    delays.append(min(8, 2 ** (count - 1)))
+                db.execute(
+                    "UPDATE attempts SET state=?,stage='waiting_connection' WHERE id=?",
+                    (next_state, child['id']),
+                )
+            retry_at = now + min(delays or [1])
+            result['vk_completion_retry_counts'] = counts
+            result['vk_completion_retry_at'] = timestamp(retry_at)
+            db.execute(
+                "UPDATE operations SET state='running',complete=0,work_state='working',"
+                "lease_owner=NULL,lease_until=?,deadline=MAX(deadline,?),error=NULL,result=? WHERE id=?",
+                (retry_at, now + 120, canonical(result), op['id']),
+            )
+            self.store.event(
+                db, op['id'], 'waiting_connection', 'started',
+                'VK completion retry scheduled inside the original business operation',
+            )
 
     def schedule_media_store_retry(self, op):
         """Durably retry safe pre-dispatch failures and known-ID observations."""

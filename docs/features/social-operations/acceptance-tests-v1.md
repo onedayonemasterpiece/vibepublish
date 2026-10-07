@@ -97,8 +97,40 @@ Required executable coverage for contract 1.7:
 - VK `wall.delete` readback accepts `is_deleted=true` tombstones only when owner/id exactly match the requested wall item; mismatches fail closed and the delete is never retried;
 - URL-handle lookup must not be coerced to an integer inside the VK transport.
 
+## TG+VK same-operation completion regressions - 2026-10-07
+
+Required before rollout:
+
+- TG+VK scheduled publish: Telegram reaches its native queue, VK fails before dispatch with a transient transport error, the original operation remains incomplete, a restarted worker reclaims the same VK attempt, and final readback confirms both queues. Telegram provider effect count remains exactly one.
+- VK scheduled `wall.post`: first native response is lost; identical calls reuse one deterministic `guid` and produce one provider effect/native ID.
+- Post-dispatch restart with the VK item already present: reconciliation reads the complete postponed queue, recovers the exact frozen item, and creates no second provider effect.
+- Post-dispatch restart with no VK item present: complete queue absence plus a replayable frozen checkpoint permits one same-`guid` replay, followed by exact queue readback.
+- Multiple exact candidates, unsafe attachment replay, changed authority/plan/time, or exhausted retries remain unknown with zero fresh publication identity.
+- Live acceptance uses one original execute call targeting both designated Telegram and VK destinations and requires both native queue items. Cleanup uses the tracked native items; no duplicate test post may remain queued.
+
 ## Live evidence gates
 
 L01: independently configured Telegram/VK write + media readback. L02: native scheduling verified in provider UI/queue. L03: stop every VibePublish process before due time, then observe publication at the provider (external observer/manual fixture account); service restart must not send it. L04: edit/reschedule/cancel existing native item. L05: protected/unauthorized source denied. L06: native forward/repost origin observed. L07: MAX profile/account/queue behavior verified live. L08: actual imagegen artifact return. These are targeted test destinations approved by the owner, not public marketing channels selected by the agent.
 
 Reports record exact repo SHA, dependency/browser versions, fixture versions, command, test counts/pass/fail/skip, provider identity reference, artifact/evidence hashes and unresolved limitations. Never change a compatibility test merely to turn a defect green. Runtime, live-provider and weak-agent readiness remain separate verdicts.
+
+## TG+VK fan-out completion regression — 2026-10-07
+
+Status: **Not confirmed by user**.
+
+Focused candidate verification on the exact source candidate passed **114 tests plus
+3 subtests** across native Telegram/VK adapters, VK photo-copy binding, same-operation
+fan-out completion, explicit safe retry, original-terminal recovery, unknown
+resolution, SQLite lock retry and worker lock recovery. The critical regressions
+prove: one successful Telegram sibling is not repeated; transient VK pre-dispatch
+failure reopens the same immutable operation; scheduled VK response loss uses
+complete postponed-queue observation and the same frozen `guid`; photo posts can
+recover through existing copy-binding or re-stage the same source bytes when the
+native item is proven absent; and worker restart/SQLite contention do not require a
+second user publication command.
+
+A broader runtime/provider/contracts run produced **412 passing tests and 213
+passing subtests**. Its remaining server/OAuth failures all shared the unchanged
+local MCP SDK incompatibility `Server.list_tools` and are not evidence against
+this candidate; that environment issue remains separate from TG+VK fan-out
+acceptance.
