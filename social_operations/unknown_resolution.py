@@ -122,29 +122,29 @@ def accept_resolution(app, actor, args):
     return app.store.receipt(actor, op)
 
 
-async def _complete_search(adapter, binding, text, hooks):
+async def _complete_feed(adapter, binding, text, hooks):
     cursor, seen, observed = None, set(), []
     for _ in range(100):
         page = await adapter.read(
             ReadRequest(
                 binding['connection_id'], binding['native_id'],
-                'search', 100, cursor, text=text,
+                'feed', 100, cursor,
             ),
             hooks,
         )
         for item in page.items:
             if item.native_target != binding['native_id'] or item.namespace != 'published':
-                raise DomainError('resolution_invalid_published_search')
+                raise DomainError('resolution_invalid_published_feed')
             if item.text == text:
                 raise DomainError('resolution_published_collision')
             observed.append([item.native_id, item.fingerprint])
         if page.cursor is None:
             return observed
         if page.cursor in seen:
-            raise DomainError('resolution_search_incomplete')
+            raise DomainError('resolution_feed_incomplete')
         seen.add(page.cursor)
         cursor = page.cursor
-    raise DomainError('resolution_search_incomplete')
+    raise DomainError('resolution_feed_incomplete')
 
 
 async def run_resolution(worker, op, actor):
@@ -158,7 +158,7 @@ async def run_resolution(worker, op, actor):
     idless = native is None
     expected_text = json.loads(plan['content_json'])['text'] if idless else None
     expected_time = plan['scheduled_at'] if idless else None
-    published_search = []
+    published_feed = []
 
     async with worker.lane(binding['connection_id']):
         async with asyncio.timeout(30):
@@ -198,7 +198,7 @@ async def run_resolution(worker, op, actor):
                 if published.items or published.cursor is not None:
                     raise DomainError('resolution_published_collision')
             else:
-                published_search = await _complete_search(
+                published_feed = await _complete_feed(
                     adapter, binding, expected_text, worker.hooks(op)
                 )
 
@@ -228,8 +228,8 @@ async def run_resolution(worker, op, actor):
                 'scheduled_queue_digest': digest(queue_items),
                 'scheduled_queue_complete': True,
                 'published_exact_absent': native is not None,
-                'published_search_digest': digest(published_search) if idless else None,
-                'published_search_complete': idless,
+                'published_feed_digest': digest(published_feed) if idless else None,
+                'published_feed_complete': idless,
                 'observed_at': worker.store.clock(),
             }
             db.execute(
@@ -239,7 +239,7 @@ async def run_resolution(worker, op, actor):
             )
             message = (
                 'Scheduled VK intent absent: complete native queue and published '
-                'search prove no matching effect; original publication outcome '
+                'feed prove no matching effect; original publication outcome '
                 'remains unknown. No publication retried.'
                 if idless else
                 'Externally removed native object: absence verified; original '
@@ -251,7 +251,7 @@ async def run_resolution(worker, op, actor):
             )
             worker.store.event(
                 db, op['id'], 'finished', 'completed',
-                ('Complete native queue and published search prove the idless '
+                ('Complete native queue and published feed prove the idless '
                  'scheduled intent absent; only this attempt quarantine resolved'
                  if idless else
                  'Complete native queue and exact published lookup prove absence; '

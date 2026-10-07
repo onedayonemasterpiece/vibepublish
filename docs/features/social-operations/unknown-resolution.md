@@ -66,10 +66,10 @@ ineligible without a positive native ID.
 `reconcile_removed` still performs **no provider mutation**. For an eligible
 id-less attempt it must enumerate the complete postponed queue and reject
 resolution if an item with the exact frozen text and scheduled time is present.
-It must also exhaust a bounded provider published-search for the exact frozen
-text and reject resolution on a collision or incomplete/stale pagination.
+It must also exhaust a bounded complete provider published feed and reject resolution when an item
+has the exact frozen text, or when pagination is incomplete/stale.
 Only when both observations complete with no matching effect may the service
-record `scheduled_intent_absent`, with `native_id: null`, queue/search digests,
+record `scheduled_intent_absent`, with `native_id: null`, queue/feed digests,
 and the original checkpoint digest. The original operation remains
 `outcome_unknown`; only its connection quarantine is released. This proof never
 authorizes a replacement publication, retry, edit, cancel, or delete.

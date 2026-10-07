@@ -20,7 +20,7 @@ class Reader:
         self.revoke = None
         self.intent_time = None
         self.intent_queued = False
-        self.published_search_collision = False
+        self.published_feed_collision = False
     async def read(self, request, hooks):
         self.calls.append(request)
         if self.revoke:
@@ -34,7 +34,7 @@ class Reader:
             ),))
         if request.kind == 'item' and self.collision:
             return ReadPage((object(),))
-        if request.kind == 'search' and self.published_search_collision:
+        if request.kind == 'feed' and self.published_feed_collision:
             return ReadPage((SimpleNamespace(
                 native_target='-241261191', namespace='published', native_id='77',
                 text='test', fingerprint='published',
@@ -133,7 +133,7 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
         result = await self.run_resolution()
         self.assertEqual(result['state'], 'verified', result)
         self.assertIn('Scheduled VK intent absent', result['message'])
-        self.assertEqual([r.kind for r in self.reader.calls], ['scheduled', 'search'])
+        self.assertEqual([r.kind for r in self.reader.calls], ['scheduled', 'feed'])
         with self.store.connection() as db:
             self.assertEqual(
                 tuple(db.execute('SELECT * FROM attempts WHERE id=?', (self.old,)).fetchone()),
@@ -145,7 +145,7 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(proof['kind'], 'scheduled_intent_absent')
             self.assertIsNone(proof['native_id'])
             self.assertTrue(proof['scheduled_queue_complete'])
-            self.assertTrue(proof['published_search_complete'])
+            self.assertTrue(proof['published_feed_complete'])
             self.assertEqual(
                 db.execute('SELECT state FROM operations WHERE id=?', (self.old_op,)).fetchone()[0],
                 'outcome_unknown',
@@ -161,7 +161,7 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_idless_published_collision_keeps_quarantine(self):
         await self.seed_idless()
-        self.reader.published_search_collision = True
+        self.reader.published_feed_collision = True
         result = await self.run_resolution()
         self.assertEqual(result['error']['code'], 'resolution_published_collision')
         with self.store.connection() as db:
