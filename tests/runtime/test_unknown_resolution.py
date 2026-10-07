@@ -18,14 +18,27 @@ class Reader:
         self.queued = False
         self.cursor = None
         self.revoke = None
+        self.intent_time = None
+        self.intent_queued = False
+        self.published_search_collision = False
     async def read(self, request, hooks):
         self.calls.append(request)
         if self.revoke:
             self.revoke(); self.revoke = None
         if request.kind == 'scheduled' and self.queued:
             return ReadPage((SimpleNamespace(native_target='-241261191', namespace='scheduled', native_id='8'),))
+        if request.kind == 'scheduled' and self.intent_queued:
+            return ReadPage((SimpleNamespace(
+                native_target='-241261191', namespace='scheduled', native_id='99',
+                text='test', scheduled_at=self.intent_time, fingerprint='intent',
+            ),))
         if request.kind == 'item' and self.collision:
             return ReadPage((object(),))
+        if request.kind == 'search' and self.published_search_collision:
+            return ReadPage((SimpleNamespace(
+                native_target='-241261191', namespace='published', native_id='77',
+                text='test', fingerprint='published',
+            ),))
         return ReadPage((), self.cursor if request.kind == 'scheduled' else None)
     async def execute(self, *args):
         raise AssertionError('Resolution must never execute')
@@ -56,6 +69,46 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
             self.snapshot=tuple(db.execute('SELECT * FROM attempts WHERE id=?',(self.old,)).fetchone())
         return receipt
 
+    async def seed_idless(self):
+        receipt = await self.app.call(self.actor, 'vibepublish_publish', {
+            'to':['vk'], 'content':{'text':'test'},
+            'delivery':{'kind':'at', 'at':timestamp(self.store.clock()+172800)}
+        })
+        with self.store.tx() as db:
+            row = dict(db.execute(
+                'SELECT * FROM attempts WHERE operation_id=?',
+                (receipt['operation_id'],)
+            ).fetchone())
+            plan = json.loads(row['plan'])
+            cp = canonical({
+                'transition':'vk_prepared',
+                'adapter':{
+                    'version':1, 'attempt':row['id'], 'plan':row['plan_digest'],
+                    'target':'-241261191', 'id':None, 'media':[]
+                }
+            })
+            db.execute(
+                "UPDATE attempts SET state='outcome_unknown', dispatched=1, checkpoint=? WHERE id=?",
+                (cp,row['id'])
+            )
+            db.execute(
+                "UPDATE operations SET state='outcome_unknown',complete=1,work_state='done' WHERE id=?",
+                (receipt['operation_id'],)
+            )
+        self.reader.intent_time = plan['scheduled_at']
+        self.old = row['id']
+        self.old_op = receipt['operation_id']
+        self.args = {
+            'publication_id':receipt['resource_id'], 'expected_revision':1,
+            'change':{'kind':'reconcile_removed','attempt_id':self.old},
+            'request_key':'resolve-idless'
+        }
+        with self.store.connection() as db:
+            self.snapshot = tuple(db.execute(
+                'SELECT * FROM attempts WHERE id=?', (self.old,)
+            ).fetchone())
+        return receipt
+
     async def run_resolution(self):
         accepted=await self.app.call(self.actor, 'vibepublish_publication_update', self.args)
         self.assertIn('operation_id', accepted, accepted)
@@ -74,6 +127,45 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(db.execute('SELECT state FROM operations WHERE id=?',(self.old_op,)).fetchone()[0],'outcome_unknown')
         replay=await self.app.call(self.actor,'vibepublish_publication_update',self.args)
         self.assertEqual(replay['operation_id'],result['operation_id']); self.assertFalse(await self.worker.run_once())
+
+    async def test_idless_scheduled_intent_absence_releases_quarantine_without_publish(self):
+        await self.seed_idless()
+        result = await self.run_resolution()
+        self.assertEqual(result['state'], 'verified', result)
+        self.assertIn('Scheduled VK intent absent', result['message'])
+        self.assertEqual([r.kind for r in self.reader.calls], ['scheduled', 'search'])
+        with self.store.connection() as db:
+            self.assertEqual(
+                tuple(db.execute('SELECT * FROM attempts WHERE id=?', (self.old,)).fetchone()),
+                self.snapshot,
+            )
+            proof = json.loads(db.execute(
+                'SELECT proof FROM attempt_resolutions'
+            ).fetchone()[0])
+            self.assertEqual(proof['kind'], 'scheduled_intent_absent')
+            self.assertIsNone(proof['native_id'])
+            self.assertTrue(proof['scheduled_queue_complete'])
+            self.assertTrue(proof['published_search_complete'])
+            self.assertEqual(
+                db.execute('SELECT state FROM operations WHERE id=?', (self.old_op,)).fetchone()[0],
+                'outcome_unknown',
+            )
+
+    async def test_idless_scheduled_candidate_keeps_quarantine(self):
+        await self.seed_idless()
+        self.reader.intent_queued = True
+        result = await self.run_resolution()
+        self.assertEqual(result['error']['code'], 'resolution_object_present')
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM attempt_resolutions').fetchone()[0], 0)
+
+    async def test_idless_published_collision_keeps_quarantine(self):
+        await self.seed_idless()
+        self.reader.published_search_collision = True
+        result = await self.run_resolution()
+        self.assertEqual(result['error']['code'], 'resolution_published_collision')
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM attempt_resolutions').fetchone()[0], 0)
 
     async def test_published_collision_keeps_quarantine(self):
         await self.seed(); self.reader.collision=True

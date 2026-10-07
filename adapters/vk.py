@@ -84,6 +84,14 @@ class VKAdapter:
             raise last
         raise OutcomeUnknown('vk_response_identity_missing')
 
+    def _scheduled_recovery_guard(self, request):
+        """Recovery ignores the original RPC deadline but never the frozen native time."""
+        epoch = parse_time(request.scheduled_at or '')
+        if epoch != int(epoch):
+            raise DomainError('native_time_precision', 'Native scheduling requires whole seconds')
+        if epoch < self.clock() + 60:
+            raise DomainError('native_lead_time', 'Native submission window closed; no fallback send')
+
     async def _rights(self, request):
         self._connection(request)
         group = -int(request.native_target)
@@ -197,7 +205,6 @@ class VKAdapter:
                 or matches[0]['post_id'] != local['post_id']):
             raise DomainError('vk_read_target_mismatch')
         return local['post_id']
-
     def _item(self, raw, namespace, target):
         ident = self._wall_post_id(raw, namespace, target)
         if namespace == 'scheduled' and raw.get('post_type') not in {None, 'postpone'}:
@@ -658,9 +665,12 @@ class VKAdapter:
             return await self._observe(request, checkpoint, hooks)
 
         # The complete queue proves no matching scheduled item is currently
-        # visible. If the original upload produced a capability-bearing photo
-        # reference, re-stage the same immutable bytes; do not persist access
-        # keys. The wall mutation itself still reuses the frozen VK guid.
+        # visible. Recovery may happen long after the initiating RPC deadline,
+        # but the frozen provider-native schedule and lead time still apply.
+        self._scheduled_recovery_guard(request)
+        # If the original upload produced a capability-bearing photo reference,
+        # re-stage the same immutable bytes; do not persist access keys. The wall
+        # mutation itself still reuses the frozen VK guid.
         if checkpoint.get('retryable_wall_post') is True:
             attachments = list(expected_media)
         else:
@@ -681,7 +691,6 @@ class VKAdapter:
                 checkpoint.pop('photo_proofs', None)
             await hooks.checkpoint('vk_prepared', saved_checkpoint(request, **checkpoint))
 
-        schedule_guard(request, self.clock())
         params = {
             'owner_id': int(request.native_target),
             'message': text,

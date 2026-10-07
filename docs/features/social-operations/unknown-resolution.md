@@ -27,15 +27,18 @@ Call `vibepublish_publication_update` with:
 ```
 
 Only the same private publication's current owner can request this bounded VK
-scheduled-publish resolution. Checkpoint transitions `vk_response` or
-`vk_media_bound` must bind a positive native ID, immutable plan digest, attempt
-and target; `vk_prepared` is insufficient. The worker holds the connection lane
-through reads and proof commit, bounds pagination to 100 pages / 30 seconds,
-checks authority again before commit, and never calls prepare/execute/reconcile.
-A new verified receipt explicitly says **externally removed**, not published or
-cancelled. Durable proof is in `attempt_resolutions`, indexed by exact old attempt
-and new operation ID. Original receipt remains unknown; this removed publication
-cannot subsequently be edited/retried. A separate explicit publish is required.
+scheduled-publish resolution. For the ordinary native-object case, checkpoint
+transitions `vk_response` or `vk_media_bound` must bind a positive native ID,
+immutable plan digest, attempt and target. A historical id-less scheduled
+`publish` may use `vk_prepared` only under the stricter absence-proof rules
+defined below; no edit/reschedule or generic unknown gains that exception. The
+worker holds the connection lane through reads and proof commit, bounds
+pagination to 100 pages / 30 seconds, checks authority again before commit, and
+never calls prepare/execute/reconcile. A verified resolution receipt proves only
+the bounded absence claim; it does not claim publication/cancellation. Durable
+proof is in `attempt_resolutions`, indexed by exact old attempt and new operation
+ID. Original receipt remains unknown; the resolved attempt cannot subsequently be
+edited/retried from the absence proof. A separate explicit publish is required.
 
 SQLite schema migration is additive version 4 and included in package data.
 Validation: 10 dedicated tests pass; broader runtime/contracts/verification and
@@ -47,6 +50,29 @@ authenticated owner epoch at admission and proof commit. Reauthentication after
 an epoch change does not authorize resolving an earlier-epoch uncertain effect.
 Regression: fresh authenticated owner after epoch bump is denied before reads or
 revision changes; original attempt and quarantine remain intact.
+
+## Historical id-less scheduled publish quarantine
+
+Status: **Not confirmed by user**. This is a narrow additive R17 recovery for a
+historical VK scheduled `publish` that crossed the durable dispatch boundary but
+lost the `wall.post` response before a positive native post ID was checkpointed.
+
+Eligibility requires the immutable original attempt to be `outcome_unknown`,
+`dispatched=1`, provider VK, scheduled `publish`, transition `vk_prepared`,
+matching attempt/plan/target checkpoint identity, non-empty frozen text, and media
+cardinality matching the frozen plan. Edit/reschedule and other actions remain
+ineligible without a positive native ID.
+
+`reconcile_removed` still performs **no provider mutation**. For an eligible
+id-less attempt it must enumerate the complete postponed queue and reject
+resolution if an item with the exact frozen text and scheduled time is present.
+It must also exhaust a bounded provider published-search for the exact frozen
+text and reject resolution on a collision or incomplete/stale pagination.
+Only when both observations complete with no matching effect may the service
+record `scheduled_intent_absent`, with `native_id: null`, queue/search digests,
+and the original checkpoint digest. The original operation remains
+`outcome_unknown`; only its connection quarantine is released. This proof never
+authorizes a replacement publication, retry, edit, cancel, or delete.
 
 ## Final verified copy evidence
 
