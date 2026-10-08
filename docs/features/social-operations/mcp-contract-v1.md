@@ -449,6 +449,13 @@ maximum 768 px on either edge and 384 KiB, intended only for fast model inspecti
 before selection or transfer. The returned metadata binds the preview SHA-256 to
 the authorized source SHA-256.
 
+For clients which drop MCP `ImageContent` while retaining `structuredContent`,
+the same sanitized bounded WebP is also returned as `preview_data_url`
+(`data:image/webp;base64,...`). It contains preview pixels, not the original
+asset or an externally fetchable URL. The existing principal/scope check and
+content hashes apply unchanged. End-user visual acceptance still requires a
+live connector read and decoding of the returned image.
+
 Preview generation rechecks the same current principal, tenant, scope, visual-job
 and emoji-catalog access as a full resource read. It cannot publish, select, grant
 access, or replace the immutable source. The server returns neither provider URLs
