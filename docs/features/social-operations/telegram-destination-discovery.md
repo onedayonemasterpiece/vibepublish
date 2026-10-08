@@ -11,7 +11,7 @@ never joins a group and never creates a destination. Current sending rights are
 checked before returning a publish-only owner binding. This is an explicit owner
 registration operation backed by provider evidence, not a grant from URL text.
 Partners cannot discover or acquire destinations; revoked bindings stay revoked.
-Ambiguous Telegram connections fail closed. Resolve never sends a message.
+Ambiguous ordinary Telegram account connections fail closed. When one ordinary connected MTProto account and the dedicated `VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE` connection coexist, owner exact `destinations.resolve` selects that single ordinary account, just as owner direct-link routing does. It never routes external publications through the knowledge-base lane, silently chooses between multiple ordinary accounts, or bypasses native membership/publish-rights checks. Resolve never sends a message.
 
 Basic-group members with current default sending permission may publish an
 ordinary immediate post. Provider-native scheduled publish remains gated by
