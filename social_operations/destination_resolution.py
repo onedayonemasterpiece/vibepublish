@@ -30,9 +30,16 @@ def admit(app, db, actor, command, intent):
         parse_destination(command)
     placeholders = ",".join("?" for _ in _ACCOUNT_TYPES[provider])
     connections = db.execute(
-        f"SELECT id FROM connections WHERE tenant_id=? AND provider=? AND account_type IN ({placeholders}) AND active=1",
+        f"SELECT id,secret_ref FROM connections WHERE tenant_id=? AND provider=? AND account_type IN ({placeholders}) AND active=1",
         (actor.tenant_id, provider, *_ACCOUNT_TYPES[provider]),
     ).fetchall()
+    if provider == "telegram" and len(connections) > 1:
+        # A dedicated knowledge-base session is not a publishing account.
+        # Mirror owner direct-link routing without broad account fallback.
+        ordinary = [row for row in connections
+                    if row["secret_ref"] != "VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE"]
+        if len(ordinary) == 1:
+            connections = ordinary
     if len(connections) != 1:
         raise DomainError(f"{provider}_discovery_connection_ambiguous", next_action="contact_owner")
     request = dict(intent, _connection_id=connections[0]["id"])

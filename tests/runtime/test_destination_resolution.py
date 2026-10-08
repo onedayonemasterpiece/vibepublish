@@ -132,3 +132,49 @@ async def test_failed_permissions_do_not_bind(tmp_path):
     assert store.receipt(actor, first["operation_id"])["state"] == "blocked"
     with store.connection() as db:
         assert db.execute("SELECT count(*) FROM bindings").fetchone()[0] == 0
+
+@pytest.mark.asyncio
+async def test_owner_discovery_ignores_dedicated_knowledge_base_connection(tmp_path):
+    store = Store(tmp_path / "ledger.sqlite")
+    owner = store.authenticate(store.create_principal("tenant", "owner", owner=True))
+    store.add_connection(
+        owner, "conn", "telegram", account_type="mtproto_user",
+        secret_ref="VIBEPUBLISH_TEST",
+    )
+    store.add_connection(
+        owner, "kb-conn", "telegram", account_type="mtproto_user",
+        secret_ref="VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE",
+    )
+    app = Application(store)
+    result = await app.call(owner, "vibepublish_destinations", {
+        "command": {"kind": "resolve", "provider": "telegram", "url": URL},
+        "request_key": "tg-regular-not-kb",
+    })
+    assert result["state"] == "accepted", result
+    adapter = Adapter()
+    assert await Worker(store, {"conn": adapter}).run_once()
+    verified = store.receipt(owner, result["operation_id"])
+    assert verified["state"] == "verified", verified
+    with store.connection() as db:
+        assert db.execute(
+            "SELECT connection_id FROM destinations"
+        ).fetchone()[0] == "conn"
+
+@pytest.mark.asyncio
+async def test_owner_discovery_remains_ambiguous_with_two_regular_accounts(tmp_path):
+    store = Store(tmp_path / "ledger.sqlite")
+    owner = store.authenticate(store.create_principal("tenant", "owner", owner=True))
+    store.add_connection(
+        owner, "first", "telegram", account_type="mtproto_user",
+        secret_ref="VIBEPUBLISH_TEST_FIRST",
+    )
+    store.add_connection(
+        owner, "second", "telegram", account_type="mtproto_user",
+        secret_ref="VIBEPUBLISH_TEST_SECOND",
+    )
+    result = await Application(store).call(owner, "vibepublish_destinations", {
+        "command": {"kind": "resolve", "provider": "telegram", "url": URL}
+    })
+    assert result["error"]["code"] == "telegram_discovery_connection_ambiguous"
+    with store.connection() as db:
+        assert db.execute("SELECT count(*) FROM bindings").fetchone()[0] == 0
