@@ -329,8 +329,9 @@ tool("asset_preview", "Return a small metadata-free WebP preview of one authoriz
          "mime_type": {"const": "image/webp"},
          "width": {"type": "integer", "minimum": 1, "maximum": 768},
          "height": {"type": "integer", "minimum": 1, "maximum": 768},
-         "size_bytes": {"type": "integer", "minimum": 1, "maximum": 393216}},
-        ("resource_uri", "source_sha256", "preview_sha256", "mime_type", "width", "height", "size_bytes")),
+         "size_bytes": {"type": "integer", "minimum": 1, "maximum": 393216},
+         "preview_data_url": string(524320, pattern=r"^data:image/webp;base64,[A-Za-z0-9+/=]+$")},
+        ("resource_uri", "source_sha256", "preview_sha256", "mime_type", "width", "height", "size_bytes", "preview_data_url")),
     "visual", True)
 
 tool("status", "Read local receipts and atomic progress, never retry. Watch one operation with after_event; return on its first new event, not all providers.",
