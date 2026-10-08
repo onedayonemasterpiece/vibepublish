@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix MCP image previews for tool clients that only expose structured results: include the same bounded sanitized WebP as a read-only `preview_data_url` beside the existing standard MCP image block. Validate byte-for-byte equivalence; no new asset exposure or publication side effect.
+
 - Fix Telegram exact destination resolution when the regular publishing connection coexists with the dedicated knowledge-base MTProto connection: select the sole ordinary account while still rejecting genuinely ambiguous account topologies. Keep provider membership and publish-rights verification, binding idempotency and no-join behavior; add regression tests for both ordinary+knowledge-base and two ordinary accounts.
 
 - Resolve historical id-less VK scheduled-publish quarantine without a replacement write: owner-only absence resolution accepts a bound `vk_prepared` checkpoint only for the original dispatched scheduled publish, exhausts the native postponed queue plus the complete published feed, and records `scheduled_intent_absent` with `native_id: null` only when both scopes prove no matching effect. Also keep recovery eligible after the initiating RPC deadline while the frozen native schedule still satisfies provider lead time, and repair the VK photo-copy regression test syntax so CI can collect the suite again.
