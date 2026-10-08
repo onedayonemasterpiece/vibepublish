@@ -182,7 +182,15 @@ actual provider adapter. Its context owns profile/browser startup and cleanup;
 core's `AsyncExitStack` closes entered contexts on completion, errors or cancellation.
 The MAX package validates explicit `VIBEPUBLISH_MAX_PROFILE` configuration and
 requires approved profile/executable/allowlist and write opt-in; core does not
-parse or guess MAX profile paths, copy sessions, or borrow credentials. The same
+parse or guess MAX profile paths, copy sessions, or borrow credentials.
+
+Native MAX Web may auto-link a bare displayed domain such as `vk.cc/d2gEay`
+without an authored rich-link intent. Its composer/readback semantic snapshot
+accepts that *only* when the displayed hostname/path maps exactly to the same
+HTTPS URL. Mismatched or disguised targets and explicit labeled rich links retain
+strict verification. The channel's `scheduled_only` provider policy remains
+mandatory: publication goes through the existing native scheduled queue, not an
+immediate Send or a ChatGPT timer. The same
 callable can be injected through `max_factory` for offline tests. There is no
 custom provider worker or alternate social dispatch path.
 

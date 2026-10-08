@@ -59,7 +59,17 @@ const semanticSnapshot=root=>{
             else if(['i','em'].includes(tag)||node.classList?.contains('italic'))type='italic';
             else if(tag==='a'){
                 url=node.href;if(!/^https?:\/\//.test(url)){unsupported=true;return;}
-                if(url.replace(/\/$/,'')===semanticText(node).replace(/\/$/,''))return;
+                const shown=semanticText(node);
+                if(url.replace(/\/$/,'')===shown.replace(/\/$/,''))return;
+                // MAX auto-links bare displayed domains to their same HTTPS
+                // destination. This is not authored rich-text markup. Preserve
+                // fail-closed behavior for misleading labels, redirects and
+                // unexpected hosts, protocols or paths.
+                if(/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s]*)?$/i.test(shown)){
+                    try{
+                        if(new URL('https://'+shown).href.replace(/\/$/,'')===url.replace(/\/$/,''))return;
+                    }catch(_ignored){}
+                }
                 type='text_link';
             }else if(['code','pre','u','s','del','blockquote','img'].includes(tag))unsupported=true;
             if(type)entities.push({type,offset:start,length,...(url?{url}:{})});

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix MAX Web channel composer auto-link detection: a displayed bare domain linked by MAX to the exact same HTTPS URL is ordinary text, while misleading labels, wrong URL schemes and authored rich links remain verified. The existing native scheduled publisher can now accept event announcements with registration links without losing strict semantic readback. Add browser-backed regression tests.
+
 - Fix Telegram exact destination resolution when the regular publishing connection coexists with the dedicated knowledge-base MTProto connection: select the sole ordinary account while still rejecting genuinely ambiguous account topologies. Keep provider membership and publish-rights verification, binding idempotency and no-join behavior; add regression tests for both ordinary+knowledge-base and two ordinary accounts.
 
 - Resolve historical id-less VK scheduled-publish quarantine without a replacement write: owner-only absence resolution accepts a bound `vk_prepared` checkpoint only for the original dispatched scheduled publish, exhausts the native postponed queue plus the complete published feed, and records `scheduled_intent_absent` with `native_id: null` only when both scopes prove no matching effect. Also keep recovery eligible after the initiating RPC deadline while the frozen native schedule still satisfies provider lead time, and repair the VK photo-copy regression test syntax so CI can collect the suite again.
