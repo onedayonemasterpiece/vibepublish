@@ -272,6 +272,11 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': BlockedEdit(sys.argv[2], 'te
                     image=next(part for part in preview.content if part.type=='image')
                     self.assertEqual(image.mimeType,'image/webp')
                     self.assertEqual(hashlib.sha256(base64.b64decode(image.data)).hexdigest(),preview.structuredContent['preview_sha256'])
+                    # Clients which consume structuredContent only must still
+                    # receive the actual sanitized preview, not just dimensions.
+                    inline=preview.structuredContent['preview_data_url']
+                    self.assertTrue(inline.startswith('data:image/webp;base64,'))
+                    self.assertEqual(base64.b64decode(inline.partition(',')[2]),base64.b64decode(image.data))
                     choice={'command':{'kind':'select','job_id':first['visual_job_id'],'candidate_id':candidate['id'],
                             'expected_revision':ready['visual_revision'],'token':candidate['selection_token']}}
                     selected=await http.post(self.base+'/v1/visuals/commands',headers={'Idempotency-Key':'choose-http-mcp'},json=choice)
