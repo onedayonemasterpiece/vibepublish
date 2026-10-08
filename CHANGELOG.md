@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix MAX Web channel composer auto-link detection: a displayed bare domain linked by MAX to the exact same HTTPS URL is ordinary text, while misleading labels, wrong URL schemes and authored rich links remain verified. Preserve strict native scheduled-publisher readback. Add browser-backed regression tests.
+
 - Fix MCP image previews for tool clients that only expose structured results: include the same bounded sanitized WebP as a read-only `preview_data_url` beside the existing standard MCP image block. Validate byte-for-byte equivalence; no new asset exposure or publication side effect.
 
 - Fix Telegram exact destination resolution when the regular publishing connection coexists with the dedicated knowledge-base MTProto connection: select the sole ordinary account while still rejecting genuinely ambiguous account topologies. Keep provider membership and publish-rights verification, binding idempotency and no-join behavior; add regression tests for both ordinary+knowledge-base and two ordinary accounts.
