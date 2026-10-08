@@ -108,13 +108,18 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'),
         result = await service.call(actor(), name, arguments)
         if isinstance(result, AssetPreview):
             metadata = result.metadata
+            encoded = base64.b64encode(result.data).decode('ascii')
+            # A standard MCP image block is still the primary transport.
+            # Some tool clients project only structuredContent, silently
+            # dropping image blocks. Include the same bounded, sanitized
+            # preview there so those clients can actually inspect it.
+            structured = {**metadata, 'preview_data_url': 'data:' + metadata['mime_type'] + ';base64,' + encoded}
             return types.CallToolResult(
                 content=[
                     types.TextContent(type='text', text=canonical(metadata)),
-                    types.ImageContent(type='image', data=base64.b64encode(result.data).decode('ascii'),
-                                       mimeType=metadata['mime_type']),
+                    types.ImageContent(type='image', data=encoded, mimeType=metadata['mime_type']),
                 ],
-                structuredContent=metadata,
+                structuredContent=structured,
                 isError=False,
             )
         return types.CallToolResult(content=[types.TextContent(type='text', text=canonical(result))],
