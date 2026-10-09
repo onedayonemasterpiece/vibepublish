@@ -1,5 +1,11 @@
 # VibePublish Social Operations
 
+## Exact existing Telegram post edits and MAX startup isolation (2026-10-09)
+
+Status: **Not confirmed by user** until live provider acceptance. A published Telegram post's scheduled-queue reference can expire after the provider moves it into the feed. The read `query.kind=item` now accepts an exact `https://t.me/<bound-handle>/<message-id>` or `https://t.me/c/<bound-id>/<message-id>` permalink **only within an already granted Telegram destination**; it obtains a fresh provider-backed snapshot whose item ref can be used for an in-place edit. A permalink must never implicitly grant or create another destination. The original photo and publication identity are preserved; no replacement publication.
+
+A MAX browser lease held by Browser Bridge must not crash the shared Telegram/VK worker. MAX now has a separate, retrying provider lane while existing connections, rights, native receipt requirements and idempotency remain unchanged. The separate lane cannot claim MAX work without an owned adapter and must not treat a pending/failed MAX read as an absent post. This isolation alone does not prove MAX scheduling or feed readback; the MAX account/UI preflight still needs live acceptance.
+
 Current destination lifecycle correction: [VK/Telegram durable destination lifecycle and VK Stories](destination-lifecycle-vk-v1.md).
 Telegram-specific discovery history remains in [Telegram destination discovery](telegram-destination-discovery.md).
 

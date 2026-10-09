@@ -13,6 +13,7 @@ import base64
 from contextlib import contextmanager, ExitStack
 import fcntl
 import json
+import logging
 import os
 from pathlib import Path
 import stat
@@ -193,10 +194,13 @@ async def run(
     with ExitStack() as owners:
         owners.enter_context(exclusive_session_owner(db.parent / 'telegram-session.lock'))
         if knowledge_base:owners.enter_context(exclusive_session_owner(db.parent / 'telegram-knowledge-base-session.lock'))
+        # MAX owns a separate browser profile; busy MAX must not stop Telegram/VK.
+        split_max = 'max' in selected and not once
         async with native_adapters(
             store,
             env=bundles,
             telegram_factory=telegram_factory,
+            exclude_providers=('max',) if split_max else (),
         ) as wiring:
             imagegen = None
             if codex_task_artifacts is not None:
@@ -206,7 +210,8 @@ async def run(
                     codex_task_artifacts,
                     codex_home=Path("/home/dev/.codex"),
                 )
-            ordinary=[value for key,value in selected.items() if key!='knowledge_base']
+            ordinary=[value for key,value in selected.items()
+                      if key!='knowledge_base' and (key!='max' or not split_max)]
             workers=[Worker(store,wiring,imagegen=imagegen,connection_ids=ordinary)]
             if knowledge_base:
                 workers.append(Worker(store,wiring,connection_ids=[selected['knowledge_base']],include_unrouted=False))
@@ -215,8 +220,29 @@ async def run(
                     worked=await worker.run_once()
                     if once:return
                     if not worked:await asyncio.sleep(0.25)
+
+            async def max_lane():
+                # MAX may be owned by Browser Bridge or another legitimate
+                # session. Never claim MAX operations without its own adapter.
+                from adapters.max.live_session import configured_adapter
+                connection_id=selected['max']
+                while True:
+                    try:
+                        async with configured_adapter(connection_id=connection_id,env=bundles) as adapter:
+                            max_worker=Worker(store,{connection_id:adapter},
+                                              connection_ids=[connection_id],include_unrouted=False)
+                            await loop(max_worker)
+                    except DomainError as exc:
+                        logging.getLogger(__name__).warning('MAX provider lane unavailable: %s',exc.code)
+                    except Exception as exc:
+                        logging.getLogger(__name__).error('MAX provider lane exception: %s',type(exc).__name__)
+                    await asyncio.sleep(30)
+
             try:
-                await asyncio.gather(*(loop(worker) for worker in workers))
+                tasks=[loop(worker) for worker in workers]
+                if split_max:
+                    tasks.append(max_lane())
+                await asyncio.gather(*tasks)
             finally:
                 if imagegen is not None:
                     await imagegen.close()

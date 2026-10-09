@@ -60,7 +60,7 @@ def vk_credentials(bundle):
 
 
 @asynccontextmanager
-async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk_factory=VKHTTPTransport, max_factory=None):
+async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk_factory=VKHTTPTransport, max_factory=None, exclude_providers=()):
     """A worker-only lifetime; caller must explicitly enable native connections.
 
     max_factory is an async context manager callable accepting keyword-only
@@ -83,6 +83,10 @@ async def native_adapters(store, *, env=None, telegram_factory=None, tl=None, vk
     try:
         async with AsyncExitStack() as resources:
             for connection in connections:
+                # Production owns MAX in a separate retryable provider lane.
+                # Exclusion never alters the durable connection/binding registry.
+                if connection['provider'] in exclude_providers:
+                    continue
                 account = connection['account_type']
                 if account in {'unconfigured', 'fake'}:
                     continue
