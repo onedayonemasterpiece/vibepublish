@@ -73,21 +73,30 @@ def _identity(value):
 
 
 def _tail_destinations(text, entities):
-    """Recognize URL-bearing navigation near the end, irrespective of labels/spaces."""
-    double, single = text.rfind("\n\n"), text.rfind("\n")
-    offset = max(double + 2 if double >= 0 else 0, single + 1 if single >= 0 else 0)
+    """A footer is a final navigation-only line, never an incidental body link.
+
+    The link identities, not the spelling/spacing of their labels, decide
+    whether a destination has already been appended. Checking coverage of the
+    last line prevents references in editorial prose from suppressing the footer.
+    """
+    offset = text.rfind("\n") + 1
     tail = text[offset:]
-    found = set()
-    for entity in entities:
-        if entity["type"] == "text_link" and entity["offset"] >= utf16(text[:offset]):
-            identity = _identity(entity["url"])
-            if identity:
-                found.add(identity)
-    for match in re.finditer(r"https://[^\s<>]+", tail):
-        identity = _identity(match.group().rstrip(".,;!?)"))
-        if identity:
-            found.add(identity)
-    return found
+    if not tail.strip():
+        return set()
+    beginning = utf16(text[:offset])
+    spans = [(e["offset"] - beginning, e["offset"] + e["length"] - beginning, e["url"])
+             for e in entities if e["type"] == "text_link"
+             and e["offset"] >= beginning and e["offset"] + e["length"] <= utf16(text)]
+    # Named links must account for every substantive glyph of the final line;
+    # dividers and whitespace do not require a text entity.
+    position = 0
+    for char in tail:
+        end = position + utf16(char)
+        if not char.isspace() and char not in "·•|—–" and not any(
+                start <= position and end <= finish for start, finish, _ in spans):
+            return set()
+        position = end
+    return {_identity(url) for _, _, url in spans if _identity(url)}
 
 
 def append_network_footer(source_alias, provider, content, lookup, *, has_media=False):
