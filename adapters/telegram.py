@@ -443,8 +443,22 @@ class TelegramAdapter:
         # The exact Telegram get_messages CAS returns native IDs, text and
         # entities but does not download bytes. Compare native media IDs and
         # content, without treating read-only download evidence as revision.
-        same_existing(replace(expected, observed_media=()),
-                      replace(observed, observed_media=()))
+        left = replace(expected, observed_media=())
+        right = replace(observed, observed_media=())
+        try:
+            same_existing(left, right)
+        except DomainError as exc:
+            if exc.code != 'remote_revision_conflict':
+                raise
+            # Expose only changed *field names*, never message text, IDs or
+            # provider media bytes. This makes a false native CAS actionable.
+            compared = ('native_target', 'namespace', 'native_id', 'text',
+                        'scheduled_at', 'provider_media', 'member_ids', 'origin',
+                        'reply_to_native_id', 'own_reactions', 'entities_json')
+            changed = [name for name in compared if getattr(left, name) != getattr(right, name)]
+            raise DomainError('remote_revision_conflict',
+                              'Native snapshot differs: ' + ','.join(changed or ('semantic_projection',)),
+                              'refresh') from None
 
     async def prepare(self, request: ProviderRequest, hooks: Hooks) -> Prepared:
         capability = await self.inspect(request)
