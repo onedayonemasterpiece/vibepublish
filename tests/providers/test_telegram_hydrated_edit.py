@@ -54,3 +54,33 @@ async def test_published_photo_native_media_replacement_still_conflicts():
     assert error.value.code == 'remote_revision_conflict'
     assert 'provider_media' in error.value.message
     assert not journal.markers  # Refused edit has no dispatch.
+
+
+@pytest.mark.asyncio
+async def test_production_direct_target_adapter_preserves_photo_on_hydrated_caption_edit():
+    # Production wiring uses DirectTargetTelegramAdapter, not TelegramAdapter.
+    from adapters.telegram_direct import DirectTargetTelegramAdapter
+    from tests.providers.scripted import ScriptedTL
+    from tests.providers.test_native_adapters import NOW, TARGETS
+
+    _, client, journal = setup('telegram')
+    adapter = DirectTargetTelegramAdapter(client, connection_id='connection',
+                                          tl=ScriptedTL(), clock=lambda: NOW,
+                                          bound_targets=(TARGETS['telegram'],))
+    original = asset(3)
+    posted = (await adapter.execute(
+        await adapter.prepare(request('telegram', assets=(original,)), journal.hooks),
+        journal.hooks)).items[0]
+    journal.markers.clear()
+    snapshot = replace(
+        posted, media_hashes=(),
+        observed_media=(DownloadedMedia(slot=0,sha256='a'*64,mime='image/jpeg',size=321),))
+    edit = request('telegram', action='edit', existing=snapshot,
+                   content_json=canonical({'text':'Named link caption'}))
+    prepared = await adapter.prepare(edit, journal.hooks)
+    result = await adapter.execute(prepared, journal.hooks)
+    assert result.observed == 'edited'
+    assert result.items[0].native_id == posted.native_id
+    assert result.items[0].provider_media == posted.provider_media
+    assert result.items[0].text == 'Named link caption'
+    assert len(client.uploads) == 1

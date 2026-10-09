@@ -14,7 +14,7 @@ import re
 from dataclasses import replace
 from typing import Any
 
-from adapters.native import identity, same_existing
+from adapters.native import identity
 from adapters.port import Capability, Observation, Prepared, ReadPage, ReadRequest
 from social_operations.domain import DomainError, OutcomeUnknown, canonical
 
@@ -183,7 +183,7 @@ class DirectTargetTelegramAdapter(ResilientTelegramAdapter):
             )
             if current is None:
                 raise DomainError("remote_item_missing", next_action="refresh")
-            same_existing(canonical_request.existing, current)
+            self._same_existing(canonical_request.existing, current)
         if canonical_request.source:
             await hooks.emit_progress(
                 "resolving_source", "started", "Resolving the exact native source"
