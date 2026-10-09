@@ -87,6 +87,7 @@ features:
     design: docs/features/social-operations/implementation-design-v1.md
     mcp_contract: docs/features/social-operations/mcp-contract-v1.md
     telegram_custom_emoji: docs/features/social-operations/telegram-custom-emoji-v1.md
+    network_footers: docs/features/social-operations/network-footers.md
     telegram_destination_discovery: docs/features/social-operations/telegram-destination-discovery.md
     telegram_custom_emoji_status: remote_source_and_offline_core_tests_verified_live_unverified
     latest_extension: docs/features/social-operations/destination-lifecycle-vk-v1.md
