@@ -40,6 +40,8 @@ PUBLIC_HANDLES = {
 
 def _public_url(alias, lookup):
     binding = lookup(alias)  # Active, owner-authorized destination registry.
+    if not binding:
+        raise DomainError("network_footer_target_unavailable")
     provider = binding["provider"]
     if alias in PUBLIC_HANDLES:
         expected, url = PUBLIC_HANDLES[alias]
