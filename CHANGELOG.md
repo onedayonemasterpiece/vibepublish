@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Automatically add destination-specific cross-network navigation footers to new owner posts in three Kaliningrad Telegram channels and the MAX announcements channel. Resolve VK communities from active bindings, preserve Telegram/MAX semantic entities and idempotency, reject over-limit content, and leave native forwards/other destinations unchanged. Document the four routes and cover real planning with focused regressions.
+
 - Fix actual production `DirectTargetTelegramAdapter.prepare` to use the same safe native Telegram edit CAS as the base adapter. A provider-read photo caption can now be edited in place without falsely treating downloaded media evidence as a remote revision; the remaining native ID/content-change checks remain strict. Add a regression test for the direct-target production adapter, not only its base class.
 
 - Add sanitized Telegram edit CAS diagnostics naming only diverging native comparison fields; no message contents, IDs or media bytes are logged or returned. This distinguishes genuine remote edits from read/prepare projection defects without retrying a provider mutation.

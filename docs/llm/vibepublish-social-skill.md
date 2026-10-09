@@ -63,6 +63,16 @@ Read results use receipts with items/truncated/next_cursor. An accepted incomple
 
 Content normally is `{text: ...}`. Plain text is default; bounded Markdown supports paragraphs, bold, italic, inline code and named links. Provider renderings preserve Telegram links/custom emoji, VK visible URLs and only the MAX formatting its adapter has proved. Never change editorial facts silently or construct raw entity offsets.
 
+**Owner's cross-channel navigation footer is automatic.** For original posts
+to `lovekenig_tg`, `tg_74cd62f2688ba88ab5fd`,
+`tg_5060f37d74cf460135ee` or `max_lovekenig_announcements`,
+the application appends the exact mapped VK/MAX/Telegram links as a distinct
+final line with `  ·  ` separators. Do **not** author, simulate, or repeat
+these navigation links in the editorial content. For ordinary Telegram
+captions and posts leave enough room for the footer within native limits.
+Other channels, native forwards and existing-item edits are unchanged.
+See [network footer contract](../features/social-operations/network-footers.md).
+
 Media order is binding. For a chat attachment call `vibepublish_visual` with `command: {kind: "import"}`, the top-level `file` supplied by the host, and a stable `request_key`. The tool declares `openai/fileParams: ["file"]`; the host passes `download_url`, `file_id`, optional `mime_type` and `file_name`. Do not invent any of these or send a local filesystem path. A verified receipt's `resource_id` is the owned asset to use in publication media or visual sources. Import does not generate or publish. Replay returns the original asset without requiring a still-live download URL.
 
 For an image already saved by `browser.source_image.quiet`, call `vibepublish_visual` with `command: {kind: "import_browser_artifact", uri: "artifact://<uuid>"}` and a stable `request_key`. The URI is opaque: never replace it with a filesystem path and never re-fetch the source URL. VibePublish reads only its trusted configured same-host browser artifact root, verifies the browser metadata, regular-file boundaries, MIME, size and SHA-256, then uses the normal private image ingress/sanitizer. Replay returns the previously admitted asset even if the temporary browser artifact is no longer present.

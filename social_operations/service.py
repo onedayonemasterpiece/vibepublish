@@ -11,6 +11,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from contracts.social_mcp_v1 import VERSION, catalog, project_catalog
 from .assets import AssetPreview, render_asset_preview
 from .domain import DomainError, canonical, digest, new_id, normalize_intent, parse_source, parse_time, timestamp
+from .network_footers import append_network_footer
 
 CATALOG = {t['name']: t for t in catalog()['tools']}
 FORMATS = FormatChecker()
@@ -427,6 +428,13 @@ class Application:
                 if exc.code not in {'emoji_fallback_required', 'rich_fallback_needs_review'} or action != 'publish':
                     raise
                 admission_error, content = exc.code, {'text': ''}
+        if (action == 'publish' and actor.owner and not admission_error
+                and target.get('surface', 'post') == 'post' and not target.get('thread_ref')):
+            content = append_network_footer(
+                binding['alias'], binding['provider'], content,
+                lambda alias: self.store.binding(db, actor, alias=alias),
+                has_media=bool(assets) or pending_visual,
+            )
         if action not in ('forward', 'cancel', 'delete', 'react') and not assets and not content.get('text', '').strip() and not pending_visual and not admission_error:
             raise DomainError('empty_publication')
         delivery = target.get('delivery', {'kind': 'now'})
