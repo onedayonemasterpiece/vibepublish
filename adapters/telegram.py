@@ -437,6 +437,15 @@ class TelegramAdapter:
                         'url': source.canonical_url, 'fingerprint': item.fingerprint,
                         'media': list(item.provider_media), 'content_digest': digest([item.text, item.entities_json])}
 
+    @staticmethod
+    def _same_existing(expected: RemoteItem, observed: RemoteItem) -> None:
+        # An explicit provider read may attach downloaded image SHA evidence.
+        # The exact Telegram get_messages CAS returns native IDs, text and
+        # entities but does not download bytes. Compare native media IDs and
+        # content, without treating read-only download evidence as revision.
+        same_existing(replace(expected, observed_media=()),
+                      replace(observed, observed_media=()))
+
     async def prepare(self, request: ProviderRequest, hooks: Hooks) -> Prepared:
         capability = await self.inspect(request)
         if capability.status != 'supported':
@@ -446,7 +455,7 @@ class TelegramAdapter:
             current = await self._exact(await self._entity(request.native_target), request.existing)
             if current is None:
                 raise DomainError('remote_item_missing', next_action='refresh')
-            same_existing(request.existing, current)
+            self._same_existing(request.existing, current)
         if request.source:
             await hooks.emit_progress('resolving_source', 'started', 'Resolving the exact native source')
             _, state['source'] = await self._source(request)
@@ -461,7 +470,7 @@ class TelegramAdapter:
             current = await self._exact(entity, existing)
             if current is None:
                 raise DomainError('remote_item_missing', next_action='refresh')
-            same_existing(existing, current)
+            self._same_existing(existing, current)
             if existing.namespace == 'scheduled' and parse_time(existing.scheduled_at or '') < self.clock()+60:
                 raise DomainError('native_item_due_or_expired', next_action='refresh')
         source_entity = None
