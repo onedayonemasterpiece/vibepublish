@@ -125,9 +125,11 @@ async def test_busy_original_executor_lock_cannot_seal(unknown):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('column,value', [('lease_until', time.time() + 600), ('complete', 0), ('work_state', 'working')])
+@pytest.mark.parametrize('column,value', [('lease_until', 'future'), ('complete', 0), ('work_state', 'working')])
 async def test_live_or_nonterminal_core_cannot_seal(unknown, column, value):
     store, _, _, _, _, _, original, _ = unknown
+    if column == 'lease_until':
+        value = time.time() + 600  # Compute when the test runs, not during slow suite collection.
     with store.tx() as db:
         db.execute(f'UPDATE operations SET {column}=? WHERE id=?', (value, original['operation_id']))
     assert (await reconcile(unknown))['error']['code'] == 'imagegen_dispatch_reconciliation_conflict'
