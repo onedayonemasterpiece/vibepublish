@@ -109,7 +109,7 @@ class NetworkFooterPlanTests(unittest.IsolatedAsyncioTestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.store = Store(Path(self.temp.name) / "ledger.sqlite")
-        token = self.store.register_principal("tenant", "owner", owner=True)
+        token = self.store.create_principal("tenant", "owner", owner=True)
         self.actor = self.store.authenticate(token)
         for provider in ("telegram", "vk", "max"):
             self.store.add_connection(self.actor, "conn_" + provider, provider,
