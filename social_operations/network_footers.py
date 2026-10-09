@@ -72,7 +72,8 @@ def _identity(value):
 
 def _tail_destinations(text, entities):
     """Recognize URL-bearing navigation near the end, irrespective of labels/spaces."""
-    offset = max(text.rfind("\n\n") + 2, text.rfind("\n") + 1, 0)
+    double, single = text.rfind("\n\n"), text.rfind("\n")
+    offset = max(double + 2 if double >= 0 else 0, single + 1 if single >= 0 else 0)
     tail = text[offset:]
     found = set()
     for entity in entities:
