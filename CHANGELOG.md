@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Correct Telegram photo-caption edit CAS after provider read hydration: compare native media identities, text and entities without treating downloaded-photo SHA evidence absent from exact message rechecks as an external edit. Preserve rejection for changed remote text/media; add regression tests for in-place caption edits with existing photos.
+
 - Resolve exact existing Telegram post permalinks to provider-backed item snapshots for in-place caption/link edits without republishing or expanding destination rights; add deny-by-default tests for other channels and providers. Isolate MAX's single-owner browser profile into a retryable provider lane so a busy or unavailable MAX browser does not crash Telegram/VK publishing; retain native verification and original idempotency.
 
 - Fix MAX Web channel composer auto-link detection: a displayed bare domain linked by MAX to the exact same HTTPS URL is ordinary text, while misleading labels, wrong URL schemes and authored rich links remain verified. Preserve strict native scheduled-publisher readback. Add browser-backed regression tests.
