@@ -52,4 +52,5 @@ async def test_published_photo_native_media_replacement_still_conflicts():
     with pytest.raises(DomainError) as error:
         await adapter.prepare(edit, journal.hooks)
     assert error.value.code == 'remote_revision_conflict'
+    assert 'provider_media' in error.value.message
     assert not journal.markers  # Refused edit has no dispatch.

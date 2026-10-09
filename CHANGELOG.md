@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add sanitized Telegram edit CAS diagnostics naming only diverging native comparison fields; no message contents, IDs or media bytes are logged or returned. This distinguishes genuine remote edits from read/prepare projection defects without retrying a provider mutation.
+
 - Correct Telegram photo-caption edit CAS after provider read hydration: compare native media identities, text and entities without treating downloaded-photo SHA evidence absent from exact message rechecks as an external edit. Preserve rejection for changed remote text/media; add regression tests for in-place caption edits with existing photos.
 
 - Resolve exact existing Telegram post permalinks to provider-backed item snapshots for in-place caption/link edits without republishing or expanding destination rights; add deny-by-default tests for other channels and providers. Isolate MAX's single-owner browser profile into a retryable provider lane so a busy or unavailable MAX browser does not crash Telegram/VK publishing; retain native verification and original idempotency.
