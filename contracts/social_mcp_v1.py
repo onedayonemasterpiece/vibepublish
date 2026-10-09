@@ -349,8 +349,8 @@ tool("vk_mentions", "Discover and validate VK mention entities from the canonica
     obj({"command": {"oneOf": [
         arm("discover", {"query": {**string(500), "minLength": 0}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, ("query", "limit")),
         arm("validate", {"target_ref": ID}, ("target_ref",))]}}, ("command",)),
-    obj({"mentions": array(obj({"target_ref": ID, "type": enum("club", "id"), "numeric_id": {"type": "integer", "minimum": 1},
-        "display_name": string(200), "markup": string(500), "verified": {"type": "boolean"}}, ("target_ref", "type", "numeric_id", "display_name", "markup", "verified")), 0, 100)}),
+    obj({"mentions": array(obj({"target_ref": ID, "type": enum("club", "id"), "numeric_id": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+        "display_name": string(200), "markup": {"oneOf": [string(500), {"type": "null"}]}, "verified": {"type": "boolean"}}, ("target_ref", "type", "numeric_id", "display_name", "markup", "verified")), 0, 100)}),
     "destinations", True)
 
 
