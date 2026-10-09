@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix actual production `DirectTargetTelegramAdapter.prepare` to use the same safe native Telegram edit CAS as the base adapter. A provider-read photo caption can now be edited in place without falsely treating downloaded media evidence as a remote revision; the remaining native ID/content-change checks remain strict. Add a regression test for the direct-target production adapter, not only its base class.
+
 - Add sanitized Telegram edit CAS diagnostics naming only diverging native comparison fields; no message contents, IDs or media bytes are logged or returned. This distinguishes genuine remote edits from read/prepare projection defects without retrying a provider mutation.
 
 - Correct Telegram photo-caption edit CAS after provider read hydration: compare native media identities, text and entities without treating downloaded-photo SHA evidence absent from exact message rechecks as an external edit. Preserve rejection for changed remote text/media; add regression tests for in-place caption edits with existing photos.
