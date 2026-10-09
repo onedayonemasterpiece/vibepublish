@@ -51,6 +51,8 @@ class Application:
                 result = self.read(actor, arguments)
             elif short == 'media_store':
                 result = self.media_store(actor, arguments)
+            elif short == 'vk_mentions':
+                result = self.vk_mentions(actor, arguments)
             elif short in ('publish', 'engage', 'publication_update'):
                 result = self.accept(actor, short, arguments)
             elif short == 'visual':
@@ -703,6 +705,19 @@ class Application:
             db.execute('UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?', (actor.principal_id,))
         return self._new_operation(db, actor, 'destinations', intent, complete=True,
                                    result={'destinations': self.aliases(db, actor)[:100]})
+
+    def vk_mentions(self, actor, args):
+        """Handle VK mention discover/validate commands. Read-only, no provider I/O."""
+        from .vk_mentions import discover_mentions, validate_mention
+        command = args['command']
+        if command['kind'] == 'discover':
+            mentions = discover_mentions(command.get('query', ''), limit=command.get('limit', 50))
+            return {'mentions': mentions}
+        elif command['kind'] == 'validate':
+            mention = validate_mention(command['target_ref'])
+            return {'mentions': [mention]}
+        else:
+            raise DomainError('capability_not_implemented', next_action='contact_owner')
 
     def read(self, actor, args):
         query = args['query']

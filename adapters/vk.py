@@ -15,6 +15,7 @@ from .native import (bind_media, identity, load_checkpoint, plain_text, same_exi
 from .port import Capability, Hooks, Observation, Prepared, ProviderRequest, ReadPage, ReadRequest, RemoteItem
 from .vk_transport import POLICIES, validated_url
 from social_operations.domain import DomainError, OutcomeUnknown, canonical, digest, parse_time, timestamp
+from social_operations.vk_mentions import normalize_vk_mentions_for_comparison
 
 
 def _items(response):

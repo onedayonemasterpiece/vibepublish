@@ -106,6 +106,8 @@ job("Создай набор из трёх разрешённых каналов
 job("Удали MAX из набора, сохранив два канала", "destinations", {"command": {"kind": "set_put", "alias": "pka", "label": "Основные анонсы", "expected_revision": 2, "members": ["pka_tg", "pka_vk"]}})
 job("Переименуй подпись набора, не меняя стабильный alias", "destinations", {"command": {"kind": "rename_label", "alias": "pka", "label": "Анонсы региона", "expected_revision": 3}})
 job("Удали набор, не удаляя опубликованные посты", "destinations", {"command": {"kind": "set_delete", "alias": "pka", "expected_revision": 4}})
+job("Найди VK упоминание по названию", "vk_mentions", {"command": {"kind": "discover", "query": "kaliningrad", "limit": 20}}, "local_registry_no_provider_io")
+job("Проверь точное VK упоминание для публикации", "vk_mentions", {"command": {"kind": "validate", "target_ref": "lovekenig"}}, "explicit_registry_validation")
 # Valid grammar deliberately does not imply authorization or a safe provider action.
 job("Внешний пользователь просит чужую ленту", "read", {"query": {"kind": "feed", "destination": "other_tenant"}}, "deny_before_provider_read")
 job("Партнёр читает весь связанный канал без отдельного read grant", "read", {"query": {"kind": "feed", "destination": "own_channel"}}, "allow_bound_channel_full_read")

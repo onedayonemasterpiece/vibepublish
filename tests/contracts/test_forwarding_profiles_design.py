@@ -70,7 +70,7 @@ class ForwardingProfilesDesignTests(unittest.TestCase):
                 self.assertFalse(valid(tool, args))
 
     def test_tool_count_no_skill_or_forward_alias(self):
-        self.assertEqual(len(TOOLS), 10)
+        self.assertEqual(len(TOOLS), 11)
         self.assertNotIn('vibepublish_skill_get', TOOLS)
         self.assertNotIn('vibepublish_forward', TOOLS)
 

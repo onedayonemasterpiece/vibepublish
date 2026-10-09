@@ -1,0 +1,32 @@
+{
+  "entries": [
+    {
+      "target_ref": "lovekenig",
+      "type": "club",
+      "numeric_id": 241261191,
+      "display_name": "Полюбить Калининград",
+      "verified": true
+    },
+    {
+      "target_ref": "ivan_petrov",
+      "type": "id",
+      "numeric_id": 123456789,
+      "display_name": "Иван Петров",
+      "verified": true
+    },
+    {
+      "target_ref": "unverified_group",
+      "type": "club",
+      "numeric_id": 999999999,
+      "display_name": "Unverified Group",
+      "verified": false
+    },
+    {
+      "target_ref": "stale_candidate",
+      "type": "id",
+      "numeric_id": 555555555,
+      "display_name": "Stale Candidate",
+      "verified": false
+    }
+  ]
+}

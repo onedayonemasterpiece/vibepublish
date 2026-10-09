@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### VK Human-Readable Mentions — 2026-10-09
+
+- Implement VK mention compilation using canonical registry shared with events-bot.
+  Remote registry at `chatgpt/vk-mentions-20261009` with bounded local cache (24h TTL)
+  and safe stale fallback. Verified entries only; unverified candidates never injected.
+- Semantic `mention` paragraph runs resolve to frozen VK markup at compile time:
+  `[club<id>|Name]` for communities, `[id<id>|Name]` for persons. Rendered into
+  plain text before immutable plan/guid creation.
+- Fix VK readback equivalence for proven mention normalization: VK accepts both
+  `@club<id> (Name)` and canonical `[club<id>|Name]` syntaxes, normalizing the
+  former to the latter. Worker now normalizes both expected and observed text
+  before exact comparison, preserving immutable idempotency and exact non-mention
+  comparison. Resolves `outcome_unknown/content_readback_mismatch` from live repro
+  where user text contained both syntaxes.
+- Add read-only MCP tools `vibepublish_vk_mentions` (`discover`/`validate`) under
+  `destinations` scope for safe registry search and explicit validation.
+- Regression tests for markup render, person/group, stale candidate rejection,
+  and readback normalization equivalence.
+
+- Replace the ChatGPT-only OAuth registration/callback restriction with bounded
+  standards-compatible public MCP client registration. Keep exact per-client
+  redirect binding, HTTPS-or-loopback callback policy, PKCE, fixed resource/scope,
+  owner consent, authority fencing and registration limits.
+
 - Recover the private Telegram media index after the DevCoveer crash, preserving
   native album identities and source captions; document retained recovery evidence
   and the restored Wonderful Lections private asset bridge.

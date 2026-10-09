@@ -345,6 +345,14 @@ tool("destinations", "List allowed aliases, update personal purpose/notes/primar
             ("alias", "label", "expected_revision"))]}, "request_key": KEY}, ("command",)),
     ref("receipt"), "destinations")
 
+tool("vk_mentions", "Discover and validate VK mention entities from the canonical registry. Read-only, no provider I/O.",
+    obj({"command": {"oneOf": [
+        arm("discover", {"query": {**string(500), "minLength": 0}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, ("query", "limit")),
+        arm("validate", {"target_ref": ID}, ("target_ref",))]}}, ("command",)),
+    obj({"mentions": array(obj({"target_ref": ID, "type": enum("club", "id"), "numeric_id": {"type": "integer", "minimum": 1},
+        "display_name": string(200), "markup": string(500), "verified": {"type": "boolean"}}, ("target_ref", "type", "numeric_id", "display_name", "markup", "verified")), 0, 100)}),
+    "destinations", True)
+
 
 
 # Telegram palette extensions keep the publication methods and closed grammar.

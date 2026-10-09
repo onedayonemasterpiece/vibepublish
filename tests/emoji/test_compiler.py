@@ -98,7 +98,7 @@ def test_E11_explicit_semantic_fallback_not_custom_unicode():
     content = {'paragraphs': [[{'kind':'emoji','alias':'selected'}]]}
     with pytest.raises(DomainError, match='emoji fallback required'):
         compile_content(content,lambda _:alias(),provider='vk')
-    assert compile_content(content,lambda _:alias(),provider='vk',fallback=True) == {'text':'Третьяковская галерея'}
+    assert compile_content(content,lambda _:alias(),provider='vk',fallback=True) == {'text':'Третьяковская галерея', 'format': 'plain'}
 
 
 @pytest.mark.parametrize('entity', [

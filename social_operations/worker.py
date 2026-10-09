@@ -13,6 +13,7 @@ from pathlib import Path
 from adapters.port import Asset, Hooks, NativeSource, Observation, ProviderRequest, ReadRequest, RemoteItem, UnavailableAdapter
 from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time, timestamp
 from .service import Application
+from .vk_mentions import vk_mentions_equal
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled'}
 
@@ -420,8 +421,13 @@ class Worker:
         elif observation.replacement is not None:
             raise OutcomeUnknown('unexpected_native_replacement')
         if plan['action'] in ('publish', 'edit', 'reschedule', 'reply'):
-            if remote.text != json.loads(plan['content_json'])['text']:
-                raise OutcomeUnknown('content_readback_mismatch')
+            expected_text = json.loads(plan['content_json'])['text']
+            if plan['provider'] == 'vk':
+                if not vk_mentions_equal(expected_text, remote.text):
+                    raise OutcomeUnknown('content_readback_mismatch')
+            else:
+                if remote.text != expected_text:
+                    raise OutcomeUnknown('content_readback_mismatch')
             if plan['provider'] == 'max' and plan['account_type'] == 'max_web':
                 from .rich_text import max_entities
                 expected = json.loads(plan['content_json']).get('entities', [])

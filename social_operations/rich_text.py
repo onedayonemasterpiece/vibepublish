@@ -9,6 +9,7 @@ import json
 import re
 import unicodedata
 from .domain import DomainError, canonical
+from .vk_mentions import resolve_mention
 
 ENTITY_TYPES = {
     'bold': 'MessageEntityBold', 'italic': 'MessageEntityItalic',
@@ -293,6 +294,15 @@ def compile_content(content, resolve, rules=(), *, provider='telegram', fallback
                     value, extra = expand(run['alias'])
                     entities.extend({**e, 'offset': e['offset']+start} for e in extra)
                     text += value
+                elif run['kind'] == 'mention':
+                    if provider != 'vk':
+                        raise DomainError('rich_fallback_needs_review')
+                    target_ref = run.get('target_ref')
+                    if not target_ref or not isinstance(target_ref, str):
+                        raise DomainError('vk_mention_invalid', 'target_ref is required')
+                    mention = resolve_mention(target_ref)
+                    entities.append({'type': 'mention', 'offset': start, 'length': utf16(mention.markup)})
+                    text += mention.markup
                 else:
                     raise DomainError('rich_mention_needs_review')
     if utf16(text) > 32768:
@@ -352,6 +362,8 @@ def compile_content(content, resolve, rules=(), *, provider='telegram', fallback
         result = {'text': text, 'format': 'max_entities', 'entities': entities}
         max_content(canonical(result), 32768)
         return result
+    if provider == 'vk':
+        return {'text': text, 'format': 'plain'}  # VK markup embedded in plain text
     if provider != 'telegram':
         return {'text': text}  # Explicit semantic fallback, not Telegram alt glyphs.
     return {'text': text, 'format': 'telegram_entities', 'entities': entities,
