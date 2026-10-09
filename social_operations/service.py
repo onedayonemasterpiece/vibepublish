@@ -817,12 +817,34 @@ class Application:
                     b, topic_root_id = self._telegram_thread(db, actor, query['item_ref'])
                     intent['_topic_root_id'] = topic_root_id
                 elif kind in {'item','reactions'}:
-                    ref = self.resolve_item(db, actor, query['item_ref'])
-                    b = self.store.binding(db, actor, binding_id=ref['binding_id'])
-                    intent['_native_item'] = ref['native_id']
-                    intent['_namespace'] = ref['namespace']
-                    if kind=='reactions' and (b['provider']!='max' or ref['namespace']!='published'):
-                        raise DomainError('reaction_read_surface_not_enabled')
+                    if kind == 'item' and query['item_ref'].startswith('https://'):
+                        # Exact Telegram permalink inside an existing grant. Reading it
+                        # produces a fresh native snapshot ref for safe in-place edits.
+                        # A URL alone never creates a destination or authorization.
+                        source = parse_source(query['item_ref'])
+                        if source.provider != 'telegram':
+                            raise DomainError('item_link_provider_not_enabled')
+                        matches = [dict(row) for row in self.store.bindings(db, actor)
+                                   if row['provider'] == 'telegram' and (
+                                       row['native_id'] == source.channel or
+                                       str(row['handle'] or '').lstrip('@').casefold() == source.channel)]
+                        if len(matches) > 1:
+                            ordinary = [row for row in matches
+                                        if row['secret_ref'] != 'VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE']
+                            if len(ordinary) == 1:
+                                matches = ordinary
+                        if len(matches) != 1:
+                            raise DomainError('item_link_not_bound', next_action='contact_owner')
+                        b = matches[0]
+                        intent['_native_item'] = source.item
+                        intent['_namespace'] = 'published'
+                    else:
+                        ref = self.resolve_item(db, actor, query['item_ref'])
+                        b = self.store.binding(db, actor, binding_id=ref['binding_id'])
+                        intent['_native_item'] = ref['native_id']
+                        intent['_namespace'] = ref['namespace']
+                        if kind == 'reactions' and (b['provider'] != 'max' or ref['namespace'] != 'published'):
+                            raise DomainError('reaction_read_surface_not_enabled')
                 else:
                     b = self.store.binding(db, actor, alias=query['destination'])
                 if 'publish' not in json.loads(b['rights']) and not actor.owner:

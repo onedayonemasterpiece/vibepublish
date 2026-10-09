@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Resolve exact existing Telegram post permalinks to provider-backed item snapshots for in-place caption/link edits without republishing or expanding destination rights; add deny-by-default tests for other channels and providers. Isolate MAX's single-owner browser profile into a retryable provider lane so a busy or unavailable MAX browser does not crash Telegram/VK publishing; retain native verification and original idempotency.
+
 - Fix MAX Web channel composer auto-link detection: a displayed bare domain linked by MAX to the exact same HTTPS URL is ordinary text, while misleading labels, wrong URL schemes and authored rich links remain verified. Preserve strict native scheduled-publisher readback. Add browser-backed regression tests.
 
 - Fix MCP image previews for tool clients that only expose structured results: include the same bounded sanitized WebP as a read-only `preview_data_url` beside the existing standard MCP image block. Validate byte-for-byte equivalence; no new asset exposure or publication side effect.

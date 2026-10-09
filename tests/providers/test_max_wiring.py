@@ -60,6 +60,18 @@ async def test_default_factory_is_lazily_imported_only_for_configured_max(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_max_lane_exclusion_keeps_binding_and_never_claims_browser(tmp_path):
+    store, _ = setup(tmp_path)
+    def forbidden(**kwargs):
+        pytest.fail('Telegram/VK lane must never open the MAX browser')
+    async with native_adapters(store, env={}, max_factory=forbidden,
+                               exclude_providers=('max',)) as wiring:
+        assert wiring == {}
+        with store.connection() as db:
+            assert db.execute("SELECT count(*) FROM connections WHERE provider='max'").fetchone()[0] == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('account', ['fake', 'unconfigured'])
 async def test_fake_unconfigured_max_do_not_invoke_factory(tmp_path, account):
     store, _ = setup(tmp_path, account=account, secret='')
