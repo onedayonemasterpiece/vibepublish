@@ -112,3 +112,43 @@ existing video bridge case passed preparation but failed during execute with
 max_outcome_unknown (9 preceding cases passed). Its underlying cause was not
 captured and is not labeled a timeout or a baseline defect; full CI remains a
 separate release gate. No live operation was run for these diagnostics.
+
+## Account readiness budget correction, 2026-10-10
+
+Status: **Not confirmed by user**. The authorized original recovery remained
+not_attempted and reported open_account_before / timeout. Its validating-to-blocked
+interval was 11.284 seconds; the original failure took 31.520 seconds. Production
+was configured for 90 seconds. These intervals support an inner timeout mismatch
+(the account checker used hardcoded 10-second settings/phone waits and default
+navigation timeout), but do not identify the exact failed substep or prove that
+longer readiness alone will repair the live session.
+
+The visible-account checker now shares one monotonic configured timeout across
+navigation, the existing exact Settings control's readiness/click, and the
+existing visible phone field's readiness/read. Every Playwright call receives the
+decreasing remainder; zero never disables a timeout. The enclosing native open
+retains one total budget across both account checks and channel navigation/scope.
+Publication preflight additionally caps that budget at the immutable operation
+deadline. No step resets the outer budget or increases the configured maximum.
+
+The exact observed selectors and exact account-value comparison remain mandatory.
+Missing controls, a logged-out page, duplicate controls, or another account never
+prove authorization. There is no alternate selector, cached identity approval,
+login fallback, retry, or post-effect budget change. Diagnostics add only the fixed
+navigation/settings/phone subphase to the account-before/account-after stage,
+including an enclosing deadline timeout; cancellation still propagates unchanged.
+Neither expected nor observed account values are exported.
+
+Live readiness still requires a separately coordinated normal-product read using
+this same checker, cold and warm. Offline tests and a successful earlier feed read
+do not satisfy that gate. No publication recovery is authorized by this change.
+
+The focused suite passed **180 tests and 2 subtests**. Real-browser tests intercept
+all requests and show both a 10.1-second Settings delay and a 10.1-second phone
+readiness delay succeeding within the unchanged single 20-second test budget,
+followed by fresh warm checks. Logged-out pages, duplicate Settings controls and
+wrong accounts fail closed. Unit tests verify strictly decreasing step remainders,
+no disabled zero timeout, combined before/after account budget, immutable operation
+deadline, cancellation and bounded subphase diagnostics. Existing immediate-channel
+named-link/photo send and original-attempt recovery remain covered by synthetic
+replay. These checks do not establish live authentication or native send readiness.

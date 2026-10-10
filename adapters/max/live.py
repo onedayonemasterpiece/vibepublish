@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
@@ -16,6 +17,7 @@ from urllib.parse import urlsplit
 from playwright.async_api import ElementHandle, Error as PlaywrightError, expect, TimeoutError as PlaywrightTimeoutError
 
 from .profile import MaxBlocked, ProfileLane
+from .account import ACCOUNT_PHASES, VisibleAccountCheck
 from . import rich
 
 RECIPE = 'max-web-observed-20260905-v1'
@@ -137,11 +139,21 @@ class RealMaxDriver:
         self._route(target)
         return main
 
-    async def open(self, target):
+    def _open_diagnostic_phase(self, phase):
+        if (phase in {'account_before', 'account_after'}
+                and isinstance(self.account_check, VisibleAccountCheck)
+                and self.account_check.phase in ACCOUNT_PHASES):
+            return phase + '_' + self.account_check.phase
+        return phase
+
+    async def open(self, target, *, deadline=None):
+        budget = self.timeout if deadline is None else min(self.timeout, deadline - time.time())
+        if budget <= 0:
+            raise MaxBlocked('command_expired')
         self._enter(target)
         phase = 'account_before'
         try:
-            async with asyncio.timeout(self.timeout):
+            async with asyncio.timeout(budget):
                 await self._account()
                 # Reordering/pinning/unread/search cannot affect this binding.
                 # This route was obtained from actual owner-authorized UI.
@@ -154,12 +166,12 @@ class RealMaxDriver:
                 phase = 'scope_after'
                 await self._scope(target)
         except MaxBlocked as exc:
-            raise OpenBlocked(str(exc), phase) from None
+            raise OpenBlocked(str(exc), self._open_diagnostic_phase(phase)) from None
         except Exception as exc:
             category = ('timeout' if isinstance(exc, (TimeoutError, PlaywrightTimeoutError))
                         else 'ui_assertion_failed' if isinstance(exc, AssertionError)
                         else 'unavailable_ui')
-            raise OpenBlocked('unfamiliar_or_unavailable_ui', phase, category) from None
+            raise OpenBlocked('unfamiliar_or_unavailable_ui', self._open_diagnostic_phase(phase), category) from None
         finally:
             self._busy = False
 

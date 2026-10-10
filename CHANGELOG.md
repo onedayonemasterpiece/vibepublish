@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Give MAX visible-account navigation, Settings and phone readiness one decreasing configured budget instead of independent 10/30-second ceilings. Preserve exact account matching, existing selectors and the original preflight/operation deadline; retain bounded subphase diagnostics. Cover delayed authenticated cold/warm readiness and fail-closed login, duplicate-control and wrong-account cases.
+
 - Preserve bounded MAX preflight stage/reason diagnostics without raw provider state or changed dispatch behavior. Permit publish-scoped clients to retry only their own original, proven never-dispatched publication through the existing recovery command; preserve frozen intent and reject management/unknown-effect/binding-drift cases. A recovery request key now admits at most once, including after a second terminal failure.
 
 - Resolve the observed MAX public-channel landing after its exact visible controls are ready, validating the public handle and provider-supplied Web/deep links instead of assuming subscriber text. Reject HTTP errors and unrelated prior chats; retain native destination, title, account and publish-rights checks. Add delayed-render and real-browser landing regressions.

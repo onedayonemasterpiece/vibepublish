@@ -15,6 +15,7 @@ import uuid
 
 from playwright.async_api import async_playwright
 from .live import RealMaxDriver, Target
+from .account import VisibleAccountCheck
 from .profile import ProfileLane, MaxBlocked
 
 
@@ -105,12 +106,7 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                     # Only pages created by this session are navigated. Never
                     # inspect recovered tabs or profile storage to infer account.
                     page, identity_page = await context.new_page(), await context.new_page()
-                    async def account_check():
-                        await identity_page.goto('https://web.max.ru/', wait_until='domcontentloaded')
-                        await identity_page.get_by_role('button',name='Настройки',exact=True).click(timeout=10000)
-                        field = identity_page.locator('aside .phone')
-                        await field.wait_for(timeout=10000)
-                        return await field.inner_text() == phone
+                    account_check = VisibleAccountCheck(identity_page, phone, timeout=timeout)
                     driver = RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery, visual_palette=visual_palette, live_writes=live_writes, semantic_selectors=True, evidence_pages=(page,identity_page))
                     driver.allowlist_path = Path(allowlist).absolute()
                     driver.binding_snapshot = binding
