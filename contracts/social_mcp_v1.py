@@ -196,6 +196,13 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
     "review_token": string(512), "poll_after_seconds": {"type": "integer", "minimum": 1},
     "error": ref("error"), "dry_run": {"type": "boolean"}},
     ("operation_id", "action", "state", "message", "operation_complete", "progress", "next_action", "retry_safe", "receipt_ref", "deliveries"))
+DEFS["receipt"]["properties"]["workspace_upload"] = obj({
+    "upload_id": ID, "received_bytes": {"type": "integer", "minimum": 0, "maximum": 20971520},
+    "size_bytes": {"type": "integer", "minimum": 1, "maximum": 20971520},
+    "source_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+    "mime": enum("image/png", "image/jpeg", "image/webp"),
+    "expires_at": DATE, "state": enum("receiving", "completed", "aborted", "expired")},
+    ("upload_id", "received_bytes", "size_bytes", "source_sha256", "mime", "expires_at", "state"))
 DEFS["media_store_item"] = obj({
     "entry_ref": ID, "text": {**string(), "minLength": 0}, "observed_at": DATE,
     "native_id": string(128), "destination": ALIAS,
@@ -287,7 +294,20 @@ TOOLS[-1]["inputSchema"]["oneOf"] = [
     {"required": ["item_ref"], "not": {"anyOf": [{"required": ["publication_id"]}, {"required": ["expected_revision"]}]}}]
 
 browser_artifact_uri = string(47, pattern=r"^artifact://[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
-visual_cmd = {"oneOf": [arm("import"),
+workspace_import_commands = [
+    arm("import_begin", {"source_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+        "mime": enum("image/png", "image/jpeg", "image/webp"),
+        "size_bytes": {"type": "integer", "minimum": 1, "maximum": 20971520}},
+        ("source_sha256", "mime", "size_bytes")),
+    arm("import_chunk", {"upload_id": ID, "offset": {"type": "integer", "minimum": 0, "maximum": 20971520},
+        "data_base64": string(262144, pattern=r"^[A-Za-z0-9+/]*={0,2}$")},
+        ("upload_id", "offset", "data_base64")),
+    arm("import_finish", {"upload_id": ID}, ("upload_id",)),
+    arm("import_status", {"upload_id": ID}, ("upload_id",)),
+    arm("import_abort", {"upload_id": ID}, ("upload_id",)),
+]
+workspace_import_kinds = [v["properties"]["kind"]["const"] for v in workspace_import_commands]
+visual_cmd = {"oneOf": [arm("import"), *workspace_import_commands,
     arm("import_browser_artifact", {"uri": browser_artifact_uri}, ("uri",)),
     ref("visual_spec"),
     arm("recompose", {"job_id": ID, "candidate_id": ID,
@@ -304,7 +324,7 @@ visual_cmd = {"oneOf": [arm("import"),
         ("job_id", "candidate_id", "expected_revision", "token")),
     arm("feedback", {"job_id": ID, "candidate_id": ID, "rating": enum("accepted", "rejected"), "reason": string(2000)},
         ("job_id", "candidate_id", "rating"))]}
-tool("visual", "Import a chat attachment or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Explicit recompose creates a separate standalone candidate from verified stored art without AI, fenced by source visual revision and candidate SHA256; it never changes an existing choice or publishes. Generate allows optional source references. Selection resumes only its exact authorized parent. Explicit reconcile_dispatch seals an original terminal unknown only with trusted executor proof of no generation dispatch; it never resubmits or publishes. Explicit reconcile_observation queues one bounded read of the SAME saved dispatched execution to import completed artifacts; it never submits, starts another turn, renews generation deadlines, or automatically selects/publishes.",
+tool("visual", "Import a chat attachment, bounded workspace bytes (import_begin/chunk/finish/status/abort), or trusted same-host browser artifact as a private asset without AI, or generate, tune or compose from prompt (legacy brief accepted), select a candidate, or record feedback. Explicit recompose creates a separate standalone candidate from verified stored art without AI, fenced by source visual revision and candidate SHA256; it never changes an existing choice or publishes. Generate allows optional source references. Selection resumes only its exact authorized parent. Explicit reconcile_dispatch seals an original terminal unknown only with trusted executor proof of no generation dispatch; it never resubmits or publishes. Explicit reconcile_observation queues one bounded read of the SAME saved dispatched execution to import completed artifacts; it never submits, starts another turn, renews generation deadlines, or automatically selects/publishes.",
     obj({"command": visual_cmd, "request_key": KEY,
          "file": obj({"download_url": string(8192), "file_id": string(512),
                       "mime_type": enum("image/png", "image/jpeg", "image/webp"),
@@ -315,7 +335,7 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
     "if": {"properties": {"command": {"properties": {"kind": {"const": "import"}}, "required": ["kind"]}}},
     "then": {"required": ["file", "request_key"]},
     "else": {"not": {"required": ["file"]}}},
-    {"if": {"properties": {"command": {"properties": {"kind": {"const": "import_browser_artifact"}},
+    {"if": {"properties": {"command": {"properties": {"kind": {"enum": ["import_browser_artifact", *workspace_import_kinds]}},
                                         "required": ["kind"]}}},
      "then": {"required": ["request_key"]}},
     {"if": {"properties": {"command": {"properties": {"kind": {"const": "recompose"}},
@@ -555,8 +575,8 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
                 "zero-dispatch failure, at the same revision and active binding epoch. One admission per "
                 "request key; subsequent calls only return the original receipt. No lifecycle or reconciliation rights.")
         if item["name"] == "vibepublish_visual" and "visual" not in scopes:
-            item["inputSchema"]["properties"]["command"] = arm("import")
-            item["description"] = "Import a chat attachment as a private image asset, without AI or publication."
+            item["inputSchema"]["properties"]["command"] = {"oneOf": [arm("import"), *copy.deepcopy(workspace_import_commands)]}
+            item["description"] = "Import a chat attachment or bounded workspace image bytes as a private image asset, without AI or publication."
         if item["name"] == "vibepublish_publish" and "visual" not in scopes:
             item["inputSchema"]["properties"].pop("visual", None)
             item["inputSchema"]["anyOf"] = [v for v in item["inputSchema"]["anyOf"] if v.get("required") != ["visual"]]

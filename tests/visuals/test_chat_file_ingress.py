@@ -53,7 +53,8 @@ async def test_import_replay_scope_and_private_receipt(env):
     tool = next(t for t in app.tools(other) if t['name']=='vibepublish_visual')
     assert tool['_meta']['openai/fileParams']==['file']
     assert Tool(**tool).meta == tool['_meta']
-    assert tool['inputSchema']['properties']['command']['properties']['kind']['const']=='import'
+    assert {arm['properties']['kind']['const'] for arm in tool['inputSchema']['properties']['command']['oneOf']} == {
+        'import', 'import_begin', 'import_chunk', 'import_finish', 'import_status', 'import_abort'}
     assert (await app.call(other,'vibepublish_visual',{'command':{'kind':'generate','prompt':'sea'}}))['error']['code']=='invalid_input'
     with pytest.raises(DomainError): app.read_asset(other,result['resource_id'])
     assert (await app.call(other,'vibepublish_visual',args()))['state']=='verified'

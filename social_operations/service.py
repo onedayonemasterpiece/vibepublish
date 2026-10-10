@@ -56,7 +56,10 @@ class Application:
             elif short in ('publish', 'engage', 'publication_update'):
                 result = self.accept(actor, short, arguments)
             elif short == 'visual':
-                if arguments['command']['kind'] == 'import':
+                if arguments['command']['kind'] in {'import_begin', 'import_chunk', 'import_finish', 'import_status', 'import_abort'}:
+                    from .workspace_asset_ingress import import_workspace_image
+                    result = await import_workspace_image(self, actor, arguments)
+                elif arguments['command']['kind'] == 'import':
                     from .chat_file_ingress import import_chat_file
                     result = await import_chat_file(self, actor, arguments)
                 elif arguments['command']['kind'] == 'import_browser_artifact':
