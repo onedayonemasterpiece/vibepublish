@@ -15,7 +15,8 @@ MENU = """(element, options) => {
   e.preventDefault();e.stopImmediatePropagation();window.opens++;
   if(options.drift && window.opens===1) {
    if(options.drift==='detach') element.replaceWith(element.cloneNode(true));
-   if(options.drift==='text') element.textContent+=' changed';
+   if(options.drift==='text') element.closest('main').querySelector('[contenteditable]').textContent+=' changed';
+   if(options.drift==='metadata') element.closest('.messageWrapper').querySelector('.volatile').textContent='UI metadata changed';
    if(options.drift==='route') history.pushState({},'', '/foreign');
    if(options.drift==='media') element.closest('main').querySelector('img').src='data:image/png;base64,changed';
   }
@@ -47,7 +48,7 @@ async def setup_menu(writer, surface, after, drift=None):
     state['messages']=[dict(id='old',text='Bound caption',outgoing=True)]
     await d.open('-101')
     main=await d._scope('-101')
-    await main.evaluate("m=>{const i=document.createElement('img');i.src='data:image/png;base64,AAAA';m.append(i)}")
+    await main.evaluate("m=>{const i=document.createElement('img');i.src='data:image/png;base64,AAAA';const a=document.createElement('div');a.className='attach';a.append(i);m.querySelector('.attaches').append(a);}")
     control=(d._rows(main,'Bound caption').locator('.bubbleContent > .text') if surface=='row'
              else main.get_by_role('button',name='Отправить сообщение',exact=True))
     label='Изменить время' if surface=='row' else 'Отправить позже'
@@ -88,6 +89,15 @@ async def test_wrong_visible_menu_does_not_reopen_or_select(writer):
         await d._open_context_menu(control)
     assert await page.evaluate('window.opens')==1
     assert not effects(state)
+
+async def test_row_ui_metadata_change_does_not_replace_authored_binding(writer):
+    d,page,state,control,label=await setup_menu(writer,'row',2)
+    await control.evaluate("e=>{const n=document.createElement('span');n.className='volatile';n.textContent='Initial UI metadata';e.closest('.messageWrapper').append(n)}")
+    await control.evaluate(MENU,dict(after=2,label=label,drift='metadata'))
+    await d._open_context_menu(control)
+    assert await page.evaluate('window.opens')==2
+    assert await control.text_content()=='Bound caption'
+    assert not effects(state) and not d.lane.marker.exists()
 
 class PreparedOnly(SystemExit): pass
 

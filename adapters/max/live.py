@@ -896,16 +896,22 @@ class RealMaxDriver:
         handle = control if isinstance(control, ElementHandle) else await control.element_handle()
         if handle is None:
             raise MaxBlocked('native_row_detached')
-        snapshot = await handle.evaluate("""e => {
-            const scope=e.closest('.messageWrapper') || e.closest('main') || e;
-            return {text:scope.textContent,html:e.innerHTML,media:[...scope.querySelectorAll('img,video source')].map(x=>x.currentSrc||x.src)};
-        }""")
+        # Row-wide text includes changing delivery/selection UI metadata. Bind
+        # authored semantics, the native clock and ordered actual media instead.
+        snapshot_js = '(e)=>{'+rich.SNAPSHOT_JS+"""
+            const row=e.closest('.messageWrapper'),main=e.closest('main');
+            const content=row ? e : main?.querySelector('[role="textbox"][contenteditable][data-lexical-editor]') || e;
+            const media=row ? row.querySelectorAll('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source')
+                : main?.querySelectorAll('.attaches .attach img') || [];
+            return {connected:e.isConnected&&content.isConnected,text:semanticText(content),
+                entities:semanticSnapshot(content),label:e.getAttribute('aria-label'),
+                time:row?.querySelector('.meta .text')?.textContent.trim() || null,
+                media:[...media].map(x=>({src:x.currentSrc||x.src,name:x.alt||null}))};
+        }"""
+        snapshot = await handle.evaluate(snapshot_js)
         for attempt in range(2):
-            same = await handle.evaluate("""(e,x) => {
-                const scope=e.closest('.messageWrapper') || e.closest('main') || e;
-                return e.isConnected && scope.textContent===x.text && e.innerHTML===x.html && JSON.stringify([...scope.querySelectorAll('img,video source')].map(n=>n.currentSrc||n.src))===JSON.stringify(x.media);
-            }""", snapshot)
-            if self.page.url != route or not same:
+            current = await handle.evaluate(snapshot_js)
+            if self.page.url != route or not current['connected'] or current != snapshot:
                 raise MaxBlocked('context_menu_subject_changed')
             await self.page.bring_to_front()
             await handle.click(button='right', timeout=self.timeout*1000)
@@ -986,7 +992,12 @@ class RealMaxDriver:
         for opening in range(2):
             await self._scope(target)
             await self._connected_row(row)
-            await self._open_message_menu(row)
+            try:
+                await self._open_message_menu(row)
+            except MaxBlocked as exc:
+                if str(exc)=='native_context_menu_not_open':
+                    raise MaxBlocked('native_copy_menu_unavailable') from None
+                raise
             menu = self.page.get_by_role('menu')
             try:
                 await menu.get_by_role('menuitem', name='Скопировать ссылку на сообщение', exact=True).click(
