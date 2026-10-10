@@ -210,7 +210,8 @@ class Application:
         result = []
         for row in self.store.bindings(db, actor):
             result.append({'alias': row['alias'], 'kind': 'destination', 'label': row['label'],
-                           'revision': row['epoch'], 'provider': row['provider']})
+                           'revision': row['epoch'], 'provider': row['provider'],
+                           'native_id': row['native_id']})
         for row in db.execute('SELECT * FROM destination_sets WHERE tenant_id=? AND principal_id=?', (actor.tenant_id, actor.principal_id)):
             members = json.loads(row['members'])
             if all(any(d['alias'] == m for d in result) for m in members):

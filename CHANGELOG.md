@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add owner-only exact public MAX channel resolution through the authenticated native worker, with visible identity/publish-authority checks, stable routing and private atomic target registration. New explicitly verified channel bindings support immediate publish without changing existing channel policies; unresolved navigation fails closed. Add least-privilege CLI scope/right selection and scoped native destination IDs for integration identity checks. Live channel acceptance remains separate from offline tests.
+
 - Harden MAX native scheduled-post preparation: observe the context menu, permit one identity-bound pre-effect reopen when it is absent, preserve phase/exception and primary crash diagnostics, and pin Playwright 1.63 for Chrome 153. Add full preparation, named-link/photo, calendar and no-post-arm-retry regression coverage; retain native media/readback and unknown-outcome protections.
 
 - Fix public HTTPS URL patterns for MCP clients that apply whole-string regex matching. Semantic named links now pass connector validation for existing-publication edits; preserve the canonical closed schema and in-place Telegram photo/caption behavior, with URL compatibility and native edit/replay regression tests.

@@ -22,6 +22,7 @@ sections:
     requirements_governance: docs/operations/requirements-governance.md
     repository_workflow: docs/operations/repository-workflow.md
     social_runtime_checkpoint: docs/operations/social-runtime.md
+    service_principal_cli: docs/operations/service-principal-cli.md
     asset_ingress: docs/operations/asset-ingress.md
     codex_task_imagegen: docs/operations/codex-task-imagegen.md
     devcoveer_acceptance: docs/operations/devcoveer-acceptance-20260905.md

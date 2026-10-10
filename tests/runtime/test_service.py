@@ -52,6 +52,21 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
     def scheduled(self, seconds=3600):
         return {'kind': 'at', 'at': timestamp(time.time()+seconds)}
 
+    async def test_bootstrap_exposes_bound_native_identity_but_not_set_identity(self):
+        await self.call('destinations', {'command': {
+            'kind': 'set_put', 'alias': 'all', 'label': 'All',
+            'expected_revision': 0, 'members': ['telegram', 'max']}})
+        bootstrap = await self.call('get_started', {})
+        destinations = {item['alias']: item for item in bootstrap['destinations']}
+        self.assertEqual(set(destinations), {'telegram', 'vk', 'max', 'all'})
+        for provider in ('telegram', 'vk', 'max'):
+            self.assertEqual(destinations[provider]['provider'], provider)
+            self.assertEqual(destinations[provider]['native_id'], 'target_' + provider)
+            self.assertEqual(destinations[provider]['revision'], 1)
+        self.assertEqual(destinations['all']['kind'], 'set')
+        self.assertNotIn('native_id', destinations['all'])
+        self.assertNotIn('provider', destinations['all'])
+
     async def test_profile_key_replay_is_atomic_and_does_not_increment_revision(self):
         args = {'command': {'kind': 'profile_update', 'alias': 'telegram',
                 'expected_revision': 0, 'profile': {'notes': 'Fixture'}}, 'request_key': 'profile-once'}

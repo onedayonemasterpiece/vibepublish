@@ -44,6 +44,31 @@ class MaxAdapter:
         self.recovery = recovery
         self.driver, self.connection_id = driver, connection_id
 
+    account_type = "max_web"
+
+    async def resolve_destination(self, url):
+        if not self.live_enabled or self.recovery_only:
+            raise DomainError("max_discovery_requires_live_connection")
+        from .discovery import probe
+        self.driver._verified_resolution = None
+        evidence = await probe(self.driver, url)
+        self.driver._verified_resolution = evidence
+        return evidence
+
+    def register_resolved_destination(self, evidence):
+        from contextlib import contextmanager
+        from .bindings import register
+        @contextmanager
+        def guarded():
+            try:
+                raw = {key: value for key, value in evidence.items()
+                       if key not in {"handle", "rights"}}
+                with register(self.driver, raw):
+                    yield
+            except MaxBlocked as exc:
+                raise DomainError("max_" + str(exc), next_action="contact_owner") from None
+        return guarded()
+
     def _binding(self, request):
         if request.connection_id != self.connection_id or request.native_target not in self.driver.targets:
             raise DomainError('max_connection_or_target_denied')

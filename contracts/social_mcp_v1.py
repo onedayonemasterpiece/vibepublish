@@ -85,7 +85,8 @@ DEFS = {
             "preset": ALIAS, "candidates": {"type": "integer", "minimum": 1, "maximum": 4},
             "selection": enum("automatic", "human")}, ("sources", "brief"))]},
     "destination": obj({"alias": ALIAS, "kind": enum("destination", "set"),
-        "label": string(200), "revision": REV, "provider": PROVIDER, "members": array(ALIAS, 0, 100)},
+        "label": string(200), "revision": REV, "provider": PROVIDER, "native_id": string(128),
+        "members": array(ALIAS, 0, 100)},
         ("alias", "kind", "label", "revision")),
     "capability": obj({"destination": ALIAS, "operation": string(80),
         "surface": string(80), "status": enum("supported", "unsupported", "needs_auth", "needs_review", "temporarily_unavailable"),
@@ -399,7 +400,9 @@ _destination_resolve["required"] = ["kind", "provider"]
 _destination_resolve["properties"]["provider_id"] = string(20, pattern=r"^-?[1-9][0-9]{0,18}$")
 _destination_resolve["oneOf"] = [
     {"required": ["url"], "not": {"required": ["provider_id"]}},
-    {"required": ["provider_id"], "not": {"required": ["url"]}},
+    # MAX channel discovery requires an exact URL; raw IDs cannot prove its route.
+    {"properties": {"provider": enum("telegram", "vk")},
+     "required": ["provider_id"], "not": {"required": ["url"]}},
 ]
 # Telegram palette extensions keep the publication methods and closed grammar.
 DEFS["emoji_part"] = obj({"document_id": string(19, pattern=r"^[1-9][0-9]{0,18}$"),
