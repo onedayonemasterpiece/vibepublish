@@ -262,27 +262,49 @@ class RealMaxDriver:
         return [result['item']]
 
     async def _compose(self, main, text, media, entities):
-        composer=main.locator(COMPOSER)
-        await expect(composer).to_have_count(1)
-        if await composer.evaluate(rich.TEXT_JS):raise MaxBlocked('existing_draft')
-        if len(media)>10 or any(m['mimeType'] not in {'image/png','image/jpeg','video/mp4'} for m in media):
-            raise MaxBlocked('unsupported_media')
-        if await main.locator('.attaches .attach').count():raise MaxBlocked('existing_attachments')
-        previews=[]
-        if media:
-            await main.get_by_role('button',name='Загрузить файл',exact=True).click()
-            async with self.page.expect_file_chooser() as chooser:
-                await self.page.get_by_role('menu').get_by_role('menuitem',name='Фото или видео',exact=True).click()
-            await (await chooser.value).set_files(list(media))
-            attached=main.locator('.attaches .attach img')
-            await expect(attached).to_have_count(len(media))
-            if any(m['mimeType']=='video/mp4' for m in media):
-                await expect(main.locator('.attaches').get_by_role('button',name='Отменить загрузку',exact=True)).to_have_count(0,timeout=self.timeout*1000)
-            previews=await attached.evaluate_all('(es)=>es.map(e=>({src:e.src,name:e.alt}))')
-            if [p['name'] for p in previews]!=[m['name'] for m in media] or any(not p['src'].startswith('data:image/png;base64,' if m['mimeType']=='video/mp4' else 'blob:') for p,m in zip(previews,media)):
-                raise MaxBlocked('upload_preview_mismatch')
-        await rich.fill(self.page,composer,text,entities)
-        return composer,previews
+        import time
+        started=time.monotonic();phase='composer'
+        try:
+            composer=main.locator(COMPOSER)
+            await expect(composer).to_have_count(1)
+            phase='draft_guard'
+            if await composer.evaluate(rich.TEXT_JS):raise MaxBlocked('existing_draft')
+            if len(media)>10 or any(m['mimeType'] not in {'image/png','image/jpeg','video/mp4'} for m in media):
+                raise MaxBlocked('unsupported_media')
+            if await main.locator('.attaches .attach').count():raise MaxBlocked('existing_attachments')
+            previews=[]
+            if media:
+                phase='upload_menu'
+                await main.get_by_role('button',name='Загрузить файл',exact=True).click()
+                phase='file_chooser'
+                async with self.page.expect_file_chooser() as chooser:
+                    await self.page.get_by_role('menu').get_by_role('menuitem',name='Фото или видео',exact=True).click()
+                phase='file_upload'
+                await (await chooser.value).set_files(list(media))
+                phase='preview'
+                attached=main.locator('.attaches .attach img')
+                await expect(attached).to_have_count(len(media))
+                if any(m['mimeType']=='video/mp4' for m in media):
+                    await expect(main.locator('.attaches').get_by_role('button',name='Отменить загрузку',exact=True)).to_have_count(0,timeout=self.timeout*1000)
+                phase='preview_guard'
+                previews=await attached.evaluate_all('(es)=>es.map(e=>({src:e.src,name:e.alt}))')
+                if [p['name'] for p in previews]!=[m['name'] for m in media] or any(not p['src'].startswith('data:image/png;base64,' if m['mimeType']=='video/mp4' else 'blob:') for p,m in zip(previews,media)):
+                    raise MaxBlocked('upload_preview_mismatch')
+            phase='rich_text'
+            await rich.fill(self.page,composer,text,entities)
+            return composer,previews
+        except (Exception, asyncio.CancelledError) as error:
+            # Repository locations identify the exact failing UI step without
+            # logging exception messages, post text, URLs or browser DOM.
+            import logging, traceback
+            from pathlib import Path
+            root=Path(__file__).parent
+            locations=' > '.join(f'{Path(f.filename).name}:{f.lineno}:{f.name}'
+                for f in traceback.extract_tb(error.__traceback__) if Path(f.filename).parent==root)
+            logging.getLogger(__name__).warning('MAX compose failed step=%s error_type=%s error_module=%s elapsed=%.3f locations=%s',
+                phase,type(error).__name__,type(error).__module__,time.monotonic()-started,locations)
+            raise
+
 
     async def submit_plain_candidate(self, *, target, text, attempt_id, plan_digest, hooks, media=(), entities=(), reply_to=None):
         """Single trusted plain Send with durable native receipt, no effect retry.
@@ -829,8 +851,16 @@ class RealMaxDriver:
                         image.verify()
                 result.append(dict(kind='download_sha256',slot=slot,sha256=hashlib.sha256(data).hexdigest(),mime=mime,size=len(data)))
             finally:
-                if download is not None:await download.delete()
-                await dialog.get_by_role('button',name='Закрыть',exact=True).click()
+                # Preserve the primary download/crash failure, not a secondary
+                # TargetClosedError raised while cleaning up the same session.
+                import sys, logging
+                failing = sys.exc_info()[0] is not None
+                try:
+                    if download is not None:await download.delete()
+                    await dialog.get_by_role('button',name='Закрыть',exact=True).click()
+                except Exception as cleanup_error:
+                    logging.getLogger(__name__).warning('MAX media cleanup failed error_type=%s primary_failure=%s',type(cleanup_error).__name__,failing)
+                    if not failing:raise
             await self._scope(target,namespace)
         return result
 
@@ -879,6 +909,49 @@ class RealMaxDriver:
         return dict(id=native_id,url=reference,target=target,namespace='feed',text=text,
             media=[],observed_media=downloaded,entities=media['entities'],scheduled_at=None,observed_at=datetime.now(timezone.utc).isoformat())
 
+    async def _open_context_menu(self, control):
+        """Open a native menu, with one state-checked pre-effect retry only."""
+        route = self.page.url
+        menu = self.page.get_by_role('menu')
+        if await menu.count():
+            raise MaxBlocked('context_menu_already_open')
+        handle = control if isinstance(control, ElementHandle) else await control.element_handle()
+        if handle is None:
+            raise MaxBlocked('native_row_detached')
+        # Row-wide text includes changing delivery/selection UI metadata. Bind
+        # authored semantics, the native clock and ordered actual media instead.
+        snapshot_js = '(e)=>{'+rich.SNAPSHOT_JS+"""
+            const row=e.closest('.messageWrapper'),main=e.closest('main');
+            const content=row ? e : main?.querySelector('[role="textbox"][contenteditable][data-lexical-editor]') || e;
+            const media=row ? row.querySelectorAll('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source')
+                : main?.querySelectorAll('.attaches .attach img') || [];
+            return {connected:e.isConnected&&content.isConnected,text:semanticText(content),
+                entities:semanticSnapshot(content),label:e.getAttribute('aria-label'),
+                time:row?.querySelector('.meta .text')?.textContent.trim() || null,
+                media:[...media].map(x=>({src:x.currentSrc||x.src,name:x.alt||null}))};
+        }"""
+        snapshot = await handle.evaluate(snapshot_js)
+        for attempt in range(2):
+            current = await handle.evaluate(snapshot_js)
+            if self.page.url != route or not current['connected'] or current != snapshot:
+                raise MaxBlocked('context_menu_subject_changed')
+            await self.page.bring_to_front()
+            await handle.click(button='right', timeout=self.timeout*1000)
+            try:
+                await expect(menu).to_have_count(1, timeout=min(2000,self.timeout*1000))
+                await expect(menu).to_be_visible(timeout=min(2000,self.timeout*1000))
+                if self.page.url != route:
+                    raise MaxBlocked('context_menu_route_changed')
+                return menu
+            except AssertionError:
+                if attempt or self.page.url != route or await menu.count():
+                    raise MaxBlocked('native_context_menu_not_open') from None
+                # A right click has no publication effect. Keep the exact same
+                # connected handle; never retry a menu action or final confirmation.
+                import logging
+                logging.getLogger(__name__).info('MAX context menu reopening before effect')
+        raise MaxBlocked('native_context_menu_not_open')
+
     async def _open_message_menu(self, row):
         # A media row's centre is the image viewer, not the message menu.
         # Use the verified caption surface; never infer identity from coordinates.
@@ -889,7 +962,7 @@ class RealMaxDriver:
         else:
             caption=row.locator('.bubbleContent > .text')
             await expect(caption).to_have_count(1)
-        await caption.click(button='right',timeout=self.timeout*1000)
+        return await self._open_context_menu(caption)
 
     async def _remaining_rows_exclude(self,main,text,native_id):
         """After durable trusted removal only; not standalone absence proof."""
@@ -941,7 +1014,12 @@ class RealMaxDriver:
         for opening in range(2):
             await self._scope(target)
             await self._connected_row(row)
-            await self._open_message_menu(row)
+            try:
+                await self._open_message_menu(row)
+            except MaxBlocked as exc:
+                if str(exc)=='native_context_menu_not_open':
+                    raise MaxBlocked('native_copy_menu_unavailable') from None
+                raise
             menu = self.page.get_by_role('menu')
             try:
                 await menu.get_by_role('menuitem', name='Скопировать ссылку на сообщение', exact=True).click(

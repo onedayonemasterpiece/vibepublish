@@ -41,7 +41,9 @@ ALIAS = string(80, pattern=r"^[a-z][a-z0-9_-]*$")
 ID = string(128, pattern=r"^[a-z][a-z0-9_:-]*$")
 REV = {"type": "integer", "minimum": 1}
 DATE = string(40, format="date-time")
-URL = string(4096, format="uri", pattern=r"^https://")
+# Explicitly consume the whole URL: some MCP clients apply full-match pattern
+# validation rather than JSON Schema's search semantics.
+URL = string(4096, format="uri", pattern=r"^https://[^\s]+$")
 TELEGRAM_THREAD_URL = string(4096, format="uri", pattern=r"^https://t\.me/c/[1-9][0-9]*/[1-9][0-9]*/?$")
 KEY = string(128)
 LIMIT = {"type": "integer", "minimum": 1, "maximum": 50}

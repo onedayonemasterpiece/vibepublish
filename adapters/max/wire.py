@@ -114,8 +114,15 @@ class QueueObserver:
         if self.error:raise self.error
         return self.rows
 
-    async def __aexit__(self,*_):
-        for session in self.sessions:await session.detach()
+    async def __aexit__(self,exc_type,exc,tb):
+        import logging
+        failure = None
+        for session in self.sessions:
+            try:await session.detach()
+            except Exception as cleanup_error:
+                logging.getLogger(__name__).warning('MAX observer cleanup failed error_type=%s primary_failure=%s',type(cleanup_error).__name__,exc_type is not None)
+                failure = failure or cleanup_error
+        if failure is not None and exc_type is None:raise failure
 
 
 

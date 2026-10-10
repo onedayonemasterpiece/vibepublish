@@ -385,7 +385,16 @@ class Worker:
                         hint = {**json.loads(recovery['hint']), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
                         checkpoint = canonical({**json.loads(checkpoint), 'core_recovery': hint})
                 timeout = max(0.1, min(90, op['deadline']-self.store.clock())) if not current['dispatched'] else 90
-                async with asyncio.timeout(timeout):
+                async with asyncio.timeout(timeout) as execution_budget:
+                    if (not current['dispatched'] and child['provider']=='max'
+                            and request.action in {'publish','reschedule'} and request.scheduled_at):
+                        original_before_effect=hooks.before_effect
+                        async def before_effect(attempt_id,plan_digest):
+                            await original_before_effect(attempt_id,plan_digest)
+                            # One fresh bounded verification phase, only after
+                            # the durable guard succeeds. Never replay an effect.
+                            execution_budget.reschedule(asyncio.get_running_loop().time()+90)
+                        hooks=Hooks(hooks.emit_progress,hooks.checkpoint,before_effect)
                     observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
                                    await adapter.execute(prepared, hooks))
                 self.finish_child(op, child, actor, observation, needs_finalize=callable(getattr(adapter, 'finalize', None)))
