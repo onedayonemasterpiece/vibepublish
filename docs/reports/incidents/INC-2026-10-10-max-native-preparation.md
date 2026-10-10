@@ -1,70 +1,82 @@
 # INC-2026-10-10-max-native-preparation
 
-Status: `Open` / live final mutation acceptance pending.
+Status: Live social effects verified; phase-budget correction pending final CI/deployment.
 Registered incident: `inc_b61df688a29d6109383cbaec`.
 
-## Summary and Impact
+## Impact and evidence limits
 
-Owner MAX scheduled publish and native reschedule on deployed source
+Owner MAX scheduled publish and native reschedule on source
 `a567997e2c7d39dfd56d1d5f6d8606331d14fc8a` failed before dispatch.
-Historical generic catches discarded the underlying exception. Those original
-exceptions cannot be reconstructed, so subsequent reproductions are not falsely
-attributed to the old attempts. The native museum queue item remained unchanged.
+Generic catches discarded the original exceptions. Later reproductions do not
+prove the historical attempts had the identical underlying cause.
 
-## Root Cause and Fix
+## Preparation repairs
 
-Reproduction found two concrete preparation failures:
-- right click returned without a visible native context menu; the next menuitem
-  action waited until timeout. Exact current Russian menu labels were verified.
-  Reopen at most once, only for an absent menu and the same connected DOM handle,
-  route, bound authored semantics, native scheduled clock and ordered media.
-  Live evidence showed unchanged caption HTML, connected handle and media but
-  changing aggregate row.textContent after the first right click. Exclude only
-  surrounding UI metadata; changed authored links/text, time and media still
-  reject. No menu-action or confirmation retry.
-- Chrome 153 exited with SIGSEGV while downloading an existing queue photo.
-  Production Playwright was 1.57. Cleanup then hid the first failure. Preserve
-  original failures and log only exception class/phase. A compatible isolated
-  Playwright1.63 run completed the exact original photo hash and calendar checks.
-  Later runs reproduced the same native SIGSEGV with Playwright1.63 and both
-  host Chrome153.0.8010.47 and bundled Chrome for Testing153.0.8010.12.
-  Driver version alignment is therefore not a proven crash fix. Pinned headless
-  shell153.0.8010.12 completed full-photo reschedule preparation once; further
-  comparison and host RAM/cgroup/OOM correlation are required.
+A native right click sometimes returned without a visible menu. The adapter now
+observes the actual menu and retries absence once, before arm, on the same
+connected control and unchanged authored text/entities, native clock and ordered
+media. Unrelated visible menus or subject drift fail closed. Only proven volatile
+row metadata is excluded. Menu actions and final confirmation are never retried.
 
-Playwright1.63 release notes explicitly test Chrome153:
-https://playwright.dev/python/docs/release-notes
+Full Chrome153 crashed with SIGSEGV during native photo download under both
+Playwright1.57 and1.63, including bundled full Chrome. Version alignment alone
+was disproven as a fix. Production now uses an isolated pinned Playwright1.63
+runtime and official Chromium headless-shell153.0.8010.12, with two successful
+full-photo preparations and subsequent actual MCP reads/reschedule/publication.
+The native C++ crash cause remains unproven. Original exceptions survive cleanup;
+compose diagnostics record step, exception module/class, elapsed time and
+repository traceback locations, without post text, URLs or DOM.
 
-## Regression Checks and Evidence
+Host audits found zero OOM kills since boot and no stale diagnostic browsers.
+The exact successful preparation downloaded the original124384-byte1080x1080
+JPEG to a writable UID1001 temporary directory, with3.70GB and over1million
+inodes free. Available RAM stayed above3.10GB; job peak991MB; job memory limits
+were unlimited and OOM/limit counters remained zero. These observations exclude
+an OOM kill for the recorded crashes, not every possible allocator failure.
 
-Offline tests exercise first-click/second-click/no-menu cases, detached/text/
-media/route drift, unexpected menu, full publish/reschedule calendar preparation,
-named link and uploaded photo retention, and refusal after arm without a click.
+## Proven completion-budget defect and correction
 
-Live owner-authorized diagnostics used the Vibe runtime profile, a tomorrow time,
-and both a checkpoint stop before arm and a UI submission tripwire:
-- publish preparation reached MAX_PREPARED at 07:58:50 UTC;
-- full-media reschedule reached MAX_RESCHEDULE_PREPARED at 08:02:37 UTC using
-  Playwright1.63 and Chrome153; normal browser exit, worker restored active.
-No live native Save/Send was performed by these diagnostics. The owner confirmed
-that the tool cancellation was not their action. A later read-only draft check
-verified an empty composer and zero attachment previews. Final native write/
-readback is pending. Further local browser probes are paused while investigating
-RAM/cgroup limits and concurrent unrelated server work; no unrelated process is
-stopped or inspected for private content.
+The real lecture command completed preflight at09:16:22.311 UTC, committed its
+single durable dispatch marker at09:17:23.188, then returned unknown at
+09:17:52.619,90.31 seconds after preflight. It had already saved the new native
+identity and original downloaded-photo evidence. Preparation consumed53 seconds;
+the existing90-second execution scope left insufficient time for the full
+post-dispatch independent readback. Explicit observation-only reconciliation
+completed in49.7 seconds without another effect.
 
-## Release Evidence
+The worker and scheduled MAX adapter now start a fresh bounded observation budget
+only after the original before_effect guard successfully commits dispatch.
+Preparation retains its original deadline. Scheduled publish/reschedule execute
+for at most90 seconds before dispatch plus90 after it (adapter limits may be
+shorter), with the existing bounded finalization. No additional Send/Save,
+observation weakening, automatic effect retry, or permission bypass is added.
+An exhausted post-dispatch budget still becomes outcome_unknown. Cancellation
+and restart retain the existing observation-only recovery contract.
 
-Initial candidate501fd4b: CI passed1323 tests and248 subtests per Python3.12/
-3.13, failing only an existing read-recovery error-code assertion. Preserve that
-error contract at the copy-reference boundary and rerun the complete gate on the
-updated source. Exact final release and production pair verification pending.
-Earlier public HTTPS schema fix must remain in ancestry. Canonical dirty checkout
-must not be overwritten.
+## Acceptance and regression evidence
 
-## Follow-Ups
+- Exact d63b2da full CI passed:
+  https://github.com/onedayonemasterpiece/vibepublish/actions/runs/38038744898
+- Normal MCP reschedule verified museum at20:00 Kaliningrad with original photo.
+- Normal MCP lecture publication created one native post at13:30 Kaliningrad.
+  Independent native read verified all three named links and photo. Its
+  observation-only reconcile finished scheduled with download_binding and
+  finalized quarantine at09:20:47. Both authoritative posts must not be retried.
+- Lecture source SHA2569dc4ae5f7e70d12ef9124e4deb5e43b5b2e7ec04ea5a60ae1d8b570e5ddda61e
+  is causally bound to MAX's transcoded native photo
+  SHA2569f01328df037b1938fe10a2956fefdf8e0bb0b8345f433f4bb2436692c11a821,
+ 182205 bytes, through original operation/attempt/plan/native identity.
+- Offline tests cover menu absence/drift, photo/link/calendar retention, precise
+  content-free diagnostics, pre-dispatch expiry, separate post-dispatch budget,
+  missing receipt, cancellation/restart, and at most one external effect.
 
-Complete native post scheduling/rescheduling through the existing MCP contract
-with ample future-time margin; verify provider IDs, times, named links and photos.
-An expired frozen publish plan cannot be changed by retry_failed: verify zero
-dispatch and no pending recovery, then use the explicitly changed future intent.
+Earlier uninstrumented compose timeouts did not reproduce in controlled
+preparation, exact preflight, or prior-read sequence; do not claim their exact UI
+cause is established. The narrow logging patch preserves evidence next time.
+
+## Release boundary
+
+Preserve the earlier public HTTPS schema fix, existing account/profile/allowlist,
+and rollback source/interpreter. Do not modify the older dirty canonical checkout.
+No further live test posts are required: final budget verification is deterministic
+offline regression plus read-only service/native acceptance of the existing posts.

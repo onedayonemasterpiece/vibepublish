@@ -102,7 +102,7 @@ async def test_row_ui_metadata_change_does_not_replace_authored_binding(writer):
 class PreparedOnly(SystemExit): pass
 
 @pytest.mark.parametrize('action',['publish','reschedule'])
-@pytest.mark.parametrize('after_arm',[False,True])
+@pytest.mark.parametrize('after_arm',[False,True,'after_marker'])
 async def test_full_native_prepare_and_no_retry_after_arm(writer,monkeypatch,action,after_arm):
     d,page,state,h=writer
     d.evidence_pages=(page,)
@@ -140,7 +140,26 @@ async def test_full_native_prepare_and_no_retry_after_arm(writer,monkeypatch,act
     async def checkpoint(name,raw):
         checkpoints.append((name,json.loads(raw)))
         if not after_arm:raise PreparedOnly()
-    async def dispatch(*a):raise RuntimeError('dispatch refuses before click')
+    import asyncio
+    from contextlib import asynccontextmanager
+    original_timeout=asyncio.timeout;resets=[];marked=False
+    @asynccontextmanager
+    async def tracked_timeout(seconds):
+        async with original_timeout(seconds) as budget:
+            def reset(deadline):
+                resets.append(deadline-asyncio.get_running_loop().time())
+                budget.reschedule(deadline)
+            yield SimpleNamespace(reschedule=reset)
+    monkeypatch.setattr(asyncio,'timeout',tracked_timeout)
+    account=d._account
+    async def checked_account():
+        if marked and after_arm=='after_marker':raise RuntimeError('stop after committed marker, before click')
+        return await account()
+    monkeypatch.setattr(d,'_account',checked_account)
+    async def dispatch(*a):
+        nonlocal marked
+        if after_arm!='after_marker':raise RuntimeError('dispatch refuses before click')
+        marked=True
     h.checkpoint=checkpoint;h.before_effect=dispatch
     args=dict(scheduled_at='2030-11-12T16:45:00Z',attempt_id='attempt',plan_digest='plan',hooks=h)
     expected=MaxBlocked if after_arm else PreparedOnly
@@ -161,7 +180,9 @@ async def test_full_native_prepare_and_no_retry_after_arm(writer,monkeypatch,act
     assert await page.evaluate('window.opens')==2
     assert await page.evaluate('window.confirmClicks')==0
     assert not effects(state)
-    assert d.lane.marker.exists()==after_arm
+    assert d.lane.marker.exists()==bool(after_arm)
+    assert len(resets)==(1 if after_arm=='after_marker' else 0)
+    if resets:assert resets[0]==pytest.approx(d.timeout,abs=.02)
 
 @pytest.mark.parametrize('primary',[False,True])
 async def test_observer_cleanup_preserves_primary_exception(primary):

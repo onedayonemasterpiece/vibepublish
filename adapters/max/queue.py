@@ -112,7 +112,7 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
     driver._enter(target);armed=False;guard=None;phase='account'
     try:
         driver.lane.assert_clear()
-        async with asyncio.timeout(driver.timeout):
+        async with asyncio.timeout(driver.timeout) as phase_budget:
             await driver._account()
             # Read the current native queue before composing. A fresh empty queue
             # surface has no entry control; never treat a missing native ITEM as
@@ -165,6 +165,7 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
             await driver._account();await driver._scope(target)
             driver.lane.arm(attempt_id,plan_digest);armed=True
             await hooks.before_effect(attempt_id,plan_digest)
+            phase_budget.reschedule(asyncio.get_running_loop().time()+driver.timeout)
             await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_schedule_form_changed')
             await confirm.click()
@@ -290,7 +291,7 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
     try:
         driver.lane.assert_clear()
         if existing['namespace']!='scheduled' or not scheduled_at:raise MaxBlocked('exact_native_schedule_required')
-        async with asyncio.timeout(driver.timeout):
+        async with asyncio.timeout(driver.timeout) as phase_budget:
             original=(await read(driver,target,existing['id'],passes=1))[0]
             if any(original[k]!=existing[k] for k in ('text','scheduled_at','observed_media','entities')):
                 raise MaxBlocked('native_schedule_existing_changed')
@@ -336,6 +337,7 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
             await driver._account();await driver._scope(target,'scheduled')
             driver.lane.arm(attempt_id,plan_digest);armed=True
             await hooks.before_effect(attempt_id,plan_digest)
+            phase_budget.reschedule(asyncio.get_running_loop().time()+driver.timeout)
             await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_reschedule_form_changed')
             await confirm.click()
