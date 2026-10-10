@@ -1,7 +1,10 @@
 """Standalone synthetic coverage for native Copy geometry, labels and references."""
+import asyncio
+import contextlib
 import json
 
 import pytest
+from playwright.async_api import expect
 
 from adapters.max.live import RealMaxDriver, Target
 from adapters.max.profile import MaxBlocked
@@ -107,6 +110,10 @@ def bind_public(driver, public_url=PUBLIC):
 
 async def assert_observation_only(writer, *, copies):
     driver, page, state, _ = writer
+    if copies:
+        # Both fixture Copy handlers remove the menu only after the event fetch
+        # is acknowledged. Clipboard delivery alone does not await that record.
+        await expect(page.get_by_role('menu')).to_have_count(0, timeout=driver.timeout * 1000)
     assert not effects(state)
     assert not state['checkpoints'] and 'dispatched' not in state
     assert not driver.lane.marker.exists()
@@ -229,3 +236,43 @@ async def test_public_binding_change_during_copy_fails_closed(writer):
         await driver._copy_native_reference(row, TARGET)
     assert driver.binding_snapshot['targets'][TARGET]['public_url'] == 'https://max.ru/other_channel'
     await assert_observation_only(writer, copies=1)
+
+
+@pytest.mark.parametrize('public', [False, True])
+async def test_rejected_reference_waits_for_fixture_copy_acknowledgement(writer, public):
+    """Clipboard delivery can precede the independent fixture event record."""
+    driver, page, state, _ = writer
+    if public:
+        bind_public(driver, 'https://max.ru/other_channel')
+        row = await exact_row(writer, mode='post', public_reference=POST)
+    else:
+        await page.add_init_script("window.REPLAY_COPY_TARGET='-303'")
+        row = await exact_row(writer)
+    requested = asyncio.Event()
+    release = asyncio.Event()
+    async def delayed_copy_event(route):
+        assert route.request.post_data_json['kind'] == 'copy'
+        requested.set()
+        await release.wait()
+        await route.fallback()
+    await page.route(driver.origin + '/replay-event', delayed_copy_event)
+    verification = None
+    try:
+        with pytest.raises(MaxBlocked, match='^native_reference_scope_mismatch$'):
+            await driver._copy_native_reference(row, TARGET)
+        async with asyncio.timeout(5):
+            await requested.wait()
+            assert not [event for event in state['events'] if event['kind'] == 'copy']
+            assert await page.get_by_role('menu').count() == 1
+            verification = asyncio.create_task(assert_observation_only(writer, copies=1))
+            # Yield once, not a timing margin: the old immediate assertion fails
+            # before the gate opens; the acknowledged helper waits for the menu.
+            await asyncio.sleep(0)
+            release.set()
+            await verification
+    finally:
+        release.set()
+        if verification is not None and not verification.done():
+            verification.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await verification
