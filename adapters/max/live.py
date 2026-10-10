@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 from playwright.async_api import ElementHandle, Error as PlaywrightError, expect, TimeoutError as PlaywrightTimeoutError
 
 from .profile import MaxBlocked, ProfileLane
+from .references import native_reference_id
 from .account import ACCOUNT_PHASES, VisibleAccountCheck
 from . import rich
 
@@ -24,8 +25,44 @@ RECIPE = 'max-web-observed-20260905-v1'
 MAIN = 'main[aria-labelledby="main-header-title"]'
 COMPOSER = '[contenteditable][role="textbox"][data-lexical-editor="true"]'
 TITLE = '.name > .text'
+# Two exact native message/post actions observed in MAX Web, never the generic link action.
+NATIVE_COPY_NAME = re.compile(r'^Скопировать ссылку на (?:сообщение|пост)$')
 QUEUE_TITLE = 'Запланированные посты'
 QUEUE_HEADING = re.compile(r'^(?:Запланированные посты|Отложенные сообщения)$')
+
+
+# Public rendered DOM geometry only. No app state, private API or inferred route.
+MESSAGE_MENU_POINT_JS = """(caption) => {
+    if (!caption.isConnected) return null;
+    const row=caption.closest('.messageWrapper');
+    if (!row || !row.isConnected) return null;
+    const blocked='a,button,[role="button"],[role="link"],input,textarea,select,video,audio,img,[contenteditable]';
+    const box=caption.getBoundingClientRect(),style=getComputedStyle(caption);
+    const borderLeft=parseFloat(style.borderLeftWidth)||0,borderTop=parseFloat(style.borderTopWidth)||0;
+    const walker=document.createTreeWalker(caption,NodeFilter.SHOW_TEXT);
+    let node,seen=0,rectangles=0;
+    while ((node=walker.nextNode()) && ++seen<=512) {
+        const parent=node.parentElement;
+        if (!node.textContent.trim() || !parent || parent.closest(blocked)) continue;
+        const range=document.createRange();
+        range.selectNodeContents(node);
+        for (const rect of range.getClientRects()) {
+            if (++rectangles>1024) return null;
+            if (rect.width<=0 || rect.height<=0) continue;
+            const clientX=rect.left+rect.width/2,clientY=rect.top+rect.height/2;
+            if (clientX<0 || clientY<0 || clientX>=innerWidth || clientY>=innerHeight) continue;
+            const hit=document.elementFromPoint(clientX,clientY);
+            if (!hit || !caption.contains(hit) || hit.closest('.messageWrapper')!==row
+                    || hit.closest(blocked)) continue;
+            const x=clientX-box.left-borderLeft,y=clientY-box.top-borderTop;
+            // Inline captions have zero clientWidth/clientHeight; rendered range
+            // and bounding rectangles remain valid for their actual text points.
+            if (x<0 || y<0 || x>=box.width-borderLeft || y>=box.height-borderTop) continue;
+            return {x,y};
+        }
+    }
+    return null;
+}"""
 
 
 @dataclass(frozen=True)
@@ -943,7 +980,7 @@ class RealMaxDriver:
         return dict(id=native_id,url=reference,target=target,namespace='feed',text=text,
             media=[],observed_media=downloaded,entities=media['entities'],scheduled_at=None,observed_at=datetime.now(timezone.utc).isoformat())
 
-    async def _open_context_menu(self, control):
+    async def _open_context_menu(self, control, *, non_link_text=False):
         """Open a native menu, with one state-checked pre-effect retry only."""
         route = self.page.url
         menu = self.page.get_by_role('menu')
@@ -970,12 +1007,29 @@ class RealMaxDriver:
             if self.page.url != route or not current['connected'] or current != snapshot:
                 raise MaxBlocked('context_menu_subject_changed')
             await self.page.bring_to_front()
-            await handle.click(button='right', timeout=self.timeout*1000)
+            click_options = {}
+            if non_link_text:
+                # A caption centre may be a named link, which opens a link menu
+                # instead of the message menu. Use only actual non-link text
+                # geometry in this same stable caption/row; never a label fallback.
+                await handle.scroll_into_view_if_needed(timeout=self.timeout*1000)
+                point = await handle.evaluate(MESSAGE_MENU_POINT_JS)
+                current = await handle.evaluate(snapshot_js)
+                if self.page.url != route or not current['connected'] or current != snapshot:
+                    raise MaxBlocked('context_menu_subject_changed')
+                if point is None:
+                    raise MaxBlocked('native_non_link_text_surface_unavailable')
+                click_options['position'] = point
+            await handle.click(button='right', timeout=self.timeout*1000, **click_options)
             try:
                 await expect(menu).to_have_count(1, timeout=min(2000,self.timeout*1000))
                 await expect(menu).to_be_visible(timeout=min(2000,self.timeout*1000))
                 if self.page.url != route:
                     raise MaxBlocked('context_menu_route_changed')
+                if non_link_text:
+                    current = await handle.evaluate(snapshot_js)
+                    if not current['connected'] or current != snapshot:
+                        raise MaxBlocked('context_menu_subject_changed')
                 return menu
             except AssertionError:
                 if attempt or self.page.url != route or await menu.count():
@@ -996,7 +1050,7 @@ class RealMaxDriver:
         else:
             caption=row.locator('.bubbleContent > .text')
             await expect(caption).to_have_count(1)
-        return await self._open_context_menu(caption)
+        return await self._open_context_menu(caption, non_link_text=True)
 
     async def _remaining_rows_exclude(self,main,text,native_id):
         """After durable trusted removal only; not standalone absence proof."""
@@ -1031,9 +1085,28 @@ class RealMaxDriver:
             return candidate
         raise MaxBlocked('native_candidate_not_matching')
 
+    def _reference_public_url(self, target):
+        """Use only the existing verified allowlist's exact native-target entry."""
+        bound = self.targets.get(target)
+        if bound is None:
+            raise MaxBlocked('native_reference_scope_mismatch')
+        snapshot = getattr(self, 'binding_snapshot', {})
+        entry = snapshot.get('targets', {}).get(target)
+        if entry is None:
+            return None
+        if (not isinstance(entry, dict) or entry.get('alias') != bound.alias
+                or entry.get('policy') != bound.policy):
+            raise MaxBlocked('native_reference_scope_mismatch')
+        return entry.get('public_url')
+
+    def _native_reference_id(self, value, target):
+        return native_reference_id(value, target,
+                                   public_url=self._reference_public_url(target))
+
     async def _copy_native_reference(self, row, target):
         """Observed message-menu recipe; never infer an ID from row position."""
         import uuid
+        public_url = self._reference_public_url(target)
         await self._scope(target)
         await self._connected_row(row)
         # Identity validation uses another page; activate our own message page
@@ -1056,8 +1129,12 @@ class RealMaxDriver:
                 raise
             menu = self.page.get_by_role('menu')
             try:
-                await menu.get_by_role('menuitem', name='Скопировать ссылку на сообщение', exact=True).click(
-                    timeout=min(self.timeout*1000, 2000))
+                copies = menu.get_by_role('menuitem', name=NATIVE_COPY_NAME)
+                await copies.first.wait_for(state='visible', timeout=min(self.timeout*1000, 2000))
+                if (await menu.count() != 1 or await copies.count() != 1
+                        or not await copies.is_visible() or not await copies.is_enabled()):
+                    raise MaxBlocked('native_copy_menu_unavailable')
+                await copies.click(timeout=min(self.timeout*1000, 2000))
                 break
             except PlaywrightTimeoutError:
                 await self._scope(target)
@@ -1068,11 +1145,13 @@ class RealMaxDriver:
                 # This is still an observation, not a second social effect.
                 await self.page.evaluate('(value)=>navigator.clipboard.writeText(value)', sentinel)
         value = await self.page.evaluate('navigator.clipboard.readText()')
-        match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', value)
-        if not match or match[1] != target:
+        native_id = native_reference_id(value, target, public_url=public_url)
+        if native_id is None:
             raise MaxBlocked('native_reference_scope_mismatch')
         await self._scope(target)
-        return value, match[2]
+        if self._reference_public_url(target) != public_url:
+            raise MaxBlocked('native_reference_scope_mismatch')
+        return value, native_id
 
     def _check_attempt_fuse(self, attempt, plan):
         import json
@@ -1180,10 +1259,10 @@ class RealMaxDriver:
                     or ('task_marker' in state and len(marker) < 16)
                     or text.count(marker) != 1 or not attempt or not plan):
                 raise ValueError()
-            match = re.fullmatch(r'https://max\.ru/c/(-[1-9][0-9]*)/([A-Za-z0-9_-]+)', reference)
-            if not match or match[1] != target:
+            native_id = self._native_reference_id(reference, target)
+            if native_id is None:
                 raise ValueError()
-            if state['action'] == 'edit' and (state.get('existing_id') != match[2]
+            if state['action'] == 'edit' and (state.get('existing_id') != native_id
                     or not isinstance(state.get('old_text'), str) or not state['old_text']
                     or state['old_text'] == text):
                 raise ValueError()
