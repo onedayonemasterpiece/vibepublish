@@ -76,7 +76,7 @@ class SafeRetryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.call('publication_update', self.retry_args(edit)))['state'], 'verified')
         self.assertFalse(await self.worker.run_once())
 
-    async def test_same_key_can_retry_another_predispatch_failure_but_never_unknown(self):
+    async def test_same_key_never_readmits_another_predispatch_failure(self):
         edit = await self.blocked_edit()
         args = self.retry_args(edit)
         await self.call('publication_update', args)
@@ -86,8 +86,9 @@ class SafeRetryTests(unittest.IsolatedAsyncioTestCase):
         await self.call('publication_update', args)
         await self.worker.run_once()
         result = await self.call('publication_update', args)
-        self.assertEqual(result['error']['code'], 'retry_not_proven_safe')
-        self.assertEqual(self.provider.count('effect'), 2)
+        self.assertEqual(result['state'], 'blocked')
+        self.assertFalse(await self.worker.run_once())
+        self.assertEqual(self.provider.count('effect'), 1)
 
     async def test_expired_immediate_deadline_refreshes_but_frozen_native_time_does_not(self):
         edit = await self.blocked_edit()

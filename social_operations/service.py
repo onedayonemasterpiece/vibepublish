@@ -479,6 +479,12 @@ class Application:
         return binding, topic
 
     def accept(self, actor, action, args):
+        if action == 'publication_update':
+            with self.store.connection() as db:
+                actor = self.store.current(db, actor)
+            if 'publication.manage' not in actor.scopes and (
+                    'publish' not in actor.scopes or args['change']['kind'] != 'retry_failed'):
+                raise DomainError('access_denied', next_action='contact_owner')
         if action == 'publication_update' and args['change']['kind'] == 'reconcile_removed':
             from .unknown_resolution import accept_resolution
             return accept_resolution(self, actor, args)
