@@ -1,5 +1,17 @@
 # MCP contract v1.5 — native queues, incremental receipts and visual choice
 
+## HTTPS schema compatibility correction — 2026-10-10
+
+Status: `Not confirmed by user`. The reported named-link edit defect is tracked
+in incident `inc_a1f574608853235cdc335343`; live connector acceptance is pending.
+All public HTTPS URL patterns explicitly consume the entire non-whitespace URL,
+so both standard JSON Schema search semantics and full-match MCP clients accept
+valid named links. The canonical semantic paragraph/link structure, immutable
+item-reference CAS, authorization, provider verification, and photo-preserving
+edit behavior remain unchanged. Raw provider entities and Markdown parsing are
+not introduced. Regression covers native photo-caption editing, named registration
+and footer links, UTF-16 offsets, and idempotent replay without republishing.
+
 > Current remote delivery: **partial, not a runnable release**. The implemented
 > behavior and historical test counts below describe the complete archived source.
 > Three production modules remain undelivered; current evidence and exact boundaries

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix public HTTPS URL patterns for MCP clients that apply whole-string regex matching. Semantic named links now pass connector validation for existing-publication edits; preserve the canonical closed schema and in-place Telegram photo/caption behavior, with URL compatibility and native edit/replay regression tests.
+
 - Automatically add destination-specific cross-network navigation footers to new owner posts in three Kaliningrad Telegram channels and the MAX announcements channel. Resolve VK communities from active bindings, preserve Telegram/MAX semantic entities and idempotency, reject over-limit content, and leave native forwards/other destinations unchanged. Document the four routes and cover real planning with focused regressions.
 
 - Fix actual production `DirectTargetTelegramAdapter.prepare` to use the same safe native Telegram edit CAS as the base adapter. A provider-read photo caption can now be edited in place without falsely treating downloaded media evidence as a remote revision; the remaining native ID/content-change checks remain strict. Add a regression test for the direct-target production adapter, not only its base class.
