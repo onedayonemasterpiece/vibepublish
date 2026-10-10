@@ -18,7 +18,7 @@ A publish_channel permits immediate channel publication through the existing pre
 
 Required offline checks cover strict URL parsing, ambiguity, wrong target type, absent rights, replay, existing aliases, revocation, private atomic allowlist updates and immediate-channel policy isolation. Live exact resolution and live publication/readback are separate evidence gates; no test may post to a real channel.
 
-The public navigation recipe follows a unique visible MAX Web link observed on the exact public landing. The link must encode an observed native route or the same public reference; a generic Web-home/marketing link cannot select the previously opened chat. Public subscriber text must be visible. Oversized heading/link projections fail closed rather than silently hide ambiguity. Redirected public references, wrong hosts, ports, credentials, hidden links, native route substitution and absent composers never persist a destination.
+The primary public navigation recipe waits for the observed «Открыть в браузере» link and verifies its actual href against the exact public handle. The same page must show one visible h1 title, the exact @handle and the visible «Перейти в канал» control whose deep link matches that handle. This explicit channel control proves public channel kind without requiring a subscriber count that the current landing does not show. The older bounded native-link/subscriber recipe remains a conservative fallback. A generic Web-home/marketing link cannot select a destination. An unchanged prior native chat is refused unless its private runtime binding already contains this exact verified public URL. Oversized fallback projections, redirected public references, wrong hosts, ports, credentials, hidden controls, ambiguous identities and absent composers never persist a destination.
 
 Private registration compares the loaded account/target document under a cooperative lock and the owned profile lease. It validates file/parent ownership and modes, uses a same-directory atomic replacement and fsync, and rolls back file plus in-memory registration if the fenced ledger transaction fails. Core rechecks owner, connection identity and active binding after provider observation. A process-crash-only orphan in the native allowlist grants no new core authorization; replay reconciles it.
 
@@ -52,3 +52,30 @@ unchanged attempt routes and metadata isolation for unrelated action types.
 The correction's focused runtime/storage/provider suite passed **93 tests and
 6 subtests**. These injected-provider tests establish routing behavior only;
 a new live exact-resolution operation is still required after release.
+
+## Observed public-link navigation correction, 2026-10-10
+
+Status: **Not confirmed by user**; authenticated native resolution remains
+**Not done**. The next production pilot reached the public landing but reported
+one heading, no accepted visible Web links and no subscriber marker. This
+diagnostic alone did not establish HTTP403 or a rendering cause.
+
+The supported browser bridge and a bounded unauthenticated public HTML read
+both observed HTTP200 at the exact requested URL. The visible h1 was
+«Ух ты, Калининград!», with @channel_uh_kaliningrad and no visible subscriber
+count. The two observed anchors were «Перейти в канал» with
+max://max.ru/channel_uh_kaliningrad and «Открыть в браузере» with
+https://web.max.ru/channel_uh_kaliningrad. Neither had a target attribute.
+A bridge click did not produce observable navigation; navigating the actual
+observed Web href returned HTTP200 and sign-in UI in that separate logged-out
+profile. No authentication, native ID, membership or publishing authority was
+inferred from this public inspection.
+
+The product now waits for the actual visible controls instead of taking an
+immediate DOMContentLoaded snapshot, and records the public HTTP status in
+bounded diagnostics. It follows the observed href and still requires a canonical
+native route, exact native header, editable composer and account reconfirmation
+before registration. No successful public landing by itself creates a binding.
+Browser regressions use intercepted synthetic pages for these exact SSR controls,
+delayed visibility, channel-link mismatch, lack of publishing rights, HTTP403,
+prior unrelated current-chat reuse and re-verification of an existing exact URL.

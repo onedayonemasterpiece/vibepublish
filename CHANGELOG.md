@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Resolve the observed MAX public-channel landing after its exact visible controls are ready, validating the public handle and provider-supplied Web/deep links instead of assuming subscriber text. Reject HTTP errors and unrelated prior chats; retain native destination, title, account and publish-rights checks. Add delayed-render and real-browser landing regressions.
+
 - Begin every existing automatic network footer with a semantic «Подписаться» link to the current verified destination, followed by its established cross-links. Upgrade existing navigation in one line without duplicate URLs, preserve native VK/unlisted eventsbot footer ownership, and fail visibly when the current public URL is unavailable. Cover Telegram/MAX ordering, UTF-16, idempotency, media limits and unchanged VK behavior.
 
 - Route owner destination-resolution operations to their explicit provider connection in split production workers. MAX resolution no longer falls through to the ordinary Telegram/VK lane before its native adapter is available; preserve existing publication/read routing and ignore injected connection fields on unrelated actions.
