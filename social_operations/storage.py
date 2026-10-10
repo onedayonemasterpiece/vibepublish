@@ -263,7 +263,10 @@ class Store:
                 marks=','.join('?' for _ in connection_ids)
                 routed="(SELECT json_extract(a.plan,'$.connection_id') FROM attempts a WHERE a.operation_id=o.id LIMIT 1)"
                 read="(SELECT d.connection_id FROM bindings b JOIN destinations d ON d.id=b.destination_id WHERE b.id=json_extract(o.request,'$._binding_id'))"
-                route=f'coalesce({routed},{read})'
+                # Exact discovery precedes destination/binding creation, but its
+                # owner-admitted connection still belongs to one provider lane.
+                destination="CASE WHEN o.action='destinations' THEN json_extract(o.request,'$._connection_id') END"
+                route=f'coalesce({routed},{read},{destination})'
                 query+=f' AND ({route} IN ({marks})'+(f' OR {route} IS NULL' if include_unrouted else '')+')'
                 values.extend(connection_ids)
             row=db.execute(query+' ORDER BY created,id LIMIT 1',values).fetchone()

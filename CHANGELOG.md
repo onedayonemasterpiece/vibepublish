@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Route owner destination-resolution operations to their explicit provider connection in split production workers. MAX resolution no longer falls through to the ordinary Telegram/VK lane before its native adapter is available; preserve existing publication/read routing and ignore injected connection fields on unrelated actions.
+
 - Add owner-only exact public MAX channel resolution through the authenticated native worker, with visible identity/publish-authority checks, stable routing and private atomic target registration. New explicitly verified channel bindings support immediate publish without changing existing channel policies; unresolved navigation fails closed. Add least-privilege CLI scope/right selection and scoped native destination IDs for integration identity checks. Live channel acceptance remains separate from offline tests.
 
 - Harden MAX native scheduled-post preparation: observe the context menu, permit one identity-bound pre-effect reopen when it is absent, preserve phase/exception and primary crash diagnostics, and pin Playwright 1.63 for Chrome 153. Add full preparation, named-link/photo, calendar and no-post-arm-retry regression coverage; retain native media/readback and unknown-outcome protections.

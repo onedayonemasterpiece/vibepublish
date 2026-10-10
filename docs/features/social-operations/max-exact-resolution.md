@@ -27,3 +27,28 @@ Private registration compares the loaded account/target document under a coopera
 The scoped run passed **203 tests and 2 subtests**, including real-browser synthetic replay. The channel named-link plus photo test uses a row without the group-only outgoing flag, verifies one causal Send, early exact native-reference checkpoint, downloaded SHA evidence, fresh readback and observation-only original-attempt recovery. A deliberate post-receipt timeout preserves the original reference/quarantine and refuses a second Send; the existing group foreign-row refusal remains intact.
 
 Immediate publication retains its existing single total driver timeout for preparation, Send and readback. This work does not introduce an effect retry or a new phase budget. The initial combined browser replay returned outcome_unknown under the fixture's 10-second budget; its underlying cause was not captured and is not asserted as a timeout. An exact diagnostic rerun passed at the same 10-second budget in 6.072 seconds, with native identity at 1.416 seconds. The final combined acceptance replay uses 30 seconds and also covers two seconds of deliberate preparation delay. Production/live acceptance remains unverified.
+
+## Split-provider lane correction, 2026-10-10
+
+Status: **Not confirmed by user**; live resolution remains **Not done**. The first
+pilot after release c0fad40 stopped before browser navigation with
+max_discovery_requires_live_connection. The ordinary Telegram/VK worker claimed
+the operation as unrouted because exact discovery has no attempt or destination
+binding yet. The MAX worker, which excludes unrouted operations, could not claim it.
+No channel binding or publication was created.
+
+An admitted destinations operation now carries its explicit _connection_id into
+the existing Store.claim provider-lane filter. Attempt and binding routes keep
+their precedence. Other action types ignore this metadata; truly unrouted work
+continues to follow include_unrouted. An expired discovery lease remains assigned
+to the same provider lane. This change does not open a profile, substitute an
+adapter or broaden publishing rights.
+
+Regression tests exercise the production split-worker configuration: an ordinary
+lane with include_unrouted=True must leave MAX resolution accepted and untouched;
+the owned MAX lane with include_unrouted=False must claim and invoke the resolver
+exactly once. Tests also cover empty ordinary lanes, expired lease recovery,
+unchanged attempt routes and metadata isolation for unrelated action types.
+The correction's focused runtime/storage/provider suite passed **93 tests and
+6 subtests**. These injected-provider tests establish routing behavior only;
+a new live exact-resolution operation is still required after release.
