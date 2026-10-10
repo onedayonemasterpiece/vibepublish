@@ -15,6 +15,8 @@ from social_operations.storage import Store
 
 class NetworkFooterUnitTests(unittest.TestCase):
     targets = {
+        "lovekenig_tg": {"provider": "telegram", "native_id": "-10011", "handle": "@fixture_love"},
+        "tg_74cd62f2688ba88ab5fd": {"provider": "telegram", "native_id": "-10022", "handle": "https://t.me/fixture_events"},
         "lovekenig_vk": {"provider": "vk", "native_id": "-11"},
         "vk_972b45c6f71c0f2a1fb9": {"provider": "vk", "native_id": "-22"},
         "vk_027d33367c33ba2599ee": {"provider": "vk", "native_id": "-33"},
@@ -28,13 +30,13 @@ class NetworkFooterUnitTests(unittest.TestCase):
 
     def test_each_route_is_semantic_and_ordered(self):
         expected = {
-            "lovekenig_tg": ("https://vk.com/club11",),
+            "lovekenig_tg": ("https://t.me/fixture_love", "https://vk.com/club11"),
             "tg_74cd62f2688ba88ab5fd": (
-                "https://vk.com/club22", "https://max.ru/channel_kenigevents"),
+                "https://t.me/fixture_events", "https://vk.com/club22", "https://max.ru/channel_kenigevents"),
             "tg_5060f37d74cf460135ee": (
-                "https://vk.com/club33", "https://max.ru/channel_kenigevents"),
+                "https://t.me/kenigevents", "https://vk.com/club33", "https://max.ru/channel_kenigevents"),
             "max_lovekenig_announcements": (
-                "https://vk.com/club22", "https://t.me/kenigevents"),
+                "https://max.ru/channel_kenigevents", "https://vk.com/club22", "https://t.me/kenigevents"),
         }
         for source, urls in expected.items():
             with self.subTest(source=source):
@@ -69,7 +71,7 @@ class NetworkFooterUnitTests(unittest.TestCase):
 
     def test_idempotent_media_only_post_without_newline(self):
         post = self.compile("lovekenig_tg", "telegram", {"text": ""}, has_media=True)
-        self.assertEqual(post["text"], "ВКонтакте")
+        self.assertEqual(post["text"], "Подписаться  ·  ВКонтакте")
         self.assertEqual(self.compile("lovekenig_tg", "telegram", post, has_media=True), post)
 
     def test_semantic_existing_footer_detects_vk_public_alias_without_byte_match(self):
@@ -77,7 +79,10 @@ class NetworkFooterUnitTests(unittest.TestCase):
         content = {"text": text, "format": "telegram_entities", "entities": [
             {"type": "text_link", "offset": utf16("Событие\n\n  "), "length": 2,
              "url": "https://vk.ru/public11/"}]}
-        self.assertEqual(self.compile("lovekenig_tg", "telegram", content), content)
+        result = self.compile("lovekenig_tg", "telegram", content)
+        self.assertEqual(result["text"], "Событие\n\nПодписаться  ·  ВКонтакте")
+        self.assertEqual(len(result["entities"]), 2)
+        self.assertEqual(self.compile("lovekenig_tg", "telegram", result), result)
 
     def test_body_reference_does_not_suppress_real_footer(self):
         text = "Про наш канал в VK"
@@ -85,8 +90,8 @@ class NetworkFooterUnitTests(unittest.TestCase):
             {"type": "text_link", "offset": utf16("Про наш канал в "),
              "length": 2, "url": "https://vk.com/club11"}]}
         result = self.compile("lovekenig_tg", "telegram", content)
-        self.assertEqual(len(result["entities"]), 2)
-        self.assertTrue(result["text"].endswith("\n\nВКонтакте"))
+        self.assertEqual(len(result["entities"]), 3)
+        self.assertTrue(result["text"].endswith("\n\nПодписаться  ·  ВКонтакте"))
 
     def test_non_target_is_untouched_and_missing_target_fails_closed(self):
         content = {"text": "Событие"}
@@ -102,6 +107,42 @@ class NetworkFooterUnitTests(unittest.TestCase):
         with self.assertRaises(DomainError):
             self.compile("lovekenig_tg", "telegram", {"text": "А" * 1017},
                          has_media=True)
+
+
+    def test_current_url_is_required_and_never_inferred_from_label_or_id(self):
+        targets = dict(self.targets)
+        targets["lovekenig_tg"] = {"provider": "telegram", "native_id": "-10011",
+                                  "label": "fixture_love", "handle": ""}
+        with self.assertRaises(DomainError) as context:
+            append_network_footer("lovekenig_tg", "telegram", {"text": "Событие"},
+                                  targets.get)
+        self.assertEqual(context.exception.code, "network_footer_source_url_unavailable")
+
+    def test_current_link_moves_first_and_duplicate_urls_are_removed(self):
+        text = "Событие\n\nVK · Канал · Ещё VK"
+        entities = []
+        for label, url in [("VK", "https://vk.com/club11"),
+                           ("Канал", "https://t.me/fixture_love"),
+                           ("Ещё VK", "https://vk.ru/public11/")]:
+            offset = text.index(label)
+            entities.append({"type": "text_link", "offset": utf16(text[:offset]),
+                             "length": utf16(label), "url": url})
+        result = self.compile("lovekenig_tg", "telegram",
+                              {"text": text, "format": "telegram_entities", "entities": entities})
+        self.assertEqual(result["text"], "Событие\n\nПодписаться  ·  ВКонтакте")
+        self.assertEqual(len(result["entities"]), 2)
+        self.assertEqual(self.compile("lovekenig_tg", "telegram", result), result)
+
+    def test_unlisted_vk_native_markup_is_unchanged(self):
+        content = {"text": "Событие\n\n[club11|Подписаться] · https://t.me/fixture_love"}
+        self.assertIs(self.compile("lovekenig_vk", "vk", content), content)
+
+    def test_unlisted_eventsbot_max_footer_is_not_added_again(self):
+        content = {"text": "Дайджест\n\nПодписаться · Телеграм · Вконтакте",
+                   "format": "max_entities", "entities": [
+                       {"type": "text_link", "offset": 10, "length": 11,
+                        "url": "https://max.ru/channel_uh_kaliningrad"}]}
+        self.assertIs(self.compile("max_excursion_fixture", "max", content), content)
 
 
 class NetworkFooterPlanTests(unittest.IsolatedAsyncioTestCase):
@@ -125,7 +166,8 @@ class NetworkFooterPlanTests(unittest.IsolatedAsyncioTestCase):
         }
         for alias, ident in self.native_ids.items():
             provider = "max" if alias.startswith("max_") else "vk" if alias.startswith("vk_") or alias == "lovekenig_vk" else "telegram"
-            self.store.bind(self.actor, "owner", alias, "conn_" + provider, ident)
+            self.store.bind(self.actor, "owner", alias, "conn_" + provider, ident,
+                            handle="@fixture_" + alias if provider == "telegram" else "")
         self.store.bind(self.actor, "owner", "other_tg", "conn_telegram", "-100999")
         self.app = Application(self.store)
 
@@ -142,7 +184,8 @@ class NetworkFooterPlanTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(alias=alias):
                 plan = await self._plan(alias)
                 compiled = json.loads(plan["content_json"])
-                self.assertEqual(len(compiled["entities"]), len(ROUTES[alias]))
+                self.assertEqual(len(compiled["entities"]), len(ROUTES[alias]) + 1)
+                self.assertTrue(compiled["text"].split("\n")[-1].startswith("Подписаться"))
                 self.assertTrue(compiled["text"].startswith("Анонс\n\n"))
                 self.assertIn("·", compiled["text"] if len(ROUTES[alias]) > 1 else "·")
         other = await self._plan("other_tg")
