@@ -36,6 +36,10 @@ class Collection:
     def __init__(self, elements):
         self.elements = elements
 
+    async def wait_for(self, **kwargs):
+        if not await self.is_visible():
+            raise discovery.PlaywrightTimeoutError("offline missing named control")
+
     async def all(self):
         return self.elements
 
@@ -86,7 +90,9 @@ class Page:
         if not pattern.fullmatch(self.url):
             raise MaxBlocked("native_channel_route_unverified")
 
-    def get_by_role(self, role):
+    def get_by_role(self, role, **kwargs):
+        if kwargs.get("name") == "Открыть в браузере":
+            return Collection([])
         assert role in {"heading", "link"}
         return Collection(self.headings if role == "heading" else self.links)
 
