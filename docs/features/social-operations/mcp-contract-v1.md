@@ -135,6 +135,10 @@ separately, never hidden or skipped in that strict gate.
 
 ### Explicit safe retry before dispatch
 
+Requirements: **Fixed** by the owner's 2026-10-10 bounded original-publication
+recovery correction. Implementation: **Not confirmed by user**; regression tests
+and source delivery do not establish a live MAX publication.
+
 `publication_update` also implements its existing `retry_failed` branch:
 
 ```json
@@ -145,6 +149,24 @@ separately, never hidden or skipped in that strict gate.
   "request_key": "retry-blocked-edit"
 }
 ```
+
+An actor with `publish` and an active publishing binding, without
+`publication.manage`, receives a closed retry-only projection of this tool. It
+requires `publication_id`, `expected_revision`, `request_key`, and exactly
+`change.kind=retry_failed` with named active publishing aliases. This permits only
+that same tenant/principal's original `publish` operation and frozen publish plans
+at their exact actor/binding epochs. Application admission independently enforces
+these restrictions; the schema is not the security boundary. It grants no edit,
+delete, reschedule, cancel, approval, forward, native-item adoption, or reconciliation
+permission. Existing `publication.manage` actors retain the full lifecycle tool
+and can still explicitly retry their own eligible lifecycle operations.
+
+HTTP clients use the existing authenticated
+`POST /v1/publications/{publication_id}/commands` endpoint with an
+`Idempotency-Key` header containing the same stable recovery key and body
+`expected_revision` plus `change`. The original publication key must not be reused
+as the recovery key; distinct intents under one key conflict. A transport retry
+must repeat the same recovery request and key, never mint another key.
 
 This explicitly re-admits the **same operation, revision and selected attempts**
 only when they are completed blocked/failed attempts with `dispatched=0`. It is
@@ -163,14 +185,21 @@ must still prove the native object unchanged; an expired native time blocks rath
 than falling back to immediate publication. Exactly one dispatch transition is
 possible for the selected original attempt, including across retries and restarts.
 
-The same matching request key joins in-flight work or replays successful results.
-If another attempt stops before dispatch, that same key may explicitly re-admit
-it again. A retry that crosses dispatch and becomes unknown cannot be submitted
-again. Durable events distinguish retry admission from the preceding failure.
+A matching recovery request key admits at most once. Every subsequent call only
+returns the original current receipt, including after another terminal pre-dispatch
+failure, successful completion, or an unknown outcome. It never rearms the worker,
+renews the deadline, resets the attempt, or appends another admission event. This
+also covers a lost HTTP response and concurrent retries. A different key is a new
+explicit admission request subject to every guard; it cannot bypass dispatched or
+unknown outcomes. Durable events distinguish the single admission from preceding
+and subsequent failures.
 The original failed operation's publication revision remains usable for later
 lifecycle changes after successful retry; private item adoption is not required.
 Tests include authenticated MCP ClientSession and independent worker processes,
 expired command/native deadlines, external changes, epochs and partial successes.
+`tests/runtime/test_publish_retry_scope.py` covers the publish-only schema and
+application boundary, private ownership, immutable identity, stable-key replay,
+dispatched uncertainty, and current binding rights/identity/epoch checks.
 Implementation status: **Not confirmed by user**; offline checks are not live MAX
 acceptance.
 

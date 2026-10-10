@@ -531,6 +531,7 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
         effective.add("media.store")
     # Narrow task scopes expose only their own command variants.
     if publish_destinations and "publish" in effective:
+        effective.add("publication.manage")  # Retry-only projection; no lifecycle grant.
         if "forward" in effective:
             effective.add("engage")
         if "destination.profile" in effective:
@@ -542,6 +543,17 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
         if item["required_scope"] not in effective:
             continue
         item.pop("required_scope")
+        if item["name"] == "vibepublish_publication_update" and "publication.manage" not in scopes:
+            schema = item["inputSchema"]
+            schema["properties"].pop("item_ref", None)
+            schema["properties"]["change"] = arm("retry_failed", {
+                "destinations": {**array(enum(*sorted(set(publish_destinations))), 1, 20),
+                                 "uniqueItems": True}}, ("destinations",))
+            schema["required"] = ["publication_id", "expected_revision", "change", "request_key"]
+            schema.pop("oneOf", None)
+            item["description"] = ("Re-admit only this principal\'s original publish operation after a proven "
+                "zero-dispatch failure, at the same revision and active binding epoch. One admission per "
+                "request key; subsequent calls only return the original receipt. No lifecycle or reconciliation rights.")
         if item["name"] == "vibepublish_visual" and "visual" not in scopes:
             item["inputSchema"]["properties"]["command"] = arm("import")
             item["description"] = "Import a chat attachment as a private image asset, without AI or publication."

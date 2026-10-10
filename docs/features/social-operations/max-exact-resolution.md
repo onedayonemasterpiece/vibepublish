@@ -79,3 +79,36 @@ before registration. No successful public landing by itself creates a binding.
 Browser regressions use intercepted synthetic pages for these exact SSR controls,
 delayed visibility, channel-link mismatch, lack of publishing rights, HTTP403,
 prior unrelated current-chat reuse and re-verification of an existing exact URL.
+
+## Bounded preflight diagnostics, 2026-10-10
+
+Status: **Not confirmed by user**. A production publication stopped before dispatch
+with max_preflight_needs_review. That original generic receipt does not establish
+which check failed. A successful earlier feed read does not prove later publish
+readiness. No speculative UI fix or automatic effect retry follows from it.
+
+The same preflight now retains a fixed-enum stage and reason in the existing
+max_preflight_needs_review error message. Stages distinguish request validation,
+mutation policy, and native opening. Native opening additionally identifies the
+first account check, navigation, first scope check, account recheck, or final
+scope check; timeout, UI assertion failure, and unavailable UI remain distinct.
+Known policy/account/route blockers are whitelisted. Unrecognized reasons collapse
+to an opaque blocker. No exception message, DOM, content, account identifier,
+profile path, URL, credential, or asset value is exported. Live failures use the
+max_web_dom evidence tag rather than offline_fixture.
+
+Diagnostics do not change selectors, operation deadlines, driver timeout budgets,
+check ordering, quarantine, dispatch, readback or retry authority. Cancellation
+continues to propagate. An old terminal receipt is not retroactively diagnosed;
+only a new explicitly authorized standard operation can provide fresh evidence.
+
+The focused MAX adapter and immediate-channel browser suite passed **158 tests
+and 2 subtests**. It covers all five open subphases, both timeout types, assertion
+and generic failures, opaque unknown blockers, cancellation, unchanged successful
+checks, no effect hooks, quarantine retention, and the existing named-link/photo
+channel send and original-attempt recovery replay. A broader local browser run
+reached its 240-second limit before summary and showed two failures. An isolated
+existing video bridge case passed preparation but failed during execute with
+max_outcome_unknown (9 preceding cases passed). Its underlying cause was not
+captured and is not labeled a timeout or a baseline defect; full CI remains a
+separate release gate. No live operation was run for these diagnostics.

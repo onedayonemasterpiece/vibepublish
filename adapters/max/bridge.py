@@ -16,8 +16,45 @@ from adapters.port import Capability, Hooks, Observation, Prepared, ProviderRequ
 from social_operations.domain import DomainError, OutcomeUnknown, canonical, digest
 
 from .driver import FixtureDriver, fingerprint
-from .live import RealMaxDriver
+from .live import OpenBlocked, RealMaxDriver
 from .profile import MaxBlocked
+
+
+# Deliberately closed vocabulary: exception messages may contain provider content.
+_PREFLIGHT_REASONS = frozenset({
+    'max_connection_or_target_denied', 'max_live_binding_mismatch',
+    'max_live_factory_not_implemented', 'max_action_unsupported',
+    'max_surface_unsupported', 'max_native_forward_edit_unsupported',
+    'max_exact_forward_source_required', 'max_reply_subject_required',
+    'max_reaction_subject_required', 'max_rich_recipe_not_qualified',
+    'max_media_unsupported', 'max_exact_existing_required',
+    'max_publish_existing_conflict', 'provider_media_limit',
+    'media_rendering_needs_review', 'asset_integrity', 'provider_text_limit',
+    'rich_content_needs_review', 'native_time_precision', 'native_lead_time',
+    'command_expired', 'profile_not_owned', 'profile_busy', 'outcome_unknown',
+    'causal_receipt_recipe_unverified', 'immediate_publication_denied',
+    'channel_publish_only', 'native_schedule_minute_precision',
+    'live_surface_not_implemented', 'target_denied', 'wrong_target_or_origin',
+    'needs_auth_or_wrong_account', 'wrong_namespace', 'unsupported_namespace',
+    'unfamiliar_or_unavailable_ui', 'fixture_origin_required', 'wrong_target',
+    'read_denied', 'write_denied',
+})
+_OPEN_PHASES = frozenset({
+    'account_before', 'navigation', 'scope_before', 'account_after', 'scope_after',
+})
+
+
+def _preflight_reason(stage, exc):
+    if stage not in {'validate', 'mutation_preflight', 'open', 'fixture_read', 'fixture_scope'}:
+        stage = 'unknown'
+    reason = exc.code if isinstance(exc, DomainError) else str(exc)
+    reason = reason if reason in _PREFLIGHT_REASONS else 'unrecognized_blocker'
+    if stage == 'open' and isinstance(exc, OpenBlocked):
+        if exc.phase in _OPEN_PHASES:
+            stage = 'open_' + exc.phase
+        if exc.category in {'timeout', 'ui_assertion_failed', 'unavailable_ui'}:
+            reason = exc.category
+    return f'MAX preflight not verified: stage={stage}; reason={reason}'
 
 
 @dataclass(frozen=True)
@@ -134,19 +171,25 @@ class MaxAdapter:
     async def inspect(self, request: ProviderRequest) -> Capability:
         if self.recovery_only:
             return Capability('needs_review', 'Observation-only recovery binding; no execute capability', evidence='max_web_read_only')
+        stage = 'validate'
         try:
             self._validate(request)
             if self.live_enabled:
+                stage = 'mutation_preflight'
                 await self.driver.mutation_preflight(request.native_target, request.action,
                     media=request.assets, scheduled_at=request.scheduled_at)
+                stage = 'open'
                 await self.driver.open(request.native_target)
             else:
+                stage = 'fixture_read'
                 await self.driver.read(request.native_target, 'scheduled' if request.scheduled_at else 'feed')
+                stage = 'fixture_scope'
                 await self.driver._scope(request.native_target, write=True)
         except (DomainError, MaxBlocked) as exc:
             if isinstance(exc,DomainError) and exc.code=='max_native_forward_edit_unsupported':
                 return Capability('unsupported','MAX group native forwards have no Edit control',evidence='max_web_dom')
-            return Capability('needs_review', 'MAX request/profile capability not verified', evidence='offline_fixture',
+            return Capability('needs_review', _preflight_reason(stage, exc),
+                              evidence='max_web_dom' if self.live_enabled else 'offline_fixture',
                               min_lead_seconds=self.driver.min_lead)
         return Capability('supported', 'Native UI receipt path' if self.live_enabled else 'Explicit loopback fixture only; NOT live MAX evidence',
                           min_lead_seconds=self.driver.min_lead, evidence='max_web_dom' if self.live_enabled else 'offline_fixture')
@@ -157,7 +200,7 @@ class MaxAdapter:
         self._validate(request)
         capability = await self.inspect(request)
         if capability.status != 'supported':
-            raise DomainError('max_preflight_needs_review')
+            raise DomainError('max_preflight_needs_review', capability.reason)
         await hooks.emit_progress('validating', 'completed', 'MAX preflight complete')
         return Prepared(request, capability, saved_checkpoint(request))
 

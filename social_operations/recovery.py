@@ -63,10 +63,15 @@ def retry_failed(app, actor, args):
     store = app.store
     if args.get('item_ref'):
         raise DomainError('retry_original_publication_required')
+    if args.get('change', {}).get('kind') != 'retry_failed':
+        raise DomainError('invalid_input')
     intent_hash = digest(['retry_failed', normalize_intent('publication_update', args)])
     with store.tx() as db:
         actor = store.current(db, actor)
         key = args.get('request_key')
+        publish_only = 'publication.manage' not in actor.scopes
+        if publish_only and ('publish' not in actor.scopes or not key):
+            raise DomainError('access_denied', next_action='contact_owner')
         replay = db.execute('SELECT * FROM request_keys WHERE tenant_id=? AND principal_id=? AND key=?',
                             (actor.tenant_id, actor.principal_id, key)).fetchone() if key else None
         if replay and replay['digest'] != intent_hash:
@@ -74,14 +79,24 @@ def retry_failed(app, actor, args):
         op = store.private_operation(db, actor, replay['operation_id'] if replay else args['publication_id'])
         if op['publication_id'] != args['publication_id'] or op['revision'] != args['expected_revision']:
             raise DomainError('revision_conflict', next_action='refresh')
+        pub = db.execute('SELECT revision,kind FROM publications WHERE id=?', (op['publication_id'],)).fetchone()
+        # Application guard, independent of the projected public schema. A publish
+        # grant cannot recover a later edit/delete/forward or an adopted native item.
+        if publish_only and (op['action'] != 'publish' or pub['kind'] != 'publish'):
+            raise DomainError('access_denied', next_action='contact_owner')
         children = list(db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)))
         aliases = set(args['change']['destinations'])
         selected = [c for c in children if c['alias'] in aliases]
         if len(selected) != len(aliases):
             raise DomainError('retry_destination_mismatch')
-        resolved = all(c['state'] in ('verified', 'scheduled', 'cancelled') for c in selected)
-        if not (replay and (op['work_state'] != 'done' or resolved)):
-            pub = db.execute('SELECT revision FROM publications WHERE id=?', (op['publication_id'],)).fetchone()
+        if publish_only:
+            for child in selected:
+                binding = store.binding(db, actor, binding_id=child['binding_id'])
+                if json.loads(child['plan'])['action'] != 'publish' or 'publish' not in json.loads(binding['rights']):
+                    raise DomainError('access_denied', next_action='contact_owner')
+        # A matching key authorizes one admission only. Even another terminal
+        # zero-dispatch failure is observation-only on replay, never a new send.
+        if not replay:
             if pub['revision'] != op['revision']:
                 raise DomainError('revision_conflict', next_action='refresh')
             if op['work_state'] != 'done':

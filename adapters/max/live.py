@@ -54,6 +54,14 @@ class VisibleSnapshot:
     missing_checks: tuple[str, ...] = ('native_item_identity', 'pagination_completeness')
 
 
+class OpenBlocked(MaxBlocked):
+    """Internal bounded diagnostic; the existing public blocker code is unchanged."""
+    def __init__(self, code, phase, category='blocked'):
+        super().__init__(code)
+        self.phase = phase
+        self.category = category
+
+
 class RealMaxDriver:
     def __init__(self, page, lane: ProfileLane, *, targets: tuple[Target, ...],
                  account_check, origin='https://web.max.ru', timeout=10, visual_recovery=None, visual_palette=None, live_writes=False, semantic_selectors=False, evidence_pages=()):
@@ -131,19 +139,27 @@ class RealMaxDriver:
 
     async def open(self, target):
         self._enter(target)
+        phase = 'account_before'
         try:
             async with asyncio.timeout(self.timeout):
                 await self._account()
                 # Reordering/pinning/unread/search cannot affect this binding.
                 # This route was obtained from actual owner-authorized UI.
+                phase = 'navigation'
                 await self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded')
+                phase = 'scope_before'
                 await self._scope(target)
+                phase = 'account_after'
                 await self._account()
+                phase = 'scope_after'
                 await self._scope(target)
-        except MaxBlocked:
-            raise
-        except Exception:
-            raise MaxBlocked('unfamiliar_or_unavailable_ui') from None
+        except MaxBlocked as exc:
+            raise OpenBlocked(str(exc), phase) from None
+        except Exception as exc:
+            category = ('timeout' if isinstance(exc, (TimeoutError, PlaywrightTimeoutError))
+                        else 'ui_assertion_failed' if isinstance(exc, AssertionError)
+                        else 'unavailable_ui')
+            raise OpenBlocked('unfamiliar_or_unavailable_ui', phase, category) from None
         finally:
             self._busy = False
 
