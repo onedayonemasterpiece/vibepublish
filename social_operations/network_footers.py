@@ -51,7 +51,23 @@ def _public_url(alias, lookup):
     if provider == "vk" and re.fullmatch(r"-[1-9][0-9]*", str(binding["native_id"])):
         # The numeric club URL continues to work if a VK page's vanity name changes.
         return "https://vk.com/club" + str(-int(binding["native_id"]))
+    handle = str(dict(binding).get("handle") or "").strip()
+    if provider == "telegram":
+        match = re.fullmatch(r"(?:@|https://t\.me/)?([A-Za-z][A-Za-z0-9_]{3,31})/?", handle)
+        if match:
+            return "https://t.me/" + match[1]
     raise DomainError("network_footer_target_mismatch")
+
+
+def _source_url(alias, provider, lookup):
+    binding = lookup(alias)
+    if not binding or binding["provider"] != provider:
+        raise DomainError("network_footer_source_mismatch")
+    try:
+        return _public_url(alias, lambda _: binding)
+    except DomainError as exc:
+        raise DomainError("network_footer_source_url_unavailable",
+                          "The current destination has no verified public subscription URL.") from exc
 
 
 def _identity(value):
@@ -79,6 +95,7 @@ def _tail_destinations(text, entities):
     whether a destination has already been appended. Checking coverage of the
     last line prevents references in editorial prose from suppressing the footer.
     """
+    text = text.rstrip("\n")
     offset = text.rfind("\n") + 1
     tail = text[offset:]
     if not tail.strip():
@@ -122,13 +139,35 @@ def append_network_footer(source_alias, provider, content, lookup, *, has_media=
     text = compiled["text"]
     entities = normalized_entities(text, compiled.get("entities", []))
     linked = _tail_destinations(text, entities)
-    missing = []
+    # Resolve every required link before rewriting anything. A partial footer
+    # must never hide a missing current destination or cross-network binding.
+    missing = [("Подписаться", _source_url(source_alias, provider, lookup))]
+    identities = {_identity(missing[0][1])}
     for caption, target_alias in rules:
         url = _public_url(target_alias, lookup)
-        if _identity(url) not in linked:
+        if _identity(url) not in identities:
             missing.append((caption, url))
-    if not missing:
-        return content
+            identities.add(_identity(url))
+    if linked & identities:
+        # Upgrade old footers in place rather than adding a second navigation
+        # line. Preserve extra navigation links, but never duplicate a URL.
+        text = text.rstrip("\n")
+        tail_start = text.rfind("\n") + 1
+        boundary = utf16(text[:tail_start])
+        encoded = text.encode("utf-16-le")
+        for entity in entities:
+            if entity["type"] != "text_link" or entity["offset"] < boundary:
+                continue
+            identity = _identity(entity["url"])
+            if identity and identity not in identities:
+                start = entity["offset"] * 2
+                caption = encoded[start:start + entity["length"] * 2].decode("utf-16-le")
+                missing.append((caption, entity["url"]))
+                identities.add(identity)
+        text = text[:tail_start].rstrip("\n")
+        end = utf16(text)
+        entities = [dict(entity, length=min(entity["length"], end - entity["offset"]))
+                    for entity in entities if entity["offset"] < end]
     gap = ("\n\n" if not text.endswith("\n") else "\n" if not text.endswith("\n\n") else "") if text else ""
     footer = "  ·  ".join(caption for caption, _ in missing)
     full = text + gap + footer
