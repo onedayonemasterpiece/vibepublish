@@ -101,7 +101,7 @@ async def set_time(driver,scheduled_at):
 
 async def open_schedule_dialog(driver,target,main):
     """Observed group/channel menu labels, never immediate Send."""
-    await main.get_by_role('button',name='Отправить сообщение',exact=True).click(button='right')
+    await driver._open_context_menu(main.get_by_role('button',name='Отправить сообщение',exact=True))
     label='Запланировать пост' if driver.targets[target].policy=='scheduled_only' else 'Отправить позже'
     await driver.page.get_by_role('menu').get_by_role('menuitem',name=label,exact=True).click()
 
@@ -109,7 +109,7 @@ async def open_schedule_dialog(driver,target,main):
 async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,plan_digest,hooks):
     import asyncio,json,hashlib,re
     from .live import COMPOSER
-    driver._enter(target);armed=False;guard=None
+    driver._enter(target);armed=False;guard=None;phase='account'
     try:
         driver.lane.assert_clear()
         async with asyncio.timeout(driver.timeout):
@@ -129,8 +129,11 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
                 else:baseline=[]
             when=int(datetime.fromisoformat(scheduled_at.replace('Z','+00:00')).timestamp()*1000)
             if any(x['text']==text and x['time_ms']==when for x in baseline):raise MaxBlocked('preexisting_scheduled_candidate')
+            phase='compose'
             composer,previews=await driver._compose(main,text,media,entities)
+            phase='schedule_menu'
             await open_schedule_dialog(driver,target,main)
+            phase='calendar'
             dialog,date=await set_time(driver,scheduled_at)
             confirm=dialog.get_by_role('button',name=re.compile(r'^Отправить .+ в '+datetime.fromtimestamp(when/1000,MOSCOW).strftime('%H:%M')+'$'))
             await expect(confirm).to_have_count(1)
@@ -190,7 +193,9 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
         if isinstance(exc,(asyncio.CancelledError,KeyboardInterrupt,SystemExit)):raise
         if armed:raise MaxBlocked('outcome_unknown') from None
         if isinstance(exc,MaxBlocked):raise
-        raise MaxBlocked('native_schedule_prepare_unavailable') from None
+        import logging
+        logging.getLogger(__name__).warning('MAX prepare failed action=schedule phase=%s error_type=%s attempt_id=%s',phase,type(exc).__name__,attempt_id)
+        raise MaxBlocked('native_schedule_prepare_unavailable_'+phase+'_'+type(exc).__name__.lower()) from None
     finally:
         if guard is not None:
             try:await guard.evaluate('(g)=>g.stop()');await guard.dispose()
@@ -281,7 +286,7 @@ async def legacy_unreachable_guard(driver,state):
 
 async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks):
     import asyncio,json,re
-    target=existing['target'];driver._enter(target);armed=False;guard=None
+    target=existing['target'];driver._enter(target);armed=False;guard=None;phase='read_existing'
     try:
         driver.lane.assert_clear()
         if existing['namespace']!='scheduled' or not scheduled_at:raise MaxBlocked('exact_native_schedule_required')
@@ -290,8 +295,11 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
             if any(original[k]!=existing[k] for k in ('text','scheduled_at','observed_media','entities')):
                 raise MaxBlocked('native_schedule_existing_changed')
             main=await driver._scope(target,'scheduled');row=driver._rows(main,original['text'])
+            phase='message_menu'
             await driver._open_message_menu(row)
+            phase='reschedule_action'
             await driver.page.get_by_role('menu').get_by_role('menuitem',name='Изменить время',exact=True).click()
+            phase='calendar'
             dialog,date=await set_time(driver,scheduled_at)
             clock=datetime.fromisoformat(scheduled_at.replace('Z','+00:00')).astimezone(MOSCOW).strftime('%H:%M')
             confirm=dialog.get_by_role('button',name=re.compile(r'^Отправить .+ в '+clock+'$'))
@@ -347,7 +355,9 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
         if isinstance(exc,(asyncio.CancelledError,KeyboardInterrupt,SystemExit)):raise
         if armed:raise MaxBlocked('outcome_unknown') from None
         if isinstance(exc,MaxBlocked):raise
-        raise MaxBlocked('native_reschedule_prepare_unavailable') from None
+        import logging
+        logging.getLogger(__name__).warning('MAX prepare failed action=reschedule phase=%s error_type=%s attempt_id=%s',phase,type(exc).__name__,attempt_id)
+        raise MaxBlocked('native_reschedule_prepare_unavailable_'+phase+'_'+type(exc).__name__.lower()) from None
     finally:
         if guard is not None:
             try:await guard.evaluate('(g)=>g.stop()');await guard.dispose()

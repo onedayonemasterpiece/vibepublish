@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Harden MAX native scheduled-post preparation: observe the context menu, permit one identity-bound pre-effect reopen when it is absent, preserve phase/exception and primary crash diagnostics, and pin Playwright 1.63 for Chrome 153. Add full preparation, named-link/photo, calendar and no-post-arm-retry regression coverage; retain native media/readback and unknown-outcome protections.
+
 - Fix public HTTPS URL patterns for MCP clients that apply whole-string regex matching. Semantic named links now pass connector validation for existing-publication edits; preserve the canonical closed schema and in-place Telegram photo/caption behavior, with URL compatibility and native edit/replay regression tests.
 
 - Automatically add destination-specific cross-network navigation footers to new owner posts in three Kaliningrad Telegram channels and the MAX announcements channel. Resolve VK communities from active bindings, preserve Telegram/MAX semantic entities and idempotency, reject over-limit content, and leave native forwards/other destinations unchanged. Document the four routes and cover real planning with focused regressions.

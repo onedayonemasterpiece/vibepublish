@@ -829,8 +829,16 @@ class RealMaxDriver:
                         image.verify()
                 result.append(dict(kind='download_sha256',slot=slot,sha256=hashlib.sha256(data).hexdigest(),mime=mime,size=len(data)))
             finally:
-                if download is not None:await download.delete()
-                await dialog.get_by_role('button',name='Закрыть',exact=True).click()
+                # Preserve the primary download/crash failure, not a secondary
+                # TargetClosedError raised while cleaning up the same session.
+                import sys, logging
+                failing = sys.exc_info()[0] is not None
+                try:
+                    if download is not None:await download.delete()
+                    await dialog.get_by_role('button',name='Закрыть',exact=True).click()
+                except Exception as cleanup_error:
+                    logging.getLogger(__name__).warning('MAX media cleanup failed error_type=%s primary_failure=%s',type(cleanup_error).__name__,failing)
+                    if not failing:raise
             await self._scope(target,namespace)
         return result
 
@@ -879,6 +887,43 @@ class RealMaxDriver:
         return dict(id=native_id,url=reference,target=target,namespace='feed',text=text,
             media=[],observed_media=downloaded,entities=media['entities'],scheduled_at=None,observed_at=datetime.now(timezone.utc).isoformat())
 
+    async def _open_context_menu(self, control):
+        """Open a native menu, with one state-checked pre-effect retry only."""
+        route = self.page.url
+        menu = self.page.get_by_role('menu')
+        if await menu.count():
+            raise MaxBlocked('context_menu_already_open')
+        handle = control if isinstance(control, ElementHandle) else await control.element_handle()
+        if handle is None:
+            raise MaxBlocked('native_row_detached')
+        snapshot = await handle.evaluate("""e => {
+            const scope=e.closest('.messageWrapper') || e.closest('main') || e;
+            return {text:scope.textContent,html:e.innerHTML,media:[...scope.querySelectorAll('img,video source')].map(x=>x.currentSrc||x.src)};
+        }""")
+        for attempt in range(2):
+            same = await handle.evaluate("""(e,x) => {
+                const scope=e.closest('.messageWrapper') || e.closest('main') || e;
+                return e.isConnected && scope.textContent===x.text && e.innerHTML===x.html && JSON.stringify([...scope.querySelectorAll('img,video source')].map(n=>n.currentSrc||n.src))===JSON.stringify(x.media);
+            }""", snapshot)
+            if self.page.url != route or not same:
+                raise MaxBlocked('context_menu_subject_changed')
+            await self.page.bring_to_front()
+            await handle.click(button='right', timeout=self.timeout*1000)
+            try:
+                await expect(menu).to_have_count(1, timeout=min(2000,self.timeout*1000))
+                await expect(menu).to_be_visible(timeout=min(2000,self.timeout*1000))
+                if self.page.url != route:
+                    raise MaxBlocked('context_menu_route_changed')
+                return menu
+            except AssertionError:
+                if attempt or self.page.url != route or await menu.count():
+                    raise MaxBlocked('native_context_menu_not_open') from None
+                # A right click has no publication effect. Keep the exact same
+                # connected handle; never retry a menu action or final confirmation.
+                import logging
+                logging.getLogger(__name__).info('MAX context menu reopening before effect')
+        raise MaxBlocked('native_context_menu_not_open')
+
     async def _open_message_menu(self, row):
         # A media row's centre is the image viewer, not the message menu.
         # Use the verified caption surface; never infer identity from coordinates.
@@ -889,7 +934,7 @@ class RealMaxDriver:
         else:
             caption=row.locator('.bubbleContent > .text')
             await expect(caption).to_have_count(1)
-        await caption.click(button='right',timeout=self.timeout*1000)
+        return await self._open_context_menu(caption)
 
     async def _remaining_rows_exclude(self,main,text,native_id):
         """After durable trusted removal only; not standalone absence proof."""
