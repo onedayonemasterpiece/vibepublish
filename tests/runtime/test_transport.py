@@ -316,8 +316,8 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': BlockedEdit(sys.argv[2], 'te
                     self.assertTrue(denied_preview.isError)
                     self.assertEqual(denied_preview.structuredContent['error']['code'],'asset_not_available')
                     command_schema=visual.inputSchema['properties']['command']
-                    self.assertEqual(command_schema['properties']['kind'], {'const':'import'})
-                    self.assertNotIn('oneOf', command_schema)
+                    self.assertEqual({arm['properties']['kind']['const'] for arm in command_schema['oneOf']},
+                                     {'import', 'import_begin', 'import_chunk', 'import_finish', 'import_status', 'import_abort'})
                     self.assertEqual(visual.meta['openai/fileParams'], ['file'])
                     for denied_command in [
                         {'kind':'generate','prompt':'No scope'},

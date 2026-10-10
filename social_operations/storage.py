@@ -39,7 +39,7 @@ class Store:
         os.chmod(self.path, 0o600)
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4, 5, 6, 7):
+            if version not in (0, 1, 2, 3, 4, 5, 6, 7, 8):
                 raise RuntimeError("Unsupported VibePublish database version")
             self._enable_wal(db)
             if version == 0:
@@ -59,6 +59,8 @@ class Store:
                 db.executescript(Path(__file__).with_name("media_store_schema.sql").read_text())
             if version < 7:
                 db.executescript(Path(__file__).with_name("telegram_media_budget_schema.sql").read_text())
+            if version < 8:
+                db.executescript(Path(__file__).with_name("workspace_upload_schema.sql").read_text())
 
     @staticmethod
     def _enable_wal(db: sqlite3.Connection) -> None:

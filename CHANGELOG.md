@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add bounded authenticated workspace image import through the existing visual MCP tool: durable begin/chunk/finish/status/abort, source hash and offset checks, private principal/epoch-scoped staging, safe request-key replay, expiration and staging caps. Reuse existing image sanitization and asset admission without public hosting, chat relay, regeneration or publication. Keep the 512 KiB MCP body limit and add transport and restart/privacy regressions.
+
 - Give MAX visible-account navigation, Settings and phone readiness one decreasing configured budget instead of independent 10/30-second ceilings. Preserve exact account matching, existing selectors and the original preflight/operation deadline; retain bounded subphase diagnostics. Cover delayed authenticated cold/warm readiness and fail-closed login, duplicate-control and wrong-account cases.
 
 - Preserve bounded MAX preflight stage/reason diagnostics without raw provider state or changed dispatch behavior. Permit publish-scoped clients to retry only their own original, proven never-dispatched publication through the existing recovery command; preserve frozen intent and reject management/unknown-effect/binding-drift cases. A recovery request key now admits at most once, including after a second terminal failure.
