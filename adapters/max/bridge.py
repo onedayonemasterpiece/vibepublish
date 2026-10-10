@@ -17,6 +17,7 @@ from social_operations.domain import DomainError, OutcomeUnknown, canonical, dig
 
 from .driver import FixtureDriver, fingerprint
 from .live import OpenBlocked, RealMaxDriver
+from .account import ACCOUNT_PHASES
 from .profile import MaxBlocked
 
 
@@ -41,7 +42,8 @@ _PREFLIGHT_REASONS = frozenset({
 })
 _OPEN_PHASES = frozenset({
     'account_before', 'navigation', 'scope_before', 'account_after', 'scope_after',
-})
+} | {check + '_' + phase for check in ('account_before', 'account_after')
+     for phase in ACCOUNT_PHASES})
 
 
 def _preflight_reason(stage, exc):
@@ -179,7 +181,7 @@ class MaxAdapter:
                 await self.driver.mutation_preflight(request.native_target, request.action,
                     media=request.assets, scheduled_at=request.scheduled_at)
                 stage = 'open'
-                await self.driver.open(request.native_target)
+                await self.driver.open(request.native_target, deadline=request.deadline)
             else:
                 stage = 'fixture_read'
                 await self.driver.read(request.native_target, 'scheduled' if request.scheduled_at else 'feed')
