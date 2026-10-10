@@ -262,27 +262,49 @@ class RealMaxDriver:
         return [result['item']]
 
     async def _compose(self, main, text, media, entities):
-        composer=main.locator(COMPOSER)
-        await expect(composer).to_have_count(1)
-        if await composer.evaluate(rich.TEXT_JS):raise MaxBlocked('existing_draft')
-        if len(media)>10 or any(m['mimeType'] not in {'image/png','image/jpeg','video/mp4'} for m in media):
-            raise MaxBlocked('unsupported_media')
-        if await main.locator('.attaches .attach').count():raise MaxBlocked('existing_attachments')
-        previews=[]
-        if media:
-            await main.get_by_role('button',name='Загрузить файл',exact=True).click()
-            async with self.page.expect_file_chooser() as chooser:
-                await self.page.get_by_role('menu').get_by_role('menuitem',name='Фото или видео',exact=True).click()
-            await (await chooser.value).set_files(list(media))
-            attached=main.locator('.attaches .attach img')
-            await expect(attached).to_have_count(len(media))
-            if any(m['mimeType']=='video/mp4' for m in media):
-                await expect(main.locator('.attaches').get_by_role('button',name='Отменить загрузку',exact=True)).to_have_count(0,timeout=self.timeout*1000)
-            previews=await attached.evaluate_all('(es)=>es.map(e=>({src:e.src,name:e.alt}))')
-            if [p['name'] for p in previews]!=[m['name'] for m in media] or any(not p['src'].startswith('data:image/png;base64,' if m['mimeType']=='video/mp4' else 'blob:') for p,m in zip(previews,media)):
-                raise MaxBlocked('upload_preview_mismatch')
-        await rich.fill(self.page,composer,text,entities)
-        return composer,previews
+        import time
+        started=time.monotonic();phase='composer'
+        try:
+            composer=main.locator(COMPOSER)
+            await expect(composer).to_have_count(1)
+            phase='draft_guard'
+            if await composer.evaluate(rich.TEXT_JS):raise MaxBlocked('existing_draft')
+            if len(media)>10 or any(m['mimeType'] not in {'image/png','image/jpeg','video/mp4'} for m in media):
+                raise MaxBlocked('unsupported_media')
+            if await main.locator('.attaches .attach').count():raise MaxBlocked('existing_attachments')
+            previews=[]
+            if media:
+                phase='upload_menu'
+                await main.get_by_role('button',name='Загрузить файл',exact=True).click()
+                phase='file_chooser'
+                async with self.page.expect_file_chooser() as chooser:
+                    await self.page.get_by_role('menu').get_by_role('menuitem',name='Фото или видео',exact=True).click()
+                phase='file_upload'
+                await (await chooser.value).set_files(list(media))
+                phase='preview'
+                attached=main.locator('.attaches .attach img')
+                await expect(attached).to_have_count(len(media))
+                if any(m['mimeType']=='video/mp4' for m in media):
+                    await expect(main.locator('.attaches').get_by_role('button',name='Отменить загрузку',exact=True)).to_have_count(0,timeout=self.timeout*1000)
+                phase='preview_guard'
+                previews=await attached.evaluate_all('(es)=>es.map(e=>({src:e.src,name:e.alt}))')
+                if [p['name'] for p in previews]!=[m['name'] for m in media] or any(not p['src'].startswith('data:image/png;base64,' if m['mimeType']=='video/mp4' else 'blob:') for p,m in zip(previews,media)):
+                    raise MaxBlocked('upload_preview_mismatch')
+            phase='rich_text'
+            await rich.fill(self.page,composer,text,entities)
+            return composer,previews
+        except (Exception, asyncio.CancelledError) as error:
+            # Repository locations identify the exact failing UI step without
+            # logging exception messages, post text, URLs or browser DOM.
+            import logging, traceback
+            from pathlib import Path
+            root=Path(__file__).parent
+            locations=' > '.join(f'{Path(f.filename).name}:{f.lineno}:{f.name}'
+                for f in traceback.extract_tb(error.__traceback__) if Path(f.filename).parent==root)
+            logging.getLogger(__name__).warning('MAX compose failed step=%s error_type=%s error_module=%s elapsed=%.3f locations=%s',
+                phase,type(error).__name__,type(error).__module__,time.monotonic()-started,locations)
+            raise
+
 
     async def submit_plain_candidate(self, *, target, text, attempt_id, plan_digest, hooks, media=(), entities=(), reply_to=None):
         """Single trusted plain Send with durable native receipt, no effect retry.
