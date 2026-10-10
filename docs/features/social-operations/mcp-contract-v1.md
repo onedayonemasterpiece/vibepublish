@@ -200,8 +200,12 @@ MAX Web may auto-link a bare displayed domain such as `vk.cc/d2gEay` without
 an authored rich-link intent. Its composer/readback snapshot accepts that only
 when the displayed domain and path map exactly to the same HTTPS URL. Mismatched
 or disguised targets and explicit labeled links remain strictly verified. The
-channel's `scheduled_only` policy stays mandatory: publication uses the native
-MAX queue, not immediate Send or a ChatGPT timer. The same
+existing channel's `scheduled_only` policy stays mandatory: publication uses the
+native MAX queue, not immediate Send or a ChatGPT timer. The owner-authorized
+2026-10-10 extension permits newly verified exact channel bindings to opt into
+`publish_channel` for immediate publication, as specified in
+[exact MAX resolution](max-exact-resolution.md). It never silently converts an
+existing `scheduled_only` or `test_group` binding. The same
 callable can be injected through `max_factory` for offline tests. There is no
 custom provider worker or alternate social dispatch path.
 

@@ -35,7 +35,7 @@ class Target:
     def __post_init__(self):
         if not re.fullmatch(r'-[1-9][0-9]{0,19}', self.native_id):
             raise MaxBlocked('invalid_native_target')
-        if not self.alias or self.policy not in {'test_group', 'scheduled_only'}:
+        if not self.alias or self.policy not in {'test_group', 'scheduled_only', 'publish_channel'}:
             raise MaxBlocked('invalid_target_binding')
 
 
@@ -82,7 +82,7 @@ class RealMaxDriver:
         # Channel posts are provider-owned channel objects and are not reliably
         # marked as account-outgoing by MAX Web. Test-group reads remain limited
         # to this account's outgoing rows.
-        return '.messageWrapper' if bound.policy == 'scheduled_only' else '.messageWrapper--isOut'
+        return '.messageWrapper' if bound.policy in {'scheduled_only', 'publish_channel'} else '.messageWrapper--isOut'
 
     def _rows(self, main, text, *, outgoing=False):
         target = self.page.url.rsplit('/', 1)[-1]
@@ -218,6 +218,10 @@ class RealMaxDriver:
             raise MaxBlocked('causal_receipt_recipe_unverified')
         if target not in self.targets:
             raise MaxBlocked('immediate_publication_denied')
+        if self.targets[target].policy == 'publish_channel':
+            if action != 'publish' or scheduled_at is not None:
+                raise MaxBlocked('channel_publish_only')
+            return
         # Cancel is not immediate publication. The queued native snapshot and
         # exact bound object are mandatory in queue.cancel before any input.
         if action=='cancel':return
@@ -327,7 +331,8 @@ class RealMaxDriver:
         observer = None
         try:
             self.lane.assert_clear()
-            if self.targets[target].policy != 'test_group':
+            if (self.targets[target].policy not in {'test_group', 'publish_channel'}
+                    or self.targets[target].policy == 'publish_channel' and reply_to is not None):
                 raise MaxBlocked('immediate_publication_denied')
             if (not isinstance(text, str) or not text.strip() or len(text) > 4000
                     or not attempt_id or not plan_digest or hooks is None):
@@ -419,7 +424,8 @@ class RealMaxDriver:
                 if reply_to is not None or entities or any(m['mimeType']=='video/mp4' for m in media):
                     # Preserve the actual native reference before media inspection;
                     # a lost download/readback must never require another Send.
-                    if 'messageWrapper--isOut' not in (await rows.get_attribute('class') or '').split():
+                    if (self.targets[target].policy != 'publish_channel'
+                            and 'messageWrapper--isOut' not in (await rows.get_attribute('class') or '').split()):
                         raise MaxBlocked('nonexact_outgoing_candidate')
                     reference,native_id=await self._copy_native_reference(rows,target)
                     state.update(recovery_reference=reference,native_id=native_id,transition=transition)
@@ -670,7 +676,7 @@ class RealMaxDriver:
                         await row.scroll_into_view_if_needed()
                         count=await row.locator('[aria-label="Прикрепленные фото"] > button').count()
                         native_history_id=None
-                        if history_rows is not None and self.targets[target].policy=='scheduled_only':
+                        if history_rows is not None and self.targets[target].policy in {'scheduled_only', 'publish_channel'}:
                             matches=[candidate for candidate in history_rows
                                 if candidate['text']==text and candidate['media_count']==count]
                             if len(matches)>1:
@@ -698,7 +704,7 @@ class RealMaxDriver:
                             if published_wire_id(item['id']) not in history_ids:continue
                         items.append(item)
                 await self._account();await self._scope(target)
-                if native_item is None and self.targets[target].policy=='scheduled_only' and history_rows and not items:
+                if native_item is None and self.targets[target].policy in {'scheduled_only', 'publish_channel'} and history_rows and not items:
                     raise MaxBlocked('native_history_dom_projection_unavailable')
                 if native_item or incomplete:raise MaxBlocked('exact_read_not_observed')
                 return items
@@ -870,7 +876,7 @@ class RealMaxDriver:
         await self.page.bring_to_front()
         await row.scroll_into_view_if_needed()
         async def content():
-            if (self.targets[target].policy != 'scheduled_only'
+            if (self.targets[target].policy not in {'scheduled_only', 'publish_channel'}
                     and 'messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()
                     or await row.locator('.bubbleContent > .text').evaluate(rich.TEXT_JS)!=text
                     or await row.locator('audio').count()
@@ -1171,7 +1177,8 @@ class RealMaxDriver:
                     candidates = self._rows(main,text)
                     await expect(candidates).to_have_count(1, timeout=self.timeout*1000)
                     row = candidates
-                    if 'messageWrapper--isOut' not in (await row.get_attribute('class') or '').split():
+                    if (self.targets[target].policy != 'publish_channel'
+                            and 'messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()):
                         raise MaxBlocked('recovery_not_outgoing')
                     content = row.locator('.bubbleContent > .text')
                     await expect(content).to_have_count(1)
@@ -1189,7 +1196,8 @@ class RealMaxDriver:
                     await expect(candidates).to_have_count(1)
                     if await candidates.locator('.bubbleContent > .text').evaluate(rich.TEXT_JS) != text:
                         raise MaxBlocked('recovery_content_changed')
-                    if 'messageWrapper--isOut' not in (await candidates.get_attribute('class') or '').split():
+                    if (self.targets[target].policy != 'publish_channel'
+                            and 'messageWrapper--isOut' not in (await candidates.get_attribute('class') or '').split()):
                         raise MaxBlocked('recovery_not_outgoing')
                     fresh=await self._plain_candidate(target,text,candidates,media_count=state.get('media_slots',len(state['media'])))
                     if fresh.get('observed_media',[])!=first.get('observed_media',[]) or (observations and fresh.get('observed_media',[])!=observations[-1].get('observed_media',[])):

@@ -7,7 +7,13 @@ import json
 import os
 from pathlib import Path
 from .domain import DomainError
-from .storage import Store
+from .storage import ALL_BINDING_RIGHTS, ALL_SCOPES, Store
+
+
+PARTNER_SCOPES = frozenset({
+    "bootstrap", "publish", "publication.manage", "visual", "status",
+    "forward", "destination.profile",
+})
 
 
 def parser():
@@ -22,8 +28,13 @@ def parser():
     connect.add_argument('--account-type', choices=('unconfigured','fake','mtproto_user','mtproto_bot','vk_user','vk_group','max_web'), default='unconfigured')
     bind = sub.add_parser('bind'); bind.add_argument('--principal', required=True); bind.add_argument('--alias', required=True)
     bind.add_argument('--connection', required=True); bind.add_argument('--native-id', required=True); bind.add_argument('--label', required=True)
+    bind.add_argument('--right', action='append', choices=sorted(ALL_BINDING_RIGHTS),
+                      help='Repeat for the exact binding rights; replaces legacy defaults when supplied')
     partner = sub.add_parser('principal'); partner.add_argument('--tenant', required=True); partner.add_argument('--principal', required=True)
-    grant = sub.add_parser('grant-rights'); grant.add_argument('--binding-id', required=True); grant.add_argument('--right', action='append', required=True)
+    partner.add_argument('--scope', action='append', choices=sorted(ALL_SCOPES),
+                         help='Repeat for the exact principal scopes; replaces legacy defaults when supplied')
+    grant = sub.add_parser('grant-rights'); grant.add_argument('--binding-id', required=True)
+    grant.add_argument('--right', action='append', required=True, choices=sorted(ALL_BINDING_RIGHTS))
     revoke = sub.add_parser('revoke'); revoke.add_argument('--binding-id', required=True)
     asset = sub.add_parser('image'); asset.add_argument('--file', required=True, type=Path); asset.add_argument('--mime', required=True)
     video = sub.add_parser('video'); video.add_argument('--file', required=True, type=Path); video.add_argument('--mime', required=True, choices=('video/mp4',))
@@ -88,10 +99,11 @@ def main():
         if args.command == 'connection':
             store.add_connection(actor, args.id, args.provider, account_type=args.account_type, secret_ref=args.secret_ref, shared=args.shared)
         elif args.command == 'bind':
-            print(store.bind(actor, args.principal, args.alias, args.connection, args.native_id, label=args.label))
+            rights = {'rights': tuple(dict.fromkeys(args.right))} if args.right is not None else {}
+            print(store.bind(actor, args.principal, args.alias, args.connection, args.native_id, label=args.label, **rights))
         elif args.command == 'principal':
             print(json.dumps({'service_token': store.create_principal(args.tenant, args.principal,
-                scopes={'bootstrap','publish','publication.manage','visual','status','forward','destination.profile'})}))
+                scopes=frozenset(args.scope) if args.scope is not None else PARTNER_SCOPES)}))
         elif args.command == 'grant-rights':
             print(json.dumps({'rights':store.grant_binding_rights(actor,args.binding_id,args.right)}))
         elif args.command == 'revoke':

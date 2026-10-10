@@ -17,6 +17,16 @@ from contracts.social_mcp_v1 import STAGE
 
 ALL_SCOPES = frozenset({"bootstrap", "publish", "publication.manage", "visual", "status",
                         "engage", "destinations", "forward", "destination.profile"})
+DEFAULT_BINDING_RIGHTS = ("publish", "edit", "reschedule", "cancel", "delete", "forward")
+ALL_BINDING_RIGHTS = frozenset((*DEFAULT_BINDING_RIGHTS, "reply", "react", "basic_group_schedule"))
+
+
+def _validated_permissions(values, allowed, error_code):
+    """Reject malformed authority before credential generation or database writes."""
+    if not isinstance(values, (list, tuple, set, frozenset)) or any(
+            not isinstance(value, str) or value not in allowed for value in values):
+        raise DomainError(error_code)
+    return tuple(dict.fromkeys(values))
 
 
 class Store:
@@ -104,6 +114,7 @@ class Store:
     def create_principal(self, tenant: str, principal: str, *, owner=False,
                          scopes=ALL_SCOPES, timezone="Europe/Kaliningrad") -> str:
         """Local owner CLI only. No model-facing account administration method."""
+        scopes = _validated_permissions(scopes, ALL_SCOPES, "invalid_principal_scopes")
         ZoneInfo(timezone)
         token = secrets.token_urlsafe(32)
         with self.tx() as db:
@@ -160,9 +171,10 @@ class Store:
                        (connection, owner.tenant_id, provider, account_type, secret_ref, int(shared)))
 
     def bind(self, owner: Actor, principal: str, alias: str, connection: str, native_id: str, *,
-             label="Test destination", handle="", rights=("publish", "edit", "reschedule", "cancel", "delete", "forward")):
+             label="Test destination", handle="", rights=DEFAULT_BINDING_RIGHTS):
         if not owner.owner:
             raise DomainError("access_denied", next_action="contact_owner")
+        rights = _validated_permissions(rights, ALL_BINDING_RIGHTS, "invalid_binding_rights")
         import re
         if not re.fullmatch(r"[a-z][a-z0-9_-]{0,79}", alias):
             raise DomainError("invalid_alias")
@@ -186,9 +198,9 @@ class Store:
 
     def grant_binding_rights(self, owner: Actor, binding_id: str, rights):
         """Owner-only additive grant; never revokes epochs or clears quarantine."""
-        allowed={'publish','edit','reschedule','cancel','delete','forward','reply','react','basic_group_schedule'}
-        if not isinstance(rights,(list,tuple)) or not rights or any(r not in allowed for r in rights):
+        if not isinstance(rights, (list, tuple)) or not rights:
             raise DomainError('invalid_binding_rights')
+        rights = _validated_permissions(rights, ALL_BINDING_RIGHTS, 'invalid_binding_rights')
         with self.tx() as db:
             self.current(db,owner)
             row=db.execute('SELECT * FROM bindings WHERE id=? AND tenant_id=? AND active=1',(binding_id,owner.tenant_id)).fetchone()

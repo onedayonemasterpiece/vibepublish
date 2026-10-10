@@ -111,7 +111,10 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                         field = identity_page.locator('aside .phone')
                         await field.wait_for(timeout=10000)
                         return await field.inner_text() == phone
-                    yield RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery, visual_palette=visual_palette, live_writes=live_writes, semantic_selectors=True, evidence_pages=(page,identity_page))
+                    driver = RealMaxDriver(page, lane, targets=targets, account_check=account_check, timeout=timeout, visual_recovery=visual_recovery, visual_palette=visual_palette, live_writes=live_writes, semantic_selectors=True, evidence_pages=(page,identity_page))
+                    driver.allowlist_path = Path(allowlist).absolute()
+                    driver.binding_snapshot = binding
+                    yield driver
                 finally:
                     await context.close()
         finally:

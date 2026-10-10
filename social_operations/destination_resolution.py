@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import ExitStack
 
 from .domain import DomainError, canonical, digest, new_id
 
@@ -10,8 +11,9 @@ from .domain import DomainError, canonical, digest, new_id
 _ACCOUNT_TYPES = {
     "telegram": {"mtproto_user"},
     "vk": {"vk_user", "vk_group"},
+    "max": {"max_web"},
 }
-_PREFIX = {"telegram": "tg", "vk": "vk"}
+_PREFIX = {"telegram": "tg", "vk": "vk", "max": "max"}
 
 
 def admit(app, db, actor, command, intent):
@@ -24,6 +26,11 @@ def admit(app, db, actor, command, intent):
         if command.get("provider_id"):
             raise DomainError("telegram_destination_reference_invalid")
         from adapters.telegram_discovery import parse_destination_url
+        parse_destination_url(command["url"])
+    elif provider == "max":
+        if command.get("provider_id"):
+            raise DomainError("max_destination_reference_invalid")
+        from adapters.max_discovery import parse_destination_url
         parse_destination_url(command["url"])
     else:
         from adapters.vk_discovery import parse_destination
@@ -42,6 +49,8 @@ def admit(app, db, actor, command, intent):
             connections = ordinary
     if len(connections) != 1:
         raise DomainError(f"{provider}_discovery_connection_ambiguous", next_action="contact_owner")
+    if provider == "max" and connections[0]["secret_ref"] != "VIBEPUBLISH_MAX_PROFILE":
+        raise DomainError("max_discovery_requires_live_connection")
     request = dict(intent, _connection_id=connections[0]["id"])
     return app._new_operation(db, actor, "destinations", request)
 
@@ -66,7 +75,7 @@ async def process(worker, op, actor):
     await worker.hooks(op).emit_progress(
         "accepted", "started", f"Checking exact {provider} destination access and publish permission"
     )
-    budget = min(30, op["deadline"] - worker.store.clock())
+    budget = min(120 if provider == "max" else 30, op["deadline"] - worker.store.clock())
     if budget <= 0:
         raise DomainError("command_expired")
     adapter = worker.adapter(provider, connection_id)
@@ -77,6 +86,10 @@ async def process(worker, op, actor):
                     from adapters.telegram_discovery import resolve
                     evidence = await resolve(adapter, args["command"]["url"])
                     rights = evidence["rights"]
+                elif provider == "max":
+                    from adapters.max_discovery import resolve
+                    evidence = await resolve(adapter, args["command"]["url"])
+                    rights = evidence["rights"]
                 else:
                     from adapters.vk_discovery import resolve
                     evidence = await resolve(adapter, args["command"])
@@ -84,84 +97,94 @@ async def process(worker, op, actor):
         except TimeoutError:
             raise DomainError("provider_read_deadline", next_action="refresh") from None
 
-    with worker.store.tx() as db:
-        worker.store.fence(db, op["id"], worker.id, op["fence"])
-        actor = worker.store.current(db, actor)
-        current = db.execute(
-            "SELECT * FROM connections WHERE id=? AND tenant_id=? AND active=1",
-            (connection_id, actor.tenant_id),
-        ).fetchone()
-        if (not current or current["provider"] != provider
-                or current["account_type"] not in _ACCOUNT_TYPES[provider]):
-            raise DomainError("access_revoked", next_action="reauthorize")
-        destination = db.execute(
-            "SELECT * FROM destinations WHERE connection_id=? AND native_id=?",
-            (connection_id, evidence["native_id"]),
-        ).fetchone()
-        dest_id = destination["id"] if destination else new_id("dest")
-        binding = db.execute(
-            "SELECT * FROM bindings WHERE principal_id=? AND destination_id=?",
-            (actor.principal_id, dest_id),
-        ).fetchone()
-        if binding and not binding["active"]:
-            raise DomainError("access_revoked", next_action="reauthorize")
-        if not destination:
-            db.execute(
-                "INSERT INTO destinations VALUES(?,?,?,?,?)",
-                (dest_id, connection_id, evidence["native_id"], evidence["handle"], evidence["label"]),
-            )
-        else:
-            db.execute(
-                "UPDATE destinations SET handle=?,label=? WHERE id=?",
-                (evidence["handle"], evidence["label"], dest_id),
-            )
-        changed = False
-        if not binding:
-            alias = _PREFIX[provider] + "_" + digest([connection_id, evidence["native_id"]])[:20]
-            if (db.execute(
-                    "SELECT 1 FROM bindings WHERE tenant_id=? AND principal_id=? AND alias=?",
-                    (actor.tenant_id, actor.principal_id, alias),
-                ).fetchone()
-                    or db.execute(
-                        "SELECT 1 FROM destination_sets WHERE tenant_id=? AND principal_id=? AND alias=?",
-                        (actor.tenant_id, actor.principal_id, alias),
-                    ).fetchone()):
-                raise DomainError("alias_conflict")
-            db.execute(
-                "INSERT INTO bindings(id,tenant_id,principal_id,alias,destination_id,rights) VALUES(?,?,?,?,?,?)",
-                (new_id("bind"), actor.tenant_id, actor.principal_id, alias, dest_id, canonical(rights)),
-            )
-            changed = True
-            revision = 1
-        else:
-            alias = binding["alias"]
-            existing_rights = json.loads(binding["rights"])
-            if "publish" not in existing_rights:
+    with ExitStack() as registration:
+        with worker.store.tx() as db:
+            worker.store.fence(db, op["id"], worker.id, op["fence"])
+            actor = worker.store.current(db, actor)
+            if not actor.owner:
                 raise DomainError("access_denied", next_action="contact_owner")
-            merged = list(dict.fromkeys(existing_rights + rights))
-            if merged != existing_rights:
-                db.execute("UPDATE bindings SET rights=? WHERE id=?", (canonical(merged), binding["id"]))
+            current = db.execute(
+                "SELECT * FROM connections WHERE id=? AND tenant_id=? AND active=1",
+                (connection_id, actor.tenant_id),
+            ).fetchone()
+            if (not current or current["provider"] != provider
+                    or current["account_type"] not in _ACCOUNT_TYPES[provider]):
+                raise DomainError("access_revoked", next_action="reauthorize")
+            if provider == "max" and dict(current) != dict(connection):
+                raise DomainError("access_revoked", next_action="reauthorize")
+            destination = db.execute(
+                "SELECT * FROM destinations WHERE connection_id=? AND native_id=?",
+                (connection_id, evidence["native_id"]),
+            ).fetchone()
+            dest_id = destination["id"] if destination else new_id("dest")
+            binding = db.execute(
+                "SELECT * FROM bindings WHERE principal_id=? AND destination_id=?",
+                (actor.principal_id, dest_id),
+            ).fetchone()
+            if binding and not binding["active"]:
+                raise DomainError("access_revoked", next_action="reauthorize")
+            if not destination:
+                db.execute(
+                    "INSERT INTO destinations VALUES(?,?,?,?,?)",
+                    (dest_id, connection_id, evidence["native_id"], evidence["handle"], evidence["label"]),
+                )
+            else:
+                db.execute(
+                    "UPDATE destinations SET handle=?,label=? WHERE id=?",
+                    (evidence["handle"], evidence["label"], dest_id),
+                )
+            changed = False
+            if not binding:
+                alias = _PREFIX[provider] + "_" + digest([connection_id, evidence["native_id"]])[:20]
+                if (db.execute(
+                        "SELECT 1 FROM bindings WHERE tenant_id=? AND principal_id=? AND alias=?",
+                        (actor.tenant_id, actor.principal_id, alias),
+                    ).fetchone()
+                        or db.execute(
+                            "SELECT 1 FROM destination_sets WHERE tenant_id=? AND principal_id=? AND alias=?",
+                            (actor.tenant_id, actor.principal_id, alias),
+                        ).fetchone()):
+                    raise DomainError("alias_conflict")
+                db.execute(
+                    "INSERT INTO bindings(id,tenant_id,principal_id,alias,destination_id,rights) VALUES(?,?,?,?,?,?)",
+                    (new_id("bind"), actor.tenant_id, actor.principal_id, alias, dest_id, canonical(rights)),
+                )
                 changed = True
-            revision = binding["epoch"]
-        if changed:
+                revision = 1
+            else:
+                alias = binding["alias"]
+                existing_rights = json.loads(binding["rights"])
+                if "publish" not in existing_rights:
+                    raise DomainError("access_denied", next_action="contact_owner")
+                merged = list(dict.fromkeys(existing_rights + rights))
+                if merged != existing_rights:
+                    db.execute("UPDATE bindings SET rights=? WHERE id=?", (canonical(merged), binding["id"]))
+                    changed = True
+                revision = binding["epoch"]
+            if changed:
+                db.execute(
+                    "UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?",
+                    (actor.principal_id,),
+                )
+            if provider == "max":
+                # Roll back the private allowlist if the fenced ledger transaction
+                # fails; a crash-only orphan grants no new core binding authority.
+                registration.enter_context(adapter.register_resolved_destination(evidence))
+            result = {
+                "destinations": [{
+                    "alias": alias,
+                    "kind": "destination",
+                    "label": evidence["label"],
+                    "revision": revision,
+                    "provider": provider,
+                    "native_id": evidence["native_id"],
+                }]
+            }
             db.execute(
-                "UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?",
-                (actor.principal_id,),
+                "UPDATE operations SET state='verified',complete=1,work_state='done',result=? WHERE id=?",
+                (canonical(result), op["id"]),
             )
-        result = {
-            "destinations": [{
-                "alias": alias,
-                "kind": "destination",
-                "label": evidence["label"],
-                "revision": revision,
-                "provider": provider,
-            }]
-        }
-        db.execute(
-            "UPDATE operations SET state='verified',complete=1,work_state='done',result=? WHERE id=?",
-            (canonical(result), op["id"]),
-        )
-        worker.store.event(
-            db, op["id"], "finished", "completed",
-            f"{provider} exact destination and publish authority verified; native target {evidence['native_id']}",
-        )
+            worker.store.event(
+                db, op["id"], "finished", "completed",
+                f"{provider} exact destination and publish authority verified; native target {evidence['native_id']}",
+            )
