@@ -7,6 +7,7 @@ Bot API and Business connections are different capability families, not aliases.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -46,7 +47,7 @@ from social_operations.rich_text import (ENTITY_TYPES, from_native, to_native,
 from .telegram_emoji import check_custom, load_set
 _TYPES = {'InputMediaUploadedPhoto', 'InputPhoto', 'InputMediaPhoto', 'InputSingleMedia', 'InputStickerSetShortName',
           'InputReplyToMessage', 'InputMediaUploadedDocument', 'DocumentAttributeFilename',
-          'InputDocument', 'InputMediaDocument'} | set(ENTITY_TYPES.values())
+          'InputDocument', 'InputMediaDocument', 'DocumentAttributeVideo'} | set(ENTITY_TYPES.values())
 
 
 class TelethonTypes:
@@ -219,7 +220,7 @@ class TelegramAdapter:
             if request.action not in {'publish', 'forward', 'edit', 'reschedule', 'cancel', 'delete'}:
                 raise DomainError('telegram_action_unsupported')
             provider_content(request.content_json, telegram_text_limit(request))
-            verify_assets(request, allow_document=True)
+            verify_assets(request, allow_video=True, allow_document=True)
             roles = {'document' if asset.role == 'document' else 'photo' for asset in request.assets}
             if len(request.assets) > 1 and len(roles) > 1:
                 raise DomainError('telegram_mixed_media_album_needs_review')
@@ -499,16 +500,21 @@ class TelegramAdapter:
             for ordinal, asset in enumerate(r.assets):
                 await hooks.emit_progress('uploading', 'started', f'Staging media {ordinal+1}/{len(r.assets)}')
                 stream = io.BytesIO(asset.data)
-                extension = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'application/pdf':'pdf', 'image/vnd.djvu':'djvu'}[asset.mime]
+                extension = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'application/pdf':'pdf', 'image/vnd.djvu':'djvu', 'video/mp4':'mp4'}[asset.mime]
                 stream.name = f'verified-{ordinal+1}.{extension}'
                 if asset.role=='document' and asset.mime in {'application/pdf','image/vnd.djvu'} and asset.alt_text:
                     candidate=asset.alt_text
                     if len(candidate)<=160 and '/' not in candidate and '\\' not in candidate and all(ord(c)>=32 for c in candidate):
                         stream.name=candidate
                 uploaded = await self.client.upload_file(stream, file_size=asset.size, file_name=stream.name)
-                if asset.role == 'document':
+                if asset.role in {'document', 'video'}:
+                    attributes=[self.tl.type('DocumentAttributeFilename', file_name=stream.name)]
+                    if asset.role == 'video':
+                        from social_operations.video_assets import video_metadata
+                        width,height,duration = await asyncio.to_thread(video_metadata, asset.data)
+                        attributes.append(self.tl.type('DocumentAttributeVideo', duration=duration, w=width, h=height, supports_streaming=True))
                     uploaded_media = self.tl.type('InputMediaUploadedDocument', file=uploaded, mime_type=asset.mime,
-                        attributes=[self.tl.type('DocumentAttributeFilename', file_name=stream.name)], force_file=True)
+                        attributes=attributes, force_file=asset.role == 'document')
                     media_result = await self._call('upload', peer=entity, media=uploaded_media)
                     document = getattr(media_result, 'document', None)
                     if document is None or type(getattr(document, 'id', None)) is not int:

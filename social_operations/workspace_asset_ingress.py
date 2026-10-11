@@ -10,6 +10,7 @@ import threading
 from starlette.concurrency import run_in_threadpool
 
 from .assets import insert_verified_image, verify_image
+from .video_assets import insert_verified_video, verify_video
 from .chat_file_ingress import authority
 from .domain import DomainError, digest, new_id, timestamp
 
@@ -47,7 +48,7 @@ def _validate(args):
     if kind == 'import_begin':
         if (not isinstance(command.get('source_sha256'), str)
                 or not re.fullmatch('[0-9a-f]{64}', command['source_sha256'])
-                or command.get('mime') not in {'image/png', 'image/jpeg', 'image/webp'}
+                or command.get('mime') not in {'image/png', 'image/jpeg', 'image/webp', 'video/mp4'}
                 or type(command.get('size_bytes')) is not int
                 or not 1 <= command['size_bytes'] <= MAX_UPLOAD_BYTES):
             raise DomainError('invalid_input')
@@ -201,7 +202,11 @@ async def _finish(service, actor, key, intent):
         try:
             if len(data) != row['size_bytes'] or hashlib.sha256(data).hexdigest() != row['source_sha256']:
                 raise DomainError('workspace_upload_integrity')
-            image = await run_in_threadpool(verify_image, data, row['mime'])
+            is_video = row['mime'] == 'video/mp4'
+            if is_video:
+                image = await run_in_threadpool(verify_video, data, row['mime'], artifact_root=store.path.parent/'artifacts'/'video-processing')
+            else:
+                image = await run_in_threadpool(verify_image, data, row['mime'])
         except DomainError:
             with store.tx() as db:
                 db.execute("UPDATE workspace_uploads SET state='aborted',bytes=X'' "
@@ -216,7 +221,7 @@ async def _finish(service, actor, key, intent):
                 row = _owned(db, actor, ident)
                 if row['state'] != 'completed':
                     _receiving(row, store.clock())
-                    resource = insert_verified_image(store, db, actor, image)
+                    resource = (insert_verified_video if is_video else insert_verified_image)(store, db, actor, image)
                     db.execute("UPDATE workspace_uploads SET state='completed',bytes=X'',resource_id=? WHERE id=?",
                                (resource, ident))
                     row = _owned(db, actor, ident)

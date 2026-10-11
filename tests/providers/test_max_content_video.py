@@ -190,8 +190,8 @@ async def test_missing_max_entities_never_verifies(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('provider,account',[('telegram','mtproto_user'),('vk','vk_user'),('max','fake')])
-async def test_video_role_does_not_widen_other_provider_or_fake_bindings(tmp_path,video_bytes,provider,account):
+@pytest.mark.parametrize('provider,account',[('max','fake')])
+async def test_video_role_does_not_widen_fake_max_bindings(tmp_path,video_bytes,provider,account):
     store,actor,app=runtime(tmp_path,provider,account)
     asset=import_video(store,actor,video_bytes,'video/mp4')
     result=await app.call(actor,'vibepublish_publish',{'to':['target'],'content':{'text':'Video'},

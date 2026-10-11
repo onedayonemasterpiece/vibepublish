@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.10.0-runtime"
+VERSION = "1.11.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -220,7 +220,7 @@ DEFS["receipt"]["properties"]["workspace_upload"] = obj({
     "upload_id": ID, "received_bytes": {"type": "integer", "minimum": 0, "maximum": 20971520},
     "size_bytes": {"type": "integer", "minimum": 1, "maximum": 20971520},
     "source_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
-    "mime": enum("image/png", "image/jpeg", "image/webp"),
+    "mime": enum("image/png", "image/jpeg", "image/webp", "video/mp4"),
     "expires_at": DATE, "state": enum("receiving", "completed", "aborted", "expired")},
     ("upload_id", "received_bytes", "size_bytes", "source_sha256", "mime", "expires_at", "state"))
 DEFS["media_store_item"] = obj({
@@ -327,7 +327,7 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
 browser_artifact_uri = string(47, pattern=r"^artifact://[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 workspace_import_commands = [
     arm("import_begin", {"source_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
-        "mime": enum("image/png", "image/jpeg", "image/webp"),
+        "mime": enum("image/png", "image/jpeg", "image/webp", "video/mp4"),
         "size_bytes": {"type": "integer", "minimum": 1, "maximum": 20971520}},
         ("source_sha256", "mime", "size_bytes")),
     arm("import_chunk", {"upload_id": ID, "offset": {"type": "integer", "minimum": 0, "maximum": 20971520},

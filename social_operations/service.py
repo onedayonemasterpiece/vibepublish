@@ -418,7 +418,7 @@ class Application:
         if target.get('visual') and not pending_visual:
             raise DomainError('visual_requires_visual_service')
         content = target.get('renderings', {}).get(binding['provider'], target.get('content', {'text': ''}))
-        assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] == 'max' and binding['account_type'] == 'max_web', allow_document=binding['provider'] == 'telegram')
+        assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] in {'telegram', 'vk'} or (binding['provider'] == 'max' and binding['account_type'] == 'max_web'), allow_document=binding['provider'] == 'telegram')
         if binding['account_type'] != 'fake':
             for asset in assets:
                 fixture = db.execute('SELECT fixture FROM visual_asset_origins WHERE asset_id=?', (asset['ref'],)).fetchone()
