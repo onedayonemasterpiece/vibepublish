@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 from social_operations.domain import DomainError
+from social_operations.provider_diagnostics import provider_call
 
 API_VERSION = '5.199'  # Donor-tested contract, not an assertion of latest API.
 # Values are (role, required fields, allowed fields). There is no MCP passthrough.
@@ -142,6 +143,10 @@ class VKHTTPTransport:
                            'groups.getLongPollSettings', 'groups.getLongPollServer'})
 
     async def _post(self, url, data, *, api=False):
+        with provider_call('vk', 'api_http' if api else 'media_upload') as diagnostic:
+            return await self._post_observed(url, data, api=api, diagnostic=diagnostic)
+
+    async def _post_observed(self, url, data, *, api=False, diagnostic):
         import aiohttp  # Optional production extra; no SDK/network needed by scripted tests.
         host = validated_url(url, api=api)
         addresses = await public_addresses(host)
@@ -150,6 +155,11 @@ class VKHTTPTransport:
                 cookie_jar=aiohttp.DummyCookieJar(), auto_decompress=False,
                 timeout=aiohttp.ClientTimeout(total=25), headers={'Accept-Encoding': 'identity'}) as session:
             async with session.post(url, data=data, allow_redirects=False) as response:
+                diagnostic['http_status'] = response.status
+                try:
+                    diagnostic['retry_after_s'] = float(response.headers.get('Retry-After', ''))
+                except (ValueError, TypeError, AttributeError):
+                    pass
                 if response.status != 200:
                     phase = 'api' if api else 'media_upload'
                     # Only bounded status and a static phase are safe to persist.
@@ -164,6 +174,10 @@ class VKHTTPTransport:
                 return decoded_json(b''.join(chunks), response.headers.get('Content-Encoding', '').lower())
 
     async def invoke(self, *, role: str, method: str, params: dict):
+        with provider_call('vk', method if method in POLICIES else 'unsupported') as diagnostic:
+            return await self._invoke_observed(role=role, method=method, params=params, diagnostic=diagnostic)
+
+    async def _invoke_observed(self, *, role, method, params, diagnostic):
         policy = POLICIES.get(method)
         if not policy or not role_allowed(role, method) or not policy[1] <= set(params) or set(params) - policy[2]:
             raise DomainError('vk_call_not_allowed')
@@ -199,6 +213,7 @@ class VKHTTPTransport:
             raise DomainError('vk_transport_failed') from None
         if not isinstance(response, dict) or 'response' not in response or 'error' in response:
             code = response.get('error', {}).get('error_code') if isinstance(response, dict) and isinstance(response.get('error'), dict) else None
+            diagnostic['provider_code'] = code
             raise DomainError('vk_captcha_needs_human' if code == 14 else 'vk_cooldown' if code in {6, 9, 29} else 'vk_api_failed', next_action='contact_owner')
         return response['response']
 

@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from playwright.async_api import expect
 from . import rich
 from .profile import MaxBlocked
+from .diagnostics import observe, observed
 from .wire import QueueObserver
 
 MOSCOW=ZoneInfo('Europe/Moscow')
@@ -13,6 +14,7 @@ def instant(milliseconds):
     return datetime.fromtimestamp(milliseconds/1000,timezone.utc).isoformat().replace("+00:00","Z")
 
 
+@observed('native_queue')
 async def open_queue(driver,target,observer):
     main=await driver._scope(target)
     control=main.get_by_role('button',name='Открыть отложенные сообщения',exact=True)
@@ -23,6 +25,7 @@ async def open_queue(driver,target,observer):
     return await observer.wait(driver.timeout)
 
 
+@observed('scheduled_readback')
 async def item(driver,target,native,main):
     if native['status'] not in (None,'EDITED'):
         raise MaxBlocked('native_schedule_status_unqualified')
@@ -52,7 +55,7 @@ async def read(driver,target,native_item=None,*,passes=2):
     for _ in range(passes):
         async with QueueObserver(driver.page,target,driver.origin,driver.evidence_pages) as observer:
             await driver._account()
-            await driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded')
+            await observe('navigation', driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded'))
             natives=await open_queue(driver,target,observer)
             if native_item is not None:natives=[x for x in natives if x['id']==native_item]
             if native_item is not None and len(natives)!=1:raise MaxBlocked('native_scheduled_item_not_found')
@@ -65,6 +68,7 @@ async def read(driver,target,native_item=None,*,passes=2):
     return observations[-1]
 
 
+@observed('calendar')
 async def set_time(driver,scheduled_at):
     """Observed calendar/day and accessible spinbuttons; never editor internals."""
     import re
@@ -99,6 +103,7 @@ async def set_time(driver,scheduled_at):
     return dialog,dict(month=desired,day=str(wanted.day),hour=str(wanted.hour),minute=str(wanted.minute))
 
 
+@observed('schedule_menu')
 async def open_schedule_dialog(driver,target,main):
     """Observed group/channel menu labels, never immediate Send."""
     await driver._open_context_menu(main.get_by_role('button',name='Отправить сообщение',exact=True))
@@ -118,13 +123,13 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
             # surface has no entry control; never treat a missing native ITEM as
             # evidence of deletion or cancellation.
             async with QueueObserver(driver.page,target,driver.origin,driver.evidence_pages) as observer:
-                await driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded')
+                await observe('navigation', driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded'))
                 main=await driver._scope(target)
                 await expect(main.locator(COMPOSER)).to_have_count(1)
                 await main.locator('.messageWrapper').first.wait_for(timeout=driver.timeout*1000)
                 if await main.get_by_role('button',name='Открыть отложенные сообщения',exact=True).count():
                     baseline=await open_queue(driver,target,observer)
-                    await driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded')
+                    await observe('navigation', driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded'))
                     main=await driver._scope(target)
                 else:baseline=[]
             when=int(datetime.fromisoformat(scheduled_at.replace('Z','+00:00')).timestamp()*1000)
@@ -168,15 +173,15 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
             phase_budget.reschedule(asyncio.get_running_loop().time()+driver.timeout)
             await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_schedule_form_changed')
-            await confirm.click()
-            transition=await guard.evaluate('(g)=>g.result()')
+            await observe('schedule_submit', confirm.click())
+            transition=await observe('submit_transition', guard.evaluate('(g)=>g.result()'))
             if transition!=dict(clicks=1,blocked=False):raise MaxBlocked('native_schedule_click_unverified')
             state['transition']=transition
             await hooks.checkpoint('MAX_SUBMIT_CONFIRMED',json.dumps(state))
             await guard.evaluate('(g)=>g.stop()');await guard.dispose();guard=None
             # A fresh native reply, not a composer/toast, supplies identity/time.
             async with QueueObserver(driver.page,target,driver.origin,driver.evidence_pages) as observer:
-                await driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded')
+                await observe('navigation', driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded'))
                 natives=await open_queue(driver,target,observer)
                 matches=[x for x in natives if x['id'] not in state['baseline_native_ids'] and x['text']==text and x['time_ms']==when and x['media_count']==len(media)]
                 if len(matches)!=1:raise MaxBlocked('native_schedule_identity_ambiguous')
@@ -218,7 +223,7 @@ async def reconcile(driver,state):
             native=state.get('native_id')
             if native is None:
                 async with QueueObserver(driver.page,target,driver.origin,driver.evidence_pages) as observer:
-                    await driver._account();await driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded')
+                    await driver._account();await observe('navigation', driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded'))
                     rows=await open_queue(driver,target,observer)
                     when=int(datetime.fromisoformat(state['scheduled_at'].replace('Z','+00:00')).timestamp()*1000)
                     matches=[x for x in rows if x['id'] not in state['baseline_native_ids'] and x['text']==state['text'] and x['time_ms']==when and x['media_count']==state['media_slots']]
@@ -261,7 +266,7 @@ async def legacy_unreachable_guard(driver,state):
         async with asyncio.timeout(driver.timeout):
             for _ in range(2):
                 driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
-                await driver._account();await driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded')
+                await driver._account();await observe('navigation', driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded'))
                 main=await driver._scope(target)
                 await main.locator('.messageWrapper').first.wait_for(timeout=driver.timeout*1000)
                 if await driver._rows(main,state['text']).count():return None
@@ -340,8 +345,8 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
             phase_budget.reschedule(asyncio.get_running_loop().time()+driver.timeout)
             await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_reschedule_form_changed')
-            await confirm.click()
-            transition=await guard.evaluate('(g)=>g.result()')
+            await observe('schedule_submit', confirm.click())
+            transition=await observe('submit_transition', guard.evaluate('(g)=>g.result()'))
             if transition!=dict(clicks=1,blocked=False):raise MaxBlocked('native_reschedule_click_unverified')
             await hooks.checkpoint('MAX_RESCHEDULE_CONFIRMED',json.dumps(dict(state,transition=transition)))
             await guard.evaluate('(g)=>g.stop()');await guard.dispose();guard=None
@@ -377,7 +382,7 @@ async def rescheduled_item(driver,state):
     """
     target=state['target'];old=state['existing_id']
     async with QueueObserver(driver.page,target,driver.origin,driver.evidence_pages) as observer:
-        await driver._account();await driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded')
+        await driver._account();await observe('navigation', driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded'))
         natives=await open_queue(driver,target,observer)
         matches=[x for x in natives if x['id']==old]
         if not matches:
@@ -411,7 +416,7 @@ async def cancelled_item(driver,state):
     for _ in range(2):
         async with QueueObserver(driver.page,state['target'],driver.origin,driver.evidence_pages) as observer:
             await driver._account()
-            await driver.page.goto(driver.origin+'/'+state['target'],wait_until='domcontentloaded')
+            await observe('navigation', driver.page.goto(driver.origin+'/'+state['target'],wait_until='domcontentloaded'))
             main=await driver._scope(state['target'])
             entry=main.get_by_role('button',name='Открыть отложенные сообщения',exact=True)
             if await entry.count():
@@ -476,8 +481,8 @@ async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
             await hooks.before_effect(attempt_id,plan_digest)
             await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_cancel_guard_changed')
-            await button.click();await expect(dialog).to_have_count(0);await expect(row).to_have_count(0)
-            transition=await guard.evaluate('(g)=>g.result()')
+            await observe('scheduled_update_submit', button.click());await expect(dialog).to_have_count(0);await expect(row).to_have_count(0)
+            transition=await observe('submit_transition', guard.evaluate('(g)=>g.result()'))
             if transition!=dict(clicks=1,removed=True,blocked=False):raise MaxBlocked('native_cancel_transition_unverified')
             state['transition']=transition
             await hooks.checkpoint('MAX_CANCEL_CONFIRMED',json.dumps(state))
@@ -563,7 +568,7 @@ async def edit(driver,*,existing,text,entities,attempt_id,plan_digest,hooks):
             if not await guard.evaluate('(g)=>g.ready()'):
                 await hooks.emit_progress('validating','failed',__import__('json').dumps(await guard.evaluate('(g)=>g.checks()')))
                 raise MaxBlocked('native_edit_guard_changed')
-            await button.click();state['transition']=await guard.evaluate('(g)=>g.result()')
+            await observe('scheduled_update_submit', button.click());state['transition']=await observe('submit_transition', guard.evaluate('(g)=>g.result()'))
             if state['transition']!=dict(clicks=1,blocked=False):raise MaxBlocked('native_edit_click_unverified')
             await hooks.checkpoint('MAX_NATIVE_EDIT_CONFIRMED',json.dumps(state))
             await expect(heading).to_have_count(0)
