@@ -23,7 +23,7 @@ class Context:
 
 
 @pytest.mark.parametrize("api,phase", [(True, "api"), (False, "media_upload")])
-@pytest.mark.parametrize("status", [301, 400, 403, 413, 429, 500, 503])
+@pytest.mark.parametrize("status", [301, 400, 403, 413, 429, 500, 502, 503, 504])
 def test_http_failure_has_only_status_and_static_phase(api, phase, status):
     response = SimpleNamespace(status=status, headers={'Retry-After':'13', 'Set-Cookie':'secret'})
     events = []
@@ -44,6 +44,8 @@ def test_http_failure_has_only_status_and_static_phase(api, phase, status):
                 {"access_token": "secret", "photo": b"private"}, api=api))
     error = raised.value
     assert error.code == "vk_http_failed"
+    assert error.http_status == status
+    assert error.http_phase == phase
     assert error.message == f"VK {phase} HTTP status {status}"
     assert error.output()["error"]["message"] == error.message
     assert "secret" not in str(error.output())

@@ -541,7 +541,11 @@ class VKAdapter:
                 try:
                     receipt = await self.transport.upload_photo(url, asset.data, asset.mime)
                 except DomainError as exc:
-                    if exc.code != 'vk_upload_transient_empty_photo' or upload_attempt == 2:
+                    transient = (exc.code == 'vk_upload_transient_empty_photo' or (
+                        exc.code == 'vk_http_failed'
+                        and getattr(exc, 'http_phase', None) == 'media_upload'
+                        and getattr(exc, 'http_status', None) in {502, 503, 504}))
+                    if not transient or upload_attempt == 2:
                         raise
                     await asyncio.sleep(upload_attempt + 1)
                     continue
