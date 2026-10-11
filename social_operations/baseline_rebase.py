@@ -45,10 +45,18 @@ def rebase(app, actor, args):
                 raise DomainError("rebase_not_available")
             child = children[0]
             old = json.loads(child["plan"])
+            missing = json.loads(child["result"]).get("missing_checks", [])
+            failure = json.loads(previous["error"] or "{}").get("error", {})
+            upload_failed = ("vk_http_failed" in missing
+                and failure.get("code") == "vk_http_failed"
+                and failure.get("message") in {
+                    "VK media_upload HTTP status 502",
+                    "VK media_upload HTTP status 503",
+                    "VK media_upload HTTP status 504"})
             if (child["id"] != change["attempt_id"] or child["dispatched"]
                     or child["state"] not in {"blocked", "failed"}
                     or old["provider"] != "vk" or old["action"] != "edit"
-                    or "remote_revision_conflict" not in json.loads(child["result"]).get("missing_checks", [])
+                    or not ("remote_revision_conflict" in missing or upload_failed)
                     or not old.get("existing") or old["existing"]["namespace"] != "published"):
                 raise DomainError("rebase_not_available")
             if db.execute("SELECT 1 FROM attempt_recovery WHERE attempt_id=? AND finalize_state='pending'",
