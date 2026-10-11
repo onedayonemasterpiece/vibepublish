@@ -151,7 +151,10 @@ class VKHTTPTransport:
                 timeout=aiohttp.ClientTimeout(total=25), headers={'Accept-Encoding': 'identity'}) as session:
             async with session.post(url, data=data, allow_redirects=False) as response:
                 if response.status != 200:
-                    raise DomainError('vk_http_failed')
+                    phase = 'api' if api else 'media_upload'
+                    # Only bounded status and a static phase are safe to persist.
+                    raise DomainError('vk_http_failed',
+                        message=f'VK {phase} HTTP status {int(response.status)}')
                 chunks, length = [], 0
                 async for chunk in response.content.iter_chunked(65536):
                     length += len(chunk)
