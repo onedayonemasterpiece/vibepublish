@@ -17,29 +17,18 @@ class SavedPhotos(Copies):
         self.read_failure = None
 
     async def invoke(self, **args):
-        if args["method"] != "photos.getById":
-            return await super().invoke(**args)
-        self.calls.append((args["method"], args["role"], copy.deepcopy(args["params"])))
-        assert args["role"] == "reader"
-        if self.read_failure == "transport":
-            raise OSError("fixture photo read failed")
-        values = args["params"]["photos"]
-        values = values if isinstance(values, (tuple, list)) else values.split(",")
-        rows = []
-        for value in values:
-            owner, ident = map(int, str(value).split("_")[:2])
-            photo = self.photos.get(ident)
-            if photo is not None and photo["owner_id"] == owner:
-                rows.append(copy.deepcopy(photo))
-        if self.read_failure == "missing":
-            rows.pop()
-        elif self.read_failure == "reorder":
-            rows.reverse()
-        elif self.read_failure == "wrong_id":
-            rows[0]["id"] += 1
-        elif self.read_failure == "bytes":
-            self.blobs[rows[0]["sizes"][0]["url"]] = asset(9).data
-        return rows
+        method = args["method"]
+        if method == "photos.getById":
+            pytest.fail("Saved receipts must not require pre-attachment photo lookup")
+        if method == "wall.edit" and self.read_failure == "deleted":
+            self.calls.append((method, args["role"], copy.deepcopy(args["params"])))
+            raise DomainError("vk_api_failed", "Fixture provider rejects deleted saved photo")
+        result = await super().invoke(**args)
+        if method == "wall.edit" and self.read_failure == "missing":
+            for post in self.posts.values():
+                if post["attachments"]:
+                    post["attachments"].pop()
+        return result
 
 
 async def staged_edit(count=4):
@@ -86,43 +75,57 @@ def mutations(calls):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("count", [1, 2, 4, 10])
-@pytest.mark.parametrize("reordered", [False, True])
-async def test_reuses_exact_saved_ids_in_approved_order_without_upload_or_save(count, reordered):
+async def test_reuses_exact_saved_ids_in_approved_order_without_upload_or_save(count):
     adapter, transport, current, staging, blocked = await staged_edit(count)
-    if reordered:
-        transport.read_failure = "reorder"
     journal = Journal()
-    start = len(transport.calls)
+    start, downloads = len(transport.calls), len(transport.downloads)
     prepared = await prepared_reuse(adapter, current, staging, journal)
     observation = await adapter.execute(prepared, journal.hooks)
     calls = transport.calls[start:]
     assert mutations(calls) == ["wall.edit"]
+    assert not any(method == "photos.getById" for method, _, _ in calls)
     assert len(transport.uploads) == count and transport.effects == 2
-    assert observation.items[0].native_id == current.existing.native_id
-    assert observation.items[0].media_hashes == tuple(item.sha256 for item in current.assets)
-    assert observation.items[0].provider_media == tuple(
+    item = observation.items[0]
+    assert item.native_id == current.existing.native_id
+    assert item.media_hashes == tuple(a.sha256 for a in current.assets)
+    assert item.media_check == "provider_binding" and not observation.missing_checks
+    assert item.provider_media == tuple(
         "photo-101_" + str(int(value.split("_")[1]) + 10000) for value in staging["media"])
-    read = [params["photos"] for method, _, params in calls if method == "photos.getById"]
-    assert len(read) == 1
-    values = read[0] if isinstance(read[0], (tuple, list)) else read[0].split(",")
-    assert list(values) == [value.removeprefix("photo") for value in staging["media"]]
+    wall_index = next(i for i, call in enumerate(calls) if call[0] == "wall.edit")
+    assert any(method == "wall.getById" for method, _, _ in calls[wall_index + 1:])
+    assert len(transport.downloads[downloads:]) == count
+    assert all("/copied/" in url for url in transport.downloads[downloads:])
     assert len(journal.markers) == 1 and not blocked.markers
     assert "private_fixture_key" not in journal.checkpoint_json
+    assert "https://" not in journal.checkpoint_json
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["transport", "missing", "wrong_id", "bytes"])
+@pytest.mark.parametrize("failure", ["deleted", "missing", "bytes", "reorder", "owner", "proof_sha_mismatch"])
 async def test_saved_photo_read_or_proof_failure_never_falls_back_to_upload(failure):
     adapter, transport, current, staging, _ = await staged_edit()
+    if failure in {"deleted", "missing"}:
+        transport.read_failure = failure
+    elif failure == "proof_sha_mismatch":
+        staging["photo_proofs"][0]["sha256"] = "0" * 64
+    else:
+        transport.sabotage = failure
     journal = Journal()
     prepared = await prepared_reuse(adapter, current, staging, journal)
-    transport.read_failure = failure
     start = len(transport.calls)
-    with pytest.raises((DomainError, OSError)):
-        await adapter.execute(prepared, journal.hooks)
-    assert mutations(transport.calls[start:]) == []
-    assert len(transport.uploads) == 4 and transport.effects == 1
-    assert not journal.markers
+    try:
+        observation = await adapter.execute(prepared, journal.hooks)
+    except (DomainError, OSError):
+        pass
+    else:
+        assert observation.missing_checks, observation
+        assert observation.items[0].media_check == "incomplete"
+        assert not observation.items[0].media_hashes
+    methods = [method for method, _, _ in transport.calls[start:]]
+    assert not any(method in {"photos.getById", "photos.getWallUploadServer",
+                              "upload_photo", "photos.saveWallPhoto"} for method in methods)
+    assert methods.count("wall.edit") <= 1
+    assert len(transport.uploads) == 4
 
 
 @pytest.mark.asyncio
@@ -160,21 +163,23 @@ async def test_native_cas_change_after_prepare_blocks_before_readback_or_wall_mu
 
 
 @pytest.mark.asyncio
-async def test_native_change_during_photo_verification_is_caught_by_final_cas():
+async def test_native_change_after_initial_check_is_caught_by_final_cas():
     adapter, transport, current, staging, _ = await staged_edit()
     journal = Journal()
     prepared = await prepared_reuse(adapter, current, staging, journal)
-    fingerprint = transport.image_fingerprint
-    async def change_during_read(url):
-        proof = await fingerprint(url)
-        transport.posts[(int(current.native_target), int(current.existing.native_id))]["text"] = "Changed during verification"
-        return proof
-    transport.image_fingerprint = change_during_read
+    invoke, reads = transport.invoke, [0]
+    async def change_at_final_read(**args):
+        if args["method"] == "wall.getById":
+            reads[0] += 1
+            if reads[0] == 2:
+                transport.posts[(int(current.native_target), int(current.existing.native_id))]["text"] = "Changed after initial CAS"
+        return await invoke(**args)
+    transport.invoke = change_at_final_read
     start = len(transport.calls)
     with pytest.raises(DomainError) as error:
         await adapter.execute(prepared, journal.hooks)
     assert error.value.code == "remote_revision_conflict"
-    assert any(method == "photos.getById" for method, _, _ in transport.calls[start:])
+    assert reads[0] >= 2
     assert mutations(transport.calls[start:]) == []
     assert len(transport.uploads) == 4 and transport.effects == 1
     assert not journal.markers
@@ -191,7 +196,7 @@ async def test_verified_prefix_is_checked_before_only_remaining_suffix_uploads()
     observation = await adapter.execute(prepared, journal.hooks)
     calls = transport.calls[start:]
     methods = [method for method, _, _ in calls]
-    assert methods.index("photos.getById") < methods.index("upload_photo")
+    assert "photos.getById" not in methods
     assert methods.count("upload_photo") == methods.count("photos.saveWallPhoto") == 2
     assert len(transport.uploads) == 6 and transport.effects == 2
     assert observation.items[0].provider_media[:2] == ("photo-101_11001", "photo-101_11002")
@@ -202,16 +207,16 @@ async def test_verified_prefix_is_checked_before_only_remaining_suffix_uploads()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["missing", "wrong_id", "bytes", "transport"])
+@pytest.mark.parametrize("failure", ["size", "sha256", "width"])
 async def test_entire_prefix_must_verify_before_any_suffix_upload(failure):
     adapter, transport, current, staging, _ = await staged_edit()
     staging["media"] = staging["media"][:2]
     staging["photo_proofs"] = staging["photo_proofs"][:2]
+    staging["photo_proofs"][1][failure] = {"size": 0, "sha256": "bad", "width": True}[failure]
     journal = Journal()
     prepared = await prepared_reuse(adapter, current, staging, journal)
-    transport.read_failure = failure
     start = len(transport.calls)
-    with pytest.raises((DomainError, OSError)):
+    with pytest.raises(DomainError):
         await adapter.execute(prepared, journal.hooks)
     assert mutations(transport.calls[start:]) == []
     assert len(transport.uploads) == 4 and transport.effects == 1
@@ -230,3 +235,20 @@ async def test_different_authorized_assets_without_selected_staging_upload_norma
     assert not any(method == "photos.getById" for method, _, _ in calls)
     assert observation.items[0].media_hashes == tuple(a.sha256 for a in current.assets)
     assert len(transport.uploads) == 8 and transport.effects == 2
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [
+    ("sha256", "not-a-hash"), ("width", 0), ("height", True),
+    ("size", -1), ("mime", "video/mp4"), ("url", "https://private.invalid/key"),
+])
+async def test_invalid_stored_proof_rejected_before_any_provider_write(field, value):
+    adapter, transport, current, staging, _ = await staged_edit()
+    staging["photo_proofs"][0][field] = value
+    journal = Journal()
+    prepared = await prepared_reuse(adapter, current, staging, journal)
+    start = len(transport.calls)
+    with pytest.raises(DomainError):
+        await adapter.execute(prepared, journal.hooks)
+    assert mutations(transport.calls[start:]) == []
+    assert len(transport.uploads) == 4 and transport.effects == 1
+    assert not journal.markers
