@@ -106,6 +106,8 @@ class RemoteItem:
     reply_to_native_id: str | None = field(default=None, repr=False)
     own_reactions: tuple[str, ...] = ()
     own_reactions_observed: bool = False
+    native_schedule_origin_json: str = "{}"
+    story_link_json: str = "{}"
 
     def __post_init__(self):
         object.__setattr__(self, 'observed_media', downloaded_media(self.observed_media))
@@ -145,6 +147,8 @@ class ProviderRequest:
     # Trusted core authorization derived from an explicit owner-granted binding right.
     # It is never accepted from public tool input or inferred by the provider adapter.
     basic_group_schedule_authorized: bool = field(default=False, repr=False)
+    story_link_json: str = "{}"
+    story_parent_json: str = "{}"
 
 
 @dataclass(frozen=True, slots=True)

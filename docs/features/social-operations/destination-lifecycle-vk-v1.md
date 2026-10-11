@@ -118,6 +118,36 @@ Deletion uses normal `vibepublish_publication_update(change.kind=delete)` agains
 
 If the provider reports that a community is ineligible for Stories (for example provider-side community requirements), that is a provider capability failure for that destination; VibePublish must not simulate a Story through a wall post or browser workaround.
 
+### Optional exact wall-post link (2026-10-11)
+
+Status: **Not confirmed by user**. This additive feature has offline tests; it does
+not inherit the 2026-10-01 unlinked Story live acceptance.
+
+Immediate VK photo Stories may include `story_link: {item_ref, text}`. The reference
+is a scoped published VK item or an exact VK wall URL in an existing active
+publishing binding on the same VK connection. `text` is the provider selector
+`read` or `more`. Native posts created outside VibePublish are allowed when that
+binding authorizes their read. Arbitrary sites, unbound walls, scheduled source
+references, cross-provider targets and scheduled Stories fail closed.
+
+The immutable attempt freezes the exact canonical `https://vk.com/wall…` identity,
+label selector, source-binding epoch and selected image digest. Source access is
+rechecked before worker read and before dispatch. The adapter confirms the wall
+post exists before staging, passes `link_url` and `link_text` to
+`stories.getPhotoUploadServer`, and verifies exact Story identity, photo binding
+and link in `stories.getById`. Observed links participate in item fingerprints. VK's output label is a plain
+provider-localized string, not the upload selector enum: verification requires the
+exact URL and a nonempty returned label, retains that label, and never guesses an
+equality mapping from `read`/`more` to displayed language. The visible label remains
+part of live acceptance.
+
+Recovery reads the original Story identity and never repeats ambiguous
+`stories.save`. Missing identity, changed photo or mismatched link stays
+`outcome_unknown`; a new request key is not a recovery mechanism.
+
+This feature does not add scheduling, callbacks, credentials or provider settings.
+Live linked-Story verification requires a separately authorized publication.
+
 ## VK native repost
 
 VK native repost remains `vibepublish_engage(command.kind=forward)` with a verified VK wall source and VK destination. It uses `wall.repost`, preserves provider attribution/copy history and verifies the exact destination wall item.

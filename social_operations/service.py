@@ -445,6 +445,7 @@ class Application:
         scheduled = timestamp(parse_time(delivery['at'])) if delivery.get('at') else None
         if scheduled and parse_time(scheduled) < self.store.clock()+60:
             raise DomainError('native_lead_time', 'Choose a later native publication time')
+        story_link = self._story_link(db, actor, binding, target) if target.get('story_link') else None
         return {'binding_id': binding['id'], 'binding_epoch': binding['epoch'], 'alias': binding['alias'],
                 'provider': binding['provider'], 'connection_id': binding['connection_id'], 'account_type': binding['account_type'],
                 'secret_ref': binding['secret_ref'], 'destination_id': binding['destination_id'], 'native_target': binding['native_id'],
@@ -452,8 +453,47 @@ class Application:
                 'scheduled_at': scheduled, 'mode': target.get('mode', 'execute'), 'existing': existing,
                 'selection': target.get('selection', 'post'), 'source': None, 'source_authorized': False,
                 'basic_group_schedule_authorized': 'basic_group_schedule' in binding_rights,
+                **(story_link or {}),
                 **({'topic_root_id': topic_root_id} if topic_root_id else {}),
                 **({'admission_error': admission_error} if admission_error else {})}
+
+    def _story_link(self, db, actor, binding, target):
+        """Resolve an exact readable wall identity without creating source access."""
+        if (binding['provider'] != 'vk' or target.get('surface') != 'story'
+                or target.get('delivery', {'kind': 'now'})['kind'] != 'now'):
+            raise DomainError('story_link_requires_immediate_vk_story')
+        link = target['story_link']
+        reference = link['item_ref']
+        if reference.startswith('https://'):
+            source = parse_source(reference)
+            if source.provider != 'vk':
+                raise DomainError('vk_story_wall_link_required')
+            channel, ident = source.channel, source.item
+            matches = [row for row in self.store.bindings(db, actor)
+                       if row['provider'] == 'vk' and row['connection_id'] == binding['connection_id']
+                       and row['native_id'] == channel]
+            if len(matches) != 1:
+                raise DomainError('source_access_denied')
+            source_binding = matches[0]
+        else:
+            item = self.resolve_item(db, actor, reference)
+            source_binding = self.store.binding(db, actor, binding_id=item['binding_id'])
+            if item['namespace'] != 'published':
+                raise DomainError('vk_story_wall_link_required')
+            channel, ident = source_binding['native_id'], item['native_id']
+        if (source_binding['provider'] != 'vk'
+                or source_binding['connection_id'] != binding['connection_id']
+                or 'publish' not in json.loads(source_binding['rights'])):
+            raise DomainError('source_access_denied')
+        import re
+        if not re.fullmatch(r'-[1-9][0-9]*', channel) or not re.fullmatch(r'[1-9][0-9]*', ident):
+            raise DomainError('vk_story_wall_link_required')
+        return {
+            'story_link_json': canonical({'url': f'https://vk.com/wall{channel}_{ident}',
+                                          'text': link['text'], 'target': channel, 'id': ident}),
+            'story_link_binding_id': source_binding['id'],
+            'story_link_binding_epoch': source_binding['epoch'],
+        }
 
     def _telegram_thread(self, db, actor, ref, *, alias=None):
         """Resolve a topic through an existing scoped binding; never create a grant."""
@@ -616,6 +656,9 @@ class Application:
                 for plan in (() if pending_visual else plans):
                     db.execute('INSERT INTO attempts(id,operation_id,binding_id,binding_epoch,alias,provider,plan,plan_digest) VALUES(?,?,?,?,?,?,?,?)',
                                (new_id('attempt'), op, plan['binding_id'], plan['binding_epoch'], plan['alias'], plan['provider'], canonical(plan), digest(plan)))
+                if action == 'publish' and intent.get('linked_story') is not None:
+                    from .vk_story_dependencies import register
+                    register(self, db, actor, intent, op, plans)
                 if action == 'media_store':
                     staging_expires = db.execute(
                         'SELECT deadline FROM operations WHERE id=?', (op,)).fetchone()['deadline'] + 3600
@@ -918,6 +961,8 @@ class Application:
                 'destination': binding['alias'], 'observed_at': remote['observed_at'],
                 'source': source, 'freshness': 'current' if source == 'provider' else 'cached',
                 'origin': 'provider_client', 'publication_kind': 'forward' if remote.get('origin') else 'original'}
+        if remote.get('native_schedule_origin_json', '{}') != '{}':
+            item['native_schedule_origin'] = json.loads(remote['native_schedule_origin_json'])
         if remote.get('entities_json', '[]') != '[]':
             item['entities'] = json.loads(remote['entities_json'])
         if remote.get('text'):

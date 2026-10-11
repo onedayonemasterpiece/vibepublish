@@ -19,6 +19,8 @@ from social_operations.domain import DomainError
 API_VERSION = '5.199'  # Donor-tested contract, not an assertion of latest API.
 # Values are (role, required fields, allowed fields). There is no MCP passthrough.
 POLICIES = {
+    'groups.getLongPollSettings': ('reader', {'group_id'}, {'group_id'}),
+    'groups.getLongPollServer': ('reader', {'group_id'}, {'group_id'}),
     'groups.getById': ('reader', {'group_ids'}, {'group_ids', 'fields'}),
     'wall.getById': ('reader', {'posts'}, {'posts', 'extended'}),
     'wall.get': ('editor', {'owner_id', 'filter', 'count', 'offset'}, {'owner_id', 'filter', 'count', 'offset'}),
@@ -29,7 +31,7 @@ POLICIES = {
     'wall.edit': ('editor', {'owner_id', 'post_id'}, {'owner_id', 'post_id', 'message', 'attachments', 'publish_date'}),
     'wall.delete': ('editor', {'owner_id', 'post_id'}, {'owner_id', 'post_id'}),
     'wall.repost': ('editor', {'object', 'group_id'}, {'object', 'group_id'}),
-    'stories.getPhotoUploadServer': ('media', {'group_id'}, {'group_id', 'add_to_news'}),
+    'stories.getPhotoUploadServer': ('media', {'group_id'}, {'group_id', 'add_to_news', 'link_url', 'link_text'}),
     'stories.save': ('media', {'upload_results'}, {'upload_results', 'extended'}),
     'stories.getById': ('reader', {'stories'}, {'stories', 'extended'}),
     'stories.delete': ('editor', {'owner_id', 'story_id'}, {'owner_id', 'story_id'}),
@@ -133,7 +135,8 @@ class VKHTTPTransport:
             return True
         # No user-token fallback. Group token path stays narrowly text-now/read.
         return (token.group_id == group_id and not scheduled and
-                method in {'wall.post', 'wall.getById', 'groups.getById'})
+                method in {'wall.post', 'wall.getById', 'groups.getById',
+                           'groups.getLongPollSettings', 'groups.getLongPollServer'})
 
     async def _post(self, url, data, *, api=False):
         import aiohttp  # Optional production extra; no SDK/network needed by scripted tests.
@@ -192,6 +195,50 @@ class VKHTTPTransport:
             code = response.get('error', {}).get('error_code') if isinstance(response, dict) and isinstance(response.get('error'), dict) else None
             raise DomainError('vk_captcha_needs_human' if code == 14 else 'vk_cooldown' if code in {6, 9, 29} else 'vk_api_failed', next_action='contact_owner')
         return response['response']
+
+    async def poll_wall_events(self, native_target: str, cursor: str | None):
+        import re
+        if not re.fullmatch(r'-[1-9][0-9]*', native_target):
+            raise DomainError('vk_event_target_invalid')
+        group = -int(native_target)
+        token = self._tokens.get('reader')
+        if token is None or token.kind != 'group' or token.group_id != group:
+            return {'status': 'unavailable_existing_group_token_required'}
+        settings = await self.invoke(role='reader', method='groups.getLongPollSettings',
+                                     params={'group_id': group})
+        if (not isinstance(settings, dict) or settings.get('is_enabled') != 1
+                or not isinstance(settings.get('events'), dict)
+                or settings['events'].get('wall_post_new') != 1):
+            return {'status': 'unavailable_existing_event_settings_required'}
+        server = await self.invoke(role='reader', method='groups.getLongPollServer',
+                                   params={'group_id': group})
+        if (not isinstance(server, dict) or not isinstance(server.get('key'), str)
+                or not 1 <= len(server['key']) <= 1024
+                or not re.fullmatch(r'[0-9]{1,32}', str(server.get('ts', '')))):
+            raise DomainError('vk_event_response_invalid')
+        # Provider-supplied key/URL are transient and never logged or persisted.
+        url = server.get('server')
+        validated_url(url)
+        if urlsplit(url).query:
+            raise DomainError('vk_event_response_invalid')
+        ts = cursor or str(server['ts'])
+        if not re.fullmatch(r'[0-9]{1,32}', ts):
+            raise DomainError('vk_event_cursor_invalid')
+        response = await self._post(url, {'act': 'a_check', 'key': server['key'],
+                                          'ts': ts, 'wait': 1})
+        if not isinstance(response, dict):
+            raise DomainError('vk_event_response_invalid')
+        failed = response.get('failed')
+        if failed in (1, 2, 3):
+            reset = str(response.get('ts', server['ts'])) if failed == 1 else str(server['ts'])
+            if not re.fullmatch(r'[0-9]{1,32}', reset):
+                raise DomainError('vk_event_response_invalid')
+            return {'status': 'cursor_reset', 'cursor': reset, 'updates': []}
+        if (failed is not None or not isinstance(response.get('updates'), list)
+                or len(response['updates']) > 1000
+                or not re.fullmatch(r'[0-9]{1,32}', str(response.get('ts', '')))):
+            raise DomainError('vk_event_response_invalid')
+        return {'status': 'ready', 'cursor': str(response['ts']), 'updates': response['updates']}
 
     async def upload_photo(self, url: str, data: bytes, mime: str) -> dict:
         import aiohttp

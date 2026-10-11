@@ -73,8 +73,15 @@ class Worker:
                 b = self.store.binding(db, actor, binding_id=child['binding_id'])
                 plan = json.loads(child['plan'])
                 self.app.emojis.frozen_access(db, actor, json.loads(plan['content_json']))
+                from .vk_story_dependencies import assert_child_authority
+                assert_child_authority(self.store, db, actor, op['id'], plan)
                 required = 'publish' if plan['action'] == 'publish' else plan['action']
                 current_rights = json.loads(b['rights'])
+                if plan.get('story_link_binding_id'):
+                    source_binding = self.store.binding(db, actor, binding_id=plan['story_link_binding_id'])
+                    if (source_binding['epoch'] != plan['story_link_binding_epoch']
+                            or 'publish' not in json.loads(source_binding['rights'])):
+                        raise DomainError('source_access_revoked', next_action='reauthorize')
                 special_schedule_revoked = (
                     bool(plan.get('basic_group_schedule_authorized'))
                     and 'basic_group_schedule' not in current_rights
@@ -115,6 +122,11 @@ class Worker:
         plan = json.loads(child['plan'])
         assets = []
         with self.store.connection() as db:
+            if plan.get('story_link_binding_id'):
+                source_binding = self.store.binding(db, actor, binding_id=plan['story_link_binding_id'])
+                if (source_binding['epoch'] != plan['story_link_binding_epoch']
+                        or 'publish' not in json.loads(source_binding['rights'])):
+                    raise DomainError('source_access_revoked', next_action='reauthorize')
             for a in plan['assets']:
                 row = db.execute('SELECT bytes,sha256 FROM assets WHERE id=? AND tenant_id=? AND principal_id=?', (a['ref'], actor.tenant_id, actor.principal_id)).fetchone()
                 if not row or hashlib.sha256(row['bytes']).hexdigest() != a['sha256']:
@@ -127,7 +139,9 @@ class Worker:
                                subject=RemoteItem(**plan['subject']) if plan.get('subject') else None,
                                reaction=plan.get('reaction'),reaction_mode=plan.get('reaction_mode'),
                                topic_root_id=plan.get('topic_root_id'),
-                               basic_group_schedule_authorized=bool(plan.get('basic_group_schedule_authorized')))
+                               basic_group_schedule_authorized=bool(plan.get('basic_group_schedule_authorized')),
+                               story_link_json=plan.get('story_link_json', '{}'),
+                               story_parent_json=plan.get('story_parent_json', '{}'))
 
     async def heartbeat(self, op):
         while True:
@@ -155,7 +169,8 @@ class Worker:
                 raise
             return False
         if not op:
-            return False
+            from .vk_story_dependencies import advance
+            return await advance(self)
         pulse = asyncio.create_task(self.heartbeat(op))
         try:
             actor = self.store.operation_actor(op)
