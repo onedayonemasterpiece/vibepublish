@@ -9,7 +9,7 @@ import re
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from adapters.port import Asset, Hooks, NativeSource, Observation, ProviderRequest, ReadRequest, RemoteItem, UnavailableAdapter
 from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time, timestamp
@@ -427,6 +427,12 @@ class Worker:
                 with self.store.tx() as db:
                     self.store.fence(db, op['id'], self.id, op['fence'])
                     current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
+                    if prepared and not current['dispatched'] and child['provider'] == 'vk':
+                        from .vk_staged_photos import select
+                        staging = select(db, op, current)
+                        if staging:
+                            prepared = replace(prepared, state_json=canonical({
+                                **json.loads(prepared.state_json), 'staged_photos': staging}))
                     if not current['dispatched'] and child['provider']=='telegram':
                         reserve(db, json.loads(child['plan']), child['id'], self.store.clock())
                     if current['dispatched']:

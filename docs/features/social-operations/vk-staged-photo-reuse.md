@@ -1,0 +1,15 @@
+# Resume verified VK photo staging
+
+Status: Not confirmed by user. Live acceptance remains required.
+
+An immediate VK photo publish/edit can resume its own verified staging prefix during an already-authorized never-dispatched retry or worker restart. A separately authorized tracked edit may reuse that prefix or a complete checkpoint from an earlier terminal, never-dispatched edit of the same publication and native post. The original terminal receipt and consumed recovery key stay unchanged. Explicit fresh-read baseline reconciliation and the separate new edit remain the admission workflow; reconcile itself never performs a provider write.
+
+The worker selects only intact previous attempt/plan checkpoints with identical ordered immutable assets (the newly authorized caption may change independently), matching principal/actor/binding/connection authority and earlier revision, and an ordered verified prefix of native photos plus exact saved rendition fingerprints. Unknown/dispatched source attempts, other publications/posts, changed assets and stale authority cannot qualify. A matching but corrupt/incomplete proof fails closed instead of silently triggering a full re-upload; genuinely new assets use the ordinary upload path. No cross-publication media cache or guessed album matching is introduced. The same attempt is preferred before earlier revisions. After each successful save and fingerprint, vk_photo_staging records the verified prefix; later upload failures preserve it. Existing vk_prepared checkpoints require a complete set. Group-owned photos without fingerprints retain the previous ordinary path and are not reused by this mechanism.
+
+The adapter reads these exact IDs using the native reader method photos.getById and verifies each saved rendition's cryptographic fingerprint with the existing photo-proof mechanism. Missing photos or changed bytes fail closed with no upload fallback. Fresh transient access keys, if returned, are used only for the immediate provider call and never saved or logged. Existing target readback/CAS, before-effect fencing and exact post-edit readback remain mandatory.
+
+A complete verified prefix requires no getWallUploadServer, media upload or saveWallPhoto calls. A partial prefix is verified in full before uploading only the missing suffix. Saved photos are attached in the approved order; a fresh native CAS follows all staging. A later revision does not rearm the earlier retry key or erase previous failures.
+
+Residual crash window: saveWallPhoto may succeed before fingerprint collection/checkpoint persistence. That newly allocated but unrecorded photo is not recovered by this change; this is not a claim of exactly-once media allocation or fully crash-safe preparation. Ambiguous public effects retain existing observation-only recovery and no-repeat guards. Consumed recovery keys never gain another send; further edits require the existing fresh-baseline/new-revision path.
+
+Native method contract: https://github.com/VKCOM/vk-api-schema/blob/master/photos/methods.json (photos.getById, API 5.199). No upload host, credential, persistent permission, schema or dependency changes.
