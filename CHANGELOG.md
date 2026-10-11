@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Resolve a strictly proven VK video allocation-only URL-validation failure through explicit reconciliation, preserving the allocated video and historical dispatch while releasing only its validated connection quarantine. Keep unknown uploads/wall effects blocked, and preserve the independent carousel edit's frozen CAS and one-time recovery.
+
 - Give VK multi-photo post publish/edit a bounded asset-count-aware execution budget and matching admission/recovery deadline. Keep single-photo/default timing, HTTP timeouts, retry limits, fencing and native no-repeat checks unchanged.
 
 - Reduce VK photo upload bytes with smaller-only same-dimension JPEG wire derivatives and bounded pre-save retries for explicit upload HTTP 502/503/504. Preserve immutable assets, native CAS and no-repeat guards for saves/public effects. Allow explicit fresh-read baseline refresh after a terminal never-dispatched VK HTTP upload failure, retaining the original terminal receipt.

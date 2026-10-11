@@ -610,6 +610,9 @@ class Worker:
 
     def known_effect_resolved(self, db, child):
         """A generic partial state cannot release a connection's unknown fence."""
+        from .vk_allocation_recovery import resolved
+        if resolved(db, child):
+            return True
         try:
             if child['state'] != 'partial' or not child['dispatched']:
                 return False

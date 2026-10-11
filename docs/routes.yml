@@ -96,6 +96,7 @@ features:
     vk_linked_story_dependency: docs/features/social-operations/vk-linked-story-dependency.md
     native_video_publication: docs/features/social-operations/native-video-publication.md
     vk_photo_budgets: docs/features/social-operations/vk-photo-budgets.md
+    vk_allocation_recovery: docs/features/social-operations/vk-allocation-recovery.md
     vk_photo_upload_recovery: docs/features/social-operations/vk-photo-upload-recovery.md
     provider_diagnostics: docs/features/social-operations/provider-diagnostics.md
     vk_baseline_rebase: docs/features/social-operations/vk-baseline-rebase.md
