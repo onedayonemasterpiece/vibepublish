@@ -6,6 +6,9 @@ from .domain import DomainError, canonical, digest, normalize_intent
 def admit(app, actor, args):
     store = app.store
     change = args['change']
+    if str(change.get('native_reference', '')).startswith('item_'):
+        from .baseline_rebase import rebase
+        return rebase(app, actor, args)
     if args.get('item_ref') or ('native_reference' in change and 'attempt_id' not in change):
         raise DomainError('recovery_original_attempt_required')
     intent_hash = digest(['reconcile', normalize_intent('publication_update', args)])

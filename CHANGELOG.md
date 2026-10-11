@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add explicit owner-only local baseline refresh for a never-dispatched tracked VK edit conflict, using a fresh same-post item ref through reconcile. Preserve immutable failed intent and require a separate edit with normal native CAS; no provider effect or blind retry during refresh.
+
 - Record bounded, correlated TG/VK/MAX provider call phases, duration, safe error/status/cooldown metadata and readback summaries in the existing durable progress ledger. Preserve original failures before unknown-outcome conversion, exclude payloads/secrets, and keep all retry/dispatch safeguards unchanged.
 
 - Preserve sanitized VK non-200 HTTP status and static API/media-upload phase in durable failure diagnostics, without URLs, response bodies, credentials or changed retry behavior.
