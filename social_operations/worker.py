@@ -15,6 +15,7 @@ from adapters.port import Asset, Hooks, NativeSource, Observation, ProviderReque
 from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time, timestamp
 from .service import Application
 from .media_budget import MediaBudgetDeferred, reserve
+from .provider_diagnostics import diagnostic_scope, provider_call, safe_diagnostic
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled', 'partial'}
 
@@ -50,6 +51,31 @@ class Worker:
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
+
+    def diagnostic_observer(self, op, child=None):
+        """Append bounded safe metadata to the existing cursor-readable ledger."""
+        def observe(details):
+            with self.store.tx() as db:
+                self.store.fence(db, op['id'], self.id, op['fence'])
+                count = db.execute("SELECT count(*) FROM events WHERE operation_id=? AND body LIKE '%provider_diagnostic %'", (op['id'],)).fetchone()[0]
+                if count >= 512:
+                    return
+                row = db.execute('SELECT stage,dispatched FROM attempts WHERE id=?', (child['id'],)).fetchone() if child else None
+                stage = row['stage'] if row else 'verifying'
+                record = {**safe_diagnostic(details), 'operation_id': op['id'],
+                          'action': op['action']}
+                if op.get('publication_id'):
+                    record['publication_id'] = op['publication_id']
+                if child:
+                    record.update(attempt_id=child['id'], provider=child['provider'],
+                                  dispatched=bool(row['dispatched']))
+                if count == 511:
+                    record = {'operation_id': op['id'], 'status': 'completed',
+                              'operation': 'diagnostic_limit_reached'}
+                self.store.event(db, op['id'], stage,
+                    details.get('status') if details.get('status') in {'started','completed','failed'} else 'failed',
+                    'provider_diagnostic ' + canonical(record), child['alias'] if child else None)
+        return observe
 
     def hooks(self, op, child=None, min_lead=60):
         async def emit(stage, status, message):
@@ -208,7 +234,11 @@ class Worker:
                     raise DomainError('capability_unsupported', next_action='contact_owner')
                 if prepared[child['id']].request != r:
                     raise DomainError('adapter_changed_request')
-            outcomes = await asyncio.gather(*(preflight(c) for c in pending), return_exceptions=True)
+            async def observed_preflight(child):
+                with diagnostic_scope(self.diagnostic_observer(op, child)):
+                    with provider_call(child['provider'], 'preflight'):
+                        return await preflight(child)
+            outcomes = await asyncio.gather(*(observed_preflight(c) for c in pending), return_exceptions=True)
             errors = [e for e in outcomes if isinstance(e, BaseException)]
             if errors and all(isinstance(e, DomainError) and e.code in {'emoji_fallback_required', 'rich_fallback_needs_review'} for e in errors) and all(json.loads(c['plan'])['mode'] == 'execute' for c in pending):
                 # Only explicit per-target rendering gates are independent; preserve existing global preflight policy for other failures.
@@ -382,6 +412,10 @@ class Worker:
             self.store.event(db,op['id'],'waiting_connection','started','Shared Telegram media budget deferred; original request identity retained')
 
     async def run_child(self, op, child, actor, prepared):
+        with diagnostic_scope(self.diagnostic_observer(op, child)):
+            return await self._run_child(op, child, actor, prepared)
+
+    async def _run_child(self, op, child, actor, prepared):
         try:
             request = self.request(op, child, actor)
             hooks = self.hooks(op, child, prepared.capability.min_lead_seconds if prepared else 60)
@@ -415,8 +449,12 @@ class Worker:
                             # the durable guard succeeds. Never replay an effect.
                             execution_budget.reschedule(asyncio.get_running_loop().time()+90)
                         hooks=Hooks(hooks.emit_progress,hooks.checkpoint,before_effect)
-                    observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
-                                   await adapter.execute(prepared, hooks))
+                    with provider_call(child['provider'], 'reconcile' if current['dispatched'] else 'execute') as diagnostic:
+                        observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
+                                       await adapter.execute(prepared, hooks))
+                        diagnostic.update(observed=observation.observed, items_count=len(observation.items))
+                        if observation.items:
+                            diagnostic['media_check'] = observation.items[0].media_check
                 self.finish_child(op, child, actor, observation, needs_finalize=callable(getattr(adapter, 'finalize', None)))
         except MediaBudgetDeferred as deferred:
             with self.store.tx() as db:
@@ -920,7 +958,10 @@ class Worker:
         try:
             async with self.lane(b['connection_id']):
                 async with asyncio.timeout(budget):
-                    page = await self.adapter(b['provider'], b['connection_id']).read(request, self.hooks(op))
+                    with diagnostic_scope(self.diagnostic_observer(op)):
+                        with provider_call(b['provider'], 'read') as diagnostic:
+                            page = await self.adapter(b['provider'], b['connection_id']).read(request, self.hooks(op))
+                            diagnostic['items_count'] = len(page.items)
         except TimeoutError:
             raise DomainError('provider_read_deadline', 'Native read did not complete within the command deadline', 'refresh') from None
         if request.kind=='reactions' and (len(page.items)!=1 or not page.items[0].own_reactions_observed

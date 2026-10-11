@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Record bounded, correlated TG/VK/MAX provider call phases, duration, safe error/status/cooldown metadata and readback summaries in the existing durable progress ledger. Preserve original failures before unknown-outcome conversion, exclude payloads/secrets, and keep all retry/dispatch safeguards unchanged.
+
 - Preserve sanitized VK non-200 HTTP status and static API/media-upload phase in durable failure diagnostics, without URLs, response bodies, credentials or changed retry behavior.
 
 - Add bounded MP4 workspace ingress and native Telegram video, VK wall video and VK video Stories, with preserved rotation, exact provider identities and fail-closed uncertain upload handling.

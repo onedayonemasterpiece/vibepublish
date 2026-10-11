@@ -158,16 +158,20 @@ class TelegramAdapter:
 
     async def _call(self, kind: str, **values):
         # Exactly one RPC. RPC retry/flood sleeps are disabled in trusted wiring.
-        try:
-            return await self.client(self.tl.request(kind, **values))
-        except DomainError:
-            raise
-        except Exception as exc:
-            name = type(exc).__name__
-            code = ('telegram_cooldown' if name in {'FloodWaitError', 'SlowModeWaitError'} else
-                    'telegram_auth_required' if name in {'AuthKeyUnregisteredError', 'SessionRevokedError'} else
-                    'telegram_rpc_failed')
-            raise DomainError(code, next_action='contact_owner') from None
+        from social_operations.provider_diagnostics import provider_call
+        with provider_call('telegram', kind) as diagnostic:
+            try:
+                return await self.client(self.tl.request(kind, **values))
+            except DomainError:
+                raise
+            except Exception as exc:
+                name = type(exc).__name__
+                diagnostic.update(error_type=name, provider_code=getattr(exc, 'code', None),
+                                  retry_after_s=getattr(exc, 'seconds', None))
+                code = ('telegram_cooldown' if name in {'FloodWaitError', 'SlowModeWaitError'} else
+                        'telegram_auth_required' if name in {'AuthKeyUnregisteredError', 'SessionRevokedError'} else
+                        'telegram_rpc_failed')
+                raise DomainError(code, next_action='contact_owner') from None
 
     async def _entity(self, target: str):
         if not re.fullmatch(r'-?[1-9][0-9]*', target):
@@ -506,7 +510,9 @@ class TelegramAdapter:
                     candidate=asset.alt_text
                     if len(candidate)<=160 and '/' not in candidate and '\\' not in candidate and all(ord(c)>=32 for c in candidate):
                         stream.name=candidate
-                uploaded = await self.client.upload_file(stream, file_size=asset.size, file_name=stream.name)
+                from social_operations.provider_diagnostics import provider_call
+                with provider_call('telegram', 'upload_file'):
+                    uploaded = await self.client.upload_file(stream, file_size=asset.size, file_name=stream.name)
                 if asset.role in {'document', 'video'}:
                     attributes=[self.tl.type('DocumentAttributeFilename', file_name=stream.name)]
                     if asset.role == 'video':

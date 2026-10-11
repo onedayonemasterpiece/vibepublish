@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 from playwright.async_api import ElementHandle, Error as PlaywrightError, expect, TimeoutError as PlaywrightTimeoutError
 
 from .profile import MaxBlocked, ProfileLane
+from .diagnostics import observe, observed
 from .references import native_reference_id
 from .account import ACCOUNT_PHASES, VisibleAccountCheck
 from . import rich
@@ -152,12 +153,14 @@ class RealMaxDriver:
         if self.page.url != self.origin + '/' + target:
             raise MaxBlocked('wrong_target_or_origin')
 
+    @observed('account_check')
     async def _account(self):
         # Trusted explicit binding, not a boolean supplied by a model/request.
         # Live factory reads the existing account's settings in its OWN page.
         if await self.account_check() is not True:
             raise MaxBlocked('needs_auth_or_wrong_account')
 
+    @observed('target_scope')
     async def _scope(self, target, namespace='feed'):
         self._route(target)
         main = self.page.locator(MAIN)
@@ -195,7 +198,7 @@ class RealMaxDriver:
                 # Reordering/pinning/unread/search cannot affect this binding.
                 # This route was obtained from actual owner-authorized UI.
                 phase = 'navigation'
-                await self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded')
+                await observe('navigation', self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded'))
                 phase = 'scope_before'
                 await self._scope(target)
                 phase = 'account_after'
@@ -330,6 +333,7 @@ class RealMaxDriver:
                 attempt_id=attempt_id,plan_digest=plan_digest,hooks=hooks,entities=entities)
         return [result['item']]
 
+    @observed('compose')
     async def _compose(self, main, text, media, entities):
         import time
         started=time.monotonic();phase='composer'
@@ -344,12 +348,12 @@ class RealMaxDriver:
             previews=[]
             if media:
                 phase='upload_menu'
-                await main.get_by_role('button',name='Загрузить файл',exact=True).click()
+                await observe('upload_menu', main.get_by_role('button',name='Загрузить файл',exact=True).click())
                 phase='file_chooser'
                 async with self.page.expect_file_chooser() as chooser:
                     await self.page.get_by_role('menu').get_by_role('menuitem',name='Фото или видео',exact=True).click()
                 phase='file_upload'
-                await (await chooser.value).set_files(list(media))
+                await observe('file_upload', (await chooser.value).set_files(list(media)))
                 phase='preview'
                 attached=main.locator('.attaches .attach img')
                 await expect(attached).to_have_count(len(media))
@@ -360,7 +364,7 @@ class RealMaxDriver:
                 if [p['name'] for p in previews]!=[m['name'] for m in media] or any(not p['src'].startswith('data:image/png;base64,' if m['mimeType']=='video/mp4' else 'blob:') for p,m in zip(previews,media)):
                     raise MaxBlocked('upload_preview_mismatch')
             phase='rich_text'
-            await rich.fill(self.page,composer,text,entities)
+            await observe('rich_text', rich.fill(self.page,composer,text,entities))
             return composer,previews
         except (Exception, asyncio.CancelledError) as error:
             # Repository locations identify the exact failing UI step without
@@ -404,7 +408,7 @@ class RealMaxDriver:
                 raise MaxBlocked('invalid_publish_intent')
             async with asyncio.timeout(self.timeout):
                 await self._account()
-                await self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded')
+                await observe('navigation', self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded'))
                 main = await self._scope(target)
                 if await self._rows(main,text).count():
                     raise MaxBlocked('preexisting_content_candidate')
@@ -479,11 +483,11 @@ class RealMaxDriver:
                 if not await observer.evaluate('(o)=>o.ready()'):
                     raise MaxBlocked('submit_observer_lost')
                 # No retry loop: after this boundary any failure is unknown.
-                await main.get_by_role('button', name='Отправить сообщение', exact=True).click()
+                await observe('submit', main.get_by_role('button', name='Отправить сообщение', exact=True).click())
                 await hooks.emit_progress('reading_back', 'running', '{}')
                 rows = self._rows(main,text)
-                await expect(rows).to_have_count(1, timeout=self.timeout*1000)
-                transition = await observer.evaluate('(o)=>o.state')
+                await observe('candidate_wait', expect(rows).to_have_count(1, timeout=self.timeout*1000))
+                transition = await observe('submit_transition', observer.evaluate('(o)=>o.state'))
                 if transition != dict(clicks=1, changed=True, blocked=False):
                     raise MaxBlocked('submit_transition_unverified')
                 if reply_to is not None or entities or any(m['mimeType']=='video/mp4' for m in media):
@@ -504,10 +508,10 @@ class RealMaxDriver:
                 await observer.evaluate('(o)=>o.stop()')
                 await observer.dispose()
                 observer = None
-                await self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded')
+                await observe('navigation', self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded'))
                 main = await self._scope(target)
                 rows = self._rows(main,text)
-                await expect(rows).to_have_count(1, timeout=self.timeout*1000)
+                await observe('candidate_wait', expect(rows).to_have_count(1, timeout=self.timeout*1000))
                 fresh = await self._plain_candidate(target, text, rows, media_count=len(media))
                 if fresh['url'] != item['url'] or fresh.get('observed_media',[]) != item.get('observed_media',[]):
                     raise MaxBlocked('native_reference_changed')
@@ -573,7 +577,7 @@ class RealMaxDriver:
                 raise MaxBlocked('published_channel_edit_denied')
             async with asyncio.timeout(self.timeout):
                 await self._account()
-                await self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded')
+                await observe('navigation', self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded'))
                 main = await self._scope(target)
                 composer = main.locator(COMPOSER)
                 if await composer.evaluate(rich.TEXT_JS):
@@ -594,7 +598,7 @@ class RealMaxDriver:
                 await expect(main.get_by_text(re.compile(r'^Редактирование (?:поста|сообщения)$'))).to_have_count(1)
                 if await composer.evaluate(rich.TEXT_JS) != old:
                     raise MaxBlocked('edit_draft_mismatch')
-                await rich.fill(self.page,composer,text,entities)
+                await observe('rich_text', rich.fill(self.page,composer,text,entities))
                 # Guard the actual trusted Save click, including a mode closure
                 # during pointerdown. No synthetic ID or provider state access.
                 guard = await main.evaluate_handle("(main, x)=>{" + rich.SNAPSHOT_JS + r"""
@@ -637,7 +641,7 @@ class RealMaxDriver:
                 current = await self._plain_candidate(target,old,rows,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
                 if current['url'] != reference or current.get('observed_media',[]) != existing.get('observed_media',[]) or not await guard.evaluate('(g)=>g.ready()'):
                     raise MaxBlocked('edit_binding_or_mode_changed')
-                await main.get_by_role('button',name='Отправить сообщение',exact=True).click()
+                await observe('submit', main.get_by_role('button',name='Отправить сообщение',exact=True).click())
                 transition = await guard.evaluate('(g)=>g.result()')
                 if transition != dict(clicks=1,blocked=False):
                     raise MaxBlocked('edit_transition_unverified')
@@ -652,7 +656,7 @@ class RealMaxDriver:
                 await hooks.checkpoint('MAX_EDIT_REFERENCE',json.dumps(dict(state,item=item)))
                 await guard.evaluate('(g)=>g.stop()');await guard.dispose();guard=None
                 await self._account()
-                await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
+                await observe('navigation', self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded'))
                 main = await self._scope(target)
                 updated = self._rows(main,text)
                 item = await self._plain_candidate(target,text,updated,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
@@ -704,7 +708,7 @@ class RealMaxDriver:
                     from .wire import HistoryObserver
                     async with HistoryObserver(self.page,target,self.origin,pages=self.evidence_pages) as history:
                         await self._account()
-                        await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
+                        await observe('navigation', self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded'))
                         main=await self._scope(target)
                         history_rows=await history.wait(min(self.timeout,25))
                     if not history_rows:
@@ -712,7 +716,7 @@ class RealMaxDriver:
                         return []
                 else:
                     await self._account()
-                    await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
+                    await observe('navigation', self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded'))
                     main=await self._scope(target)
                 rows=main.locator(self._owned_row_selector(target))
                 if native_item is not None:
@@ -796,7 +800,7 @@ class RealMaxDriver:
                 raise MaxBlocked('published_channel_delete_denied')
             async with asyncio.timeout(self.timeout):
                 await self._account()
-                await self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded')
+                await observe('navigation', self.page.goto(self.origin+'/'+target, wait_until='domcontentloaded'))
                 main = await self._scope(target)
                 phase='native_read'
                 row = self._rows(main,text)
@@ -848,7 +852,7 @@ class RealMaxDriver:
                 await self.page.bring_to_front()
                 self._check_attempt_fuse(attempt_id,plan_digest)
                 if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('delete_binding_changed')
-                await dialog.get_by_role('button',name='Удалить',exact=True).click()
+                await observe('delete_submit', dialog.get_by_role('button',name='Удалить',exact=True).click())
                 await expect(dialog).to_have_count(0)
                 await handle.wait_for_element_state('hidden')
                 transition=await guard.evaluate('(g)=>g.result()')
@@ -857,7 +861,7 @@ class RealMaxDriver:
                 await hooks.checkpoint('MAX_DELETE_CONFIRMED',json.dumps(state))
                 await guard.evaluate('(g)=>g.stop()');await guard.dispose();guard=None
                 await self._account()
-                await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
+                await observe('navigation', self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded'))
                 main=await self._scope(target)
                 await self._remaining_rows_exclude(main,text,existing['id'])
                 self._check_attempt_fuse(attempt_id,plan_digest)
@@ -882,6 +886,7 @@ class RealMaxDriver:
                 except Exception:pass
             self._busy=False
 
+    @observed('media_download')
     async def _download_media(self, row, target, count, *, namespace='feed'):
         """Actual UI downloads, not rotating CDN URLs or invented native IDs."""
         import hashlib
@@ -935,6 +940,7 @@ class RealMaxDriver:
             await self._scope(target,namespace)
         return result
 
+    @observed('candidate_readback')
     async def _plain_candidate(self, target, text, row, *, media_count=0, native_history_id=None):
         await self._scope(target)
         await expect(row).to_have_count(1)
@@ -980,6 +986,7 @@ class RealMaxDriver:
         return dict(id=native_id,url=reference,target=target,namespace='feed',text=text,
             media=[],observed_media=downloaded,entities=media['entities'],scheduled_at=None,observed_at=datetime.now(timezone.utc).isoformat())
 
+    @observed('context_menu')
     async def _open_context_menu(self, control, *, non_link_text=False):
         """Open a native menu, with one state-checked pre-effect retry only."""
         route = self.page.url
@@ -1103,6 +1110,7 @@ class RealMaxDriver:
         return native_reference_id(value, target,
                                    public_url=self._reference_public_url(target))
 
+    @observed('native_reference')
     async def _copy_native_reference(self, row, target):
         """Observed message-menu recipe; never infer an ID from row position."""
         import uuid
@@ -1231,7 +1239,7 @@ class RealMaxDriver:
                 for _ in range(2):
                     self._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
                     await self._account()
-                    await self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded')
+                    await observe('navigation', self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded'))
                     main=await self._scope(target)
                     await self._remaining_rows_exclude(main,state['text'],state['existing_id'])
                 return dict(item=dict(item,observed_at=datetime.now(timezone.utc).isoformat()),quarantine_released=False)
@@ -1278,7 +1286,7 @@ class RealMaxDriver:
             async with asyncio.timeout(self.timeout):
                 for _ in range(2):
                     await self._account()
-                    await self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded')
+                    await observe('navigation', self.page.goto(self.origin + '/' + target, wait_until='domcontentloaded'))
                     main = await self._scope(target)
                     # Search ONLY the intended pane, not account-wide snippets.
                     candidates = self._rows(main,text)

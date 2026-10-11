@@ -8,6 +8,7 @@ import pytest
 
 from adapters.vk_transport import VKHTTPTransport
 from social_operations.domain import DomainError
+from social_operations.provider_diagnostics import diagnostic_scope
 
 
 class Context:
@@ -24,7 +25,8 @@ class Context:
 @pytest.mark.parametrize("api,phase", [(True, "api"), (False, "media_upload")])
 @pytest.mark.parametrize("status", [301, 400, 403, 413, 429, 500, 503])
 def test_http_failure_has_only_status_and_static_phase(api, phase, status):
-    response = SimpleNamespace(status=status)
+    response = SimpleNamespace(status=status, headers={'Retry-After':'13', 'Set-Cookie':'secret'})
+    events = []
     session = SimpleNamespace(post=lambda *args, **kwargs: Context(response))
     aiohttp = SimpleNamespace(
         TCPConnector=lambda **kwargs: None,
@@ -36,7 +38,7 @@ def test_http_failure_has_only_status_and_static_phase(api, phase, status):
     with patch.dict(sys.modules, {"aiohttp": aiohttp}), \
             patch("adapters.vk_transport.validated_url", return_value="example.invalid"), \
             patch("adapters.vk_transport.public_addresses", new=AsyncMock(return_value=[])):
-        with pytest.raises(DomainError) as raised:
+        with diagnostic_scope(events.append), pytest.raises(DomainError) as raised:
             asyncio.run(transport._post(
                 "https://example.invalid/private?access_token=secret",
                 {"access_token": "secret", "photo": b"private"}, api=api))
@@ -47,3 +49,7 @@ def test_http_failure_has_only_status_and_static_phase(api, phase, status):
     assert "secret" not in str(error.output())
     assert "example.invalid" not in str(error.output())
     assert error.output()["retry_safe"] is False
+    assert events[-1]["http_status"] == status
+    assert events[-1]["retry_after_s"] == 13
+    assert events[-1]["status"] == "failed"
+    assert "secret" not in str(events)
