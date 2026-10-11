@@ -30,10 +30,12 @@ def admit(app, actor, args):
             children = list(db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)))
             if change.get('attempt_id') and not any(c['id'] == change['attempt_id'] for c in children):
                 raise DomainError('recovery_operation_mismatch')
+            from . import vk_allocation_recovery
             unknown = [c for c in children if c['state'] == 'outcome_unknown' and c['dispatched']]
             pending = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id WHERE a.operation_id=? AND r.finalize_state='pending'", (op['id'],)).fetchone()
             if op['work_state'] == 'done' and not unknown and not pending:
-                if not children or not all(c['state'] in ('verified', 'scheduled', 'cancelled') for c in children):
+                if not children or not all(c['state'] in ('verified', 'scheduled', 'cancelled')
+                                              or vk_allocation_recovery.resolved(db, c) for c in children):
                     raise DomainError('recovery_not_available', next_action='review_outcome')
             if op['work_state'] == 'done' and (unknown or pending):
                 for child in unknown:
@@ -41,6 +43,9 @@ def admit(app, actor, args):
                     plan = json.loads(child['plan'])
                     if b['epoch'] != child['binding_epoch'] or plan['action'] not in json.loads(b['rights']):
                         raise DomainError('access_revoked', next_action='reauthorize')
+                    allocation = vk_allocation_recovery.candidate(db, op, child)
+                    if allocation and vk_allocation_recovery.resolve(store, db, op, child, allocation):
+                        continue
                     hint = {'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
                     if child['id'] == change.get('attempt_id') and change.get('native_reference'):
                         hint['native_reference'] = change['native_reference']
