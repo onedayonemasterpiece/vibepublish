@@ -333,8 +333,24 @@ To edit/reschedule/cancel/delete a provider item found in an authorized read, us
 publication_update with item_ref and change. Do not also supply publication_id or
 expected_revision: the scoped item_ref carries immutable remote-snapshot CAS.
 A stale ref requires a new read, not a blind retry. For your own tracked publication
-use publication_id + expected_revision as before. Native media are preserved;
-external media replacement is currently gated.
+use publication_id + expected_revision as before. For an explicitly authorized
+single-image/video replacement on your own verified tracked Telegram message,
+read that exact item now, then pass its fresh item_ref with change.kind=edit and
+one owned media asset. This edits the same message and retains the original
+publication plus untouched sibling receipts; inspect each delivery, since a
+successful Telegram edit does not resolve a partial/unknown VK sibling. Compare
+each delivery's applied_revision to desired_revision and report sync_status;
+for a selected-destination repair use publication_id + expected_revision and
+change.kind=edit with change.destinations listing exact existing aliases and a
+stable request_key. Only verified selected targets can be edited. An omitted
+destinations selector addresses all latest targets. An item_ref cannot be paired
+with destinations. Do not call a partial edit fully synchronized or silently
+catch up an untouched provider;
+a previously successful older sibling is outdated, so the publication remains
+partial until explicitly brought into agreement. Do not silently retry it. Reuse
+the same request key after an uncertain call. An unknown selected edit must be
+reconciled, never replaced with another key. Unmanaged external media replacement,
+albums and stale/non-provider refs remain gated.
 
 
 ## Telegram custom emoji: choose once, freeze, verify

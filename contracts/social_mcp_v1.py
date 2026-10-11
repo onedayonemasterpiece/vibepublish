@@ -95,6 +95,8 @@ DEFS = {
     "delivery_result": obj({"destination": ALIAS, "provider": PROVIDER, "attempt_id": ID,
         "state": STATE, "observed": enum("not_attempted", "provider_scheduled", "provider_processing", "published", "edited", "reacted", "deleted", "cancelled", "absent", "unknown"),
         "observed_at": DATE, "revision": REV, "requested_at": DATE, "effective_at": DATE,
+        "applied_revision": {"type": ["integer", "null"], "minimum": 1}, "desired_revision": REV,
+        "sync_status": enum("current", "outdated", "pending", "unknown"),
         "stage": STAGE, "scheduling_owner": {"const": "provider"}, "item_ref": ID, "url": URL,
         "queue_ref": ID, "preview_ref": ID, "navigate_hint": string(500),
         "evidence_ref": ID, "media_check": enum("not_applicable", "source_bytes", "provider_binding", "download_binding", "visual_correspondence", "incomplete"),
@@ -299,7 +301,8 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
 
 change = {"oneOf": [
     arm("approve", {"token": string(512)}, ("token",)),
-    arm("edit", {"content": ref("content"), "media": array(ref("media"), 0, 20), "renderings": ref("renderings")}),
+    arm("edit", {"content": ref("content"), "media": array(ref("media"), 0, 20), "renderings": ref("renderings"),
+        "destinations": {**array(ALIAS, 1, 20), "uniqueItems": True}}),
     arm("reschedule", {"delivery": DEFS["delivery"]["oneOf"][1]}, ("delivery",)),
     arm("cancel"), arm("delete"),
     arm("reconcile_removed", {"attempt_id": ID}, ("attempt_id",)),
@@ -308,7 +311,7 @@ change = {"oneOf": [
     arm("supersede_failed", {"destinations": {**array(ALIAS, 1, 20), "uniqueItems": True},
         "content": ref("content")}, ("destinations", "content"))]}
 change["oneOf"][1]["anyOf"] = [{"required": [p]} for p in ("content", "media", "renderings")]
-tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication. Reconcile observes the original uncertain operation without repeating its effect. For a never-dispatched tracked VK edit conflict, an owner may pass a fresh same-post item ref as native_reference to accept a new local baseline revision; this performs no provider write and requires a separate edit.",
+tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication. Reconcile observes the original uncertain operation without repeating its effect. For a never-dispatched tracked VK edit conflict, an owner may pass a fresh same-post item ref as native_reference to accept a new local baseline revision; this performs no provider write and requires a separate edit. A fresh exact Telegram item_ref may replace one image/video only on a provably managed same-principal published message; it creates a new revision of that same publication, edits the existing message, and retains unselected sibling receipts. External media adoption remains gated. An edit may select existing publication destinations by alias with a request key; only verified selected targets execute. Unselected target evidence remains visible with desired/applied revision and synchronization status.",
     obj({"publication_id": ID, "expected_revision": REV, "item_ref": ID, "change": change, "request_key": KEY},
         ("change",)), ref("receipt"), "publication.manage")
 # Existing private publication CAS or one exact immutable observed native item.
@@ -320,6 +323,15 @@ TOOLS[-1]["inputSchema"]["oneOf"] = [
 TOOLS[-1]["inputSchema"]["allOf"] = [{
     "if": {"properties": {"change": {"properties": {"kind": {"const": "supersede_failed"}},
                                        "required": ["kind"]}}},
+    "then": {"required": ["publication_id", "expected_revision", "request_key"],
+             "not": {"required": ["item_ref"]}}
+}, {
+    "if": {"required": ["item_ref"], "properties": {
+        "change": {"required": ["kind", "media"], "properties": {"kind": {"const": "edit"}}}}},
+    "then": {"required": ["request_key"]}
+}, {
+    "if": {"properties": {"change": {"required": ["kind", "destinations"],
+        "properties": {"kind": {"const": "edit"}}}}},
     "then": {"required": ["publication_id", "expected_revision", "request_key"],
              "not": {"required": ["item_ref"]}}
 }]

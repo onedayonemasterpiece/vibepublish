@@ -345,7 +345,8 @@ class Store:
                 if binding['epoch'] != plan['binding_epoch']:
                     raise DomainError('access_revoked', next_action='reauthorize')
         # Every status/cache read rechecks current channel access, including old epochs.
-        for child in db.execute("SELECT * FROM attempts WHERE operation_id=?", (row["id"],)):
+        from .managed_item_edits import latest_attempts
+        for child in latest_attempts(db, row):
             binding = self.binding(db, actor, binding_id=child["binding_id"])
             if binding["epoch"] != child["binding_epoch"]:
                 raise DomainError("access_revoked", next_action="reauthorize")
@@ -362,11 +363,15 @@ class Store:
                               (op["id"], seq, event_limit + 1)).fetchall()
             page = rows[:event_limit]
             deliveries = []
-            for child in db.execute("SELECT * FROM attempts WHERE operation_id=? ORDER BY rowid", (op["id"],)):
+            from .managed_item_edits import latest_attempts
+            for child in latest_attempts(db, op):
                 result = {"destination": child["alias"], "provider": child["provider"], "attempt_id": child["id"], "state": child["state"],
-                          "stage": child["stage"], "observed": child["observed"], "revision": op["revision"],
+                          "stage": child["stage"], "observed": child["observed"], "revision": child["target_revision"],
                           "media_check": "not_applicable", "retry_safe": False}
                 result.update(json.loads(child["result"]))
+                if op["publication_id"]:
+                    result.update(applied_revision=child["applied_revision"],
+                                  desired_revision=child["desired_revision"], sync_status=child["sync_status"])
                 if child['observed'] in ('cancelled', 'deleted'):
                     # Terminal removal: strip queue ownership metadata but
                     # preserve effective_at as historical schedule evidence.

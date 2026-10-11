@@ -476,6 +476,42 @@ required and no other author's private publication is exposed. HTTP equivalent:
 POST `/v1/items/{item_ref}/commands`; the canonical tool count remains eight.
 
 
+### Target-scoped edits and managed Telegram single-media replacement
+
+`Not confirmed by user` (2026-10-11 repair): an ordinary publication edit may
+include `change.destinations`, a nonempty unique list of existing destination
+aliases. This requires the publication ID, exact expected revision and request
+key; it cannot be combined with item_ref. Only selected verified/scheduled
+children receive new attempts. Selecting an unknown, failed, unrelated or
+unauthorized target fails before admission. Omission still edits all current
+target heads, allowing an explicit all-target revision to restore consistency.
+Provider CAS and each provider's existing edit capability gates remain in force.
+
+
+`Not confirmed by user` (2026-10-11 repair): the existing exact `item_ref` edit
+may replace one image/video on a same-principal, verified, tracked Telegram
+published message. It requires a stable request key, a fresh exact provider read,
+unchanged binding and actor epochs, matching native identity and a single authoritative managed
+publication. Arbitrary external media adoption, albums and uncertain selected
+targets remain gated. The native message is edited in place; no new publication
+or provider message is created. A new immutable revision/operation belongs to
+the original publication. Normal native CAS and exact media readback remain
+mandatory; a lost outcome cannot be retried as a fresh replacement.
+
+Receipts and subsequent planning use a bounded latest-attempt-per-target view
+at the requested revision. Only the selected target has an executable attempt.
+Unselected original attempts, receipts, checkpoints and allocation/unknown-effect
+proofs are retained by reference, never cloned or cleared. Command completion
+tracks selected work; the final publication aggregate continues to show partial
+or unknown siblings. One publication revision is the common desired revision.
+Each delivery exposes desired_revision, applied_revision (the last revision whose
+provider effect was verified, or null), and sync_status: current, outdated,
+pending or unknown. A successful untouched older target retains its historical
+state/evidence but is explicitly outdated; the aggregate remains partial, never
+wholly synchronized. Unknown effects retain unknown status even when an older
+applied revision is known. These fields do not authorize retries or automatic
+catch-up. An old operation receipt remains its historical revision.
+
 ## Runtime extension 1.4: shared visual jobs and private assets
 
 The eight names are unchanged. Standalone visual generate/tune/compose and inline

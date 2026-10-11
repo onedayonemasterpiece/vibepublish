@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Support explicit destination-scoped publication edits with immutable sibling evidence, desired/applied revision status and provider CAS; require exact revision and request key, reject uncertain selected targets, and preserve the all-target convergence path.
+
+- Permit a fresh exact provider-read item ref to replace one image/video on a verified same-principal managed Telegram message in place. Keep the original publication and immutable operation history, project untouched target receipts/proofs without copied attempts, and retain binding/epoch checks, native CAS, exact readback and no-repeat protection. Expose each target's last verified applied revision, common desired revision and synchronization status; older successful siblings stay visibly outdated and keep the aggregate partial. Generic external media adoption remains gated.
+
 - Extend the existing bounded provider ledger with sanitized VK upload host, wire bytes, framing, response identifiers and timing, plus direct URL-rejection reasons and fixed API error categories. Preserve secret redaction, the existing message/event caps and all effect/retry safeguards; retain the verified cargo carousel incident evidence.
 
 - Reuse authoritative VK saved-photo receipts without the added photos.getById permission prerequisite. Retain fresh CAS and mandatory ordered post-readback fingerprints, dimensions and target-owner checks, including VK photo ID reassignment; missing or changed media cannot be reported verified.
