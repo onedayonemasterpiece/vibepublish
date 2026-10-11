@@ -1,5 +1,15 @@
 # MCP contract v1.5 — native queues, incremental receipts and visual choice
 
+## Bounded recovery and owner edit administration — 2026-10-11
+
+Requirements: **Fixed** by the owner's request to complete the edited-photo publication and explicitly grant edit access to one channel. Implementation: **Not confirmed by user**; see [incident](../../reports/incidents/INC-2026-10-11-known-vk-effect-and-edit-recovery.md).
+
+An exact provider effect and fully verified content are different claims. For a VK checkpoint-bound native object whose target, identity, text and scheduling intent are read back exactly, a remaining media-identity failure must be visible as partial/review-needed with retry disabled. Validated internal known-effect evidence may release only that attempt's connection-wide unknown-dispatch fence; it never certifies the photo, authorizes a repeat send, clears unrelated uncertainty, or treats a missing/mismatched identity as known. Details and proof fences are in [unknown-resolution](unknown-resolution.md).
+
+An explicit `publication_update` change `supersede_failed` may replace content only for named terminal blocked/failed publication children with durable `dispatched=0`. It is not a retry of an uncertain effect. The original publication/revision and immutable plans remain audit evidence; one atomic keyed transaction permanently cancels the selected old children and links a replacement publication containing only those destinations. Media, native delivery time and successful siblings are preserved. A request key admits one replacement, not a retry loop. Any dispatched/unknown/running child, changed authority, stale revision or competing worker prevents admission; the replacement still obeys ordinary connection fences. No automatic supersession is permitted. See [explicit failed-intent supersession](supersede-failed.md).
+
+The owner-only `destinations` command `binding_grant_edit` exposes the existing local owner grant domain, not an authentication bypass. It accepts one own alias, expected binding epoch, expected routing revision and mandatory request key; the caller must currently be an owner and hold both `destinations` and `publication.manage`. It can add only `edit` to that active binding. It cannot select another principal, add scopes, create credentials, grant provider membership, revoke a fence or enable another right. Authorization is checked independently of catalog visibility and an atomic before/after receipt records the exact grant. User approval for a persistent permission remains required. See [service-principal administration](../../operations/service-principal-cli.md).
+
 ## HTTPS schema compatibility correction — 2026-10-10
 
 Status: `Not confirmed by user`. The reported named-link edit defect is tracked

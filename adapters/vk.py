@@ -634,9 +634,29 @@ class VKAdapter:
         source = checkpoint.get('source')
         if source and item.origin != source['url']:
             raise OutcomeUnknown('vk_repost_origin_mismatch')
-        item = (bind_media(r, item, checkpoint['media'])
-                if tuple(checkpoint['media']) == item.provider_media
-                else await self._bind_copied_media(r, item, checkpoint, hooks))
+        try:
+            item = (bind_media(r, item, checkpoint['media'])
+                    if tuple(checkpoint['media']) == item.provider_media
+                    else await self._bind_copied_media(r, item, checkpoint, hooks))
+        except OutcomeUnknown as exc:
+            # A known post with unverified media is not an unknown dispatch.
+            # Never turn text/target/schedule ambiguity or a moving item into proof.
+            if (exc.code != 'media_identity_or_order_mismatch'
+                    or r.action not in {'publish', 'edit', 'reschedule'} or source
+                    or checkpoint.get('identity_source') == 'queue_match'
+                    or str(checkpoint.get('id')) != item.native_id
+                    or item.native_target != r.native_target
+                    or item.text != plain_text(r, limit=16000)
+                    or item.scheduled_at != r.scheduled_at
+                    or item.namespace != namespace):
+                raise
+            current = await self._exact(r.native_target, item.native_id, namespace)
+            if current is None or identity(current) != identity(item):
+                raise OutcomeUnknown('vk_photo_binding_item_changed') from None
+            return Observation(
+                'provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',
+                (replace(current, media_hashes=(), media_check='incomplete'),),
+                missing_checks=('media_identity_or_order_mismatch',))
         return Observation('provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',
                            (item,), forward_origin_matched=bool(source))
 
@@ -661,6 +681,7 @@ class VKAdapter:
             raise OutcomeUnknown('vk_scheduled_identity_ambiguous')
         if len(candidates) == 1:
             checkpoint['id'] = candidates[0].native_id
+            checkpoint['identity_source'] = 'queue_match'
             await hooks.checkpoint('vk_response', saved_checkpoint(request, **checkpoint))
             return await self._observe(request, checkpoint, hooks)
 

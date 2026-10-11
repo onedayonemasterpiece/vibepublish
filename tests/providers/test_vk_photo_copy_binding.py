@@ -1,4 +1,5 @@
 """Offline copied-ID fixtures; no VK calls or real generated imagery."""
+
 import copy
 import hashlib
 from dataclasses import replace
@@ -11,6 +12,27 @@ from social_operations.assets import verify_image
 from social_operations.domain import DomainError, OutcomeUnknown, timestamp
 from .scripted import VKTransport
 from .test_native_adapters import Journal, NOW, asset, request
+
+@pytest.mark.asyncio
+async def test_idless_queue_candidate_with_wrong_media_is_still_unknown():
+    import json
+    a, t, j, r = setup_copy()
+    t.sabotage = 'bytes'
+    result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    assert result.missing_checks == ('media_identity_or_order_mismatch',)
+    lost_response = json.loads(j.checkpoint_json)
+    lost_response['adapter']['id'] = None
+    with pytest.raises(OutcomeUnknown) as error:
+        await a.reconcile(r, json.dumps(lost_response), j.hooks)
+    assert error.value.code == 'media_identity_or_order_mismatch'
+    assert t.effects == 1
+
+
+def test_landscape_crop_beyond_twenty_percent_is_not_verified():
+    assert not VKAdapter._single_photo_copy_compatible(
+        {'mime': 'image/jpeg', 'width': 2048, 'height': 886},
+        {'mime': 'image/jpeg', 'width': 1575, 'height': 886})
+
 
 
 class Copies(VKTransport):
@@ -91,9 +113,10 @@ async def test_user_photo_ids_rebind_by_exact_ordered_provider_bytes():
 async def test_remapping_does_not_accept_changed_images_order_or_owner(sabotage):
     a, t, j, r = setup_copy()
     t.sabotage = sabotage
-    with pytest.raises(OutcomeUnknown) as error:
-        await a.execute(await a.prepare(r, j.hooks), j.hooks)
-    assert error.value.code == 'media_identity_or_order_mismatch'
+    result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    assert result.missing_checks == ('media_identity_or_order_mismatch',)
+    assert result.items[0].media_check == 'incomplete'
+    assert not result.items[0].media_hashes
     assert t.effects == 1
 
 
@@ -119,8 +142,10 @@ async def test_old_checkpoint_cannot_invent_copy_proof():
     await a.execute(await a.prepare(r, j.hooks), j.hooks)
     old = json.loads(j.checkpoint_json)
     old['adapter'].pop('photo_proofs')
-    with pytest.raises(OutcomeUnknown):
-        await a.reconcile(r, json.dumps(old), j.hooks)
+    result = await a.reconcile(r, json.dumps(old), j.hooks)
+    assert result.missing_checks == ('media_identity_or_order_mismatch',)
+    assert result.items[0].media_check == 'incomplete'
+    assert not result.items[0].media_hashes
     assert t.effects == 1
 
 

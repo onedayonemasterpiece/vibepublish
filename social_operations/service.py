@@ -486,7 +486,7 @@ class Application:
             with self.store.connection() as db:
                 actor = self.store.current(db, actor)
             if 'publication.manage' not in actor.scopes and (
-                    'publish' not in actor.scopes or args['change']['kind'] != 'retry_failed'):
+                    'publish' not in actor.scopes or args['change']['kind'] not in {'retry_failed', 'supersede_failed'}):
                 raise DomainError('access_denied', next_action='contact_owner')
         if action == 'publication_update' and args['change']['kind'] == 'reconcile_removed':
             from .unknown_resolution import accept_resolution
@@ -494,6 +494,9 @@ class Application:
         if action == 'publication_update' and args['change']['kind'] == 'retry_failed':
             from .recovery import retry_failed
             return retry_failed(self, actor, args)
+        if action == 'publication_update' and args['change']['kind'] == 'supersede_failed':
+            from .recovery import supersede_failed
+            return supersede_failed(self, actor, args)
         if action == 'publication_update' and args['change']['kind'] == 'reconcile':
             from .recovery import admit
             return admit(self, actor, args)
@@ -744,6 +747,13 @@ class Application:
         intent = normalize_intent('destinations', args)
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
+            if args['command']['kind'] == 'binding_grant_edit':
+                if not actor.owner or not {'destinations', 'publication.manage'} <= actor.scopes:
+                    raise DomainError('access_denied', next_action='contact_owner')
+                if list(Draft202012Validator(CATALOG['vibepublish_destinations']['inputSchema'],
+                                             format_checker=FORMATS).iter_errors(args)):
+                    raise DomainError('invalid_input')
+                self.store.binding(db, actor, alias=args['command']['alias'])
             # Keyed replay precedes profile/set CAS, atomically with mutations.
             op = self._replay(db, actor, 'destinations', intent, args, implicit=False)
             if not op:
@@ -754,6 +764,23 @@ class Application:
 
     def _destinations_mutation(self, db, actor, command, intent):
         action = command['kind']
+        if action == 'binding_grant_edit':
+            actor = self.store.current(db, actor)
+            if not actor.owner or not {'destinations', 'publication.manage'} <= actor.scopes:
+                raise DomainError('access_denied', next_action='contact_owner')
+            binding = self.store.binding(db, actor, alias=command['alias'])
+            if binding['epoch'] != command['expected_binding_epoch']:
+                raise DomainError('binding_epoch_conflict', next_action='refresh')
+            if actor.routing_revision != command['expected_routing_revision']:
+                raise DomainError('routing_revision_conflict', next_action='refresh')
+            before = {'rights': json.loads(binding['rights']), 'binding_epoch': binding['epoch'],
+                      'actor_epoch': actor.epoch, 'routing_revision': actor.routing_revision}
+            rights = self.store._grant_binding_rights(db, actor, binding['id'], ('edit',))
+            current = self.store.current(db, actor)
+            after = {**before, 'rights': rights, 'routing_revision': current.routing_revision}
+            return self._new_operation(db, current, 'destinations', intent, complete=True,
+                result={'binding_grant': {'binding_id': binding['id'], 'alias': binding['alias'],
+                                         'right': 'edit', 'before': before, 'after': after}})
         if action.startswith('emoji_'):
             return self.emojis.commands(db, actor, command, intent)
         if action == 'resolve':

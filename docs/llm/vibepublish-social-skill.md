@@ -15,6 +15,14 @@ lookup/set management: destinations. All names have the `vibepublish_` prefix.
 
 One authorized publication uses one mutation call. Do not search for prepare/upload/commit tools. Status calls observe that same operation and never create another publication.
 
+## Explicit correction and owner authority
+
+`known_effect_media_review` means an exact native effect exists but its media is unverified. Report partial success; never resend it.
+
+For user-changed text in terminal never-dispatched failures, use `publication_update` change `supersede_failed` with `destinations` and new `content`, exact publication/revision and stable request key. It atomically cancels those old intents and returns a linked replacement, preserving photo/time and successful siblings. Never supersede uncertain effects or loop with new keys.
+
+With explicit permission, an authenticated owner may add only edit to one own alias using `destinations.binding_grant_edit`: alias, expected_binding_epoch (alias revision), expected_routing_revision (bootstrap) and request_key. Verify binding_grant receipt, then re-read the native item before editing. No scope, credential or denial bypass.
+
 ## Scheduling is native only
 
 For this owner's workflow use **Europe/Kaliningrad (UTC+02:00)**. A supplied date/time becomes delivery.at with explicit +02:00. A time-only instruction means the next future occurrence of that clock time in Kaliningrad; report the resolved date. If only a date and no clock time is supplied, ask for the missing time rather than inventing it. If no scheduling time was requested, omit delivery (now). Never silently turn a past explicit schedule into an immediate send. An explicit environment restriction such as the VK acceptance stand's postponed-only rule still wins over the general default.

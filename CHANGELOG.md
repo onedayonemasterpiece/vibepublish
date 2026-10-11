@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Separate exact observed VK effects with unresolved media checks from unknown dispatch, retaining visible review warnings and no-resend protection while releasing only validated connection quarantine. Add explicit atomic content supersession for never-dispatched failed destinations with linked replacement intent and unchanged successful siblings. Expose the existing owner-only additive edit grant through an authenticated, exact-own-alias MCP command with binding/routing CAS, idempotency and audit; no implicit rights, scope or credential changes.
+
 - Add bounded authenticated workspace image import through the existing visual MCP tool: durable begin/chunk/finish/status/abort, source hash and offset checks, private principal/epoch-scoped staging, safe request-key replay, expiration and staging caps. Reuse existing image sanitization and asset admission without public hosting, chat relay, regeneration or publication. Keep the 512 KiB MCP body limit and add transport and restart/privacy regressions.
 
 - Give MAX visible-account navigation, Settings and phone readiness one decreasing configured budget instead of independent 10/30-second ceilings. Preserve exact account matching, existing selectors and the original preflight/operation deadline; retain bounded subphase diagnostics. Cover delayed authenticated cold/warm readiness and fail-closed login, duplicate-control and wrong-account cases.

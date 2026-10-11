@@ -407,9 +407,30 @@ async def test_reordered_media_cannot_verify_even_when_count_matches(provider):
         else:
             next(iter(transport.posts.values()))['attachments'].reverse()
     transport.after_mutation = reorder
-    with pytest.raises(OutcomeUnknown) as err:
-        await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
-    assert err.value.code == 'media_identity_or_order_mismatch'
+    if provider == 'telegram':
+        with pytest.raises(OutcomeUnknown) as err:
+            await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
+        assert err.value.code == 'media_identity_or_order_mismatch'
+    else:
+        # Exact VK post identity is known, but reordered media is never verified.
+        # Core projects this incomplete observation as terminal partial.
+        result = await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
+        assert result.observed == 'published'
+        assert result.missing_checks == ('media_identity_or_order_mismatch',)
+        item, = result.items
+        assert item.native_target == r.native_target
+        assert item.text == 'Fixture'
+        assert item.media_check == 'incomplete'
+        assert not item.media_hashes
+        assert transport.effects == 1
+        uploads = len(transport.uploads)
+        again = await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
+        assert again.items[0].native_id == item.native_id
+        assert again.missing_checks == result.missing_checks
+        assert again.items[0].media_check == 'incomplete'
+        assert not again.items[0].media_hashes
+        assert transport.effects == 1
+        assert len(transport.uploads) == uploads
 
 
 @pytest.mark.asyncio
