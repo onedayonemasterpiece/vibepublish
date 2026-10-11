@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Add explicit durable VK wall-to-linked-Story continuation: frozen approved image, exact original parent receipt, existing community Long Poll, bounded missed-event readback, transactional deduplication, child status and no resend after uncertain save. No mobile dependency or automatic credential/event-setting changes.
+
+- Add scoped optional wall-post links to immediate VK photo Stories through the existing publish tool. Freeze source identity/binding epoch, label and image; verify source before upload and exact Story link/photo on readback. Recover known Story identities by observation only, preserving no-repeat protection for ambiguous saves. No scheduling, callback, credential or destination-setting changes; linked-Story live acceptance remains pending.
+
 - Separate exact observed VK effects with unresolved media checks from unknown dispatch, retaining visible review warnings and no-resend protection while releasing only validated connection quarantine. Add explicit atomic content supersession for never-dispatched failed destinations with linked replacement intent and unchanged successful siblings. Expose the existing owner-only additive edit grant through an authenticated, exact-own-alias MCP command with binding/routing CAS, idempotency and audit; no implicit rights, scope or credential changes.
 
 - Add bounded authenticated workspace image import through the existing visual MCP tool: durable begin/chunk/finish/status/abort, source hash and offset checks, private principal/epoch-scoped staging, safe request-key replay, expiration and staging caps. Reuse existing image sanitization and asset admission without public hosting, chat relay, regeneration or publication. Keep the 512 KiB MCP body limit and add transport and restart/privacy regressions.

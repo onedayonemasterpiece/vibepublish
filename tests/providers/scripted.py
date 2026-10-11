@@ -202,6 +202,8 @@ class VKTransport:
             return {'upload_url': 'https://pu.vk.com/upload?fixture=1'}
         if method == 'stories.getPhotoUploadServer':
             self.pending_story_group = params['group_id']
+            self.pending_story_link = ({'url': params['link_url'], 'text': params['link_text']}
+                                       if 'link_url' in params else None)
             return {'upload_url': 'https://pu.vk.com/story-upload?fixture=1', 'user_ids': []}
         if method == 'stories.getById':
             if self.fail_read:
@@ -281,6 +283,8 @@ class VKTransport:
             story = {'id': self.next_story, 'owner_id': owner, 'date': 1_800_000_000,
                      'expires_at': 1_800_086_400, 'is_deleted': False, 'is_expired': False,
                      'photo': {'owner_id': owner, 'id': self.next_photo}}
+            if self.pending_story_link:
+                story['link'] = copy.deepcopy(self.pending_story_link)
             self.stories[(owner, self.next_story)] = story
             result = {'count': 1, 'items': [copy.deepcopy(story)]}
         elif method == 'stories.delete':

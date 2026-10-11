@@ -93,6 +93,7 @@ features:
     telegram_custom_emoji_status: remote_source_and_offline_core_tests_verified_live_unverified
     latest_extension: docs/features/social-operations/destination-lifecycle-vk-v1.md
     destination_lifecycle_vk: docs/features/social-operations/destination-lifecycle-vk-v1.md
+    vk_linked_story_dependency: docs/features/social-operations/vk-linked-story-dependency.md
     acceptance_tests: docs/features/social-operations/acceptance-tests-v1.md
     skill: docs/llm/vibepublish-social-skill.md
     skill_update_status: v1_7_vk_destination_lifecycle_and_stories

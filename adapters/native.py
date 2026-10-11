@@ -56,6 +56,8 @@ def identity(item: RemoteItem) -> str:
     """Content/lifecycle CAS excludes changing view counters and observation time."""
     fields = [item.native_target, item.namespace, item.native_id, item.text,
               item.scheduled_at, list(item.provider_media), list(item.member_ids), item.origin]
+    if item.story_link_json != '{}':
+        fields.append({'story_link': json.loads(item.story_link_json)})
     if item.observed_media:
         from dataclasses import asdict
         fields.append({'observed_media': [asdict(value) for value in item.observed_media]})

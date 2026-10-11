@@ -117,8 +117,26 @@ class VKAdapter:
                 raise DomainError('vk_token_role_not_permitted', next_action='contact_owner')
         return group
 
+    @staticmethod
+    def _story_link(request):
+        try:
+            link = json.loads(request.story_link_json)
+            if not link:
+                return {}
+            if (request.surface != 'story' or request.action != 'publish'
+                    or set(link) != {'url', 'text', 'target', 'id'}
+                    or link['text'] not in {'read', 'more'}
+                    or not re.fullmatch(r'-[1-9][0-9]*', link['target'])
+                    or not re.fullmatch(r'[1-9][0-9]*', link['id'])
+                    or link['url'] != f"https://vk.com/wall{link['target']}_{link['id']}"):
+                raise ValueError()
+            return link
+        except (ValueError, TypeError, KeyError):
+            raise DomainError('vk_story_link_invalid') from None
+
     async def inspect(self, request: ProviderRequest) -> Capability:
         try:
+            self._story_link(request)
             if request.surface not in {'post', 'story'}:
                 raise DomainError('vk_surface_needs_review')
             if request.surface == 'story':
@@ -151,6 +169,9 @@ class VKAdapter:
                 raise DomainError('vk_schedule_minute_precision',
                                   'VK scheduled lifecycle requires a whole minute; specify HH:MM')
             await self._rights(request)
+            link = self._story_link(request)
+            if link and not self.transport.permits('reader', 'wall.getById', group_id=-int(link['target'])):
+                raise DomainError('vk_token_role_not_permitted')
             if request.surface == 'post':
                 if request.existing:
                     existing = request.existing
@@ -224,6 +245,10 @@ class VKAdapter:
                           scheduled_at=timestamp(_int(raw.get('date'))) if namespace == 'scheduled' else None,
                           native_target=target, origin=origin, provider_media=media,
                           member_ids=(str(ident),), metrics=metrics,
+                          native_schedule_origin_json=canonical({
+                              'owner_id': target, 'postponed_id': str(raw['postponed_id']),
+                              'published_id': str(ident), 'evidence': 'vk_postponed_id'
+                          }) if namespace == 'published' and type(raw.get('postponed_id')) is int and raw['postponed_id'] > 0 else '{}',
                           url=f'https://vk.ru/wall{target}_{ident}' if namespace == 'published' else None)
         return replace(item, fingerprint=identity(item))
 
@@ -237,10 +262,18 @@ class VKAdapter:
         provider_media = f'story{target}_{ident}'
         if isinstance(photo, dict) and type(photo.get('owner_id')) is int and type(photo.get('id')) is int:
             provider_media = f"photo{photo['owner_id']}_{photo['id']}"
+        link = raw.get('link')
+        if link is None:
+            story_link = {}
+        elif (isinstance(link, dict) and isinstance(link.get('url'), str)
+                and isinstance(link.get('text'), str) and link['text'].strip()):
+            story_link = {'url': link['url'], 'text': link['text']}
+        else:
+            raise DomainError('vk_story_link_readback_invalid')
         item = RemoteItem(
             str(ident), 'story', '', '', timestamp(self.clock()),
             native_target=target, provider_media=(provider_media,), member_ids=(str(ident),),
-            url=f'https://vk.com/story{target}_{ident}',
+            url=f'https://vk.com/story{target}_{ident}', story_link_json=canonical(story_link),
         )
         return replace(item, fingerprint=identity(item))
 
@@ -300,6 +333,38 @@ class VKAdapter:
         if len(rows) != 1 or str(self._wall_post_id(rows[0], namespace, target)) != ident:
             raise DomainError('vk_readback_identity_mismatch')
         return self._item(rows[0], namespace, target)
+
+    async def resolve_story_parent(self, target, scheduled_id, event_candidates):
+        """Only explicit native postponed_id mapping can cross an ID transition.
+
+        A bounded destination-feed read recovers a lost event. Text similarity,
+        timestamps, queue disappearance and closest post are never identity proof.
+        Missing/ambiguous mapping remains unresolved; exact readback is mandatory.
+        """
+        if (not re.fullmatch(r'-[1-9][0-9]*', target)
+                or not re.fullmatch(r'[1-9][0-9]*', scheduled_id)
+                or len(event_candidates) > 100
+                or any(not re.fullmatch(r'[1-9][0-9]*', value) for value in event_candidates)):
+            raise DomainError('linked_story_parent_identity_unproven')
+        candidates = set(event_candidates)
+        if not candidates:
+            response = await self._call('wall.get', owner_id=int(target), filter='owner', count=100, offset=0)
+            rows = _items(response)
+            if len(rows) > 100:
+                raise DomainError('linked_story_parent_mapping_unproven')
+            for raw in rows:
+                if type(raw.get('postponed_id')) is int and str(raw['postponed_id']) == scheduled_id:
+                    if (type(raw.get('owner_id')) is not int or str(raw['owner_id']) != target
+                            or raw.get('post_type') not in {None, 'post'} or raw.get('is_deleted')):
+                        continue
+                    ident = raw.get('id')
+                    if type(ident) is int and ident > 0:
+                        candidates.add(str(ident))
+        if len(candidates) > 1:
+            raise DomainError('linked_story_parent_mapping_ambiguous', next_action='review_outcome')
+        if not candidates:
+            raise DomainError('linked_story_parent_mapping_unproven', next_action='review_outcome')
+        return await self._exact(target, next(iter(candidates)), 'published')
 
     async def _exact_raw(self, target, ident, namespace):
         if namespace == 'scheduled':
@@ -572,18 +637,41 @@ class VKAdapter:
         if r.action == 'publish':
             asset = r.assets[0]
             await hooks.emit_progress('uploading', 'started', 'Staging VK Story image')
-            server = await self._call('stories.getPhotoUploadServer', group_id=group)
+            link = self._story_link(r)
+            upload_params = {'group_id': group}
+            if link:
+                source = await self._exact(link['target'], link['id'], 'published')
+                if source is None:
+                    raise DomainError('vk_story_link_source_missing')
+                baseline = json.loads(r.story_parent_json)
+                if baseline and (source.native_target != baseline['native_target']
+                        or source.native_id != baseline['native_id']
+                        or source.text != baseline['text']
+                        or list(source.provider_media) != baseline['provider_media']):
+                    raise DomainError('linked_story_parent_changed')
+                upload_params.update(link_url=link['url'], link_text=link['text'])
+            server = await self._call('stories.getPhotoUploadServer', **upload_params)
             if not isinstance(server, dict) or not isinstance(server.get('upload_url'), str):
                 raise DomainError('vk_story_upload_server_invalid')
             validated_url(server['upload_url'])
             upload_result = await self.transport.upload_story_photo(server['upload_url'], asset.data, asset.mime)
             await hooks.checkpoint('vk_story_prepared', saved_checkpoint(r, **checkpoint))
+            if link and r.story_parent_json != '{}':
+                latest = await self._exact(link['target'], link['id'], 'published')
+                if (latest is None or latest.text != baseline['text']
+                        or latest.native_id != baseline['native_id']
+                        or latest.native_target != baseline['native_target']
+                        or list(latest.provider_media) != baseline['provider_media']):
+                    raise DomainError('linked_story_parent_changed')
             await hooks.before_effect(r.attempt_id, r.plan_digest)
             response = await self._call('stories.save', upload_results=[upload_result], extended=0)
             rows = _items(response)
             if len(rows) != 1:
                 raise OutcomeUnknown('vk_story_response_identity_missing')
-            item = self._story_item(rows[0], r.native_target)
+            # Save establishes identity/media only. Preserve that checkpoint even
+            # if its optional link projection is absent or malformed; the exact
+            # getById below is the authoritative link observation.
+            item = self._story_item({k: v for k, v in rows[0].items() if k != 'link'}, r.native_target)
             if item is None:
                 raise OutcomeUnknown('vk_story_response_identity_missing')
             checkpoint['id'] = item.native_id
@@ -612,6 +700,16 @@ class VKAdapter:
             raise OutcomeUnknown('vk_story_readback_missing')
         if tuple(checkpoint.get('media') or ()) != item.provider_media:
             raise OutcomeUnknown('vk_story_media_binding_mismatch')
+        link = self._story_link(r)
+        if link and (len(item.provider_media) != 1 or not item.provider_media[0].startswith('photo')):
+            raise OutcomeUnknown('vk_story_photo_binding_missing')
+        observed_link = json.loads(item.story_link_json)
+        # VK input is a selector enum, but output text is a provider-localized
+        # string. Prove the exact destination and retain the visible label;
+        # do not invent equality between selector and localized display text.
+        if ((link and observed_link.get('url') != link['url'])
+                or (not link and observed_link)):
+            raise OutcomeUnknown('vk_story_link_binding_mismatch')
         return Observation('published', (bind_media(r, item, list(item.provider_media)),))
 
     async def _observe(self, r, checkpoint, hooks):
@@ -737,6 +835,8 @@ class VKAdapter:
     async def reconcile(self, request: ProviderRequest, checkpoint: str, hooks: Hooks) -> Observation:
         self._connection(request)
         state = load_checkpoint(request, checkpoint)
+        if request.surface == 'story':
+            return await self._observe_story(request, state, hooks)
         if not state.get('id') and request.action == 'publish' and request.scheduled_at:
             return await self._recover_missing_scheduled_publish(request, state, hooks)
         return await self._observe(request, state, hooks)

@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.9.0-runtime"
+VERSION = "1.10.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -169,6 +169,12 @@ DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url":
     "metrics_observed_at": DATE, "error": ref("error"),
     "metrics": array(obj({"name": string(100), "value": {"type": "number"}, "unit": string(40)},
                          ("name", "value")), 0, 100)}, ("ref", "kind", "observed_at", "source", "freshness"))
+DEFS["read_item"]["properties"]["native_schedule_origin"] = obj({
+    "owner_id": string(64, pattern=r"^-[1-9][0-9]*$"),
+    "postponed_id": string(64, pattern=r"^[1-9][0-9]*$"),
+    "published_id": string(64, pattern=r"^[1-9][0-9]*$"),
+    "evidence": enum("vk_postponed_id")},
+    ("owner_id", "postponed_id", "published_id", "evidence"))
 DEFS["recompose_lineage"] = obj({"job_id": ID, "candidate_id": ID, "visual_revision": REV,
     **{key: string(64, pattern=r"^[a-f0-9]{64}$") for key in
        ("candidate_sha256", "input_digest", "art_sha256")}},
@@ -196,6 +202,11 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
     "review_token": string(512), "poll_after_seconds": {"type": "integer", "minimum": 1},
     "error": ref("error"), "dry_run": {"type": "boolean"}},
     ("operation_id", "action", "state", "message", "operation_complete", "progress", "next_action", "retry_safe", "receipt_ref", "deliveries"))
+DEFS["receipt"]["properties"]["linked_story"] = obj({
+    "id": ID, "state": enum("waiting", "queued", "verified", "blocked", "cancelled", "expired", "outcome_unknown"),
+    "reason": {"type": ["string", "null"], "maxLength": 200},
+    "event_status": string(100), "child_operation_id": {"type": ["string", "null"], "maxLength": 200},
+    "expires": {"type": "number"}}, ("id", "state", "reason", "event_status", "child_operation_id", "expires"))
 DEFS["binding_grant_snapshot"] = obj({
     "rights": {**array(enum("publish", "edit", "reschedule", "cancel", "delete", "forward",
                            "reply", "react", "basic_group_schedule"), 0, 9), "uniqueItems": True},
@@ -258,6 +269,8 @@ tool("get_started", "Get the versioned skill, allowed aliases and current capabi
 
 tool("publish", "Create one publication now or in native provider queues; return accepted progress without waiting for providers. No local scheduler. Preview does not send. An explicit execute publication with a visual defaults to eligible automatic selection: omitted delivery means now; delivery at uses a native queue. Preview and explicit human selection remain gated.",
     obj({"to": array(ALIAS, 1, 20), "content": ref("content"), "media": array(ref("media"), 0, 20),
+        "linked_story": obj({"media": array(ref("media"), 1, 1), "text": enum("read", "more")}, ("media", "text")),
+        "story_link": obj({"item_ref": {"oneOf": [ID, URL]}, "text": enum("read", "more")}, ("item_ref", "text")),
         "thread_ref": {"oneOf": [ID, TELEGRAM_THREAD_URL]},
         "surface": enum("post", "story", "message", "album", "video", "short_video"),
         "delivery": ref("delivery"), "mode": enum("execute", "preview"),

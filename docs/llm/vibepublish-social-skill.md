@@ -278,6 +278,10 @@ IDs are supported. A revoked binding is not silently reactivated.
 
 ## VK Stories
 
+For one VK wall target, `linked_story: {media: [approved image], text: read|more}` durably triggers a Story after exact parent publication. Read `linked_story.child_operation_id` for evidence; never send it again. Parent changes invalidate approval. No phone is needed.
+
+Immediate photo Stories accept `story_link: {item_ref, text: read|more}` with a published VK ref/URL in an authorized binding on the same connection. Photo/link readback is required; never resend an uncertain save.
+
 Use the ordinary publish tool with `surface=story`; there is no separate Story
 tool. The first verified VK Story shape is one immediate community photo
 (PNG/JPEG/WebP), with no authored caption text and no scheduling fallback.
