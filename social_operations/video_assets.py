@@ -55,7 +55,7 @@ def _run(args, *, timeout, capture=False):
 
 def _probe(ffprobe, path):
     raw = _run([ffprobe, '-v', 'error', '-max_alloc', str(64*1024*1024), *_INPUT,
-        '-count_packets', '-show_entries', 'format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_packets:stream_disposition=attached_pic',
+        '-count_packets', '-show_entries', 'format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_packets:stream_disposition=attached_pic:stream_side_data=rotation',
         '-of', 'json', '-i', str(path)], timeout=10, capture=True)
     try:
         info = json.loads(raw)
@@ -68,6 +68,11 @@ def _probe(ffprobe, path):
                 or videos[0].get('disposition', {}).get('attached_pic', 0)):
             raise ValueError()
         width, height = videos[0]['width'], videos[0]['height']
+        rotation = next((r['rotation'] for r in videos[0].get('side_data_list', []) if 'rotation' in r), 0)
+        if type(rotation) not in (int, float) or not math.isfinite(rotation) or rotation % 90:
+            raise ValueError()
+        if rotation % 180:
+            width, height = height, width
         if (type(width) is not int or type(height) is not int or min(width,height) < 1
                 or max(width,height) > 1920 or min(width,height) > 1080
                 or not math.isfinite(duration) or not 0 < duration <= MAX_VIDEO_SECONDS):
@@ -138,16 +143,32 @@ def import_video(store, actor, data: bytes, mime: str) -> str:
         store.current(db, actor)
     video = verify_video(data, mime, artifact_root=store.path.parent/'artifacts'/'video-processing')
     with store.tx() as db:
-        store.current(db,actor)
-        used=db.execute('SELECT COALESCE(SUM(length(bytes)),0) FROM assets WHERE tenant_id=?',(actor.tenant_id,)).fetchone()[0]
-        quota=db.execute('SELECT storage_limit FROM tenants WHERE id=?',(actor.tenant_id,)).fetchone()[0]
-        if used+len(video.original)+len(video.data)>quota:
-            raise DomainError('storage_quota_exceeded')
-        source_hash=hashlib.sha256(video.original).hexdigest()
-        refs=[]
-        for payload in (video.original,video.data):
-            ref=new_id('asset'); refs.append(ref)
-            db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
-                (ref,actor.tenant_id,actor.principal_id,hashlib.sha256(payload).hexdigest(),'video/mp4',
-                 video.width,video.height,payload,source_hash,store.clock()))
+        return insert_verified_video(store, db, actor, video)
+
+
+def insert_verified_video(store, db, actor, video):
+    """Atomic quota admission shared by CLI and resumable byte ingress."""
+    store.current(db, actor)
+    used=db.execute('SELECT COALESCE(SUM(length(bytes)),0) FROM assets WHERE tenant_id=?',(actor.tenant_id,)).fetchone()[0]
+    quota=db.execute('SELECT storage_limit FROM tenants WHERE id=?',(actor.tenant_id,)).fetchone()[0]
+    if used+len(video.original)+len(video.data)>quota:
+        raise DomainError('storage_quota_exceeded')
+    source_hash=hashlib.sha256(video.original).hexdigest()
+    refs=[]
+    for payload in (video.original,video.data):
+        ref=new_id('asset'); refs.append(ref)
+        db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
+            (ref,actor.tenant_id,actor.principal_id,hashlib.sha256(payload).hexdigest(),'video/mp4',
+             video.width,video.height,payload,source_hash,store.clock()))
     return refs[-1]
+
+
+def video_metadata(data):
+    """Bounded metadata read for an immutable, already verified MP4 asset."""
+    if not isinstance(data, bytes) or not 12 <= len(data) <= MAX_VIDEO_BYTES or data[4:8] != b'ftyp':
+        raise DomainError('video_format_unsupported')
+    with tempfile.TemporaryDirectory(prefix='vibepublish-video-metadata-') as temporary:
+        source=Path(temporary)/'source.mp4'
+        source.write_bytes(data);source.chmod(0o600)
+        width,height,duration,_=_probe(_tool('ffprobe'),source)
+        return width,height,duration

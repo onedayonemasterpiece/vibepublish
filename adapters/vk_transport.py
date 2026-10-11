@@ -31,6 +31,9 @@ POLICIES = {
     'wall.edit': ('editor', {'owner_id', 'post_id'}, {'owner_id', 'post_id', 'message', 'attachments', 'publish_date'}),
     'wall.delete': ('editor', {'owner_id', 'post_id'}, {'owner_id', 'post_id'}),
     'wall.repost': ('editor', {'object', 'group_id'}, {'object', 'group_id'}),
+    'video.save': ('media', {'group_id', 'name', 'wallpost'}, {'group_id', 'name', 'wallpost'}),
+    'video.get': ('reader', {'videos'}, {'videos'}),
+    'stories.getVideoUploadServer': ('media', {'group_id'}, {'group_id', 'add_to_news', 'link_url', 'link_text'}),
     'stories.getPhotoUploadServer': ('media', {'group_id'}, {'group_id', 'add_to_news', 'link_url', 'link_text'}),
     'stories.save': ('media', {'upload_results'}, {'upload_results', 'extended'}),
     'stories.getById': ('reader', {'stories'}, {'stories', 'extended'}),
@@ -38,7 +41,7 @@ POLICIES = {
 }
 
 
-READ_ROLES = {'groups.getById', 'wall.getById', 'wall.get', 'wall.search', 'stories.getById'}
+READ_ROLES = {'groups.getById', 'wall.getById', 'wall.get', 'wall.search', 'stories.getById', 'video.get'}
 
 
 def role_allowed(role: str, method: str) -> bool:
@@ -298,6 +301,35 @@ class VKHTTPTransport:
                 or (isinstance(response, dict) and 'error' in response)):
             raise DomainError('vk_story_upload_response_invalid')
         return upload_result
+
+    async def upload_video(self, url: str, data: bytes, mime: str) -> dict:
+        import aiohttp
+        if mime != 'video/mp4' or not data or len(data) > 20 * 1024 * 1024:
+            raise DomainError('vk_video_media_invalid')
+        form = aiohttp.FormData()
+        form.add_field('video_file', data, filename='verified.mp4', content_type=mime)
+        response = await self._post(url, form)
+        if isinstance(response, dict) and isinstance(response.get('response'), dict):
+            response = response['response']
+        if (not isinstance(response, dict) or 'error' in response
+                or type(response.get('video_id')) is not int or response['video_id'] <= 0):
+            raise DomainError('vk_video_upload_response_invalid')
+        return response
+
+    async def upload_story_video(self, url: str, data: bytes, mime: str) -> str:
+        import aiohttp
+        if mime != 'video/mp4' or not data or len(data) > 20 * 1024 * 1024:
+            raise DomainError('vk_story_media_invalid')
+        form = aiohttp.FormData()
+        form.add_field('video_file', data, filename='story.mp4', content_type=mime)
+        response = await self._post(url, form)
+        if isinstance(response, dict) and isinstance(response.get('response'), dict):
+            response = response['response']
+        result = response.get('upload_result') if isinstance(response, dict) else None
+        if (not isinstance(result, str) or not 1 <= len(result) <= 65536
+                or 'error' in response):
+            raise DomainError('vk_story_upload_response_invalid')
+        return result
 
     async def image_fingerprint(self, url: str) -> dict:
         """Read provider rendition bytes without forwarding credentials or URLs."""

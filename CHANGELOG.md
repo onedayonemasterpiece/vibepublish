@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add bounded MP4 workspace ingress and native Telegram video, VK wall video and VK video Stories, with preserved rotation, exact provider identities and fail-closed uncertain upload handling.
+
 - Add explicit durable VK wall-to-linked-Story continuation: frozen approved image, exact original parent receipt, existing community Long Poll, bounded missed-event readback, transactional deduplication, child status and no resend after uncertain save. No mobile dependency or automatic credential/event-setting changes.
 
 - Add scoped optional wall-post links to immediate VK photo Stories through the existing publish tool. Freeze source identity/binding epoch, label and image; verify source before upload and exact Story link/photo on readback. Recover known Story identities by observation only, preserving no-repeat protection for ambiguous saves. No scheduling, callback, credential or destination-setting changes; linked-Story live acceptance remains pending.

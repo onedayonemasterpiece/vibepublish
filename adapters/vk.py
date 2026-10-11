@@ -102,7 +102,8 @@ class VKAdapter:
         if self.account_type == 'vk_user' and (groups[0].get('is_admin') != 1 or groups[0].get('admin_level', 0) < 2):
             raise DomainError('provider_access_denied')
         if request.surface == 'story':
-            methods = {'publish': ['stories.getPhotoUploadServer', 'stories.save', 'stories.getById'],
+            upload_method = 'stories.getVideoUploadServer' if request.assets and request.assets[0].role == 'video' else 'stories.getPhotoUploadServer'
+            methods = {'publish': [upload_method, 'stories.save', 'stories.getById'],
                        'delete': ['stories.delete', 'stories.getById']}.get(request.action)
             if methods is None:
                 raise DomainError('vk_story_action_unsupported')
@@ -111,7 +112,7 @@ class VKAdapter:
                        'reschedule': ['wall.edit'], 'cancel': ['wall.delete'], 'delete': ['wall.delete']}[request.action]
             methods += ['wall.get' if request.scheduled_at or (request.existing and request.existing.namespace == 'scheduled') else 'wall.getById']
             if request.assets:
-                methods += ['photos.getWallUploadServer', 'photos.saveWallPhoto']
+                methods += (['video.save', 'video.get'] if any(a.role == 'video' for a in request.assets) else ['photos.getWallUploadServer', 'photos.saveWallPhoto'])
         for method in methods:
             if not self.transport.permits(POLICIES[method][0], method, group_id=group, scheduled=bool(request.scheduled_at)):
                 raise DomainError('vk_token_role_not_permitted', next_action='contact_owner')
@@ -148,8 +149,8 @@ class VKAdapter:
                     if plain_text(request, limit=16000).strip():
                         raise DomainError('vk_story_text_unsupported')
                     if (len(request.assets) != 1
-                            or request.assets[0].mime not in {'image/png', 'image/jpeg', 'image/webp'}
-                            or request.assets[0].size > 10 * 1024 * 1024):
+                            or request.assets[0].mime not in {'image/png', 'image/jpeg', 'image/webp', 'video/mp4'}
+                            or request.assets[0].size > (20 if request.assets[0].role == 'video' else 10) * 1024 * 1024):
                         raise DomainError('vk_story_media_invalid')
                 if request.existing:
                     if request.existing.native_target != request.native_target or request.existing.namespace != 'story':
@@ -163,7 +164,9 @@ class VKAdapter:
             if request.surface == 'post' and request.source and request.selection == 'message':
                 raise DomainError('vk_wall_repost_is_whole_post')
             plain_text(request, limit=16000)
-            verify_assets(request)
+            verify_assets(request, allow_video=True)
+            if any(a.role == 'video' for a in request.assets) and (len(request.assets) != 1 or request.action != 'publish'):
+                raise DomainError('vk_video_single_publish_required')
             schedule_guard(request, self.clock())
             if request.surface == 'post' and request.scheduled_at and parse_time(request.scheduled_at) % 60:
                 raise DomainError('vk_schedule_minute_precision',
@@ -262,6 +265,9 @@ class VKAdapter:
         provider_media = f'story{target}_{ident}'
         if isinstance(photo, dict) and type(photo.get('owner_id')) is int and type(photo.get('id')) is int:
             provider_media = f"photo{photo['owner_id']}_{photo['id']}"
+        video = raw.get('video')
+        if isinstance(video, dict) and type(video.get('owner_id')) is int and type(video.get('id')) is int:
+            provider_media = f"video{video['owner_id']}_{video['id']}"
         link = raw.get('link')
         if link is None:
             story_link = {}
@@ -481,6 +487,46 @@ class VKAdapter:
             **{**checkpoint, 'media_bindings': mappings}))
         return bind_media(request, item, list(item.provider_media))
 
+    async def _stage_video(self, request, group, hooks):
+        """One native video allocation; any uncertainty remains dispatched."""
+        asset = request.assets[0]
+        from social_operations.video_assets import video_metadata
+        _, _, source_duration = await asyncio.to_thread(video_metadata, asset.data)
+        await hooks.emit_progress('uploading', 'started', 'Staging verified VK video')
+        saved = await self._call('video.save', group_id=group, name='Publication video', wallpost=0)
+        if not isinstance(saved, dict):
+            raise OutcomeUnknown('vk_video_identity_missing')
+        owner, ident = saved.get('owner_id'), saved.get('video_id')
+        if type(owner) is not int or owner != -group or type(ident) is not int or ident <= 0:
+            raise OutcomeUnknown('vk_video_identity_missing')
+        native = f'video{owner}_{ident}'
+        key = saved.get('access_key')
+        if key is not None and (not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', key)):
+            raise OutcomeUnknown('vk_video_identity_invalid')
+        await hooks.checkpoint('vk_video_allocated', saved_checkpoint(request, id=None, media=[native], retryable_wall_post=False))
+        validated_url(saved.get('upload_url'))
+        uploaded = await self.transport.upload_video(saved['upload_url'], asset.data, asset.mime)
+        if uploaded.get('video_id') != ident or uploaded.get('owner_id', owner) != owner:
+            raise OutcomeUnknown('vk_video_upload_identity_mismatch')
+        for attempt in range(6):
+            rows = _items(await self._call('video.get', videos=f'{owner}_{ident}' + ('_' + key if key else '')))
+            if len(rows) != 1 or rows[0].get('owner_id') != owner or rows[0].get('id') != ident:
+                raise OutcomeUnknown('vk_video_readback_identity_mismatch')
+            video = rows[0]
+            if video.get('is_deleted') or video.get('is_blocked'):
+                raise OutcomeUnknown('vk_video_unavailable')
+            duration = video.get('duration', 0)
+            if type(duration) not in (int, float) or duration < 0:
+                raise OutcomeUnknown('vk_video_readback_invalid')
+            if not video.get('processing') and not video.get('converting') and duration > 0:
+                if abs(duration - source_duration) > 1:
+                    raise OutcomeUnknown('vk_video_duration_mismatch')
+                break
+            if attempt == 5:
+                raise OutcomeUnknown('vk_video_processing_pending')
+            await asyncio.sleep(2)
+        return [native + ('_' + key if key else '')], [native], [None]
+
     async def _stage_images(self, request, group, hooks):
         """Stage immutable source assets; this is not the public wall.post effect."""
         attachments, native_media, photo_proofs = [], [], []
@@ -573,7 +619,12 @@ class VKAdapter:
             raise DomainError('source_changed', next_action='refresh')
         attachments, native_media, photo_proofs = [], [], []
         reuse = r.existing and tuple(a.sha256 for a in r.assets) == tuple(r.existing.media_hashes)
-        if r.action == 'publish' or (r.action == 'edit' and not reuse):
+        video_effect = bool(r.action == 'publish' and any(a.role == 'video' for a in r.assets))
+        if video_effect:
+            await hooks.checkpoint('vk_video_prepared', saved_checkpoint(r, id=None, media=[], retryable_wall_post=False))
+            await hooks.before_effect(r.attempt_id, r.plan_digest)
+            attachments, native_media, photo_proofs = await self._stage_video(r, group, hooks)
+        elif r.action == 'publish' or (r.action == 'edit' and not reuse):
             attachments, native_media, photo_proofs = await self._stage_images(r, group, hooks)
         elif r.source:
             native_media = state['source']['media']
@@ -614,7 +665,8 @@ class VKAdapter:
             checkpoint['photo_proofs'] = photo_proofs
         await hooks.checkpoint('vk_prepared', saved_checkpoint(r, **checkpoint))
         schedule_guard(r, self.clock())
-        await hooks.before_effect(r.attempt_id, r.plan_digest)
+        if not video_effect:
+            await hooks.before_effect(r.attempt_id, r.plan_digest)
         response = (await self._wall_post_same_guid(r, params, hooks)
                     if method == 'wall.post' else await self._call(method, **params))
         if r.action in {'publish', 'forward'}:
@@ -650,11 +702,12 @@ class VKAdapter:
                         or list(source.provider_media) != baseline['provider_media']):
                     raise DomainError('linked_story_parent_changed')
                 upload_params.update(link_url=link['url'], link_text=link['text'])
-            server = await self._call('stories.getPhotoUploadServer', **upload_params)
+            server = await self._call('stories.getVideoUploadServer' if asset.role == 'video' else 'stories.getPhotoUploadServer', **upload_params)
             if not isinstance(server, dict) or not isinstance(server.get('upload_url'), str):
                 raise DomainError('vk_story_upload_server_invalid')
             validated_url(server['upload_url'])
-            upload_result = await self.transport.upload_story_photo(server['upload_url'], asset.data, asset.mime)
+            upload = self.transport.upload_story_video if asset.role == 'video' else self.transport.upload_story_photo
+            upload_result = await upload(server['upload_url'], asset.data, asset.mime)
             await hooks.checkpoint('vk_story_prepared', saved_checkpoint(r, **checkpoint))
             if link and r.story_parent_json != '{}':
                 latest = await self._exact(link['target'], link['id'], 'published')
@@ -700,8 +753,10 @@ class VKAdapter:
             raise OutcomeUnknown('vk_story_readback_missing')
         if tuple(checkpoint.get('media') or ()) != item.provider_media:
             raise OutcomeUnknown('vk_story_media_binding_mismatch')
+        if r.assets and r.assets[0].role == 'video' and (len(item.provider_media) != 1 or not item.provider_media[0].startswith('video')):
+            raise OutcomeUnknown('vk_story_video_binding_missing')
         link = self._story_link(r)
-        if link and (len(item.provider_media) != 1 or not item.provider_media[0].startswith('photo')):
+        if link and (len(item.provider_media) != 1 or not item.provider_media[0].startswith('video' if r.assets and r.assets[0].role == 'video' else 'photo')):
             raise OutcomeUnknown('vk_story_photo_binding_missing')
         observed_link = json.loads(item.story_link_json)
         # VK input is a selector enum, but output text is a provider-localized
