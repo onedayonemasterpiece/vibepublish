@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Reuse authoritative VK saved-photo receipts without the added photos.getById permission prerequisite. Retain fresh CAS and mandatory ordered post-readback fingerprints, dimensions and target-owner checks, including VK photo ID reassignment; missing or changed media cannot be reported verified.
+
 - Resume proof-bound VK photo staging prefixes on an existing authorized retry/restart or a separately authorized later edit of the same publication. Verify exact native photos before uploading only a missing suffix, retain fresh native CAS/effect guards, and preserve terminal receipts and spent recovery keys. Complete checkpoints need no repeated uploads; invalid matching proofs fail closed.
 
 - Resolve a strictly proven VK video allocation-only URL-validation failure through explicit reconciliation, preserving the allocated video and historical dispatch while releasing only its validated connection quarantine. Keep unknown uploads/wall effects blocked, and preserve the independent carousel edit's frozen CAS and one-time recovery.

@@ -528,7 +528,7 @@ class VKAdapter:
         return [native + ('_' + key if key else '')], [native], [None]
 
     async def _reuse_staged_images(self, request, staging, hooks):
-        """Read and verify exact previously saved photos; never upload on this path."""
+        """Reuse authoritative save receipts; final wall readback verifies the binding."""
         media, proofs = staging.get('media'), staging.get('photo_proofs')
         if (request.action not in {'publish', 'edit'} or request.surface != 'post'
                 or staging.get('target') != request.native_target
@@ -539,26 +539,17 @@ class VKAdapter:
                 or not all(isinstance(m, str) and re.fullmatch(r'photo[1-9][0-9]*_[1-9][0-9]*', m) for m in media)
                 or not isinstance(proofs, list) or len(proofs) != len(media)):
             raise DomainError('vk_staged_photos_invalid')
-        await hooks.emit_progress('reading_back', 'started', 'Verifying exact saved photos from the previous frozen edit')
-        rows = await self._call('photos.getById', photos=','.join(m[5:] for m in media))
-        if not isinstance(rows, list) or len(rows) != len(media):
-            raise DomainError('vk_staged_photos_missing')
-        found = {}
-        for photo in rows:
-            if not isinstance(photo, dict):
+        for proof in proofs:
+            if (not isinstance(proof, dict)
+                    or set(proof) != {'sha256', 'size', 'mime', 'width', 'height'}
+                    or not isinstance(proof['sha256'], str)
+                    or not re.fullmatch(r'[0-9a-f]{64}', proof['sha256'])
+                    or proof['mime'] not in {'image/jpeg', 'image/png', 'image/webp'}
+                    or any(type(proof[key]) is not int or proof[key] <= 0
+                           for key in ('size', 'width', 'height'))):
                 raise DomainError('vk_staged_photos_invalid')
-            native = f"photo{_int(photo.get('owner_id'))}_{_int(photo.get('id'))}"
-            if native not in media or native in found:
-                raise DomainError('vk_staged_photos_invalid')
-            found[native] = photo
-        attachments = []
-        for native, proof in zip(media, proofs):
-            photo = found[native]
-            await self._photo_proof(photo, proof)
-            key = photo.get('access_key')
-            if key is not None and (not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', key)):
-                raise DomainError('vk_staged_photos_invalid')
-            attachments.append(native + ('_' + key if key else ''))
+        await hooks.emit_progress('reading_back', 'started', 'Reusing verified saved photo receipts')
+        attachments = list(media)
         if request.existing:
             observed = await self._exact(request.native_target, request.existing.native_id, request.existing.namespace)
             if observed is None:

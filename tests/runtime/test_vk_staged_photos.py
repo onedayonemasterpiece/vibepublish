@@ -301,10 +301,11 @@ async def test_official_retry_new_worker_resumes_two_of_four_without_reupload(tm
     assert result["state"] == "verified", result
     assert len(transport.uploads) == 4 and transport.effects == 2
     assert staged_row(store, edited["operation_id"])["id"] == before["id"]
-    read = [params["photos"] for method, _, params in transport.calls[start:] if method == "photos.getById"]
-    assert len(read) == 1
-    values = read[0] if isinstance(read[0], (list, tuple)) else read[0].split(",")
-    assert list(values) == [value.removeprefix("photo") for value in cp["adapter"]["media"]]
+    calls = transport.calls[start:]
+    assert not any(method == "photos.getById" for method, _, _ in calls)
+    assert sum(method == "upload_photo" for method, _, _ in calls) == 2
+    final_checkpoint = json.loads(staged_row(store, edited["operation_id"])["checkpoint"])
+    assert final_checkpoint["remote"]["provider_media"][:2] == ["photo-101_11001", "photo-101_11002"]
     replay = await app.call(actor, "vibepublish_publication_update", args)
     assert replay["operation_id"] == result["operation_id"]
     assert not await restarted.run_once()
