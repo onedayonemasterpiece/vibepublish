@@ -196,6 +196,15 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
     "review_token": string(512), "poll_after_seconds": {"type": "integer", "minimum": 1},
     "error": ref("error"), "dry_run": {"type": "boolean"}},
     ("operation_id", "action", "state", "message", "operation_complete", "progress", "next_action", "retry_safe", "receipt_ref", "deliveries"))
+DEFS["binding_grant_snapshot"] = obj({
+    "rights": {**array(enum("publish", "edit", "reschedule", "cancel", "delete", "forward",
+                           "reply", "react", "basic_group_schedule"), 0, 9), "uniqueItems": True},
+    "binding_epoch": REV, "actor_epoch": REV, "routing_revision": REV},
+    ("rights", "binding_epoch", "actor_epoch", "routing_revision"))
+DEFS["receipt"]["properties"]["binding_grant"] = obj({
+    "binding_id": ID, "alias": ALIAS, "right": {"const": "edit"},
+    "before": ref("binding_grant_snapshot"), "after": ref("binding_grant_snapshot")},
+    ("binding_id", "alias", "right", "before", "after"))
 DEFS["receipt"]["properties"]["workspace_upload"] = obj({
     "upload_id": ID, "received_bytes": {"type": "integer", "minimum": 0, "maximum": 20971520},
     "size_bytes": {"type": "integer", "minimum": 1, "maximum": 20971520},
@@ -282,7 +291,9 @@ change = {"oneOf": [
     arm("cancel"), arm("delete"),
     arm("reconcile_removed", {"attempt_id": ID}, ("attempt_id",)),
     arm("reconcile", {"operation_id": ID, "attempt_id": ID, "native_reference": string(2048)}, ("operation_id",)),
-    arm("retry_failed", {"destinations": array(ALIAS, 1, 20)}, ("destinations",))]}
+    arm("retry_failed", {"destinations": array(ALIAS, 1, 20)}, ("destinations",)),
+    arm("supersede_failed", {"destinations": {**array(ALIAS, 1, 20), "uniqueItems": True},
+        "content": ref("content")}, ("destinations", "content"))]}
 change["oneOf"][1]["anyOf"] = [{"required": [p]} for p in ("content", "media", "renderings")]
 tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication. Reconcile observes the original uncertain operation without repeating its effect.",
     obj({"publication_id": ID, "expected_revision": REV, "item_ref": ID, "change": change, "request_key": KEY},
@@ -292,6 +303,13 @@ tool("publication_update", "Change an existing publication at an exact revision.
 TOOLS[-1]["inputSchema"]["oneOf"] = [
     {"required": ["publication_id", "expected_revision"], "not": {"required": ["item_ref"]}},
     {"required": ["item_ref"], "not": {"anyOf": [{"required": ["publication_id"]}, {"required": ["expected_revision"]}]}}]
+
+TOOLS[-1]["inputSchema"]["allOf"] = [{
+    "if": {"properties": {"change": {"properties": {"kind": {"const": "supersede_failed"}},
+                                       "required": ["kind"]}}},
+    "then": {"required": ["publication_id", "expected_revision", "request_key"],
+             "not": {"required": ["item_ref"]}}
+}]
 
 browser_artifact_uri = string(47, pattern=r"^artifact://[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 workspace_import_commands = [
@@ -397,10 +415,12 @@ tool("engage", "Natively forward/repost an exact item or Telegram/VK post URL; p
             "mode": enum("execute", "preview")}, ("item_ref", "to"))]},
         "request_key": KEY, "repeat_of": ID, "routing_revision": REV}, ("command",)), ref("receipt"), "engage")
 
-tool("destinations", "List allowed aliases, update personal purpose/notes/primary-channel profiles, or manage granted destination sets. Profiles and URLs never grant access.",
+tool("destinations", "List allowed aliases, update personal profiles, or manage granted destination sets. Owner-only binding_grant_edit adds only edit to one own binding using exact epoch/routing CAS and a request key; it never changes scopes. Profiles and URLs never grant access.",
     obj({"command": {"oneOf": [arm("list"),
         arm("profile_update", {"alias": ALIAS, "expected_revision": {"type": "integer", "minimum": 0},
             "profile": {**DEFS["destination_profile"], "minProperties": 1}}, ("alias", "expected_revision", "profile")),
+        arm("binding_grant_edit", {"alias": ALIAS, "expected_binding_epoch": REV,
+            "expected_routing_revision": REV}, ("alias", "expected_binding_epoch", "expected_routing_revision")),
         arm("resolve", {"provider": PROVIDER, "url": URL}, ("provider", "url")),
         arm("search", {"provider": PROVIDER, "text": string(500)}, ("provider", "text")),
         arm("set_put", {"alias": ALIAS, "label": string(200), "expected_revision": {"type": "integer", "minimum": 0},
@@ -409,6 +429,12 @@ tool("destinations", "List allowed aliases, update personal purpose/notes/primar
         arm("rename_label", {"alias": ALIAS, "label": string(200), "expected_revision": REV},
             ("alias", "label", "expected_revision"))]}, "request_key": KEY}, ("command",)),
     ref("receipt"), "destinations")
+
+TOOLS[-1]["inputSchema"]["allOf"] = [{
+    "if": {"properties": {"command": {"properties": {"kind": {"const": "binding_grant_edit"}},
+                                        "required": ["kind"]}}},
+    "then": {"required": ["request_key"]}
+}]
 
 # Exact discovery accepts one explicit URL or one provider-native ID. It never
 # turns discovery into account-wide enumeration.
@@ -566,14 +592,18 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
         if item["name"] == "vibepublish_publication_update" and "publication.manage" not in scopes:
             schema = item["inputSchema"]
             schema["properties"].pop("item_ref", None)
-            schema["properties"]["change"] = arm("retry_failed", {
-                "destinations": {**array(enum(*sorted(set(publish_destinations))), 1, 20),
-                                 "uniqueItems": True}}, ("destinations",))
+            scoped_destinations = {**array(enum(*sorted(set(publish_destinations))), 1, 20),
+                                   "uniqueItems": True}
+            schema["properties"]["change"] = {"oneOf": [
+                arm("retry_failed", {"destinations": scoped_destinations}, ("destinations",)),
+                arm("supersede_failed", {"destinations": scoped_destinations, "content": ref("content")},
+                    ("destinations", "content"))]}
             schema["required"] = ["publication_id", "expected_revision", "change", "request_key"]
             schema.pop("oneOf", None)
-            item["description"] = ("Re-admit only this principal\'s original publish operation after a proven "
-                "zero-dispatch failure, at the same revision and active binding epoch. One admission per "
-                "request key; subsequent calls only return the original receipt. No lifecycle or reconciliation rights.")
+            item["description"] = ("Recover only this principal's original proven zero-dispatch publish failure. "
+                "retry_failed re-admits the same revision; supersede_failed cancels selected failed children "
+                "and creates a linked new publication with corrected content and the same verified media. "
+                "Current publish bindings and request keys are required; successful siblings stay unchanged.")
         if item["name"] == "vibepublish_visual" and "visual" not in scopes:
             item["inputSchema"]["properties"]["command"] = {"oneOf": [arm("import"), *copy.deepcopy(workspace_import_commands)]}
             item["description"] = "Import a chat attachment or bounded workspace image bytes as a private image asset, without AI or publication."
@@ -588,6 +618,11 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
             variants = item["inputSchema"]["properties"]["command"]["oneOf"]
             item["inputSchema"]["properties"]["command"]["oneOf"] = [
                 v for v in variants if v["properties"]["kind"]["const"] == "forward"]
+        if item["name"] == "vibepublish_destinations" and (
+                not owner or not {"destinations", "publication.manage"} <= set(scopes)):
+            variants = item["inputSchema"]["properties"]["command"]["oneOf"]
+            item["inputSchema"]["properties"]["command"]["oneOf"] = [
+                v for v in variants if v["properties"]["kind"]["const"] != "binding_grant_edit"]
         if item["name"] == "vibepublish_destinations" and "destinations" not in scopes and not owner:
             variants = item["inputSchema"]["properties"]["command"]["oneOf"]
             item["inputSchema"]["properties"]["command"]["oneOf"] = [

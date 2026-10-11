@@ -135,3 +135,145 @@ def retry_failed(app, actor, args):
         if key and not replay:
             app._key(db, actor, key, intent_hash, op['id'])
     return store.receipt(actor, op['id'])
+
+
+def supersede_failed(app, actor, args):
+    """Replace selected zero-dispatch publish failures; never rewrite their frozen intent.
+
+    The replacement has its own publication identity. Successful siblings remain
+    on the original publication, with their native object and audit unchanged.
+    """
+    import hashlib
+    from .domain import new_id
+    from contracts.social_mcp_v1 import DEFS
+    from jsonschema import Draft202012Validator, FormatChecker
+    store = app.store
+    change = args.get('change', {})
+    key = args.get('request_key')
+    aliases = change.get('destinations', [])
+    if (args.get('item_ref') or change.get('kind') != 'supersede_failed'
+            or not isinstance(key, str) or not key
+            or not isinstance(aliases, list) or not aliases
+            or any(not isinstance(alias, str) for alias in aliases)
+            or len(set(aliases)) != len(aliases)
+            or set(change) != {'kind', 'destinations', 'content'}):
+        raise DomainError('invalid_input')
+    content_schema = {'$ref': '#/$defs/content', '$defs': DEFS}
+    if not Draft202012Validator(content_schema, format_checker=FormatChecker()).is_valid(change['content']):
+        raise DomainError('invalid_input')
+    intent_hash = digest(['supersede_failed', normalize_intent('publication_update', args)])
+    with store.tx() as db:
+        actor = store.current(db, actor)
+        if not actor.scopes.intersection({'publish', 'publication.manage'}):
+            raise DomainError('access_denied', next_action='contact_owner')
+        replay = db.execute('SELECT * FROM request_keys WHERE tenant_id=? AND principal_id=? AND key=?',
+                            (actor.tenant_id, actor.principal_id, key)).fetchone()
+        if replay:
+            if replay['digest'] != intent_hash:
+                raise DomainError('idempotency_conflict')
+            replacement = store.private_operation(db, actor, replay['operation_id'])
+            # Epoch checks do not imply a right that an owner has since removed.
+            for child in db.execute('SELECT * FROM attempts WHERE operation_id=?', (replacement['id'],)):
+                binding = store.binding(db, actor, binding_id=child['binding_id'])
+                if 'publish' not in json.loads(binding['rights']):
+                    raise DomainError('access_denied', next_action='contact_owner')
+            # Replay is observation only, including after a replacement failure.
+            replacement_id = replacement['id']
+        else:
+            original = store.private_operation(db, actor, args['publication_id'])
+            # private_operation already enforces this; keep the admission boundary explicit.
+            if original['actor_epoch'] != actor.epoch:
+                raise DomainError('access_revoked', next_action='reauthorize')
+            pub = db.execute('SELECT * FROM publications WHERE id=?', (original['publication_id'],)).fetchone()
+            if (original['publication_id'] != args['publication_id']
+                    or original['revision'] != args['expected_revision']
+                    or pub['revision'] != args['expected_revision']):
+                raise DomainError('revision_conflict', next_action='refresh')
+            if original['action'] != 'publish' or pub['kind'] != 'publish':
+                raise DomainError('supersede_original_publish_required')
+            if original['work_state'] != 'done' or not original['complete']:
+                raise DomainError('operation_in_progress', next_action='check_status')
+            children = list(db.execute('SELECT * FROM attempts WHERE operation_id=?', (original['id'],)))
+            selected = [child for child in children if child['alias'] in aliases]
+            if len(selected) != len(aliases):
+                raise DomainError('retry_destination_mismatch')
+            if (any(child['state'] == 'outcome_unknown' for child in children)
+                    or any(child['dispatched'] or child['state'] not in ('blocked', 'failed') for child in selected)):
+                raise DomainError('supersede_not_proven_safe', next_action='review_outcome')
+            pending = db.execute(
+                "SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id "
+                "WHERE a.operation_id=? AND r.finalize_state='pending'", (original['id'],)).fetchone()
+            if pending:
+                raise DomainError('operation_in_progress', next_action='check_status')
+            plans, replacement_targets = [], []
+            for child in selected:
+                binding = store.binding(db, actor, binding_id=child['binding_id'])
+                old = json.loads(child['plan'])
+                if (binding['epoch'] != child['binding_epoch'] or old['binding_epoch'] != child['binding_epoch']
+                        or 'publish' not in json.loads(binding['rights'])
+                        or old['action'] != 'publish'):
+                    raise DomainError('access_revoked', next_action='reauthorize')
+                if (any(binding[k] != old[k] for k in ('connection_id', 'destination_id', 'account_type', 'secret_ref'))
+                        or binding['native_id'] != old['native_target'] or digest(old) != child['plan_digest']):
+                    raise DomainError('retry_binding_changed', next_action='reauthorize')
+                if old.get('existing') or old.get('source') or old.get('mode') != 'execute':
+                    raise DomainError('supersede_original_publish_required')
+                for asset in old['assets']:
+                    row = db.execute('SELECT bytes FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
+                                     (asset['ref'], actor.tenant_id, actor.principal_id)).fetchone()
+                    if not row or hashlib.sha256(row['bytes']).hexdigest() != asset['sha256']:
+                        raise DomainError('asset_integrity')
+                target = {
+                    'content': change['content'],
+                    'media': [{'source': {'kind': 'asset', 'id': asset['ref']},
+                               'role': asset.get('role', 'image'), 'caption': asset.get('caption', ''),
+                               'alt_text': asset.get('alt_text', '')} for asset in old['assets']],
+                    'surface': old['surface'], 'mode': 'execute',
+                    'delivery': {'kind': 'at', 'at': old['scheduled_at']} if old['scheduled_at'] else {'kind': 'now'},
+                }
+                replacement_targets.append({'destination': child['alias'], **target})
+                # Ordinary compilation and admission checks apply. In particular,
+                # old timing is never silently changed to immediate delivery.
+                plans.append(app._plan(db, actor, binding, target, 'publish',
+                                       topic_root_id=old.get('topic_root_id')))
+            publication = new_id('pub')
+            lineage = {'publication_id': pub['id'], 'operation_id': original['id'],
+                       'revision': original['revision'], 'attempt_ids': [c['id'] for c in selected]}
+            replacement_intent = {'to': [p['alias'] for p in plans], 'content': change['content'],
+                                  'mode': 'execute', '_supersedes': lineage,
+                                  '_replacement_targets': replacement_targets}
+            db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)',
+                       (publication, actor.tenant_id, actor.principal_id, 1, 'publish', store.clock()))
+            db.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?)',
+                       (actor.tenant_id, actor.principal_id, publication, 1,
+                        canonical(replacement_intent), canonical(plans), digest(plans)))
+            replacement_id = app._new_operation(db, actor, 'publish', replacement_intent,
+                                                 publication=publication, revision=1)
+            for plan in plans:
+                db.execute('INSERT INTO attempts(id,operation_id,binding_id,binding_epoch,alias,provider,plan,plan_digest) '
+                           'VALUES(?,?,?,?,?,?,?,?)',
+                           (new_id('attempt'), replacement_id, plan['binding_id'], plan['binding_epoch'],
+                            plan['alias'], plan['provider'], canonical(plan), digest(plan)))
+            # Invalidate any stale hooks retained by a worker after it finished.
+            # BEGIN IMMEDIATE serializes this CAS with retry admission/worker claim.
+            changed = db.execute(
+                "UPDATE operations SET fence=fence+1,lease_owner=NULL,lease_until=0 "
+                "WHERE id=? AND fence=? AND work_state='done' AND complete=1",
+                (original['id'], original['fence'])).rowcount
+            if changed != 1:
+                raise DomainError('operation_in_progress', next_action='check_status')
+            for child in selected:
+                changed = db.execute(
+                    "UPDATE attempts SET state='cancelled',stage='finished' "
+                    "WHERE id=? AND state IN ('blocked','failed') AND dispatched=0 AND plan_digest=?",
+                    (child['id'], child['plan_digest'])).rowcount
+                if changed != 1:
+                    raise DomainError('supersede_not_proven_safe', next_action='review_outcome')
+                store.event(db, original['id'], 'finished', 'completed',
+                            'Never-dispatched intent superseded by ' + replacement_id +
+                            ' (' + publication + '); original plan retained and retry disabled', child['alias'])
+            store.event(db, replacement_id, 'accepted', 'started',
+                        'Replacement for selected never-dispatched failures of ' + original['id'] +
+                        ' (' + pub['id'] + '); successful siblings remain unchanged')
+            app._key(db, actor, key, intent_hash, replacement_id)
+    return store.receipt(actor, replacement_id)

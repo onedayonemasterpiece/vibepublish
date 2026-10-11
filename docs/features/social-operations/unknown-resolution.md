@@ -111,3 +111,38 @@ This is distinct from `reconcile_removed`. It never declares an unknown object e
 - worker restart preserves this recovery path because retry count, attempt checkpoint and operation identity are durable.
 
 Multiple exact queue matches, changed authority, expired native submission window, unsafe/non-reconstructable media, lifecycle actions, exhausted bounded attempts or any mismatch stay `outcome_unknown`. Agent-side resubmission with a fresh key remains forbidden.
+
+## Known native effect with media awaiting review
+
+Status: **Not confirmed by user**. Offline regression evidence is not live acceptance.
+
+An exact VK wall response checkpoint can establish that the original publish,
+edit, or reschedule took effect while its photo identity remains unverified.
+Only the same positive native ID, target, frozen text, namespace, and native
+scheduled time qualify. The adapter re-reads the exact item after a failed media
+binding; changed or missing identity remains unknown. A queue candidate inferred
+after losing the response ID cannot qualify from text/time alone.
+
+The original attempt becomes terminal `partial`, with the observed provider
+state, private item/queue reference, `media_check: incomplete`,
+`missing_checks: [media_identity_or_order_mismatch]`, and `retry_safe: false`.
+The operation remains `partial` and explicitly requests owner review.
+This is neither a verified media match nor an absence/cancellation proof.
+No crop threshold is widened, no source hash is attached to the wrong photo,
+and no fresh or same-guid publication retry is authorized.
+
+A private `known_effect` checkpoint proof retains the original adapter checkpoint
+and its digest, immutable plan digest, attempt/operation identity, actor and
+binding epochs, and the incomplete observation. Connection quarantine excludes
+only that proof after revalidating all bindings and current epochs. A generic
+partial state, malformed proof, stale authority, wrong or missing ID/target/text/
+time, and missing response-ID inference preserve the unknown fence.
+Unrelated authorized destinations on the same connection may proceed while the
+original media warning stays visible. Restart, retry, preflight, and aggregation
+respect the terminal partial attempt; they never automatically resend it.
+
+Dispatch examines at most 101 retained uncertain/media-review candidates per
+connection and validates no more than 100 proofs in its short transaction. More
+than 100 candidates fail closed with `connection_review_limit` and
+`next_action: review_outcome`; no dispatch occurs. Explicitly incomplete media
+observations never inherit older verified source hashes from the fact cache.

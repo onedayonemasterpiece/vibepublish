@@ -204,14 +204,28 @@ class Store:
             raise DomainError('invalid_binding_rights')
         rights = _validated_permissions(rights, ALL_BINDING_RIGHTS, 'invalid_binding_rights')
         with self.tx() as db:
-            self.current(db,owner)
-            row=db.execute('SELECT * FROM bindings WHERE id=? AND tenant_id=? AND active=1',(binding_id,owner.tenant_id)).fetchone()
-            if not owner.owner or not row:raise DomainError('access_denied')
-            old=json.loads(row['rights']);updated=list(dict.fromkeys(old+list(rights)))
-            if updated!=old:
-                db.execute('UPDATE bindings SET rights=? WHERE id=?',(canonical(updated),binding_id))
-                db.execute('UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?',(row['principal_id'],))
-            return updated
+            return self._grant_binding_rights(db, owner, binding_id, rights)
+
+    def _grant_binding_rights(self, db, owner: Actor, binding_id: str, rights):
+        """Shared grant domain inside the caller's transaction and audit receipt."""
+        if not isinstance(rights, (list, tuple)) or not rights:
+            raise DomainError('invalid_binding_rights')
+        rights = _validated_permissions(rights, ALL_BINDING_RIGHTS, 'invalid_binding_rights')
+        if not owner.owner:
+            raise DomainError('access_denied', next_action='contact_owner')
+        owner = self.current(db, owner)
+        row = db.execute(
+            'SELECT * FROM bindings WHERE id=? AND tenant_id=? AND active=1',
+            (binding_id, owner.tenant_id)).fetchone()
+        if not owner.owner or not row:
+            raise DomainError('access_denied', next_action='contact_owner')
+        old = json.loads(row['rights'])
+        updated = list(dict.fromkeys(old + list(rights)))
+        if updated != old:
+            db.execute('UPDATE bindings SET rights=? WHERE id=?', (canonical(updated), binding_id))
+            db.execute('UPDATE principals SET routing_revision=routing_revision+1 WHERE id=?',
+                       (row['principal_id'],))
+        return updated
 
     def revoke_binding(self, owner: Actor, binding_id: str):
         with self.tx() as db:
@@ -295,7 +309,7 @@ class Store:
         return json.loads(row["position"])
 
     def private_operation(self, db, actor: Actor, ident: str):
-        self.current(db, actor)
+        actor = self.current(db, actor)
         if ident.startswith('visual_'):
             visual = db.execute('SELECT operation_id FROM visual_jobs WHERE id=? AND tenant_id=? AND principal_id=?',
                                 (ident, actor.tenant_id, actor.principal_id)).fetchone()
@@ -309,6 +323,16 @@ class Store:
             raise DomainError("not_found", "Resource is not available", "refresh")
         if row["actor_epoch"] != actor.epoch:
             raise DomainError("access_revoked", next_action="reauthorize")
+        # Administrative receipts never replay through revoked or replaced bindings.
+        grant = json.loads(row['result']).get('binding_grant')
+        if grant:
+            if not actor.owner or not {'destinations', 'publication.manage'} <= actor.scopes:
+                raise DomainError('access_denied', next_action='contact_owner')
+            binding = self.binding(db, actor, binding_id=grant['binding_id'])
+            if (binding['alias'] != grant['alias']
+                    or binding['epoch'] != grant['after']['binding_epoch']
+                    or 'edit' not in json.loads(binding['rights'])):
+                raise DomainError('access_revoked', next_action='reauthorize')
         # A pending inline visual has no provider attempts yet, but still binds access.
         visual = db.execute('SELECT plans,actor_epoch FROM visual_jobs WHERE operation_id=?', (row['id'],)).fetchone()
         if visual:
