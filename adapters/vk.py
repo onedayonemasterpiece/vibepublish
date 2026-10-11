@@ -527,10 +527,50 @@ class VKAdapter:
             await asyncio.sleep(2)
         return [native + ('_' + key if key else '')], [native], [None]
 
-    async def _stage_images(self, request, group, hooks):
-        """Stage immutable source assets; this is not the public wall.post effect."""
-        attachments, native_media, photo_proofs = [], [], []
-        for n, asset in enumerate(request.assets):
+    async def _reuse_staged_images(self, request, staging, hooks):
+        """Read and verify exact previously saved photos; never upload on this path."""
+        media, proofs = staging.get('media'), staging.get('photo_proofs')
+        if (request.action not in {'publish', 'edit'} or request.surface != 'post'
+                or staging.get('target') != request.native_target
+                or staging.get('post_id') != (request.existing.native_id if request.existing else None)
+                or staging.get('asset_hashes') != [a.sha256 for a in request.assets]
+                or not isinstance(media, list) or not 1 <= len(media) <= 10
+                or len(media) > len(request.assets) or len(set(media)) != len(media)
+                or not all(isinstance(m, str) and re.fullmatch(r'photo[1-9][0-9]*_[1-9][0-9]*', m) for m in media)
+                or not isinstance(proofs, list) or len(proofs) != len(media)):
+            raise DomainError('vk_staged_photos_invalid')
+        await hooks.emit_progress('reading_back', 'started', 'Verifying exact saved photos from the previous frozen edit')
+        rows = await self._call('photos.getById', photos=','.join(m[5:] for m in media))
+        if not isinstance(rows, list) or len(rows) != len(media):
+            raise DomainError('vk_staged_photos_missing')
+        found = {}
+        for photo in rows:
+            if not isinstance(photo, dict):
+                raise DomainError('vk_staged_photos_invalid')
+            native = f"photo{_int(photo.get('owner_id'))}_{_int(photo.get('id'))}"
+            if native not in media or native in found:
+                raise DomainError('vk_staged_photos_invalid')
+            found[native] = photo
+        attachments = []
+        for native, proof in zip(media, proofs):
+            photo = found[native]
+            await self._photo_proof(photo, proof)
+            key = photo.get('access_key')
+            if key is not None and (not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', key)):
+                raise DomainError('vk_staged_photos_invalid')
+            attachments.append(native + ('_' + key if key else ''))
+        if request.existing:
+            observed = await self._exact(request.native_target, request.existing.native_id, request.existing.namespace)
+            if observed is None:
+                raise DomainError('remote_item_missing', next_action='refresh')
+            same_existing(request.existing, observed)
+        return attachments, list(media), list(proofs)
+
+    async def _stage_images(self, request, group, hooks, staging=None):
+        """Verify a saved prefix, then stage only the missing immutable assets."""
+        attachments, native_media, photo_proofs = (
+            await self._reuse_staged_images(request, staging, hooks) if staging else ([], [], []))
+        for n, asset in enumerate(request.assets[len(native_media):], start=len(native_media)):
             await hooks.emit_progress('uploading', 'started', f'Staging image {n+1}/{len(request.assets)}')
             for upload_attempt in range(3):
                 server = await self._call('photos.getWallUploadServer', group_id=group)
@@ -566,6 +606,11 @@ class VKAdapter:
                 raise DomainError('vk_saved_photo_invalid')
             native_media.append(native)
             attachments.append(native + ('_' + key if key else ''))
+            if all(isinstance(proof, dict) for proof in photo_proofs):
+                await hooks.checkpoint('vk_photo_staging', saved_checkpoint(
+                    request, id=request.existing.native_id if request.existing else None,
+                    media=list(native_media), photo_proofs=list(photo_proofs),
+                    source=None, retryable_wall_post=False))
         return attachments, native_media, photo_proofs
 
     async def _source(self, request):
@@ -628,6 +673,8 @@ class VKAdapter:
             await hooks.checkpoint('vk_video_prepared', saved_checkpoint(r, id=None, media=[], retryable_wall_post=False))
             await hooks.before_effect(r.attempt_id, r.plan_digest)
             attachments, native_media, photo_proofs = await self._stage_video(r, group, hooks)
+        elif state.get('staged_photos') and (r.action == 'publish' or (r.action == 'edit' and not reuse)):
+            attachments, native_media, photo_proofs = await self._stage_images(r, group, hooks, state['staged_photos'])
         elif r.action == 'publish' or (r.action == 'edit' and not reuse):
             attachments, native_media, photo_proofs = await self._stage_images(r, group, hooks)
         elif r.source:
@@ -636,6 +683,11 @@ class VKAdapter:
             native_media = list(r.existing.provider_media)
             # VK wall.edit clears omitted attachments; explicitly keep verified IDs.
             attachments = list(native_media)
+        if state.get('staged_photos') and r.existing:
+            latest = await self._exact(r.native_target, r.existing.native_id, r.existing.namespace)
+            if latest is None:
+                raise DomainError('remote_item_missing', next_action='refresh')
+            same_existing(r.existing, latest)
         params = {'owner_id': int(r.native_target)}
         if r.action == 'forward':
             method, params = 'wall.repost', {'object': state['source']['object'], 'group_id': group}

@@ -26,6 +26,7 @@ POLICIES = {
     'wall.getById': ('reader', {'posts'}, {'posts', 'extended'}),
     'wall.get': ('editor', {'owner_id', 'filter', 'count', 'offset'}, {'owner_id', 'filter', 'count', 'offset'}),
     'wall.search': ('reader', {'owner_id', 'query', 'count', 'offset'}, {'owner_id', 'query', 'count', 'offset'}),
+    'photos.getById': ('reader', {'photos'}, {'photos'}),
     'photos.getWallUploadServer': ('media', {'group_id'}, {'group_id'}),
     'photos.saveWallPhoto': ('media', {'group_id', 'server', 'photo', 'hash'}, {'group_id', 'server', 'photo', 'hash'}),
     'wall.post': ('editor', {'owner_id', 'message', 'from_group', 'signed', 'guid'}, {'owner_id', 'message', 'from_group', 'signed', 'guid', 'attachments', 'publish_date'}),
@@ -42,7 +43,7 @@ POLICIES = {
 }
 
 
-READ_ROLES = {'groups.getById', 'wall.getById', 'wall.get', 'wall.search', 'stories.getById', 'video.get'}
+READ_ROLES = {'groups.getById', 'wall.getById', 'wall.get', 'wall.search', 'stories.getById', 'video.get', 'photos.getById'}
 
 
 def role_allowed(role: str, method: str) -> bool:
