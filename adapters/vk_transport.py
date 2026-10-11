@@ -10,12 +10,14 @@ import hashlib
 import ipaddress
 import json
 import socket
+import time
 import zlib
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 from social_operations.domain import DomainError
-from social_operations.provider_diagnostics import provider_call
+from social_operations.provider_diagnostics import provider_call, provider_error_metadata
+from adapters.vk_upload_diagnostics import upload_endpoint, upload_payload, upload_response, rejected_url
 
 API_VERSION = '5.199'  # Donor-tested contract, not an assertion of latest API.
 # Values are (role, required fields, allowed fields). There is no MCP passthrough.
@@ -57,21 +59,42 @@ class VKToken:
 
 
 def validated_url(url: str, *, api=False) -> str:
-    if not isinstance(url, str) or not 1 <= len(url) <= 4096 or '\\' in url or any(c.isspace() or ord(c) < 32 for c in url):
-        raise DomainError('vk_upload_url_invalid')
+    def reject(reason):
+        rejected_url(url, reason, api=api)
+        raise DomainError('vk_upload_url_invalid') from None
+
+    if not isinstance(url, str):
+        reject('invalid_type')
+    if not 1 <= len(url) <= 4096:
+        reject('invalid_length')
+    if '\\' in url or any(c.isspace() or ord(c) < 32 for c in url):
+        reject('invalid_characters')
     try:
         parts = urlsplit(url)
         host = (parts.hostname or '').lower()
-        if (parts.scheme != 'https' or parts.username is not None or parts.password is not None
-                or parts.fragment or parts.port not in {None, 443}):
-            raise ValueError()
-        if api:
-            if host != 'api.vk.com' or parts.path not in {'/method/' + name for name in POLICIES} or parts.query:
-                raise ValueError()
-        elif not any(host == root or host.endswith('.' + root) for root in ('vk.com', 'userapi.com', 'vkuser.net', 'vk.me')):
-            raise ValueError()
     except ValueError:
-        raise DomainError('vk_upload_url_invalid') from None
+        reject('malformed_url')
+    if parts.scheme != 'https':
+        reject('scheme_not_https')
+    if parts.username is not None or parts.password is not None:
+        reject('credentials_present')
+    if parts.fragment:
+        reject('fragment_present')
+    try:
+        port = parts.port
+    except ValueError:
+        reject('port_not_allowed')
+    if port not in {None, 443}:
+        reject('port_not_allowed')
+    if api:
+        if host != 'api.vk.com':
+            reject('api_host_not_allowed')
+        if parts.path not in {'/method/' + name for name in POLICIES}:
+            reject('api_path_not_allowed')
+        if parts.query:
+            reject('api_query_present')
+    elif not any(host == root or host.endswith('.' + root) for root in ('vk.com', 'userapi.com', 'vkuser.net', 'vk.me')):
+        reject('host_not_allowed')
     return host
 
 
@@ -148,14 +171,24 @@ class VKHTTPTransport:
 
     async def _post_observed(self, url, data, *, api=False, diagnostic):
         import aiohttp  # Optional production extra; no SDK/network needed by scripted tests.
+        if not api:
+            upload_endpoint(diagnostic, url)
         host = validated_url(url, api=api)
+        dns_started = time.monotonic()
         addresses = await public_addresses(host)
+        if not api:
+            diagnostic['dns_ms'] = (time.monotonic() - dns_started) * 1000
         connector = aiohttp.TCPConnector(resolver=PinnedResolver(host, addresses), use_dns_cache=False, limit=1)
         async with aiohttp.ClientSession(connector=connector, trust_env=False,
                 cookie_jar=aiohttp.DummyCookieJar(), auto_decompress=False,
                 timeout=aiohttp.ClientTimeout(total=25), headers={'Accept-Encoding': 'identity'}) as session:
+            headers_started = time.monotonic()
             async with session.post(url, data=data, allow_redirects=False) as response:
                 diagnostic['http_status'] = response.status
+                if not api:
+                    # Combined connect/TLS/upload/response-header wait, not TTFB.
+                    diagnostic['headers_wait_ms'] = (time.monotonic() - headers_started) * 1000
+                    upload_response(diagnostic, response)
                 try:
                     diagnostic['retry_after_s'] = float(response.headers.get('Retry-After', ''))
                 except (ValueError, TypeError, AttributeError):
@@ -217,6 +250,8 @@ class VKHTTPTransport:
         if not isinstance(response, dict) or 'response' not in response or 'error' in response:
             code = response.get('error', {}).get('error_code') if isinstance(response, dict) and isinstance(response.get('error'), dict) else None
             diagnostic['provider_code'] = code
+            if isinstance(response, dict) and isinstance(response.get('error'), dict):
+                diagnostic.update(provider_error_metadata(response['error'].get('error_msg')))
             raise DomainError('vk_captcha_needs_human' if code == 14 else 'vk_cooldown' if code in {6, 9, 29} else 'vk_api_failed', next_action='contact_owner')
         return response['response']
 
@@ -267,7 +302,9 @@ class VKHTTPTransport:
     async def upload_photo(self, url: str, data: bytes, mime: str) -> dict:
         import aiohttp
         from adapters.vk_photo_wire import photo_wire_bytes
+        asset_sha256 = hashlib.sha256(data).hexdigest()
         data, mime = photo_wire_bytes(data, mime)
+        upload_payload(data, mime, 'photo', asset_sha256=asset_sha256)
         form = aiohttp.FormData()
         form.add_field('photo', data, filename='verified.' + {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}[mime], content_type=mime)
         try:
@@ -309,6 +346,7 @@ class VKHTTPTransport:
         import aiohttp
         if mime not in {'image/png', 'image/jpeg', 'image/webp'} or not data or len(data) > 10 * 1024 * 1024:
             raise DomainError('vk_story_media_invalid')
+        upload_payload(data, mime, 'story_photo')
         form = aiohttp.FormData()
         form.add_field('file', data, filename='story.' + {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}[mime], content_type=mime)
         try:
@@ -329,6 +367,7 @@ class VKHTTPTransport:
         import aiohttp
         if mime != 'video/mp4' or not data or len(data) > 20 * 1024 * 1024:
             raise DomainError('vk_video_media_invalid')
+        upload_payload(data, mime, 'video')
         form = aiohttp.FormData()
         form.add_field('video_file', data, filename='verified.mp4', content_type=mime)
         response = await self._post(url, form)
@@ -343,6 +382,7 @@ class VKHTTPTransport:
         import aiohttp
         if mime != 'video/mp4' or not data or len(data) > 20 * 1024 * 1024:
             raise DomainError('vk_story_media_invalid')
+        upload_payload(data, mime, 'story_video')
         form = aiohttp.FormData()
         form.add_field('video_file', data, filename='story.mp4', content_type=mime)
         response = await self._post(url, form)

@@ -297,3 +297,106 @@ async def test_unrelated_second_unknown_keeps_connection_fenced(case):
     _, preserved = case.rows(second)
     assert preserved["state"] == "outcome_unknown"
     assert preserved["dispatched"] == 1
+
+
+def insert_validation_before_execute(case, **changes):
+    """Insert an additive fixture record without changing the final failure."""
+    op, _ = case.rows()
+    with case.store.tx() as db:
+        row = [dict(row) for row in db.execute(
+            "SELECT seq,body FROM events WHERE operation_id=? ORDER BY seq", (op["id"],))
+            if json.loads(row["body"]).get("message", "").startswith("provider_diagnostic ")][-1]
+        original = json.loads(row["body"])
+        details = json.loads(original["message"].split(" ", 1)[1])
+        details.update(operation="upload_url_validation", status="failed", phase="media",
+                       error_code="vk_upload_url_invalid", url_rejection_reason="host_not_allowed",
+                       upload_host="video.example.org")
+        details.update(changes)
+        replacement = {**original, "message": "provider_diagnostic " + canonical(details)}
+        db.execute("UPDATE events SET body=? WHERE operation_id=? AND seq=?",
+                   (canonical(replacement), op["id"], row["seq"]))
+        case.store.event(db, op["id"], "submitting", "failed", original["message"], "vk")
+    return row["seq"]
+
+
+@pytest.mark.parametrize("count", [1, 3])
+def test_validated_read_only_diagnostics_preserve_positive_allocation_proof(case, count):
+    sequences = [insert_validation_before_execute(case) for _ in range(count)]
+    op, before = case.rows()
+    with case.store.tx() as db:
+        proof = candidate(db, op, before)
+        assert proof
+        assert [item["seq"] for item in proof["validation_diagnostics"]] == sequences
+        assert all(len(item["digest"]) == 64 for item in proof["validation_diagnostics"])
+        assert resolve(case.store, db, op, before, proof)
+    _, after = case.rows()
+    assert after["dispatched"] == before["dispatched"] == 1
+    assert json.loads(after["checkpoint"])["adapter"] == json.loads(before["checkpoint"])["adapter"]
+    with case.store.connection() as db:
+        assert resolved(db, after)
+    assert case.provider.count("effect") == case.provider.count("execute") == 0
+
+
+@pytest.mark.parametrize("field,value", [
+    ("phase", "api"), ("status", "completed"), ("error_code", "vk_upload_failed"),
+    ("url_rejection_reason", "unknown_reason"), ("url_rejection_reason", None),
+    ("operation", "media_upload"), ("operation", "wall.post"),
+    ("operation", "wall.edit"), ("operation", "unrecognized_diagnostic"),
+    ("attempt_id", "attempt_other"), ("publication_id", "pub_other"),
+    ("operation_id", "op_other"), ("provider", "telegram"),
+    ("action", "edit"), ("dispatched", False),
+])
+def test_only_closed_correlated_local_failure_can_be_filtered(case, field, value):
+    insert_validation_before_execute(case)
+    insert_validation_before_execute(case, **{field: value})
+    insert_validation_before_execute(case)
+    assert case.proof() is None
+
+
+@pytest.mark.parametrize("mutation", ["body", "delete", "proof_digest", "proof_sequence", "omit_proof", "unknown_insert"])
+def test_validation_evidence_is_durable_and_cannot_be_removed_or_altered(case, mutation):
+    sequence = insert_validation_before_execute(case)
+    op, before = case.rows()
+    with case.store.tx() as db:
+        proof = candidate(db, op, before)
+        assert proof and resolve(case.store, db, op, before, proof)
+    _, child = case.rows()
+    checkpoint = json.loads(child["checkpoint"])
+    with case.store.tx() as db:
+        if mutation == "body":
+            row = db.execute("SELECT body FROM events WHERE operation_id=? AND seq=?", (op["id"], sequence)).fetchone()
+            body = json.loads(row["body"])
+            details = json.loads(body["message"].split(" ", 1)[1])
+            details["upload_host"] = "different.example.org"
+            body["message"] = "provider_diagnostic " + canonical(details)
+            db.execute("UPDATE events SET body=? WHERE operation_id=? AND seq=?", (canonical(body), op["id"], sequence))
+        elif mutation == "delete":
+            db.execute("DELETE FROM events WHERE operation_id=? AND seq=?", (op["id"], sequence))
+        elif mutation == "proof_digest":
+            checkpoint["known_allocation"]["validation_diagnostics"][0]["digest"] = "0" * 64
+        elif mutation == "proof_sequence":
+            checkpoint["known_allocation"]["validation_diagnostics"][0]["seq"] = proof["saved_seq"]
+        elif mutation == "omit_proof":
+            checkpoint["known_allocation"].pop("validation_diagnostics")
+        else:
+            row = db.execute("SELECT body FROM events WHERE operation_id=? AND seq=?", (op["id"], sequence)).fetchone()
+            body = json.loads(row["body"])
+            details = json.loads(body["message"].split(" ", 1)[1])
+            details["operation"] = "wall.post"
+            body["message"] = "provider_diagnostic " + canonical(details)
+            db.execute("UPDATE events SET body=? WHERE operation_id=? AND seq=?", (canonical(body), op["id"], sequence))
+        child["checkpoint"] = canonical(checkpoint)
+        assert not resolved(db, child)
+
+
+@pytest.mark.asyncio
+async def test_multiple_safe_diagnostics_do_not_authorize_automatic_recovery(case):
+    for _ in range(3):
+        insert_validation_before_execute(case)
+    assert case.proof()
+    blocked = await case.carousel("diagnostics-before-explicit-reconcile")
+    assert blocked["state"] == "blocked" and blocked["error"]["code"] == "connection_outcome_unknown"
+    await case.reconcile()
+    fresh = await case.carousel("diagnostics-after-explicit-reconcile")
+    assert fresh["state"] == "verified"
+    assert case.provider.count("effect") == 1

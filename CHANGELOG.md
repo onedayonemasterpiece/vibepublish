@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Extend the existing bounded provider ledger with sanitized VK upload host, wire bytes, framing, response identifiers and timing, plus direct URL-rejection reasons and fixed API error categories. Preserve secret redaction, the existing message/event caps and all effect/retry safeguards; retain the verified cargo carousel incident evidence.
+
 - Reuse authoritative VK saved-photo receipts without the added photos.getById permission prerequisite. Retain fresh CAS and mandatory ordered post-readback fingerprints, dimensions and target-owner checks, including VK photo ID reassignment; missing or changed media cannot be reported verified.
 
 - Resume proof-bound VK photo staging prefixes on an existing authorized retry/restart or a separately authorized later edit of the same publication. Verify exact native photos before uploading only a missing suffix, retain fresh native CAS/effect guards, and preserve terminal receipts and spent recovery keys. Complete checkpoints need no repeated uploads; invalid matching proofs fail closed.
