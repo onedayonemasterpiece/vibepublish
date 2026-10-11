@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Reduce VK photo upload bytes with smaller-only same-dimension JPEG wire derivatives and bounded pre-save retries for explicit upload HTTP 502/503/504. Preserve immutable assets, native CAS and no-repeat guards for saves/public effects. Allow explicit fresh-read baseline refresh after a terminal never-dispatched VK HTTP upload failure, retaining the original terminal receipt.
+
 - Add explicit owner-only local baseline refresh for a never-dispatched tracked VK edit conflict, using a fresh same-post item ref through reconcile. Preserve immutable failed intent and require a separate edit with normal native CAS; no provider effect or blind retry during refresh.
 
 - Record bounded, correlated TG/VK/MAX provider call phases, duration, safe error/status/cooldown metadata and readback summaries in the existing durable progress ledger. Preserve original failures before unknown-outcome conversion, exclude payloads/secrets, and keep all retry/dispatch safeguards unchanged.

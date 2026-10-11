@@ -1,6 +1,7 @@
 # Explicit VK edit-baseline refresh
 
-If a tracked VK edit failed before dispatch with remote_revision_conflict, a fresh
+If a tracked VK edit failed before dispatch with remote_revision_conflict or an
+explicit media-upload HTTP502/503/504, a fresh
 read does not silently replace the expected snapshot. The owner may explicitly
 accept one fresh scoped item ref through the existing publication_update command:
 

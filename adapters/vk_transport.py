@@ -163,8 +163,11 @@ class VKHTTPTransport:
                 if response.status != 200:
                     phase = 'api' if api else 'media_upload'
                     # Only bounded status and a static phase are safe to persist.
-                    raise DomainError('vk_http_failed',
+                    error = DomainError('vk_http_failed',
                         message=f'VK {phase} HTTP status {int(response.status)}')
+                    error.http_status = int(response.status)
+                    error.http_phase = phase
+                    raise error
                 chunks, length = [], 0
                 async for chunk in response.content.iter_chunked(65536):
                     length += len(chunk)
@@ -263,6 +266,8 @@ class VKHTTPTransport:
 
     async def upload_photo(self, url: str, data: bytes, mime: str) -> dict:
         import aiohttp
+        from adapters.vk_photo_wire import photo_wire_bytes
+        data, mime = photo_wire_bytes(data, mime)
         form = aiohttp.FormData()
         form.add_field('photo', data, filename='verified.' + {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}[mime], content_type=mime)
         try:
