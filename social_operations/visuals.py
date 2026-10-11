@@ -453,8 +453,9 @@ class VisualService:
                 db.execute('INSERT INTO attempts(id,operation_id,binding_id,binding_epoch,alias,provider,plan,plan_digest) VALUES(?,?,?,?,?,?,?,?)',
                            (new_id('attempt'), job['operation_id'], plan['binding_id'], plan['binding_epoch'], plan['alias'], plan['provider'], canonical(plan), digest(plan)))
             # Resume the SAME original operation exactly once, not a hidden publish call.
+            from .execution_budgets import command_seconds
             db.execute("UPDATE operations SET revision=?,state='accepted',complete=0,work_state='ready',lease_owner=NULL,lease_until=0,deadline=?,error=NULL WHERE id=?",
-                       (revision, self.store.clock()+120, job['operation_id']))
+                       (revision, self.store.clock()+command_seconds(plans), job['operation_id']))
         else:
             db.execute("UPDATE operations SET state='verified',complete=1,work_state='done',error=NULL WHERE id=?", (job['operation_id'],))
         db.execute("UPDATE visual_jobs SET state='selected',revision=revision+1,selected_candidate=?,selection_digest=? WHERE id=?",

@@ -324,7 +324,7 @@ class Application:
                 result['next_cursor'] = self.store.cursor(db, actor, 'bootstrap', scope, offset+50)
             return result
 
-    def _new_operation(self, db, actor, action, intent, *, publication=None, revision=1, complete=False, result=None):
+    def _new_operation(self, db, actor, action, intent, *, publication=None, revision=1, complete=False, result=None, command_timeout=120):
         if not complete:
             active = db.execute("SELECT count(*) FROM operations WHERE tenant_id=? AND work_state!='done'", (actor.tenant_id,)).fetchone()[0]
             quota = db.execute('SELECT command_limit FROM tenants WHERE id=?', (actor.tenant_id,)).fetchone()[0]
@@ -333,7 +333,7 @@ class Application:
         op = new_id('op')
         db.execute('INSERT INTO operations(id,tenant_id,principal_id,actor_epoch,publication_id,revision,action,request_digest,request,created,deadline,state,complete,work_state,result) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                    (op, actor.tenant_id, actor.principal_id, actor.epoch, publication, revision, action, digest([action, intent]), canonical(intent),
-                    self.store.clock(), self.store.clock()+(30*86400 if action == 'media_store' else 120),
+                    self.store.clock(), self.store.clock()+(30*86400 if action == 'media_store' else command_timeout),
                     'verified' if complete else 'accepted', int(complete), 'done' if complete else 'ready', canonical(result or {})))
         self.store.event(db, op, 'finished' if complete else 'accepted', 'completed' if complete else 'started',
                          'Local operation complete' if complete else 'Command durably accepted; no provider effect yet')
@@ -649,7 +649,9 @@ class Application:
                     kind = 'media_store' if action == 'media_store' else actual
                     db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)', (publication, actor.tenant_id, actor.principal_id, revision, kind, self.store.clock()))
                 db.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?)', (actor.tenant_id, actor.principal_id, publication, revision, canonical(intent), canonical(plans), digest(plans)))
-                op = self._new_operation(db, actor, action, intent, publication=publication, revision=revision)
+                from .execution_budgets import command_seconds
+                op = self._new_operation(db, actor, action, intent, publication=publication, revision=revision,
+                                         command_timeout=command_seconds(plans))
                 pending_visual = intent.get('visual') if action == 'publish' else None
                 if pending_visual:
                     self.visuals.create(db, actor, pending_visual, op, plans, publication=publication, revision=revision)

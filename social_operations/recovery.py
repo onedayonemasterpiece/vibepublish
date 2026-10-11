@@ -133,8 +133,10 @@ def retry_failed(app, actor, args):
                 store.event(db, op['id'], 'accepted', 'started',
                             'Explicit retry admitted for a proven never-dispatched failure; frozen intent retained', child['alias'])
             # Renew only the immediate-command window. Native requested time is immutable.
+            from .execution_budgets import command_seconds
+            budget = command_seconds(json.loads(child['plan']) for child in selected)
             db.execute("UPDATE operations SET state='accepted',complete=0,work_state='ready',deadline=?,error=NULL WHERE id=?",
-                       (store.clock()+120, op['id']))
+                       (store.clock()+budget, op['id']))
         if key and not replay:
             app._key(db, actor, key, intent_hash, op['id'])
     return store.receipt(actor, op['id'])
@@ -250,8 +252,10 @@ def supersede_failed(app, actor, args):
             db.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?)',
                        (actor.tenant_id, actor.principal_id, publication, 1,
                         canonical(replacement_intent), canonical(plans), digest(plans)))
+            from .execution_budgets import command_seconds
             replacement_id = app._new_operation(db, actor, 'publish', replacement_intent,
-                                                 publication=publication, revision=1)
+                                                 publication=publication, revision=1,
+                                                 command_timeout=command_seconds(plans))
             for plan in plans:
                 db.execute('INSERT INTO attempts(id,operation_id,binding_id,binding_epoch,alias,provider,plan,plan_digest) '
                            'VALUES(?,?,?,?,?,?,?,?)',
