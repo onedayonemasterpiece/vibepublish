@@ -2,6 +2,7 @@
 import json
 import re
 from .domain import canonical, digest
+from .provider_diagnostics import _URL_REJECTIONS
 
 _KIND = 'vk_video_allocation_only'
 _PREFIX = 'provider_diagnostic '
@@ -59,6 +60,21 @@ def _diagnostic(row, op, child):
         return None
     return record
 
+def _url_rejection(record):
+    """The only additive diagnostic class known to be local and effect-free."""
+    return (isinstance(record, dict)
+            and record.get('operation') == 'upload_url_validation'
+            and record.get('status') == 'failed' and record.get('phase') == 'media'
+            and record.get('error_code') == 'vk_upload_url_invalid'
+            and record.get('dispatched') is True
+            and isinstance(record.get('url_rejection_reason'), str)
+            and record['url_rejection_reason'] in _URL_REJECTIONS)
+
+def _diagnostics(rows, op, child):
+    # Keep malformed/mismatched provider diagnostics as barriers, not omissions.
+    return [(row, _diagnostic(row, op, child)) for row in rows
+            if json.loads(row['body']).get('message', '').startswith(_PREFIX)]
+
 def candidate(db, op, child):
     """Local validation failure is positive evidence; missing logs never suffice."""
     try:
@@ -67,27 +83,35 @@ def candidate(db, op, child):
                 or json.loads(child['result']).get('missing_checks') != ['vk_upload_url_invalid']
                 or not _context(db, op, child, checkpoint)):
             return None
-        records = []
-        for row in db.execute('SELECT seq,body FROM events WHERE operation_id=? ORDER BY seq', (op['id'],)):
-            record = _diagnostic(row, op, child)
-            if record is not None:
-                records.append((row, record))
+        records = _diagnostics(db.execute(
+            'SELECT seq,body FROM events WHERE operation_id=? ORDER BY seq', (op['id'],)), op, child)
         if len(records) < 2:
             return None
-        (saved_row, saved), (failed_row, failed) = records[-2:]
-        if not (saved.get('operation') == 'video.save' and saved.get('status') == 'completed'
-                and failed.get('operation') == 'execute' and failed.get('status') == 'failed'
+        failed_row, failed = records[-1]
+        if not (failed and failed.get('operation') == 'execute' and failed.get('status') == 'failed'
                 and failed.get('error_code') == 'vk_upload_url_invalid'):
+            return None
+        validation = []
+        for saved_row, saved in reversed(records[:-1]):
+            if saved and saved.get('operation') == 'video.save' and saved.get('status') == 'completed':
+                break
+            if not _url_rejection(saved):
+                return None
+            validation.append(dict(seq=saved_row['seq'], digest=digest(json.loads(saved_row['body']))))
+        else:
             return None
         # _stage_video checkpoints the validated video.save allocation, then
         # synchronously validates its URL BEFORE upload. This exact local error
         # proves upload/wall submission unreachable, not absence of allocation.
-        return dict(kind=_KIND, operation_id=op['id'], attempt_id=child['id'],
+        proof = dict(kind=_KIND, operation_id=op['id'], attempt_id=child['id'],
                     plan_digest=child['plan_digest'], actor_epoch=op['actor_epoch'],
                     binding_epoch=child['binding_epoch'], checkpoint_digest=digest(checkpoint),
                     allocation=checkpoint['adapter']['media'][0],
                     saved_seq=saved_row['seq'], saved_digest=digest(json.loads(saved_row['body'])),
                     failed_seq=failed_row['seq'], failed_digest=digest(json.loads(failed_row['body'])))
+        if validation:
+            proof['validation_diagnostics'] = list(reversed(validation))
+        return proof
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
 
@@ -134,6 +158,13 @@ def resolved(db, child):
                 return False
             records.append(_diagnostic(row, op, child))
         saved, failed = records
+        validation = _diagnostics(db.execute(
+            'SELECT seq,body FROM events WHERE operation_id=? AND seq>? AND seq<? ORDER BY seq',
+            (op['id'], proof['saved_seq'], proof['failed_seq'])), op, child)
+        if (not all(_url_rejection(record) for _, record in validation)
+                or proof.get('validation_diagnostics', []) != [
+                    dict(seq=row['seq'], digest=digest(json.loads(row['body']))) for row, _ in validation]):
+            return False
         return (proof['saved_seq'] < proof['failed_seq']
                 and saved.get('operation') == 'video.save' and saved.get('status') == 'completed'
                 and failed.get('operation') == 'execute' and failed.get('status') == 'failed'

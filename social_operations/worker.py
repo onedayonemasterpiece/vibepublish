@@ -15,7 +15,7 @@ from adapters.port import Asset, Hooks, NativeSource, Observation, ProviderReque
 from .domain import DomainError, OutcomeUnknown, canonical, digest, new_id, parse_time, timestamp
 from .service import Application
 from .media_budget import MediaBudgetDeferred, reserve
-from .provider_diagnostics import diagnostic_scope, provider_call, safe_diagnostic
+from .provider_diagnostics import diagnostic_scope, provider_call, safe_diagnostic, budget_diagnostic
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled', 'partial'}
 
@@ -74,7 +74,7 @@ class Worker:
                               'operation': 'diagnostic_limit_reached'}
                 self.store.event(db, op['id'], stage,
                     details.get('status') if details.get('status') in {'started','completed','failed'} else 'failed',
-                    'provider_diagnostic ' + canonical(record), child['alias'] if child else None)
+                    'provider_diagnostic ' + canonical(budget_diagnostic(record)), child['alias'] if child else None)
         return observe
 
     def hooks(self, op, child=None, min_lead=60):
