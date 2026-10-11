@@ -543,6 +543,12 @@ class TelegramAdapter:
             native_media = list(existing.provider_media)
             if r.action == 'edit' and len(r.assets) != len(existing.media_hashes):
                 raise DomainError('telegram_media_removal_needs_review')
+        if existing and r.action == 'edit' and compiled_media:
+            # Uploading can take time; never overwrite a change made while staging.
+            current = await self._exact(entity, existing)
+            if current is None:
+                raise DomainError('remote_item_missing', next_action='refresh')
+            self._same_existing(existing, current)
         random_ids = [int.from_bytes(hashlib.sha256(f'{r.attempt_id}:{n}'.encode()).digest()[:8], 'big') & ((1 << 63)-1) or 1
                       for n in range(len(state['source']['ids']) if r.source else max(1, len(r.assets)))]
         ids = list(existing.member_ids or (existing.native_id,)) if existing else []

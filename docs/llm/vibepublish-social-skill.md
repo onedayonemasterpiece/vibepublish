@@ -329,13 +329,8 @@ are blockers, not authorization to use another account, a timer or another tool.
 
 ## Existing native items
 
-To edit/reschedule/cancel/delete a provider item found in an authorized read, use
-publication_update with item_ref and change. Do not also supply publication_id or
-expected_revision: the scoped item_ref carries immutable remote-snapshot CAS.
-A stale ref requires a new read, not a blind retry. For your own tracked publication
-use publication_id + expected_revision as before. Native media are preserved;
-external media replacement is currently gated.
-
+Use publication_id + expected_revision, or fresh item_ref for native CAS, never both. Managed Telegram media replacement needs one owned image/video and request_key; retain message/publication identity. External media/albums stay gated.
+Scoped edit.destinations selects verified aliases with publication revision and request_key; omit it for all targets. Report desired_revision/applied_revision/sync_status. Untouched siblings stay outdated/partial/unknown. Never imply full sync or silently retry; reconcile unknown effects using the same key.
 
 ## Telegram custom emoji: choose once, freeze, verify
 

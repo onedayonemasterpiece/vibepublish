@@ -917,11 +917,20 @@ class Worker:
     def aggregate(self, op, error=None):
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
-            states = [r[0] for r in db.execute('SELECT state FROM attempts WHERE operation_id=?', (op['id'],))]
-            if 'outcome_unknown' in states:
+            own_states = [r[0] for r in db.execute('SELECT state FROM attempts WHERE operation_id=?', (op['id'],))]
+            from .managed_item_edits import latest_attempts
+            # Observation-only commands have no delivery attempts of their own.
+            # Their failure state must not be replaced by historical uncertainty.
+            projected = latest_attempts(db, op) if own_states else []
+            states = [row['state'] for row in projected]
+            if len(states) > len(own_states) and any(s not in TERMINAL for s in own_states):
+                state = 'running'
+            elif 'outcome_unknown' in states:
                 state = 'outcome_unknown'
             elif any(s not in TERMINAL for s in states):
                 state = 'running'
+            elif any(row.get('sync_status') == 'outdated' for row in projected):
+                state = 'partial'
             elif states and all(s == 'scheduled' for s in states):
                 state = 'scheduled'
             elif states and all(s == 'cancelled' for s in states):

@@ -686,6 +686,9 @@ class Application:
         source = self.resolve_item(db, actor, args['item_ref'])
         b = self.store.binding(db, actor, binding_id=source['binding_id'])
         remote = json.loads(source['snapshot'])
+        if 'media' in args['change']:
+            from .managed_item_edits import adopt
+            return adopt(self, db, actor, args, source, b, remote)
         # Preserve native object IDs, not another principal's private asset hashes.
         remote['media_hashes'] = []
         change, kind = args['change'], args['change']['kind']
@@ -709,7 +712,7 @@ class Application:
         if (b['provider'] == 'telegram' or (b['provider'] == 'max' and b['account_type'] == 'max_web')) and remote.get('entities_json', '[]') != '[]':
             target['content'] = {'text': remote['text'], 'format': 'telegram_entities' if b['provider'] == 'telegram' else 'max_entities', 'entities': json.loads(remote['entities_json'])}
         if kind == 'edit':
-            target.update({k: v for k, v in change.items() if k != 'kind'})
+            target.update({k: v for k, v in change.items() if k not in {'kind', 'destinations'}})
         elif kind == 'reschedule':
             target['delivery'] = change['delivery']
         if kind in {'cancel', 'delete'}:
@@ -733,7 +736,7 @@ class Application:
             raise DomainError('operation_in_progress', next_action='check_status')
         change = args['change']
         kind = change['kind']
-        if kind == 'retry_failed' or previous['state'] == 'outcome_unknown':
+        if kind == 'retry_failed' or (previous['state'] == 'outcome_unknown' and not change.get('destinations')):
             raise DomainError('retry_not_proven_safe', next_action='review_outcome')
         if kind == 'approve':
             token = db.execute('SELECT * FROM decisions WHERE publication_id=? AND revision=? AND token_hash=? AND consumed_by IS NULL',
@@ -742,7 +745,10 @@ class Application:
                 raise DomainError('approval_invalid', next_action='refresh')
             db.execute('UPDATE decisions SET consumed_by=? WHERE id=?', (new_id('consumed'), token['id']))
         plans = []
-        for child in db.execute('SELECT * FROM attempts WHERE operation_id=?', (previous['id'],)).fetchall():
+        from .managed_item_edits import latest_attempts, selected_attempts
+        heads = latest_attempts(db, previous)
+        children = selected_attempts(self.store, db, actor, args, heads)
+        for child in children:
             old = json.loads(child['plan'])
             observed = json.loads(child['checkpoint']).get('remote')
             if kind != 'approve' and not observed:
@@ -755,7 +761,7 @@ class Application:
             target = {'content': json.loads(old['content_json']), 'media': [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']],
                       'surface': old['surface'], 'delivery': {'kind': 'at', 'at': old['scheduled_at']} if old['scheduled_at'] else {'kind': 'now'}, 'mode': 'execute'}
             if kind == 'edit':
-                target.update({k: v for k, v in change.items() if k != 'kind'})
+                target.update({k: v for k, v in change.items() if k not in {'kind', 'destinations'}})
             elif kind == 'reschedule':
                 target['delivery'] = change['delivery']
             if kind in ('cancel', 'delete'):

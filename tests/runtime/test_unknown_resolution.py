@@ -170,6 +170,8 @@ class UnknownResolutionTests(unittest.IsolatedAsyncioTestCase):
     async def test_published_collision_keeps_quarantine(self):
         await self.seed(); self.reader.collision=True
         result=await self.run_resolution(); self.assertEqual(result['state'],'blocked')
+        self.assertEqual(result['error']['code'], 'resolution_published_collision')
+        self.assertEqual(self.store.receipt(self.actor, self.old_op)['state'], 'outcome_unknown')
         with self.store.connection() as db: self.assertEqual(db.execute('SELECT count(*) FROM attempt_resolutions').fetchone()[0],0)
 
     async def test_incomplete_queue_keeps_quarantine(self):
