@@ -919,7 +919,9 @@ class Worker:
             self.store.fence(db, op['id'], self.id, op['fence'])
             own_states = [r[0] for r in db.execute('SELECT state FROM attempts WHERE operation_id=?', (op['id'],))]
             from .managed_item_edits import latest_attempts
-            projected = latest_attempts(db, op)
+            # Observation-only commands have no delivery attempts of their own.
+            # Their failure state must not be replaced by historical uncertainty.
+            projected = latest_attempts(db, op) if own_states else []
             states = [row['state'] for row in projected]
             if len(states) > len(own_states) and any(s not in TERMINAL for s in own_states):
                 state = 'running'

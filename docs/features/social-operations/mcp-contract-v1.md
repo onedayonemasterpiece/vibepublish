@@ -510,7 +510,10 @@ pending or unknown. A successful untouched older target retains its historical
 state/evidence but is explicitly outdated; the aggregate remains partial, never
 wholly synchronized. Unknown effects retain unknown status even when an older
 applied revision is known. These fields do not authorize retries or automatic
-catch-up. An old operation receipt remains its historical revision.
+catch-up. An old operation receipt remains its historical revision. An observation-only
+reconciliation command with no executable attempts keeps its own diagnostic
+outcome; an old unknown delivery cannot replace that command's blocked state
+or release its original quarantine.
 
 ## Runtime extension 1.4: shared visual jobs and private assets
 
