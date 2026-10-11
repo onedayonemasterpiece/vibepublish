@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve sanitized VK non-200 HTTP status and static API/media-upload phase in durable failure diagnostics, without URLs, response bodies, credentials or changed retry behavior.
+
 - Add bounded MP4 workspace ingress and native Telegram video, VK wall video and VK video Stories, with preserved rotation, exact provider identities and fail-closed uncertain upload handling.
 
 - Add explicit durable VK wall-to-linked-Story continuation: frozen approved image, exact original parent receipt, existing community Long Poll, bounded missed-event readback, transactional deduplication, child status and no resend after uncertain save. No mobile dependency or automatic credential/event-setting changes.
