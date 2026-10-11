@@ -352,10 +352,12 @@ class Worker:
             retry_at = now + min(delays or [1])
             result['vk_completion_retry_counts'] = counts
             result['vk_completion_retry_at'] = timestamp(retry_at)
+            from .execution_budgets import command_seconds
+            retry_budget = command_seconds(json.loads(child['plan']) for child, _, _ in reopen)
             db.execute(
                 "UPDATE operations SET state='running',complete=0,work_state='working',"
                 "lease_owner=NULL,lease_until=?,deadline=MAX(deadline,?),error=NULL,result=? WHERE id=?",
-                (retry_at, now + 120, canonical(result), op['id']),
+                (retry_at, now + retry_budget, canonical(result), op['id']),
             )
             self.store.event(
                 db, op['id'], 'waiting_connection', 'started',
@@ -438,7 +440,9 @@ class Worker:
                         recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
                         hint = {**json.loads(recovery['hint']), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
                         checkpoint = canonical({**json.loads(checkpoint), 'core_recovery': hint})
-                timeout = max(0.1, min(90, op['deadline']-self.store.clock())) if not current['dispatched'] else 90
+                from .execution_budgets import execution_seconds
+                execute_limit = execution_seconds(json.loads(child['plan']))
+                timeout = max(0.1, min(execute_limit, op['deadline']-self.store.clock())) if not current['dispatched'] else 90
                 async with asyncio.timeout(timeout) as execution_budget:
                     if (not current['dispatched'] and child['provider']=='max'
                             and request.action in {'publish','reschedule'} and request.scheduled_at):

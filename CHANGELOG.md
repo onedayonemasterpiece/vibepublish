@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Give VK multi-photo post publish/edit a bounded asset-count-aware execution budget and matching admission/recovery deadline. Keep single-photo/default timing, HTTP timeouts, retry limits, fencing and native no-repeat checks unchanged.
+
 - Reduce VK photo upload bytes with smaller-only same-dimension JPEG wire derivatives and bounded pre-save retries for explicit upload HTTP 502/503/504. Preserve immutable assets, native CAS and no-repeat guards for saves/public effects. Allow explicit fresh-read baseline refresh after a terminal never-dispatched VK HTTP upload failure, retaining the original terminal receipt.
 
 - Add explicit owner-only local baseline refresh for a never-dispatched tracked VK edit conflict, using a fresh same-post item ref through reconcile. Preserve immutable failed intent and require a separate edit with normal native CAS; no provider effect or blind retry during refresh.
