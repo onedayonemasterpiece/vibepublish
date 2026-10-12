@@ -141,7 +141,8 @@ def append_network_footer(source_alias, provider, content, lookup, *, has_media=
     linked = _tail_destinations(text, entities)
     # Resolve every required link before rewriting anything. A partial footer
     # must never hide a missing current destination or cross-network binding.
-    missing = [("Подписаться", _source_url(source_alias, provider, lookup))]
+    source_caption = "Max" if provider == "max" else "Подписаться"
+    missing = [(source_caption, _source_url(source_alias, provider, lookup))]
     identities = {_identity(missing[0][1])}
     for caption, target_alias in rules:
         url = _public_url(target_alias, lookup)

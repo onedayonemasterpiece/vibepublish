@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Shorten the automatic MAX current-channel footer label to `Max`, preserving URLs, cross-network labels, order and separators. Telegram keeps `Подписаться`; existing provider posts and frozen queued plans are not rewritten.
+
 - Support explicit destination-scoped publication edits with immutable sibling evidence, desired/applied revision status and provider CAS; require exact revision and request key, reject uncertain selected targets, and preserve the all-target convergence path.
 
 - Permit a fresh exact provider-read item ref to replace one image/video on a verified same-principal managed Telegram message in place. Keep the original publication and immutable operation history, project untouched target receipts/proofs without copied attempts, and retain binding/epoch checks, native CAS, exact readback and no-repeat protection. Expose each target's last verified applied revision, common desired revision and synchronization status; older successful siblings stay visibly outdated and keep the aggregate partial. Generic external media adoption remains gated.
