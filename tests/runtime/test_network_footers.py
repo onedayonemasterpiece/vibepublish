@@ -58,6 +58,30 @@ class NetworkFooterUnitTests(unittest.TestCase):
                 self.assertEqual(len(result["entities"]), len(urls))
                 normalized_entities(result["text"], result["entities"])
 
+    def test_max_label_is_short_and_existing_footer_is_rebuilt_once(self):
+        source = "max_lovekenig_announcements"
+        original = self.compile(source, "max", {"text": "🌊 Событие"})
+        self.assertEqual(original["text"], "🌊 Событие\n\nMax  ·  ВКонтакте  ·  Телеграм")
+        self.assertEqual(
+            [(e["url"], e["length"]) for e in original["entities"]],
+            [("https://max.ru/channel_kenigevents", 3),
+             ("https://vk.com/club22", 9), ("https://t.me/kenigevents", 8)],
+        )
+        # Existing semantic navigation may still carry the former long caption.
+        text = "🌊 Событие\n\nПодписаться  ·  ВКонтакте  ·  Телеграм"
+        entities = []
+        for label, url in [("Подписаться", "https://max.ru/channel_kenigevents"),
+                           ("ВКонтакте", "https://vk.com/club22"),
+                           ("Телеграм", "https://t.me/kenigevents")]:
+            entities.append({"type": "text_link", "offset": utf16(text[:text.index(label)]),
+                             "length": utf16(label), "url": url})
+        old = {"text": text, "format": "max_entities", "entities": entities}
+        rebuilt = self.compile(source, "max", old)
+        self.assertEqual(rebuilt, original)
+        self.assertEqual(self.compile(source, "max", rebuilt), rebuilt)
+        self.assertEqual(old["text"], text)
+        normalized_entities(rebuilt["text"], rebuilt["entities"])
+
     def test_utf16_offsets_and_original_format_survive(self):
         text = "🎨 Событие"
         content = {"text": text, "format": "telegram_entities",
@@ -185,7 +209,8 @@ class NetworkFooterPlanTests(unittest.IsolatedAsyncioTestCase):
                 plan = await self._plan(alias)
                 compiled = json.loads(plan["content_json"])
                 self.assertEqual(len(compiled["entities"]), len(ROUTES[alias]) + 1)
-                self.assertTrue(compiled["text"].split("\n")[-1].startswith("Подписаться"))
+                caption = "Max" if alias == "max_lovekenig_announcements" else "Подписаться"
+                self.assertTrue(compiled["text"].split("\n")[-1].startswith(caption + "  ·  "))
                 self.assertTrue(compiled["text"].startswith("Анонс\n\n"))
                 self.assertIn("·", compiled["text"] if len(ROUTES[alias]) > 1 else "·")
         other = await self._plan("other_tg")
