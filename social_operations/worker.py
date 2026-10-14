@@ -176,9 +176,9 @@ class Worker:
                 self.store.fence(db, op['id'], self.id, op['fence'])
                 db.execute('UPDATE operations SET lease_until=?,worker_seen=? WHERE id=?', (self.store.clock()+30, self.store.clock(), op['id']))
 
-    async def run_once(self):
+    async def run_once(self, *, operation_id=None):
         try:
-            if self.store.clock() >= self.next_media_store_purge:
+            if operation_id is None and self.store.clock() >= self.next_media_store_purge:
                 with self.store.tx() as db:
                     self.app._purge_media_store_assets(db)
                 self.next_media_store_purge = self.store.clock() + 60
@@ -186,6 +186,7 @@ class Worker:
                 self.id,
                 connection_ids=self.connection_ids,
                 include_unrouted=self.include_unrouted,
+                operation_id=operation_id,
             )
         except sqlite3.OperationalError as exc:
             # BEGIN IMMEDIATE contention happens before a claim and therefore
@@ -195,6 +196,8 @@ class Worker:
                 raise
             return False
         if not op:
+            if operation_id is not None:
+                return False
             from .vk_story_dependencies import advance
             return await advance(self)
         pulse = asyncio.create_task(self.heartbeat(op))

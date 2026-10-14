@@ -75,6 +75,15 @@ result can be imported within this read window without making generation valid
 again. Unknown/unfinished/mismatched reads stay terminal; replaying the same key
 only returns current status and does not queue another read.
 
+An explicitly requested standalone Original render recovery uses this same
+command when the original dispatched job closed with `visual_preset_not_available`
+and empty structured copy. It reads the saved executor/artifacts without another
+generation, preserves the prior failure in the durable progress ledger, and keeps every existing
+authority, input, lease, revision and selection check. Other blocked errors and
+inline publications are excluded. A local worker may claim the exact operation
+without claiming unrelated jobs or running unrelated maintenance. Implementation
+and offline checks: `Not confirmed by user`; live acceptance: `Not done`.
+
 Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: shared service and partial live executor acceptance `Not confirmed by user`; complete acceptance `Not done`.
 
 Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the handoff](../social-operations/analysis-handoff-20260904.md). Publication/runtime/security rules live in [implementation design](../social-operations/implementation-design-v1.md).

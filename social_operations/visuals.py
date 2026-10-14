@@ -433,8 +433,14 @@ class VisualService:
                 if (job['operation_id'] != op['id'] or job['revision'] != command['expected_visual_revision']
                         or op['revision'] != command['expected_revision']):
                     raise DomainError('visual_revision_conflict', next_action='refresh')
+                spec = json.loads(job['spec'])
+                render_recovery = (op['state'] == job['state'] == 'blocked'
+                    and (json.loads(op['error']) if op['error'] else {}).get('error', {}).get('code') == 'visual_preset_not_available'
+                    and spec.get('formats') == ['original'] and not spec.get('copy')
+                    and not job['parent_publication'])
+                terminal_state = 'blocked' if render_recovery else 'outcome_unknown'
                 if ('visual' not in actor.scopes or actor.routing_revision != job['routing_revision']
-                        or op['state'] != 'outcome_unknown' or job['state'] != 'outcome_unknown'
+                        or op['state'] != terminal_state or job['state'] != terminal_state
                         or not op['complete'] or op['work_state'] != 'done'
                         or op['lease_until'] > self.store.clock() or job['dispatched'] != 1
                         or job['execution_ref'] != job['id'] or job['selected_candidate']
@@ -446,6 +452,10 @@ class VisualService:
                 result = json.loads(op['result'])
                 if result.get('candidates'):
                     raise DomainError('imagegen_observation_reconciliation_conflict', next_action='review_outcome')
+                if render_recovery:
+                    self.store.event(db, op['id'], 'rendering', 'blocked',
+                        'Retained original renderer failure: ' + canonical({'state': op['state'],
+                            'revision': op['revision'], 'error': json.loads(op['error'])}))
                 result.update(visual_revision=job['revision'] + 1, observation_recovery={
                     'job_id': job['id'], 'execution_ref': job['execution_ref'], 'input_digest': job['input_digest'],
                     'operation_revision': op['revision'] + 1, 'visual_revision': job['revision'] + 1,
@@ -453,9 +463,9 @@ class VisualService:
                     'read_deadline': self.store.clock() + VISUAL_OBSERVATION_RECOVERY_SECONDS})
                 changed = db.execute("UPDATE operations SET state='accepted',complete=0,work_state='ready',"
                     "revision=revision+1,fence=fence+1,lease_owner=NULL,lease_until=0,result=?,error=NULL "
-                    "WHERE id=? AND revision=? AND fence=? AND state='outcome_unknown' "
+                    "WHERE id=? AND revision=? AND fence=? AND state=? "
                     "AND complete=1 AND work_state='done' AND lease_until<=?",
-                    (canonical(result), op['id'], op['revision'], op['fence'], self.store.clock())).rowcount
+                    (canonical(result), op['id'], op['revision'], op['fence'], terminal_state, self.store.clock())).rowcount
                 if changed != 1:
                     raise DomainError('stale_worker', next_action='refresh')
                 changed = db.execute("UPDATE visual_jobs SET state='running',revision=revision+1 WHERE id=? AND revision=? AND dispatched=1",
