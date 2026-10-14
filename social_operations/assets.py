@@ -4,7 +4,7 @@ import hashlib
 import io
 import warnings
 from dataclasses import dataclass
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from .domain import DomainError, new_id
 
 
@@ -43,8 +43,9 @@ def verify_image(data: bytes, mime: str, *, max_input_bytes: int = INGRESS_IMAGE
                     raise DomainError('asset_format_or_dimensions')
                 image.load()
                 # A separate immutable sanitized derivative strips EXIF/location.
-                clean = Image.new('RGB', image.size)
-                clean.paste(image.convert('RGB'))
+                oriented = ImageOps.exif_transpose(image)
+                clean = Image.new('RGB', oriented.size)
+                clean.paste(oriented.convert('RGB'))
                 output = io.BytesIO()
                 clean.save(output, format='PNG')
                 verified = output.getvalue()

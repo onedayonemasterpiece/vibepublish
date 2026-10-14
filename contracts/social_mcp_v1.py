@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.11.0-runtime"
+VERSION = "1.12.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -106,7 +106,7 @@ DEFS = {
         ("destination", "provider", "state", "stage", "observed", "revision", "media_check", "retry_safe")),
     "candidate": obj({"id": ID, "asset_ref": ID, "sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
         "preview_url": URL, "width": {"type": "integer", "minimum": 1},
-        "height": {"type": "integer", "minimum": 1}, "format": enum("post_4_5", "story_9_16"),
+        "height": {"type": "integer", "minimum": 1}, "format": enum("post_4_5", "story_9_16", "original"),
         "selection_token": string(512), "requires_review": {"type": "boolean"}}, ("id", "asset_ref", "sha256", "width", "height")),
     "error": obj({"code": string(80), "message": string(1000), "field": string(200)}, ("code", "message")),
 }
@@ -139,7 +139,7 @@ for visual_arm in DEFS["visual_spec"]["oneOf"]:
     if visual_arm["properties"]["kind"]["const"] == "generate":
         visual_arm["properties"]["sources"] = array(ref("media"), 0, 8)
     visual_arm["properties"]["copy"] = ref("visual_copy")
-    visual_arm["properties"]["formats"] = {**array(enum("post_4_5", "story_9_16"), 1, 2),
+    visual_arm["properties"]["formats"] = {**array(enum("post_4_5", "story_9_16", "original"), 1, 2),
                                            "uniqueItems": True}
 # Events commit with the corresponding state change; they are not transient logs.
 DEFS["event"] = obj({"seq": REV, "operation_id": ID, "destination": ALIAS,
@@ -353,9 +353,17 @@ workspace_import_kinds = [v["properties"]["kind"]["const"] for v in workspace_im
 visual_cmd = {"oneOf": [arm("import"), *workspace_import_commands,
     arm("import_browser_artifact", {"uri": browser_artifact_uri}, ("uri",)),
     ref("visual_spec"),
+    arm("frame_source", {"source": ref("media"), "copy": ref("visual_copy"),
+        "format": enum("post_4_5", "story_9_16", "original"),
+        "layout": obj({"text_box": array({"type": "number", "minimum": 0, "maximum": 1}, 4, 4),
+            "title_size": {"type": "number", "minimum": 28, "maximum": 68},
+            "body_size": {"type": "number", "minimum": 22, "maximum": 42},
+            "text_color": string(7, pattern=r"^#[a-fA-F0-9]{6}$"),
+            "backplate_opacity": {"type": "number", "minimum": 0, "maximum": 0.65}}, ("text_box",))},
+        ("source", "copy", "layout")),
     arm("recompose", {"job_id": ID, "candidate_id": ID,
         "expected_visual_revision": REV, "expected_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
-        "format": enum("post_4_5", "story_9_16")},
+        "format": enum("post_4_5", "story_9_16", "original")},
         ("job_id", "candidate_id", "expected_visual_revision", "expected_sha256")),
     arm("reconcile_dispatch", {"operation_id": ID, "job_id": ID,
         "expected_revision": REV, "expected_visual_revision": REV},
@@ -381,7 +389,7 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
     {"if": {"properties": {"command": {"properties": {"kind": {"enum": ["import_browser_artifact", *workspace_import_kinds]}},
                                         "required": ["kind"]}}},
      "then": {"required": ["request_key"]}},
-    {"if": {"properties": {"command": {"properties": {"kind": {"const": "recompose"}},
+    {"if": {"properties": {"command": {"properties": {"kind": {"enum": ["recompose", "frame_source"]}},
                                         "required": ["kind"]}}},
        "then": {"required": ["request_key"]}}
 ]
