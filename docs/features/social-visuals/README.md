@@ -5,6 +5,35 @@
 
 # Social visuals
 
+### Immutable source frame — 2026-10-14
+
+Requirement: `Fixed` for preserving an explicitly selected original photo;
+implementation/offline checks: `Not confirmed by user`; live acceptance: `Not done`.
+Standalone `frame_source` creates one reviewable candidate using the existing SVG
+compositor, a complete private source image and explicit structured editorial copy.
+The photo is contained uniformly across the complete output canvas. The caller/model
+supplies a normalized text area, readable font sizes and optional modest contrast
+backplate after inspecting the actual photo. No crop, perspective change or scene
+reconstruction occurs. Layout must preserve the house and important context while
+keeping the photo dominant. Geometric containment alone does not establish that a
+chosen text area avoids important image details; actual source/output review remains
+required. Copy overflow blocks; the system never shrinks lettering silently.
+EXIF orientation is applied before stripping metadata into a separate immutable
+PNG derivative. Original bytes remain unchanged. Supported families are 4:5 and
+9:16; overflow blocks rather than dropping or inventing text. The caller/model
+owns copy meaning, qualifiers and provenance; composition does not verify facts.
+
+```json
+{"command":{"kind":"frame_source","source":{"source":{"kind":"asset","id":"asset_original"}},"copy":{"title":"Explicit title","body":"Explicit approved copy"},"layout":{"text_box":[0.05,0.01,0.9,0.14],"title_size":42,"body_size":28},"format":"post_4_5"},"request_key":"distinct-owner-source-frame-intent"}
+```
+
+The normal asset/tenant/epoch checks, immutable visual job/candidate lineage,
+choice token/CAS and quality review remain in force. This standalone operation
+does not invoke Imagegen, publish, revive an old operation or imply that an old
+distorted generated image was corrected. Selection produces an asset only. It
+requires a stable request key and is replayed through the existing operation
+ledger. No new renderer, image model, provider or dispatch framework is added.
+
 Explicit `reconcile_dispatch` closes only a terminal unknown for which the
 original locked executor receipt proves no generation turn was sent. It seals
 the operation's worker fence and returns `retry_safe=true`; it never resubmits,

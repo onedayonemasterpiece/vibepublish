@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add explicit standalone source-frame composition through the existing SVG renderer, preserving the complete photograph across the canvas with caller/model-selected text placement and normal private-asset lineage/selection guards. Apply EXIF orientation to separate sanitized image derivatives while retaining original bytes. No generation or publication is implied.
+
 - Shorten the automatic MAX current-channel footer label to `Max`, preserving URLs, cross-network labels, order and separators. Telegram keeps `Подписаться`; existing provider posts and frozen queued plans are not rewritten.
 
 - Support explicit destination-scoped publication edits with immutable sibling evidence, desired/applied revision status and provider CAS; require exact revision and request key, reject uncertain selected targets, and preserve the all-target convergence path.

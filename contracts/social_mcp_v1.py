@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.11.0-runtime"
+VERSION = "1.12.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -353,6 +353,14 @@ workspace_import_kinds = [v["properties"]["kind"]["const"] for v in workspace_im
 visual_cmd = {"oneOf": [arm("import"), *workspace_import_commands,
     arm("import_browser_artifact", {"uri": browser_artifact_uri}, ("uri",)),
     ref("visual_spec"),
+    arm("frame_source", {"source": ref("media"), "copy": ref("visual_copy"),
+        "format": enum("post_4_5", "story_9_16"),
+        "layout": obj({"text_box": array({"type": "number", "minimum": 0, "maximum": 1}, 4, 4),
+            "title_size": {"type": "number", "minimum": 28, "maximum": 68},
+            "body_size": {"type": "number", "minimum": 22, "maximum": 42},
+            "text_color": string(7, pattern=r"^#[a-fA-F0-9]{6}$"),
+            "backplate_opacity": {"type": "number", "minimum": 0, "maximum": 0.65}}, ("text_box",))},
+        ("source", "copy", "layout")),
     arm("recompose", {"job_id": ID, "candidate_id": ID,
         "expected_visual_revision": REV, "expected_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
         "format": enum("post_4_5", "story_9_16")},
@@ -381,7 +389,7 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
     {"if": {"properties": {"command": {"properties": {"kind": {"enum": ["import_browser_artifact", *workspace_import_kinds]}},
                                         "required": ["kind"]}}},
      "then": {"required": ["request_key"]}},
-    {"if": {"properties": {"command": {"properties": {"kind": {"const": "recompose"}},
+    {"if": {"properties": {"command": {"properties": {"kind": {"enum": ["recompose", "frame_source"]}},
                                         "required": ["kind"]}}},
        "then": {"required": ["request_key"]}}
 ]
