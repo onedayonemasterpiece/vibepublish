@@ -136,7 +136,8 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, sour
         safe_box = [left, top, text_width, text_height]
         y = top + next((size for field, size, _ in fields if copy.get(field)), 0)
         opacity = source_layout.get('backplate_opacity', 0)
-        backplate = f'<rect x="{left}" y="{top}" width="{text_width}" height="{text_height}" fill="#0b2943" fill-opacity="{opacity}"/>'
+        # The chosen box bounds text placement, not a plate over unused photo.
+        # Build the modest contrast layer from the actual glyph line extents.
     placed, paths, font_hashes = [], [], {}
     for field, size, bold in fields:
         text = copy.get(field)
@@ -162,16 +163,23 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, sour
                            'font_size': size, 'bold': bold})
             y += size*1.25 if source_layout is not None else round(size*1.25)
         y += 8 if source_layout is not None else 18
+    backplate_box = None
+    if source_layout is not None and placed:
+        ink_bottom = max(line['baseline'] + line['font_size']*.25 for line in placed)
+        plate_height = min(text_height, ink_bottom - top + 8*width/1080)
+        backplate_box = [left, top, text_width, plate_height]
+        backplate = f'<rect x="{left}" y="{top}" width="{text_width}" height="{plate_height}" fill="#0b2943" fill-opacity="{opacity}"/>'
     recipe = {'preset': PRESET, 'format': format, 'copy': copy, 'lines': placed,
               'font_sha256': font_hashes, 'safe_box': safe_box,
               'art_sha256': hashlib.sha256(art).hexdigest(), 'art_box': [0, 0, width, art_height],
               'art_fit': 'contain', 'art_source_size': [source_width, source_height],
               'art_content_box': content_box,
               'canvas_fit': 'fixed' if copy else 'art_aspect',
-              'renderer': 'svg-path-cairosvg-v5-photo-choice' if source_layout is not None else 'svg-path-cairosvg-v3',
+              'renderer': 'svg-path-cairosvg-v6-text-plate' if source_layout is not None else 'svg-path-cairosvg-v3',
               'human_review_required': True}
     if source_layout is not None:
         recipe['source_layout'] = source_layout
+        recipe['backplate_box'] = backplate_box
     image_layer = art
     if not copy:
         # Resize once to integer pixel dimensions before SVG composition so

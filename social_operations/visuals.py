@@ -207,7 +207,7 @@ class VisualService:
         token, candidate_id = secrets.token_urlsafe(32), new_id('candidate')
         provenance = {'source_frame_contract': 'immutable-source-frame-svg-v1',
             'original_source_ref': source['ref'], 'original_source_sha256': source['sha256'],
-            'actual_executor': 'svg-path-cairosvg-v5-photo-choice', 'actual_model': None, 'generation_dispatch': 'not_sent',
+            'actual_executor': 'svg-path-cairosvg-v6-text-plate', 'actual_model': None, 'generation_dispatch': 'not_sent',
             'sources': json.loads(job['sources']), 'input_digest': job['input_digest'],
             'fixture': fixture, 'consent': json.loads(job['consent']),
             'typography_evidence': 'explicit_copy_compositor_only',

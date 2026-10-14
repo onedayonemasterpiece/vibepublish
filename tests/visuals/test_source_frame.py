@@ -125,3 +125,15 @@ def test_original_composition_preserves_aspect_and_every_source_pixel_outside_an
         assert rendered.size == source.size
         assert ImageChops.difference(rendered.convert('RGB').crop((0, 250, 1200, 800)), source.crop((0, 250, 1200, 800))).getbbox() is None
     assert json.loads(result.recipe_json)['art_content_box'] == [0, 0, 1200, 800]
+
+
+def test_contrast_plate_covers_actual_text_instead_of_unused_layout_height():
+    from social_operations.compositor import render
+    stream = io.BytesIO(); Image.new('RGB', (1080, 1440), '#206040').save(stream, format='PNG')
+    result = render(stream.getvalue(), {'title': 'Short title'}, 'original',
+        source_layout={'text_box': [.1, .05, .8, .4], 'backplate_opacity': .3})
+    recipe = json.loads(result.recipe_json)
+    assert recipe['backplate_box'][3] < recipe['safe_box'][3] / 3
+    with Image.open(io.BytesIO(result.png)) as image:
+        assert image.getpixel((300, 500))[:3] == (32, 96, 64)
+    assert recipe['copy']['title'] == 'Short title'

@@ -30,7 +30,8 @@ owns copy meaning, qualifiers and provenance; composition does not verify facts.
 ```
 
 Source-layout font sizes are nominal pixels at 1080-wide presentation and scale
-with an original canvas; the renderer preserves fractional line advances even for
+with an original canvas. A contrast plate follows the actual rendered text height
+inside the selected safe region, rather than covering unused photograph; the renderer preserves fractional line advances even for
 small source images. Crop selection and transformation belong to the caller.
 
 The normal asset/tenant/epoch checks, immutable visual job/candidate lineage,
