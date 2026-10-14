@@ -81,6 +81,8 @@ Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the han
 
 ## Product
 
+Standalone artistic `generate`/`tune`/`compose` accepts `formats:["original"]` with empty structured copy. The existing executor and compositor retain the generated artwork's native dimensions and aspect, including its handwritten annotations, with no text panel, crop or aspect correction. The consumer must compare that aspect and the actual architecture with its chosen source frame; this is not a semantic geometry guarantee. Inline publication surface constraints remain unchanged. Source-frame composition remains an explicit auxiliary choice. Implementation: `Not confirmed by user`; artistic Street Story E2E: `Not done`.
+
 Generate a new illustration, improve a rough/PIL-like card, or compose several sources into a publishable visual. Allow several candidates, automatic selection when explicitly authorized, human selection, reusable versioned presets and a clean preference corpus. Standalone creation and inline publication call the same VisualService.
 
 Tuning means image-to-image improvement, not training the model. Real fine-tuning is future scope. Existing drafts are negative/rough inputs, not automatically positive training samples.

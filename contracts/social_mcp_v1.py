@@ -139,7 +139,7 @@ for visual_arm in DEFS["visual_spec"]["oneOf"]:
     if visual_arm["properties"]["kind"]["const"] == "generate":
         visual_arm["properties"]["sources"] = array(ref("media"), 0, 8)
     visual_arm["properties"]["copy"] = ref("visual_copy")
-    visual_arm["properties"]["formats"] = {**array(enum("post_4_5", "story_9_16"), 1, 2),
+    visual_arm["properties"]["formats"] = {**array(enum("post_4_5", "story_9_16", "original"), 1, 2),
                                            "uniqueItems": True}
 # Events commit with the corresponding state change; they are not transient logs.
 DEFS["event"] = obj({"seq": REV, "operation_id": ID, "destination": ALIAS,

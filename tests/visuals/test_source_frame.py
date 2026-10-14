@@ -127,6 +127,27 @@ def test_original_composition_preserves_aspect_and_every_source_pixel_outside_an
     assert json.loads(result.recipe_json)['art_content_box'] == [0, 0, 1200, 800]
 
 
+@pytest.mark.asyncio
+async def test_existing_artistic_tune_preserves_generated_original_aspect_without_panel(runtime):
+    store, actor, app, worker, executor, provider, *_ = runtime
+    source = import_image(store, actor, asset(1).data, 'image/png')
+    result = await call(app, actor, 'visual', {'command': {'kind': 'tune',
+        'source': {'source': {'kind': 'asset', 'id': source}}, 'brief': 'Architecture ink sketch',
+        'formats': ['original'], 'copy': {}, 'candidates': 1, 'selection': 'human'},
+        'request_key': 'artistic-original'})
+    await worker.run_once()
+    ready = store.receipt(actor, result['visual_job_id'])
+    assert ready['state'] == 'needs_selection', ready
+    assert executor.calls[0].mode == 'tune' and len(executor.calls) == 1
+    c = ready['candidates'][0]
+    with store.connection() as db:
+        recipe = json.loads(db.execute('SELECT recipe FROM visual_candidates WHERE id=?', (c['id'],)).fetchone()[0])
+    assert [c['width'], c['height']] == recipe['art_source_size']
+    assert recipe['art_content_box'] == [0, 0, c['width'], c['height']]
+    assert recipe['copy'] == {} and 'source_layout' not in recipe
+    assert provider.count('effect') == 0
+
+
 def test_contrast_plate_covers_actual_text_instead_of_unused_layout_height():
     from social_operations.compositor import render
     stream = io.BytesIO(); Image.new('RGB', (1080, 1440), '#206040').save(stream, format='PNG')

@@ -76,8 +76,10 @@ class Composite:
 
 
 def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, source_layout=None) -> Composite:
-    if preset != PRESET or format not in FORMATS and not (format == 'original' and source_layout is not None):
+    if preset != PRESET or format not in {*FORMATS, 'original'}:
         raise DomainError('visual_preset_not_available')
+    if format == 'original' and copy and source_layout is None:
+        raise DomainError('visual_original_copy_requires_source_layout')
     import cairosvg
     width, height = FORMATS.get(format, (1080, 1350))
     # No text is extracted or inferred from the art. Only explicit fields render.
@@ -103,6 +105,8 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, sour
     with Image.open(io.BytesIO(art)) as image:
         image.verify()
         source_width, source_height = image.size
+    if format == 'original':
+        width, height = source_width, source_height
     if source_layout is not None:
         if format == 'original':
             width, height = source_width, source_height

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Allow standalone artistic visuals in original generated aspect through the existing executor/compositor, without adding a text panel or forcing a publication aspect. Keep inline surface constraints and explicit source-frame mode; require separate actual-image review.
+
 - Add explicit standalone source-frame composition through the existing SVG renderer, preserving original aspect/pixels or requiring already cropped 4:5/9:16 input without padding, with caller/model-selected text placement and normal private-asset lineage/selection guards. Apply EXIF orientation to separate sanitized image derivatives while retaining original bytes. No generation or publication is implied.
 
 - Shorten the automatic MAX current-channel footer label to `Max`, preserving URLs, cross-network labels, order and separators. Telegram keeps `Подписаться`; existing provider posts and frozen queued plans are not rewritten.
