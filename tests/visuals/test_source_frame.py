@@ -17,10 +17,12 @@ def runtime(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('format,size', [('post_4_5', (1080, 1350)), ('story_9_16', (1080, 1920))])
+@pytest.mark.parametrize('format,size', [('post_4_5', (1080, 1350)), ('story_9_16', (1080, 1920)), ('original', (1200, 800))])
 async def test_source_frame_has_private_immutable_lineage_exact_format_and_no_executor_or_publish(runtime, format, size):
     store, actor, app, worker, executor, provider, *_ = runtime
-    raw = asset(1).data
+    source_size = {'post_4_5': (400, 500), 'story_9_16': (360, 640), 'original': (1200, 800)}[format]
+    stream = io.BytesIO(); Image.new('RGB', source_size, '#206040').save(stream, format='PNG')
+    raw = stream.getvalue()
     source = import_image(store, actor, raw, 'image/png')
     with store.connection() as db:
         original = [tuple(r) for r in db.execute('SELECT * FROM assets')]
@@ -55,12 +57,12 @@ async def test_source_frame_has_private_immutable_lineage_exact_format_and_no_ex
     recomposed = await call(app, actor, 'visual', {'command': {
         'kind': 'recompose', 'job_id': ready['visual_job_id'], 'candidate_id': candidate['id'],
         'expected_visual_revision': selected['visual_revision'], 'expected_sha256': candidate['sha256'],
-        'format': 'story_9_16'}, 'request_key': 'owner-recompose-source-frame'})
+        'format': format}, 'request_key': 'owner-recompose-source-frame'})
     with store.connection() as db:
         recipe = json.loads(db.execute('SELECT recipe FROM visual_candidates WHERE job_id=?',
             (recomposed['visual_job_id'],)).fetchone()[0])
         assert recipe['source_layout'] == args['command']['layout']
-        assert recipe['art_box'][3] == 1920 and recipe['art_fit'] == 'contain'
+        assert recipe['art_box'][3] == size[1] and recipe['art_fit'] == 'contain'
     assert executor.calls == [] and provider.count('effect') == 0
 
 
@@ -98,3 +100,28 @@ def test_sanitized_ingress_applies_all_exif_orientations_without_mutating_origin
         assert derivative.size == expected.size
         assert derivative.tobytes() == expected.tobytes()
         assert not derivative.getexif()
+
+
+@pytest.mark.parametrize('format', ['post_4_5', 'story_9_16'])
+def test_source_frame_requires_real_crop_and_never_adds_contain_fields(format):
+    from social_operations.compositor import render
+    from social_operations.domain import DomainError
+    stream = io.BytesIO(); Image.new('RGB', (600, 400)).save(stream, format='PNG')
+    with pytest.raises(DomainError) as exc:
+        render(stream.getvalue(), {'title': 'Photo'}, format, source_layout={'text_box': [.05, .02, .9, .25]})
+    assert exc.value.code == 'source_frame_requires_true_crop'
+
+
+def test_original_composition_preserves_aspect_and_every_source_pixel_outside_annotation():
+    from social_operations.compositor import render
+    from PIL import ImageChops
+    source = Image.new('RGB', (1200, 800))
+    for x in range(1200):
+        for y in range(800):
+            source.putpixel((x, y), (x % 256, y % 256, (x + y) % 256))
+    stream = io.BytesIO(); source.save(stream, format='PNG')
+    result = render(stream.getvalue(), {'title': 'Photo'}, 'original', source_layout={'text_box': [.05, .02, .9, .25]})
+    with Image.open(io.BytesIO(result.png)) as rendered:
+        assert rendered.size == source.size
+        assert ImageChops.difference(rendered.convert('RGB').crop((0, 250, 1200, 800)), source.crop((0, 250, 1200, 800))).getbbox() is None
+    assert json.loads(result.recipe_json)['art_content_box'] == [0, 0, 1200, 800]

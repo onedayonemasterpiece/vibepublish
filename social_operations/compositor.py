@@ -76,10 +76,10 @@ class Composite:
 
 
 def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, source_layout=None) -> Composite:
-    if preset != PRESET or format not in FORMATS:
+    if preset != PRESET or format not in FORMATS and not (format == 'original' and source_layout is not None):
         raise DomainError('visual_preset_not_available')
     import cairosvg
-    width, height = FORMATS[format]
+    width, height = FORMATS.get(format, (1080, 1350))
     # No text is extracted or inferred from the art. Only explicit fields render.
     fields = [('title', 68, True), ('subtitle', 42, False), ('body', 34, False),
               ('date_line', 36, True), ('location_line', 32, False), ('source_line', 25, False)]
@@ -103,6 +103,16 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, sour
     with Image.open(io.BytesIO(art)) as image:
         image.verify()
         source_width, source_height = image.size
+    if source_layout is not None:
+        if format == 'original':
+            width, height = source_width, source_height
+        elif format == 'post_4_5' and 5*source_width != 4*source_height:
+            raise DomainError('source_frame_requires_true_crop', '4:5 requires already cropped source pixels, never contain padding')
+        elif format == 'story_9_16' and 16*source_width != 9*source_height:
+            raise DomainError('source_frame_requires_true_crop')
+        # Caller font sizes are readable pixels at a 1080-wide presentation.
+        # Original keeps all source pixels and aspect; typography scales with it.
+        fields = [(field, size*width/1080, bold) for field, size, bold in fields]
     # Finished artwork already carries its lettering. Keep its aspect ratio
     # instead of adding a blank card around it; the format bounds its size.
     if not copy and source_layout is None:
@@ -150,7 +160,7 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, sour
                 x += font['hmtx'][glyph_name][0]*scale
             placed.append({'field': field, 'text': line, 'x': pad, 'baseline': y, 'width': x-pad,
                            'font_size': size, 'bold': bold})
-            y += round(size*1.25)
+            y += size*1.25 if source_layout is not None else round(size*1.25)
         y += 8 if source_layout is not None else 18
     recipe = {'preset': PRESET, 'format': format, 'copy': copy, 'lines': placed,
               'font_sha256': font_hashes, 'safe_box': safe_box,
@@ -158,7 +168,7 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, sour
               'art_fit': 'contain', 'art_source_size': [source_width, source_height],
               'art_content_box': content_box,
               'canvas_fit': 'fixed' if copy else 'art_aspect',
-              'renderer': 'svg-path-cairosvg-v4-source-frame' if source_layout is not None else 'svg-path-cairosvg-v3',
+              'renderer': 'svg-path-cairosvg-v5-photo-choice' if source_layout is not None else 'svg-path-cairosvg-v3',
               'human_review_required': True}
     if source_layout is not None:
         recipe['source_layout'] = source_layout

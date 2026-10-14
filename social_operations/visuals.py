@@ -183,7 +183,7 @@ class VisualService:
         spec = {'kind': 'frame_source', 'source': command['source'],
             'copy': command['copy'], 'source_layout': command['layout'],
             'brief': 'Immutable complete source frame with explicit editorial copy',
-            'formats': [command.get('format', 'post_4_5')], 'candidates': 1, 'selection': 'human'}
+            'formats': [command.get('format', 'original')], 'candidates': 1, 'selection': 'human'}
         op = self.app._new_operation(db, actor, 'visual', intent)
         job_id = self.create(db, actor, spec, op)
         job = self.job(db, actor, job_id)
@@ -207,7 +207,7 @@ class VisualService:
         token, candidate_id = secrets.token_urlsafe(32), new_id('candidate')
         provenance = {'source_frame_contract': 'immutable-source-frame-svg-v1',
             'original_source_ref': source['ref'], 'original_source_sha256': source['sha256'],
-            'actual_executor': 'svg-path-cairosvg-v4-source-frame', 'actual_model': None, 'generation_dispatch': 'not_sent',
+            'actual_executor': 'svg-path-cairosvg-v5-photo-choice', 'actual_model': None, 'generation_dispatch': 'not_sent',
             'sources': json.loads(job['sources']), 'input_digest': job['input_digest'],
             'fixture': fixture, 'consent': json.loads(job['consent']),
             'typography_evidence': 'explicit_copy_compositor_only',
