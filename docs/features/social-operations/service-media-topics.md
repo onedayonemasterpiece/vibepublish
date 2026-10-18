@@ -13,6 +13,18 @@ token hash authentication; no new gateway, session manager or authentication dae
 
 One-time LOCAL owner administration of the existing VibePublish ledger:
 
+For the current DevCoveer KB archive, use the guarded one-shot operator
+`python scripts/ops/provision_rkb_archive_service.py` (read-only preflight)
+and `python scripts/ops/provision_rkb_archive_service.py --apply`
+only AFTER both VibePublish service processes are running the v10 code.
+This writes the generated service secret straight to RKB's private mode-0600
+grant file, prints no secret, and is idempotent on replay. No user browser,
+OAuth redirect or owner-service-token copying is involved. Do not manually
+edit the VibePublish database to manufacture a grant.
+
+Alternatively, for other technical consumers use the existing owner CLI
+administration with these exact restrictions:
+
 - Provision a non-owner principal with **only** `bootstrap`, `status`,
   `media.store`. The local CLI accepts repeated `--scope` values. Its token
   is output exactly once and must go directly into the consumer's owner-protected
@@ -32,7 +44,9 @@ principal's exact binding and topic grant. Search is confined to the principal's
 own archive entries, not the owner's other media. Download-cache assets are
 linked to their owning archived publication before the service can fetch bytes.
 A principal with `media.store` cannot call ordinary publish, visual-generation,
-destinations, social read or engagement tools.
+destinations, social read or engagement tools. It may call only a restricted
+`publication_update.retry_failed` on its own original media-store publication,
+and only after a zero-dispatch failure and renewed exact-topic check.
 
 ## Recovery/verification
 
