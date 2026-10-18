@@ -1,7 +1,7 @@
 [Unit]
 Description=VibePublish native Telegram and VK worker (existing credentials)
 After=vibepublish.service
-Requires=vibepublish.service
+Wants=vibepublish.service
 
 [Service]
 Type=simple

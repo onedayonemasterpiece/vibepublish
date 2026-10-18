@@ -92,3 +92,30 @@ The additive `--knowledge-base` flag enables the existing worker's second,
 concurrent connection lane. Its selected secret is exactly
 `/home/dev/.env:TELEGRAM_KNOWLEDGE_BASE`; the ordinary session and VK flags remain
 unchanged. See the [media-store contract](../features/media-store/README.md#knowledge-base-source-archive-and-independent-lane--2026-10-04).
+
+
+## Independent API and worker restart boundary — 2026-10-18
+
+The canonical worker unit uses `Wants=vibepublish.service` and
+`After=vibepublish.service`, not `Requires`. The worker consumes the shared
+SQLite ledger and native provider adapters directly; its running work does not
+depend on the API listener remaining available. Soft startup ordering preserves
+normal API startup without propagating API stop/restart into the worker.
+
+The previous canonical unit's `Requires` caused the attempted PR83 API-only
+release and rollback to restart the worker twice. A source update does not repair
+an installed unit automatically. Do not invoke the full worker installer merely
+to apply this dependency-only correction: that installer explicitly restarts the
+worker.
+
+Before any rollout, inspect the actual fragment, all drop-ins, and both directions
+of the systemd dependency graph, not only ExecStart/CWD. Verify an inert proposed
+unit with `systemd-analyze --user verify`. Confirm all nonterminal ledger
+operations, active leases and image-generation task receipts are reconciled;
+an idle persistent Codex transport is not an active job. A coordinated safe window
+must apply only the reviewed dependency change, preserve provider flags,
+interpreter, credentials and source paths, and verify graph readback before any
+controlled API restart. Acceptance requires an unchanged worker PID/start time,
+its source/PYTHONPATH intact, and actual keyed-get readback. Do not bypass the
+coupling with systemd command flags or declare absence of provider duplicates
+from ledger counts alone.
