@@ -1,6 +1,6 @@
 # INC-2026-10-18-main-deploy-dropped-street-story-original-frame
 
-Status: `Open`
+Status: `Resolved` (2026-10-18)
 
 ## Summary
 
@@ -50,10 +50,20 @@ running one.
 
 ## Release Evidence
 
+- PR #80 (with `main` merged in) merged into `main` as `6758a05`; full non-browser suite 1770 passed,
+  browser suite identical to clean `main` (needs a live MAX browser); CI 6/6 green.
+- `check_release_lineage.py --candidate 6758a05`: both units ran `74a077b`, contained in `6758a05`.
+- 2026-10-18 ~11:30 UTC: `vibepublish` and `vibepublish-worker` restarted on
+  `releases/6758a05…/source` (process cmdline and `PYTHONPATH` read back); no ASGI exceptions after restart.
+- Verified on the product: Street Story 105 got a new original-frame visual (`op_6cae28cc…`, verified);
+  120 and 102 got new visuals after Street Story deployed its fix for requests refused during the
+  regression (Street Story PR #264, now also running from its `main`).
+
 Retained evidence: `/home/dev/artifacts/vibepublish/20261018T103745Z-street-story-original-visual-regression-20261018/`
 (traceback, affected stories, the overriding drop-in).
 
 ## Follow-Ups
 
-- Ancestor guard in the deploy procedure (`docs/operations/production-runtime.md`).
-- Street Story itself also runs from a feature branch; merge it into its `main`.
+- Done: lineage guard and the main-only rule in `docs/operations/production-runtime.md` and in the
+  server-wide `/home/dev/AGENTS.md`.
+- Done: Street Story moved its production to `main` as well (it ran from a chain of unmerged branches).
