@@ -968,6 +968,8 @@ class Worker:
 
     async def run_read(self, op, actor):
         args = json.loads(op['request'])
+        if args.get('_media_store_grant_id'):
+            raise DomainError('access_denied', next_action='contact_owner')
         with self.store.connection() as db:
             b = dict(self.store.binding(db, actor, binding_id=args['_binding_id']))
             if b['epoch'] != args['_binding_epoch']:
