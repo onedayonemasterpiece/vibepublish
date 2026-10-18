@@ -35,6 +35,11 @@ def parser():
                          help='Repeat for the exact principal scopes; replaces legacy defaults when supplied')
     grant = sub.add_parser('grant-rights'); grant.add_argument('--binding-id', required=True)
     grant.add_argument('--right', action='append', required=True, choices=sorted(ALL_BINDING_RIGHTS))
+    media_topic = sub.add_parser("service-media-topic")
+    media_topic.add_argument("--principal", required=True)
+    media_topic.add_argument("--alias", required=True)
+    media_topic.add_argument("--topic", required=True)
+    media_topic.add_argument("--revoke", action="store_true")
     revoke = sub.add_parser('revoke'); revoke.add_argument('--binding-id', required=True)
     asset = sub.add_parser('image'); asset.add_argument('--file', required=True, type=Path); asset.add_argument('--mime', required=True)
     video = sub.add_parser('video'); video.add_argument('--file', required=True, type=Path); video.add_argument('--mime', required=True, choices=('video/mp4',))
@@ -106,6 +111,10 @@ def main():
                 scopes=frozenset(args.scope) if args.scope is not None else PARTNER_SCOPES)}))
         elif args.command == 'grant-rights':
             print(json.dumps({'rights':store.grant_binding_rights(actor,args.binding_id,args.right)}))
+        elif args.command == 'service-media-topic':
+            result = store.set_service_media_topic(
+                actor, args.principal, args.alias, args.topic, enabled=not args.revoke)
+            print(json.dumps(result))
         elif args.command == 'revoke':
             store.revoke_binding(actor, args.binding_id)
             print('Binding revoked. Existing provider-queued posts were NOT cancelled.')
