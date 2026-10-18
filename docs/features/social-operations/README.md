@@ -241,3 +241,19 @@ Worker SQLite startup remains `Not done`; see
 [the bounded incident record](../../reports/incidents/INC-2026-09-12-acceptance-sqlite-io.md).
 Current bounded execution evidence is in
 [the runtime record](../../operations/social-runtime.md#telegram-p0-stage-b-g-local-integration--2026-09-12).
+
+## Local M2M archive connector (2026-10-18)
+
+**Fixed requirement / Not done implementation.** Governed by
+[canonical DevCoveer on-host policy](https://github.com/onedayonemasterpiece/codex-devcoveer-mcp/blob/main/docs/operations/local-service-connections.md).
+Existing Street Story→VibePublish HTTP bearer integration is the reference.
+A local producer must authenticate with a dedicated revocable technical service
+principal, not with an owner or browser OAuth token. For RKB permit only
+`media_store` archive commands bound to its existing KB Telegram destination
+and exact source/illustration topics (2/4). A plain `publish` binding to a
+Telegram chat is **not** sufficient topic authorization; the receiver must enforce
+topic rights on put/list/get/search and receipt/asset access. RKB must verify
+native document readback with original SHA-256 before `archive_status=verified`.
+Keep the user-facing OAuth server unchanged. No new reverse proxy, central broker,
+database service or global owner access is justified. Do not report this as
+deployed until live provider evidence exists.
