@@ -21,7 +21,7 @@ def upload_image(service, actor, data: bytes, mime: str, key: str | None):
     # Check authority before expensive decoding, then again inside admission.
     with store.connection() as db:
         actor = store.current(db, actor)
-        if not actor.scopes.intersection({'publish', 'visual'}):
+        if not actor.scopes.intersection({'publish', 'visual', 'media.store'}):
             raise DomainError('access_denied')
     intent = {'source_sha256': hashlib.sha256(data).hexdigest(), 'mime': mime}
     with store.connection() as db:
@@ -37,7 +37,7 @@ def upload_image(service, actor, data: bytes, mime: str, key: str | None):
         image = verify_image(data, mime)
     with store.tx() as db:
         actor = store.current(db, actor)
-        if not actor.scopes.intersection({'publish', 'visual'}):
+        if not actor.scopes.intersection({'publish', 'visual', 'media.store'}):
             raise DomainError('access_denied')
         op = service._replay(db, actor, ACTION, intent, {'request_key': key}, implicit=False)
         if op:
