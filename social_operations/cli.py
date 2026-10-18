@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 from .domain import DomainError
-from .storage import ALL_BINDING_RIGHTS, ALL_SCOPES, Store
+from .storage import ALL_BINDING_RIGHTS, ALL_SCOPES, SERVICE_SCOPES, Store
 
 
 PARTNER_SCOPES = frozenset({
@@ -31,7 +31,7 @@ def parser():
     bind.add_argument('--right', action='append', choices=sorted(ALL_BINDING_RIGHTS),
                       help='Repeat for the exact binding rights; replaces legacy defaults when supplied')
     partner = sub.add_parser('principal'); partner.add_argument('--tenant', required=True); partner.add_argument('--principal', required=True)
-    partner.add_argument('--scope', action='append', choices=sorted(ALL_SCOPES),
+    partner.add_argument('--scope', action='append', choices=sorted(SERVICE_SCOPES),
                          help='Repeat for the exact principal scopes; replaces legacy defaults when supplied')
     grant = sub.add_parser('grant-rights'); grant.add_argument('--binding-id', required=True)
     grant.add_argument('--right', action='append', required=True, choices=sorted(ALL_BINDING_RIGHTS))
