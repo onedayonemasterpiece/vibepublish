@@ -17,6 +17,7 @@ from contracts.social_mcp_v1 import STAGE
 
 ALL_SCOPES = frozenset({"bootstrap", "publish", "publication.manage", "visual", "status",
                         "engage", "destinations", "forward", "destination.profile"})
+SERVICE_SCOPES = ALL_SCOPES | {"media.store"}
 DEFAULT_BINDING_RIGHTS = ("publish", "edit", "reschedule", "cancel", "delete", "forward")
 ALL_BINDING_RIGHTS = frozenset((*DEFAULT_BINDING_RIGHTS, "reply", "react", "basic_group_schedule"))
 
@@ -29,6 +30,14 @@ def _validated_permissions(values, allowed, error_code):
     return tuple(dict.fromkeys(values))
 
 
+def _valid_media_topic_id(value) -> bool:
+    """Canonical positive Telegram topic/message id, bounded before parsing."""
+    return (isinstance(value, str) and 1 <= len(value) <= 19
+            and value[0] in "123456789"
+            and all("0" <= digit <= "9" for digit in value)
+            and int(value) <= 9223372036854775807)
+
+
 class Store:
     def __init__(self, path: str | Path, *, clock=time.time):
         self.path = Path(path).absolute()
@@ -39,7 +48,7 @@ class Store:
         os.chmod(self.path, 0o600)
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9):
+            if version not in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
                 raise RuntimeError("Unsupported VibePublish database version")
             self._enable_wal(db)
             if version == 0:
@@ -63,6 +72,8 @@ class Store:
                 db.executescript(Path(__file__).with_name("workspace_upload_schema.sql").read_text())
             if version < 9:
                 db.executescript(Path(__file__).with_name("vk_story_dependencies.sql").read_text())
+            if version < 10:
+                db.executescript(Path(__file__).with_name("media_service_topic_schema.sql").read_text())
 
     @staticmethod
     def _enable_wal(db: sqlite3.Connection) -> None:
@@ -118,7 +129,7 @@ class Store:
     def create_principal(self, tenant: str, principal: str, *, owner=False,
                          scopes=ALL_SCOPES, timezone="Europe/Kaliningrad") -> str:
         """Local owner CLI only. No model-facing account administration method."""
-        scopes = _validated_permissions(scopes, ALL_SCOPES, "invalid_principal_scopes")
+        scopes = _validated_permissions(scopes, SERVICE_SCOPES, "invalid_principal_scopes")
         ZoneInfo(timezone)
         token = secrets.token_urlsafe(32)
         with self.tx() as db:
@@ -240,6 +251,61 @@ class Store:
             db.execute("UPDATE bindings SET active=0,epoch=epoch+1 WHERE id=?", (binding_id,))
             db.execute("UPDATE principals SET epoch=epoch+1,routing_revision=routing_revision+1 WHERE id=?", (row["principal_id"],))
             # Revocation never silently cancels already-native scheduled posts.
+    def service_media_topic_allowed(self, db, actor: Actor, binding, topic_id: str) -> bool:
+        """Authorize an exact Telegram topic for a service, never by URL alone."""
+        if actor.owner:
+            return True
+        if "media.store" not in actor.scopes:
+            return False
+        if not _valid_media_topic_id(topic_id):
+            return False
+        return db.execute(
+            "SELECT 1 FROM media_service_topic_grants "
+            "WHERE tenant_id=? AND principal_id=? AND binding_id=? AND topic_id=?",
+            (actor.tenant_id, actor.principal_id, binding["id"], topic_id)
+        ).fetchone() is not None
+
+    def set_service_media_topic(self, owner: Actor, principal: str, alias: str,
+                                topic_id: str, *, enabled=True):
+        """Local owner administration; no model-facing endpoint or credential return."""
+        if not owner.owner or not _valid_media_topic_id(topic_id):
+            raise DomainError("access_denied", next_action="contact_owner")
+        with self.tx() as db:
+            self.current(db, owner)
+            target = db.execute(
+                "SELECT scopes,owner FROM principals WHERE tenant_id=? AND id=? AND active=1",
+                (owner.tenant_id, principal)
+            ).fetchone()
+            binding = db.execute(
+                "SELECT b.id,b.rights,c.provider FROM bindings b "
+                "JOIN destinations d ON d.id=b.destination_id "
+                "JOIN connections c ON c.id=d.connection_id "
+                "WHERE b.tenant_id=? AND b.principal_id=? AND b.alias=? "
+                "AND b.active=1 AND c.active=1",
+                (owner.tenant_id, principal, alias)
+            ).fetchone()
+            if (not target or target["owner"] or "media.store" not in json.loads(target["scopes"])
+                    or not binding or binding["provider"] != "telegram"
+                    or "publish" not in json.loads(binding["rights"])):
+                raise DomainError("access_denied", next_action="contact_owner")
+            if enabled:
+                db.execute(
+                    "INSERT OR IGNORE INTO media_service_topic_grants VALUES(?,?,?,?)",
+                    (owner.tenant_id, principal, binding["id"], topic_id)
+                )
+            else:
+                result = db.execute(
+                    "DELETE FROM media_service_topic_grants "
+                    "WHERE tenant_id=? AND principal_id=? AND binding_id=? AND topic_id=?",
+                    (owner.tenant_id, principal, binding["id"], topic_id)
+                )
+                if result.rowcount:
+                    # Invalidate old permission snapshots and pending operations.
+                    db.execute("UPDATE principals SET epoch=epoch+1,"
+                               "routing_revision=routing_revision+1 WHERE id=?", (principal,))
+        return {"principal": principal, "alias": alias, "topic_id": topic_id,
+                "enabled": bool(enabled)}
+
     def binding(self, db, actor: Actor, *, alias: str | None = None, binding_id: str | None = None):
         self.current(db, actor)
         rows = self.bindings(db, actor)

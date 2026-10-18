@@ -88,12 +88,28 @@ class Application:
             self._purge_media_store_assets(db)
         with self.store.connection() as db:
             actor = self.store.current(db, actor)
-            if not actor.scopes.intersection({'visual', 'publish'}):
+            if not actor.scopes.intersection({'visual', 'publish', 'media.store'}):
                 raise DomainError('access_denied', next_action='contact_owner')
             row = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
                              (ident, actor.tenant_id, actor.principal_id)).fetchone()
             if not row:
                 raise DomainError('asset_not_available', next_action='refresh')
+            if not actor.owner and "media.store" in actor.scopes and not actor.scopes.intersection({"visual", "publish"}):
+                cache = db.execute(
+                    "SELECT m.publication_id,f.destination_id,f.snapshot FROM media_store_assets m "
+                    "JOIN publications p ON p.id=m.publication_id "
+                    "JOIN facts f ON f.publication_id=p.id "
+                    "WHERE m.asset_id=? AND m.purpose='download_cache' "
+                    "AND p.tenant_id=? AND p.principal_id=? "
+                    "ORDER BY f.observed_at DESC LIMIT 1",
+                    (ident, actor.tenant_id, actor.principal_id)
+                ).fetchone()
+                binding = next((b for b in self.store.bindings(db, actor)
+                                if cache and b['destination_id'] == cache['destination_id']), None)
+                if not cache or binding is None or not self.store.service_media_topic_allowed(
+                        db, actor, binding,
+                        str(json.loads(cache['snapshot']).get('reply_to_native_id') or '')):
+                    raise DomainError('access_denied', next_action='contact_owner')
             origin = db.execute('SELECT job_id FROM visual_asset_origins WHERE asset_id=?', (ident,)).fetchone()
             if origin:
                 self.visuals.job(db, actor, origin['job_id'])
@@ -105,13 +121,21 @@ class Application:
             return row['bytes'], row['mime'], row['sha256']
 
     def media_store(self, actor, args):
-        """Owner-only private media store with provider-independent local reads."""
-        if not actor.owner:
+        """Owner or explicit exact-topic service grants; provider-independent local reads."""
+        if not actor.owner and "media.store" not in actor.scopes:
             raise DomainError('access_denied', next_action='contact_owner')
         with self.store.tx() as db:
             self._purge_media_store_assets(db)
         command = args['command']
         if command['kind'] == 'put':
+            if not actor.owner:
+                with self.store.connection() as db:
+                    actor = self.store.current(db, actor)
+                    binding, topic = self._telegram_thread(
+                        db, actor, command['thread_ref'], alias=command['to'])
+                    if (binding['alias'] != command['to'] or
+                            not self.store.service_media_topic_allowed(db, actor, binding, topic)):
+                        raise DomainError('access_denied', next_action='contact_owner')
             intent = {
                 'to': [command['to']], 'thread_ref': command['thread_ref'],
                 'content': command['content'], 'media': command['media'],
@@ -136,6 +160,9 @@ class Application:
                 if binding is None:
                     raise DomainError('access_denied', next_action='contact_owner')
                 remote = json.loads(fact['snapshot'])
+                if not self.store.service_media_topic_allowed(
+                        db, actor, binding, str(remote.get('reply_to_native_id') or '')):
+                    raise DomainError('access_denied', next_action='contact_owner')
                 projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
                 get_ref = projected['ref']
             elif command['kind'] == 'list':
@@ -148,6 +175,8 @@ class Application:
                 if command.get('to') is not None and binding['alias'] != command['to']:
                     raise DomainError('media_store_destination_mismatch',
                                       'The destination does not match thread_ref', 'fix_input')
+                if not self.store.service_media_topic_allowed(db, actor, binding, topic):
+                    raise DomainError('access_denied', next_action='contact_owner')
                 items = self._media_store_items(db, actor, binding=binding, topic=topic,
                                                 text=command.get('text', ''))
                 limit = args.get('limit', 25)
@@ -192,6 +221,9 @@ class Application:
             item_binding = binding or next((b for b in self.store.bindings(db, actor)
                                             if b['destination_id'] == row['destination_id']), None)
             if item_binding is None:
+                continue
+            if not self.store.service_media_topic_allowed(
+                    db, actor, item_binding, str(remote.get('reply_to_native_id') or '')):
                 continue
             native_target = item_binding['native_id']
             if (not native_target.startswith('-100') or not native_target[1:].isdigit()
