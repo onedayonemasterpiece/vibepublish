@@ -2,6 +2,7 @@
 """Install the canonical DevCoveer production worker with real Codex imagegen."""
 from __future__ import annotations
 
+import configparser
 import hashlib
 import json
 import os
@@ -32,6 +33,18 @@ def _private_dir(path: Path) -> None:
 
 def _validate_unit(data: bytes) -> None:
     text = data.decode("utf-8")
+    unit = configparser.ConfigParser(interpolation=None)
+    try:
+        unit.read_string(text)
+        dependencies = unit["Unit"]
+    except (configparser.Error, KeyError):
+        raise SystemExit("canonical worker unit has invalid dependency configuration") from None
+    api = "vibepublish.service"
+    if any(api in dependencies.get(key, "").split()
+           for key in ("Requires", "Requisite", "BindsTo", "PartOf", "StopPropagatedFrom")):
+        raise SystemExit("worker must not stop or restart with the API service")
+    if any(api not in dependencies.get(key, "").split() for key in ("Wants", "After")):
+        raise SystemExit("worker requires soft API startup ordering: Wants and After")
     if text.count(IMAGEGEN_ARG) != 1:
         raise SystemExit("canonical worker unit must contain exactly one imagegen artifact argument")
     required = (

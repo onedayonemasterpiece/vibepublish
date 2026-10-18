@@ -1,6 +1,9 @@
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
+import configparser
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 UNIT = ROOT / "deploy/devcoveer/vibepublish-worker.service"
 INSTALLER = ROOT / "deploy/devcoveer/install_production_worker.py"
@@ -47,3 +50,29 @@ def test_installer_uses_private_sibling_roots_and_validates_unit(tmp_path):
     private = tmp_path / "private"
     module._private_dir(private)
     assert private.stat().st_mode & 0o077 == 0
+
+
+def test_worker_has_soft_api_startup_without_stop_restart_coupling():
+    unit = configparser.ConfigParser(interpolation=None)
+    unit.read_string(UNIT.read_text())
+    dependencies = unit["Unit"]
+    assert dependencies["Wants"] == "vibepublish.service"
+    assert dependencies["After"] == "vibepublish.service"
+    for key in ("Requires", "Requisite", "BindsTo", "PartOf", "StopPropagatedFrom"):
+        assert "vibepublish.service" not in dependencies.get(key, "").split()
+
+
+@pytest.mark.parametrize("key", ["Requires", "Requisite", "BindsTo", "PartOf", "StopPropagatedFrom"])
+def test_installer_rejects_reintroduced_api_stop_restart_coupling(key):
+    module = _installer_module()
+    data = UNIT.read_text().replace("[Unit]", "[Unit]\n" + key + "=vibepublish.service")
+    with pytest.raises(SystemExit, match="must not stop or restart"):
+        module._validate_unit(data.encode())
+
+
+@pytest.mark.parametrize("key", ["Wants", "After"])
+def test_installer_rejects_lost_soft_api_startup_ordering(key):
+    module = _installer_module()
+    data = UNIT.read_text().replace(key + "=vibepublish.service\n", "")
+    with pytest.raises(SystemExit, match="soft API startup ordering"):
+        module._validate_unit(data.encode())

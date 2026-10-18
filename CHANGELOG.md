@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Keep the production worker independent of API stop/restart: use soft
+  Wants/After ordering instead of Requires, and reject hard coupling in the
+  canonical installer. Source preparation alone does not change live units.
+
 - Honor optional media-store `get` request keys with atomic, principal-scoped
   durable read replay across lost responses and restarts. Reject intent conflicts
   and revoked bindings; preserve original terminal/expired-asset receipts and
