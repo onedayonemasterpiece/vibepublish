@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Add a release-lineage guard for production deploys: the candidate must be in `origin/main` and contain every running release (INC-2026-10-18).
+- Authorize dedicated local non-owner media-store principals only for explicit
+  per-binding Telegram topic grants, with target-scoped put/list/get/search,
+  cached-document readback checks and revocation fencing. Preserve interactive
+  OAuth and public-publishing authority; add no new server or gateway.
+
 - Reuse the existing bounded observation reconciliation to recover a standalone Original renderer failure from its saved dispatched executor, without regenerating or publishing. Preserve the original failure, immutable inputs and all ownership/selection guards; allow exact-operation worker claims without unrelated maintenance.
 
 - Allow standalone artistic visuals in original generated aspect through the existing executor/compositor, without adding a text panel or forcing a publication aspect. Keep inline surface constraints and explicit source-frame mode; require separate actual-image review.

@@ -1023,7 +1023,7 @@ class Worker:
                                     media.mime, verified.width, verified.height, media.data,
                                     evidence.sha256, self.store.clock()))
                         db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
-                                   (asset_ref, None, 'download_cache', self.store.clock()+3600))
+                                   (asset_ref, args.get('_media_store_entry_ref'), 'download_cache', self.store.clock()+3600))
                     else:
                         sanitized_sha = hashlib.sha256(verified.data).hexdigest()
                         existing_asset = db.execute(
