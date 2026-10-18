@@ -1,7 +1,7 @@
 # Exact legacy-entry reads
 
 Requirements: `Fixed` for the owner's four canonical Regional Knowledge archive
-originals. Implementation: `Not confirmed by user`. The legacy ownership mismatch
+originals and separately enumerated thirty historical illustration entries. Implementation: `Not confirmed by user`. The legacy ownership mismatch
 is `Not done` until the reviewed release and exact live byte readbacks complete.
 Source/test preparation is not runtime acceptance.
 
@@ -13,16 +13,20 @@ binding, provider message, document clone, service, or queue is created.
 List/search keep their existing publication-principal boundary. The service
 cannot use generic item reads to bypass its narrow media-store tool scope.
 
-The private operator manifest contains exactly the four approved canonical entry
-identities, not a duplicate, with verified source origins and SHA-256 values.
-The manifest is not committed. Public fixtures are synthetic.
+Separate private operator manifests contain exactly the four approved canonical
+originals and the thirty approved historical illustration entries, not duplicates.
+Neither manifest is committed. Public fixtures are synthetic. No other owner
+media gains access. The per-call limit remains four grants; a frozen thirty-entry
+manifest uses eight bounded calls in the same transaction after validating the
+complete set and refusing unexpected existing grants.
 
 ## Durable authorization
 
 Schema 11 adds exact grant records and temporary-asset-to-grant links.
 A grant contains a frozen proof of the current target tenant/principal and epoch,
 binding ID/epoch, connection and destination, source publication owner/revision,
-Telegram chat/topic/message/attachment identity and immutable origin including SHA.
+Telegram chat/topic/message/attachment identity and immutable origin. Current
+origins retain their explicit SHA interpretation unchanged.
 A grant never derives authority from an origin URI or Telegram link alone.
 
 Get admission checks current proof before keyed replay or fresh admission.
@@ -32,10 +36,34 @@ each byte-cache read revalidate that same grant. Revocation deletes the grant;
 regrant creates a different ID and cannot revive an old operation or cache.
 
 The worker accepts exactly one source document at the exact native identity and
-topic, and hashes actual downloaded bytes against the immutable origin SHA.
+topic, and hashes actual downloaded bytes against the pinned provider SHA.
 Unexpected/extra documents, changed source revisions, revoked topic/binding,
 foreign tenant/principal and mismatched bytes fail closed before cache insertion.
 The existing one-hour cache remains temporary. No document is republished.
+
+## Historical illustration origin v1
+
+The previously missing compatibility path is `Not done` until live acceptance.
+It is explicit, not a chain of fallback hash guesses: origin has exactly
+`system=regional_knowledge` and `ref=knowledge://illustrations/<UUID>`, with no
+SHA field; the source is in native topic 4 with one document attachment and one
+canonical slot-zero `download_sha256` image observation. Missing, malformed or
+ambiguous evidence and native photos fail closed. Any nonempty media hashes must
+equal that observed digest. A present malformed/conflicting origin SHA never
+switches to this legacy interpretation.
+
+The grant pins the fact ID and canonical observed SHA/MIME/size/slot/kind, not the
+mutable snapshot or observation timestamp. Normal readback refreshes must not
+invalidate its own receipt/cache. Source, display and provider crop SHA roles
+remain distinct: only the exact manifest's provider SHA may match the pinned
+observed evidence. No immutable intent, origin or native bytes are rewritten.
+Actual returned document bytes, MIME and size must match the pinned observation
+before cache insertion; cache serving uses the same explicit proof digest.
+
+Before each live legacy grant, verify the exact native topic-4 document and its
+actual bytes through an already authorized path. Historical metadata agreement
+alone is not that verification. If no authorized path is available, keep the
+entry pending; do not impersonate the owner or bypass the existing ACL.
 
 ## Migration and release gate
 
@@ -44,7 +72,8 @@ the grant guard and old Store initialization rejects schema 11. Do not initializ
 the new Store on the live ledger, admit shared reads or apply grants until:
 
 1. The exact candidate and schema-11-compatible rollback source pass review and
-   required checks.
+   required checks. Complete the separately released baseline and verified topic-4
+   acceptance first.
 2. The actual systemd unit dependency/restart coupling is understood. Obtain a
    coordinated idle/drain window without interrupting unrelated active commands.
 3. Both server and worker actual PIDs, command lines and immutable release roots
@@ -53,21 +82,23 @@ the new Store on the live ledger, admit shared reads or apply grants until:
 4. Perform the migration only in that coordinated window; verify integrity and
    preserved operation/publication identities before any grant.
 5. Verify the existing service is non-owner with exactly its original narrow
-   scopes and binding. Recheck all four frozen proofs transactionally, refuse
+   scopes and binding. Recheck the selected exact manifest's frozen proofs transactionally, refuse
    unexpected existing entry grants, and apply only the reviewed exact set.
 6. Read each canonical source through the existing service identity, await its
    original operation, then verify the actual asset SHA. Verify denied foreign
    entry/topic/tenant/principal and revoked-grant cases with synthetic fixtures.
 
-Runtime work remains on hold while the separate release incident is unresolved.
+Runtime work remains coordinator-gated by topic-4 acceptance, disk admission and
+an independently verified worker window; green source CI is not runtime approval.
 
 ## Recovery without schema downgrade
 
-Before live migration, prepare and test a stable-PR83 rollback candidate which
+Before live migration, prepare and test a stable PR80+83+85 rollback candidate which
 accepts the additive schema 11 but denies grant-marked read operations at both
 worker and private-status boundaries. It must also deny every foreign-source
 download cache even if an unrelated publish scope exists. It leaves all schema,
-publication, operation and provider evidence intact and creates no grant.
+publication, operation and provider evidence intact and creates no grant. Preserve
+PR85 soft unit ordering; never restore the old hard API-to-worker coupling.
 
 For rollback, stop new delegated admission, revoke the exact grants, safely drain
 or terminally block their existing reads under reviewed code, and coordinate both
@@ -81,4 +112,6 @@ Synthetic coverage includes exact proof fields, current authority changes,
 immutable revisions, foreign tenant/principal, unchanged list/search, generic
 read denial, optional-key recovery, no-key fences, revoke/regrant, revocation
 during provider read, unexpected provider identity and actual-byte SHA, and
-cached-asset denial. Live identity and byte verification are separate evidence.
+cached-asset denial. Legacy-v1 tests also cover evidence ambiguity, origin/kind/
+topic/hash mismatch, swapped renditions, revocation, and get/receipt/asset/keyed
+replay across a harmless observation refresh. Live identity and byte verification are separate evidence.

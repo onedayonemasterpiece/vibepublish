@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accept explicitly pinned legacy illustration origin-v1 document evidence for exact-entry reads, retaining current origin SHA checks and actual downloaded-byte validation. Keep historical metadata, source/display/provider hash roles, and native verification distinct; no grants are implied.
+
 - Add exact-entry read-only legacy media grants with immutable source and authority proofs, current grant fences through replay/worker/cache, and actual-byte SHA validation. List/search and publication ownership remain unchanged; schema 11 requires a separately coordinated server+worker release and compatible fail-closed rollback.
 
 - Keep the production worker independent of API stop/restart: use soft

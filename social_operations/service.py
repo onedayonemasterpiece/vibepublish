@@ -102,12 +102,12 @@ class Application:
                 "WHERE m.asset_id=? AND m.purpose='download_cache'",
                 (ident,)).fetchone()
             if shared_cache and shared_cache['principal_id'] != actor.principal_id:
-                from .media_entry_grants import require_grant
+                from .media_entry_grants import proof_sha256, require_grant
                 if not shared_cache['grant_id']:
                     raise DomainError('access_denied', next_action='contact_owner')
                 grant, cache_binding = require_grant(self.store, db, actor, shared_cache['publication_id'],
                                          grant_id=shared_cache['grant_id'])
-                if row['sha256'] != json.loads(grant['proof'])['origin']['sha256']:
+                if row['sha256'] != proof_sha256(json.loads(grant['proof'])):
                     raise DomainError('asset_integrity')
             if not actor.owner and "media.store" in actor.scopes and not actor.scopes.intersection({"visual", "publish"}):
                 cache = db.execute(

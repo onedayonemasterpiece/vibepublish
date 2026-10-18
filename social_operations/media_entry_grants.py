@@ -4,6 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import asdict
+
+from adapters.port import downloaded_media
 
 from .domain import DomainError, canonical, new_id
 
@@ -14,11 +17,47 @@ def _denied():
 
 def _entry(db, tenant, entry_ref):
     return db.execute(
-        "SELECT p.*,r.intent,f.destination_id,f.snapshot FROM publications p "
+        "SELECT p.*,r.intent,f.id AS fact_id,f.destination_id,f.snapshot FROM publications p "
         "JOIN revisions r ON r.publication_id=p.id AND r.revision=p.revision "
         "JOIN facts f ON f.publication_id=p.id "
         "WHERE p.id=? AND p.tenant_id=? AND p.kind='media_store' "
         "ORDER BY f.observed_at DESC LIMIT 1", (entry_ref, tenant)).fetchone()
+
+
+def _legacy_origin(origin, topic):
+    return (isinstance(origin, dict) and set(origin) == {'system', 'ref'}
+            and origin.get('system') == 'regional_knowledge' and topic == '4'
+            and isinstance(origin.get('ref'), str)
+            and re.fullmatch(r'knowledge://illustrations/[0-9a-f]{8}-[0-9a-f]{4}-'
+                             r'[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', origin['ref']))
+
+
+def _single_image_evidence(values):
+    if not isinstance(values, (list, tuple)) or len(values) != 1:
+        _denied()
+    if isinstance(values[0], dict) and set(values[0]) != {'kind', 'slot', 'sha256', 'mime', 'size'}:
+        _denied()
+    try:
+        evidence, = downloaded_media(values)
+    except (TypeError, ValueError, DomainError):
+        _denied()
+    if evidence.mime not in {'image/png', 'image/jpeg', 'image/webp'}:
+        _denied()
+    return asdict(evidence)
+
+
+def proof_sha256(proof):
+    """Explicit proof formats only; never guess a digest from a different role."""
+    if 'proof_kind' not in proof:
+        origin = proof.get('origin', {})
+        sha = origin.get('sha256') if isinstance(origin, dict) else None
+        if isinstance(sha, str) and re.fullmatch('[0-9a-f]{64}', sha):
+            return sha
+    elif (proof['proof_kind'] == 'legacy_origin_v1'
+          and _legacy_origin(proof.get('origin'), proof.get('topic_id'))
+          and isinstance(proof.get('source_fact_id'), str) and proof['source_fact_id']):
+        return _single_image_evidence([proof.get('download_evidence')])['sha256']
+    _denied()
 
 
 def entry_proof(store, db, actor, binding, entry_ref):
@@ -31,16 +70,29 @@ def entry_proof(store, db, actor, binding, entry_ref):
     remote = json.loads(row['snapshot'])
     origin = json.loads(row['intent']).get('origin')
     topic = str(remote.get('reply_to_native_id') or '')
+    attachments = remote.get('provider_media', [])
     if (current['provider'] != 'telegram' or current['destination_id'] != row['destination_id']
             or current['native_id'] != remote.get('native_target')
             or 'publish' not in json.loads(current['rights'])
             or not store.service_media_topic_allowed(db, actor, current, topic)
             or remote.get('namespace') != 'published'
-            or not isinstance(origin, dict) or set(origin) != {'system', 'ref', 'sha256'}
+            or not isinstance(origin, dict)
             or not all(isinstance(origin[key], str) and origin[key] for key in origin)
-            or not re.fullmatch('[0-9a-f]{64}', origin['sha256'])
-            or len(remote.get('provider_media', [])) != 1
-            or not remote['provider_media'][0].startswith('document:')):
+            or not isinstance(attachments, (list, tuple)) or len(attachments) != 1
+            or not isinstance(attachments[0], str) or not attachments[0].startswith('document:')):
+        _denied()
+    extra = {}
+    if set(origin) == {'system', 'ref', 'sha256'}:
+        if not re.fullmatch('[0-9a-f]{64}', origin['sha256']):
+            _denied()
+    elif _legacy_origin(origin, topic):
+        evidence = _single_image_evidence(remote.get('observed_media'))
+        hashes = remote.get('media_hashes', [])
+        if not isinstance(hashes, (list, tuple)) or (hashes and list(hashes) != [evidence['sha256']]):
+            _denied()
+        extra = {'proof_kind': 'legacy_origin_v1', 'source_fact_id': row['fact_id'],
+                 'download_evidence': evidence}
+    else:
         _denied()
     return {'tenant_id': actor.tenant_id, 'principal_id': actor.principal_id,
             'principal_epoch': actor.epoch, 'binding_id': current['id'],
@@ -49,7 +101,7 @@ def entry_proof(store, db, actor, binding, entry_ref):
             'entry_ref': row['id'], 'source_principal_id': row['principal_id'],
             'revision': row['revision'], 'topic_id': topic, 'native_id': remote['native_id'],
             'namespace': remote['namespace'], 'provider_media': remote['provider_media'],
-            'member_ids': remote.get('member_ids', []), 'origin': origin}
+            'member_ids': remote.get('member_ids', []), 'origin': origin, **extra}
 
 
 def require_grant(store, db, actor, entry_ref, *, grant_id=None, binding_id=None):
@@ -129,6 +181,12 @@ def check_download(proof, page):
             or list(remote.provider_media) != proof['provider_media']
             or list(remote.member_ids) != proof['member_ids']
             or media.item_native_id != proof['native_id'] or media.slot != 0
-            or media.provider_ref != proof['provider_media'][0]
-            or hashlib.sha256(media.data).hexdigest() != proof['origin']['sha256']):
+            or media.provider_ref != proof['provider_media'][0] or media.media_kind != 'document'
+            or hashlib.sha256(media.data).hexdigest() != proof_sha256(proof)):
         _denied()
+    if proof.get('proof_kind') == 'legacy_origin_v1':
+        evidence = _single_image_evidence(remote.observed_media)
+        if (evidence != proof['download_evidence'] or media.mime != evidence['mime']
+                or len(media.data) != evidence['size']
+                or (remote.media_hashes and list(remote.media_hashes) != [evidence['sha256']])):
+            _denied()
