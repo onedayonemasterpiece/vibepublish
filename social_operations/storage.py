@@ -29,6 +29,14 @@ def _validated_permissions(values, allowed, error_code):
     return tuple(dict.fromkeys(values))
 
 
+def _valid_media_topic_id(value) -> bool:
+    """Canonical positive Telegram topic/message id, bounded before parsing."""
+    return (isinstance(value, str) and 1 <= len(value) <= 19
+            and value[0] in "123456789"
+            and all("0" <= digit <= "9" for digit in value)
+            and int(value) <= 9223372036854775807)
+
+
 class Store:
     def __init__(self, path: str | Path, *, clock=time.time):
         self.path = Path(path).absolute()
@@ -248,7 +256,7 @@ class Store:
             return True
         if "media.store" not in actor.scopes:
             return False
-        if not isinstance(topic_id, str) or not topic_id.isascii() or not topic_id.isdecimal() or str(int(topic_id)) != topic_id or int(topic_id) <= 0:
+        if not _valid_media_topic_id(topic_id):
             return False
         return db.execute(
             "SELECT 1 FROM media_service_topic_grants "
@@ -259,7 +267,7 @@ class Store:
     def set_service_media_topic(self, owner: Actor, principal: str, alias: str,
                                 topic_id: str, *, enabled=True):
         """Local owner administration; no model-facing endpoint or credential return."""
-        if not owner.owner or not isinstance(topic_id, str) or not topic_id.isascii() or not topic_id.isdecimal() or str(int(topic_id)) != topic_id or int(topic_id) <= 0:
+        if not owner.owner or not _valid_media_topic_id(topic_id):
             raise DomainError("access_denied", next_action="contact_owner")
         with self.tx() as db:
             self.current(db, owner)
