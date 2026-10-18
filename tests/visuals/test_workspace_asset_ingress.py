@@ -96,7 +96,7 @@ async def test_additive_migration_reapply_preserves_uploads_assets_and_receipts(
         db.execute('PRAGMA user_version=7')
     restored = Store(store.path, clock=store.clock)
     with restored.connection() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 9
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 10
         after = {name: [tuple(row) for row in db.execute('SELECT * FROM ' + name + ' ORDER BY rowid')]
                  for name in tables}
         assert after == before
