@@ -972,6 +972,17 @@ class Worker:
             b = dict(self.store.binding(db, actor, binding_id=args['_binding_id']))
             if b['epoch'] != args['_binding_epoch']:
                 raise DomainError('access_revoked', next_action='reauthorize')
+        entry_grant = None
+        if args.get('_media_store_grant_id'):
+            from .media_entry_grants import require_grant
+            with self.store.connection() as db:
+                entry_grant, _ = require_grant(
+                    self.store, db, actor, args['_media_store_entry_ref'],
+                    grant_id=args['_media_store_grant_id'], binding_id=b['id'])
+                proof = json.loads(entry_grant['proof'])
+                if (args.get('_native_item') != proof['native_id']
+                        or args.get('_namespace') != proof['namespace']):
+                    raise DomainError('access_denied', next_action='contact_owner')
         query = args['query']
         request = ReadRequest(b['connection_id'], b['native_id'], query['kind'], args.get('limit', 25), args.get('_provider_cursor'),
                               args.get('_native_item'), args.get('_namespace'), query.get('text', ''),
@@ -982,6 +993,10 @@ class Worker:
         budget = max(0.1, min(budget, op['deadline']-self.store.clock()))
         try:
             async with self.lane(b['connection_id']):
+                if entry_grant:
+                    with self.store.connection() as db:
+                        require_grant(self.store, db, actor, args['_media_store_entry_ref'],
+                                      grant_id=entry_grant['id'], binding_id=b['id'])
                 async with asyncio.timeout(budget):
                     with diagnostic_scope(self.diagnostic_observer(op)):
                         with provider_call(b['provider'], 'read') as diagnostic:
@@ -996,6 +1011,12 @@ class Worker:
             self.store.fence(db, op['id'], self.id, op['fence'])
             self.store.current(db, actor)
             self.store.binding(db, actor, binding_id=b['id'])
+            if entry_grant:
+                from .media_entry_grants import check_download
+                current_grant, _ = require_grant(
+                    self.store, db, actor, args['_media_store_entry_ref'],
+                    grant_id=entry_grant['id'], binding_id=b['id'])
+                check_download(json.loads(current_grant['proof']), page)
             downloads = {}
             if page.downloads:
                 from social_operations.assets import insert_verified_image, verify_image
@@ -1024,6 +1045,9 @@ class Worker:
                                     evidence.sha256, self.store.clock()))
                         db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
                                    (asset_ref, args.get('_media_store_entry_ref'), 'download_cache', self.store.clock()+3600))
+                        if entry_grant:
+                            db.execute('INSERT INTO media_service_entry_assets VALUES(?,?)',
+                                       (asset_ref, entry_grant['id']))
                     else:
                         sanitized_sha = hashlib.sha256(verified.data).hexdigest()
                         existing_asset = db.execute(

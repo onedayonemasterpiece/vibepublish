@@ -84,6 +84,12 @@ identity, provider evidence and temporary verified transfer asset. If the
 originating service later revokes or deletes its resource, it must stop exposing
 the VibePublish reference even if the Telegram mirror still exists.
 
+## Exact legacy-entry reads
+
+The separately coordinated [read-only legacy-entry grant](legacy-entry-reads.md)
+adds no list/search sharing and requires a worker-aware schema-11 release and
+compatible fail-closed rollback. It is not part of an API-only durable-get rollout.
+
 ## Availability boundary
 
 ### Opt-in durable get replay — 2026-10-18

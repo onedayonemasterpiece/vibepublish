@@ -48,7 +48,7 @@ class Store:
         os.chmod(self.path, 0o600)
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
+            if version not in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
                 raise RuntimeError("Unsupported VibePublish database version")
             self._enable_wal(db)
             if version == 0:
@@ -74,6 +74,8 @@ class Store:
                 db.executescript(Path(__file__).with_name("vk_story_dependencies.sql").read_text())
             if version < 10:
                 db.executescript(Path(__file__).with_name("media_service_topic_schema.sql").read_text())
+            if version < 11:
+                db.executescript(Path(__file__).with_name("media_entry_grant_schema.sql").read_text())
 
     @staticmethod
     def _enable_wal(db: sqlite3.Connection) -> None:
@@ -394,6 +396,12 @@ class Store:
             raise DomainError("not_found", "Resource is not available", "refresh")
         if row["actor_epoch"] != actor.epoch:
             raise DomainError("access_revoked", next_action="reauthorize")
+        request = json.loads(row['request'])
+        if request.get('_media_store_grant_id'):
+            from .media_entry_grants import require_grant
+            require_grant(self, db, actor, request['_media_store_entry_ref'],
+                          grant_id=request['_media_store_grant_id'],
+                          binding_id=request['_binding_id'])
         # Administrative receipts never replay through revoked or replaced bindings.
         grant = json.loads(row['result']).get('binding_grant')
         if grant:

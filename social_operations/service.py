@@ -94,17 +94,32 @@ class Application:
                              (ident, actor.tenant_id, actor.principal_id)).fetchone()
             if not row:
                 raise DomainError('asset_not_available', next_action='refresh')
+            cache_binding = None
+            shared_cache = db.execute(
+                "SELECT m.publication_id,p.principal_id,g.grant_id FROM media_store_assets m "
+                "JOIN publications p ON p.id=m.publication_id "
+                "LEFT JOIN media_service_entry_assets g ON g.asset_id=m.asset_id "
+                "WHERE m.asset_id=? AND m.purpose='download_cache'",
+                (ident,)).fetchone()
+            if shared_cache and shared_cache['principal_id'] != actor.principal_id:
+                from .media_entry_grants import require_grant
+                if not shared_cache['grant_id']:
+                    raise DomainError('access_denied', next_action='contact_owner')
+                grant, cache_binding = require_grant(self.store, db, actor, shared_cache['publication_id'],
+                                         grant_id=shared_cache['grant_id'])
+                if row['sha256'] != json.loads(grant['proof'])['origin']['sha256']:
+                    raise DomainError('asset_integrity')
             if not actor.owner and "media.store" in actor.scopes and not actor.scopes.intersection({"visual", "publish"}):
                 cache = db.execute(
                     "SELECT m.publication_id,f.destination_id,f.snapshot FROM media_store_assets m "
                     "JOIN publications p ON p.id=m.publication_id "
                     "JOIN facts f ON f.publication_id=p.id "
                     "WHERE m.asset_id=? AND m.purpose='download_cache' "
-                    "AND p.tenant_id=? AND p.principal_id=? "
+                    "AND p.tenant_id=? "
                     "ORDER BY f.observed_at DESC LIMIT 1",
-                    (ident, actor.tenant_id, actor.principal_id)
+                    (ident, actor.tenant_id)
                 ).fetchone()
-                binding = next((b for b in self.store.bindings(db, actor)
+                binding = cache_binding or next((b for b in self.store.bindings(db, actor)
                                 if cache and b['destination_id'] == cache['destination_id']), None)
                 if not cache or binding is None or not self.store.service_media_topic_allowed(
                         db, actor, binding,
@@ -153,9 +168,23 @@ class Application:
                     "WHERE p.id=? AND p.tenant_id=? AND p.principal_id=? AND p.kind='media_store' "
                     "ORDER BY f.observed_at DESC LIMIT 1",
                     (command['entry_ref'], actor.tenant_id, actor.principal_id)).fetchone()
+                entry_grant = None
+                grant_binding = None
                 if not fact:
-                    raise DomainError('media_store_entry_not_found', next_action='refresh')
-                binding = next((b for b in self.store.bindings(db, actor)
+                    from .media_entry_grants import require_grant
+                    allowed = db.execute(
+                        "SELECT id FROM media_service_entry_grants WHERE tenant_id=? "
+                        "AND principal_id=? AND entry_ref=?",
+                        (actor.tenant_id, actor.principal_id, command['entry_ref'])).fetchone()
+                    if not allowed:
+                        raise DomainError('media_store_entry_not_found', next_action='refresh')
+                    entry_grant, grant_binding = require_grant(self.store, db, actor, command['entry_ref'])
+                    fact = db.execute(
+                        "SELECT f.* FROM facts f JOIN publications p ON p.id=f.publication_id "
+                        "WHERE p.id=? AND p.tenant_id=? AND p.kind='media_store' "
+                        "ORDER BY f.observed_at DESC LIMIT 1",
+                        (command['entry_ref'], actor.tenant_id)).fetchone()
+                binding = grant_binding or next((b for b in self.store.bindings(db, actor)
                                 if b['destination_id'] == fact['destination_id']), None)
                 if binding is None:
                     raise DomainError('access_denied', next_action='contact_owner')
@@ -163,7 +192,7 @@ class Application:
                 if not self.store.service_media_topic_allowed(
                         db, actor, binding, str(remote.get('reply_to_native_id') or '')):
                     raise DomainError('access_denied', next_action='contact_owner')
-                if args.get('request_key'):
+                if args.get('request_key') or entry_grant:
                     # Stable logical identity, never the fresh item_ref generated
                     # below. Admission and key binding commit in one transaction.
                     if 'publish' not in json.loads(binding['rights']) and not actor.owner:
@@ -181,8 +210,11 @@ class Application:
                                   '_media_store_get': True, '_media_store_entry_ref': command['entry_ref'],
                                   '_binding_id': binding['id'], '_binding_epoch': binding['epoch'],
                                   '_native_item': remote['native_id'], '_namespace': remote['namespace']}
+                        if entry_grant:
+                            intent['_media_store_grant_id'] = entry_grant['id']
                         op = self._new_operation(db, actor, 'read', intent)
-                        self._key(db, actor, args['request_key'], digest(['media_store_get', command]), op)
+                        if args.get('request_key'):
+                            self._key(db, actor, args['request_key'], digest(['media_store_get', command]), op)
                 else:
                     projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
                     get_ref = projected['ref']
@@ -222,7 +254,15 @@ class Application:
         db.executemany('DELETE FROM assets WHERE id=?', [(ident,) for ident in expired])
 
     def _media_store_items(self, db, actor, *, publication_id=None, binding=None, topic=None, text=''):
-        params = [actor.tenant_id, actor.principal_id]
+        source_principal = actor.principal_id
+        if publication_id:
+            from .media_entry_grants import _entry, require_grant
+            source = _entry(db, actor.tenant_id, publication_id)
+            if source and source['principal_id'] != actor.principal_id:
+                _, grant_binding = require_grant(self.store, db, actor, publication_id)
+                binding = grant_binding
+                source_principal = source['principal_id']
+        params = [actor.tenant_id, source_principal]
         sql = ("SELECT f.*,p.id AS entry_ref,p.revision,r.intent AS revision_intent "
                "FROM facts f JOIN publications p ON p.id=f.publication_id "
                "JOIN revisions r ON r.publication_id=p.id AND r.revision=p.revision "

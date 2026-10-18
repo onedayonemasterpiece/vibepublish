@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add exact-entry read-only legacy media grants with immutable source and authority proofs, current grant fences through replay/worker/cache, and actual-byte SHA validation. List/search and publication ownership remain unchanged; schema 11 requires a separately coordinated server+worker release and compatible fail-closed rollback.
+
 - Honor optional media-store `get` request keys with atomic, principal-scoped
   durable read replay across lost responses and restarts. Reject intent conflicts
   and revoked bindings; preserve original terminal/expired-asset receipts and
