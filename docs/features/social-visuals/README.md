@@ -5,6 +5,42 @@
 
 # Social visuals
 
+### Immutable source frame — 2026-10-14
+
+Requirement: `Fixed` for preserving an explicitly selected original photo;
+implementation/offline checks: `Not confirmed by user`; live acceptance: `Not done`.
+Standalone `frame_source` creates one reviewable candidate using the existing SVG
+compositor, a complete private source image and explicit structured editorial copy.
+Format `original` preserves the oriented input aspect and pixel dimensions. Formats
+`post_4_5`/`story_9_16` require input pixels already truly cropped to that ratio;
+a different input ratio is rejected, without contain fields, stretching or outpainting. The caller/model
+supplies a normalized text area, readable font sizes and optional modest contrast
+backplate after inspecting the actual photo. No crop, perspective change or scene
+reconstruction occurs. Layout must preserve the house and important context while
+keeping the photo dominant. Geometric containment alone does not establish that a
+chosen text area avoids important image details; actual source/output review remains
+required. Copy overflow blocks; the system never shrinks lettering silently.
+EXIF orientation is applied before stripping metadata into a separate immutable
+PNG derivative. Original bytes remain unchanged. Supported standalone families are original, 4:5 and
+9:16; overflow blocks rather than dropping or inventing text. The caller/model
+owns copy meaning, qualifiers and provenance; composition does not verify facts.
+
+```json
+{"command":{"kind":"frame_source","source":{"source":{"kind":"asset","id":"asset_original"}},"copy":{"title":"Explicit title","body":"Explicit approved copy"},"layout":{"text_box":[0.05,0.01,0.9,0.14],"title_size":42,"body_size":28},"format":"original"},"request_key":"distinct-owner-source-frame-intent"}
+```
+
+Source-layout font sizes are nominal pixels at 1080-wide presentation and scale
+with an original canvas. A contrast plate follows the actual rendered text height
+inside the selected safe region, rather than covering unused photograph; the renderer preserves fractional line advances even for
+small source images. Crop selection and transformation belong to the caller.
+
+The normal asset/tenant/epoch checks, immutable visual job/candidate lineage,
+choice token/CAS and quality review remain in force. This standalone operation
+does not invoke Imagegen, publish, revive an old operation or imply that an old
+distorted generated image was corrected. Selection produces an asset only. It
+requires a stable request key and is replayed through the existing operation
+ledger. No new renderer, image model, provider or dispatch framework is added.
+
 Explicit `reconcile_dispatch` closes only a terminal unknown for which the
 original locked executor receipt proves no generation turn was sent. It seals
 the operation's worker fence and returns `retry_safe=true`; it never resubmits,
@@ -39,11 +75,22 @@ result can be imported within this read window without making generation valid
 again. Unknown/unfinished/mismatched reads stay terminal; replaying the same key
 only returns current status and does not queue another read.
 
+An explicitly requested standalone Original render recovery uses this same
+command when the original dispatched job closed with `visual_preset_not_available`
+and empty structured copy. It reads the saved executor/artifacts without another
+generation, preserves the prior failure in the durable progress ledger, and keeps every existing
+authority, input, lease, revision and selection check. Other blocked errors and
+inline publications are excluded. A local worker may claim the exact operation
+without claiming unrelated jobs or running unrelated maintenance. Implementation
+and offline checks: `Not confirmed by user`; live acceptance: `Not done`.
+
 Owner requirements: `Fixed` from the 2026-09-04 handoff. Engineering choices: `Not confirmed by user`. Implementation: shared service and partial live executor acceptance `Not confirmed by user`; complete acceptance `Not done`.
 
 Sources: `voice-20260904-165005-c0a0bcbe` and the binding correction in [the handoff](../social-operations/analysis-handoff-20260904.md). Publication/runtime/security rules live in [implementation design](../social-operations/implementation-design-v1.md).
 
 ## Product
+
+Standalone artistic `generate`/`tune`/`compose` accepts `formats:["original"]` with empty structured copy. The existing executor and compositor retain the generated artwork's native dimensions and aspect, including its handwritten annotations, with no text panel, crop or aspect correction. The consumer must compare that aspect and the actual architecture with its chosen source frame; this is not a semantic geometry guarantee. Inline publication surface constraints remain unchanged. Source-frame composition remains an explicit auxiliary choice. Implementation: `Not confirmed by user`; artistic Street Story E2E: `Not done`.
 
 Generate a new illustration, improve a rough/PIL-like card, or compose several sources into a publishable visual. Allow several candidates, automatic selection when explicitly authorized, human selection, reusable versioned presets and a clean preference corpus. Standalone creation and inline publication call the same VisualService.
 

@@ -9,6 +9,8 @@ import base64
 import hashlib
 import html
 import io
+import math
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -73,39 +75,79 @@ class Composite:
     height: int
 
 
-def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET) -> Composite:
-    if preset != PRESET or format not in FORMATS:
+def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET, *, source_layout=None) -> Composite:
+    if preset != PRESET or format not in {*FORMATS, 'original'}:
         raise DomainError('visual_preset_not_available')
+    if format == 'original' and copy and source_layout is None:
+        raise DomainError('visual_original_copy_requires_source_layout')
     import cairosvg
-    width, height = FORMATS[format]
+    width, height = FORMATS.get(format, (1080, 1350))
     # No text is extracted or inferred from the art. Only explicit fields render.
     fields = [('title', 68, True), ('subtitle', 42, False), ('body', 34, False),
               ('date_line', 36, True), ('location_line', 32, False), ('source_line', 25, False)]
+    if source_layout is not None:
+        box = source_layout.get('text_box')
+        if (not isinstance(box, list) or len(box) != 4
+                or any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in box)
+                or box[2] <= 0 or box[3] <= 0 or box[0]+box[2] > 1 or box[1]+box[3] > 1):
+            raise DomainError('source_frame_layout_invalid')
+        fields = [('title', source_layout.get('title_size', 42), True), ('subtitle', 30, False),
+                  ('body', source_layout.get('body_size', 28), False), ('date_line', 28, True),
+                  ('location_line', 24, False), ('source_line', 22, False)]
+        if any(type(size) not in (int, float) or not math.isfinite(size) or not 22 <= size <= 68 for _, size, _ in fields):
+            raise DomainError('source_frame_layout_invalid')
+        if (not re.fullmatch(r'#[a-fA-F0-9]{6}', source_layout.get('text_color', '#ffffff'))
+                or type(source_layout.get('backplate_opacity', 0)) not in (int, float)
+                or not 0 <= source_layout.get('backplate_opacity', 0) <= .65):
+            raise DomainError('source_frame_layout_invalid')
     if set(copy) - {f[0] for f in fields}:
         raise DomainError('visual_copy_field_invalid')
     with Image.open(io.BytesIO(art)) as image:
         image.verify()
         source_width, source_height = image.size
+    if format == 'original':
+        width, height = source_width, source_height
+    if source_layout is not None:
+        if format == 'original':
+            width, height = source_width, source_height
+        elif format == 'post_4_5' and 5*source_width != 4*source_height:
+            raise DomainError('source_frame_requires_true_crop', '4:5 requires already cropped source pixels, never contain padding')
+        elif format == 'story_9_16' and 16*source_width != 9*source_height:
+            raise DomainError('source_frame_requires_true_crop')
+        # Caller font sizes are readable pixels at a 1080-wide presentation.
+        # Original keeps all source pixels and aspect; typography scales with it.
+        fields = [(field, size*width/1080, bold) for field, size, bold in fields]
     # Finished artwork already carries its lettering. Keep its aspect ratio
     # instead of adding a blank card around it; the format bounds its size.
-    if not copy:
+    if not copy and source_layout is None:
         scale = min(width/source_width, height/source_height)
         width = max(1, round(source_width*scale))
         height = max(1, round(source_height*scale))
     pad, bottom = 72, height-88
-    art_height = (560 if format == 'post_4_5' else 960) if copy else height
+    art_height = height if source_layout is not None else (560 if format == 'post_4_5' else 960) if copy else height
     art_scale = min(width/source_width, art_height/source_height)
     content_width, content_height = source_width*art_scale, source_height*art_scale
     content_box = [(width-content_width)/2, (art_height-content_height)/2, content_width, content_height]
     if not copy:
         content_box = [0, 0, width, height]
     y = art_height + 90
+    text_width = width-2*pad
+    safe_box = [pad, art_height+28, text_width, bottom-art_height-28]
+    backplate = ''
+    if source_layout is not None:
+        left, top, text_width, text_height = [value*extent for value, extent in zip(box, (width, height, width, height))]
+        pad, bottom = left, top+text_height
+        safe_box = [left, top, text_width, text_height]
+        y = top + next((size for field, size, _ in fields if copy.get(field)), 0)
+        opacity = source_layout.get('backplate_opacity', 0)
+        # The chosen box bounds text placement, not a plate over unused photo.
+        # Build the modest contrast layer from the actual glyph line extents.
     placed, paths, font_hashes = [], [], {}
     for field, size, bold in fields:
         text = copy.get(field)
         if not text:
             continue
-        lines = _lines(text, width-2*pad, size, bold)
+        lines = _lines(text, text_width, size, bold)
         font, sha = _font(bold)
         font_hashes['bold' if bold else 'regular'] = sha
         glyph_set = font.getGlyphSet()
@@ -123,15 +165,25 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET) -> Comp
                 x += font['hmtx'][glyph_name][0]*scale
             placed.append({'field': field, 'text': line, 'x': pad, 'baseline': y, 'width': x-pad,
                            'font_size': size, 'bold': bold})
-            y += round(size*1.25)
-        y += 18
+            y += size*1.25 if source_layout is not None else round(size*1.25)
+        y += 8 if source_layout is not None else 18
+    backplate_box = None
+    if source_layout is not None and placed:
+        ink_bottom = max(line['baseline'] + line['font_size']*.25 for line in placed)
+        plate_height = min(text_height, ink_bottom - top + 8*width/1080)
+        backplate_box = [left, top, text_width, plate_height]
+        backplate = f'<rect x="{left}" y="{top}" width="{text_width}" height="{plate_height}" fill="#0b2943" fill-opacity="{opacity}"/>'
     recipe = {'preset': PRESET, 'format': format, 'copy': copy, 'lines': placed,
-              'font_sha256': font_hashes, 'safe_box': [pad, art_height+28, width-2*pad, bottom-art_height-28],
+              'font_sha256': font_hashes, 'safe_box': safe_box,
               'art_sha256': hashlib.sha256(art).hexdigest(), 'art_box': [0, 0, width, art_height],
               'art_fit': 'contain', 'art_source_size': [source_width, source_height],
               'art_content_box': content_box,
               'canvas_fit': 'fixed' if copy else 'art_aspect',
-              'renderer': 'svg-path-cairosvg-v3', 'human_review_required': True}
+              'renderer': 'svg-path-cairosvg-v6-text-plate' if source_layout is not None else 'svg-path-cairosvg-v3',
+              'human_review_required': True}
+    if source_layout is not None:
+        recipe['source_layout'] = source_layout
+        recipe['backplate_box'] = backplate_box
     image_layer = art
     if not copy:
         # Resize once to integer pixel dimensions before SVG composition so
@@ -151,7 +203,8 @@ def render(art: bytes, copy: dict[str, str], format: str, preset=PRESET) -> Comp
            f'<rect width="{width}" height="{height}" fill="#f8fafb"/>'
            f'<image x="0" y="0" width="{width}" height="{art_height}" preserveAspectRatio="{aspect_fit}" '
            f'xlink:href="data:image/png;base64,{encoded}"/>'
-           f'<g fill="#172b3b">{"".join(paths)}</g></svg>').encode()
+           + backplate
+           + f'<g fill="{source_layout.get("text_color", "#ffffff") if source_layout is not None else "#172b3b"}">{"".join(paths)}</g></svg>').encode()
     # SVG is generated here, never user-supplied; its only URL is verified PNG data.
     png = cairosvg.svg2png(bytestring=svg, unsafe=False, output_width=width, output_height=height)
     return Composite(png, svg, canonical({**recipe, 'svg_sha256': hashlib.sha256(svg).hexdigest()}), width, height)
