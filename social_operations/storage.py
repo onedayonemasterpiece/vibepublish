@@ -48,7 +48,7 @@ class Store:
         os.chmod(self.path, 0o600)
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
+            if version not in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
                 raise RuntimeError("Unsupported VibePublish database version")
             self._enable_wal(db)
             if version == 0:
@@ -394,6 +394,8 @@ class Store:
             raise DomainError("not_found", "Resource is not available", "refresh")
         if row["actor_epoch"] != actor.epoch:
             raise DomainError("access_revoked", next_action="reauthorize")
+        if json.loads(row['request']).get('_media_store_grant_id'):
+            raise DomainError('access_denied', next_action='contact_owner')
         # Administrative receipts never replay through revoked or replaced bindings.
         grant = json.loads(row['result']).get('binding_grant')
         if grant:

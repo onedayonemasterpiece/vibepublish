@@ -94,6 +94,12 @@ class Application:
                              (ident, actor.tenant_id, actor.principal_id)).fetchone()
             if not row:
                 raise DomainError('asset_not_available', next_action='refresh')
+            foreign_cache = db.execute(
+                "SELECT 1 FROM media_store_assets m JOIN publications p ON p.id=m.publication_id "
+                "WHERE m.asset_id=? AND m.purpose='download_cache' AND p.principal_id!=?",
+                (ident, actor.principal_id)).fetchone()
+            if foreign_cache:
+                raise DomainError('access_denied', next_action='contact_owner')
             if not actor.owner and "media.store" in actor.scopes and not actor.scopes.intersection({"visual", "publish"}):
                 cache = db.execute(
                     "SELECT m.publication_id,f.destination_id,f.snapshot FROM media_store_assets m "
