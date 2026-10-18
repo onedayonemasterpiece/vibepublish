@@ -365,3 +365,108 @@ async def test_source_document_original_and_clone_purge_preserve_lost_response_r
     listed=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'list','to':'vault','thread_ref':'https://t.me/c/4379835477/5'}})
     read=await app.call(actor,'vibepublish_media_store',{'command':{'kind':'get','entry_ref':listed['media_store_items'][0]['entry_ref']}})
     await worker.run_once();assert store.receipt(actor,read['operation_id'])['state']=='verified'
+
+@pytest.mark.asyncio
+async def test_scoped_machine_archive_put_get_and_denials(tmp_path):
+    """RKB can archive exact topics without gaining owner or ordinary publish."""
+    from social_operations.asset_ingress import upload_image
+    store, owner, _asset, provider, app, worker = runtime(tmp_path)
+    token = store.create_principal(
+        "t", "regional-knowledge-mirror", scopes={"bootstrap", "status", "media.store"})
+    service = store.authenticate(token)
+    store.bind(owner, service.principal_id, "rkb-archive", "connection",
+               "-1004379835477", rights=("publish",))
+    tools = {item["name"] for item in app.tools(service)}
+    assert "vibepublish_media_store" in tools
+    assert "vibepublish_publish" not in tools
+    assert "vibepublish_visual" not in tools
+    assert "vibepublish_destinations" not in tools
+    assert not service.owner
+
+    pdf = b"%PDF-1.7\nExact KB original synthetic test bytes.\n"
+    stored = upload_image(app, service, pdf, "application/pdf", "rkb-original-asset")
+    assert stored["sha256"] == hashlib.sha256(pdf).hexdigest()
+    def command(topic, key):
+        return {
+            "command": {
+                "kind": "put", "to": "rkb-archive",
+                "thread_ref": f"https://t.me/c/4379835477/{topic}",
+                "content": {"text": "Synthetic regional source"},
+                "origin": {"system": "regional_knowledge",
+                           "ref": "knowledge://documents/synthetic/source",
+                           "sha256": hashlib.sha256(pdf).hexdigest()},
+                "media": [{"source": {"kind": "asset", "id": stored["asset_id"]},
+                           "role": "document"}]
+            }, "request_key": key
+        }
+
+    denied = await app.call(service, "vibepublish_media_store", command("2", "rkb-file-1"))
+    assert denied["error"]["code"] == "access_denied"
+    assert provider.effects == 0
+
+    granted = store.set_service_media_topic(owner, service.principal_id, "rkb-archive", "2")
+    assert granted["enabled"] is True
+    assert store.set_service_media_topic(owner, service.principal_id, "rkb-archive", "2") == granted
+    invalid = await app.call(service, "vibepublish_media_store", command("4", "rkb-file-2"))
+    assert invalid["error"]["code"] == "access_denied"
+
+    admitted = await app.call(service, "vibepublish_media_store", command("2", "rkb-file-1"))
+    assert "operation_id" in admitted, admitted
+    replay = await app.call(service, "vibepublish_media_store", command("2", "rkb-file-1"))
+    assert replay["operation_id"] == admitted["operation_id"]
+    await worker.run_once()
+    assert store.receipt(service, admitted["operation_id"])["state"] == "verified"
+    assert provider.effects == 1
+
+    forbidden = await app.call(service, "vibepublish_media_store", {
+        "command": {"kind": "list", "thread_ref": "https://t.me/c/4379835477/4"}})
+    assert forbidden["error"]["code"] == "access_denied"
+    visible = await app.call(service, "vibepublish_media_store", {
+        "command": {"kind": "list", "thread_ref": "https://t.me/c/4379835477/2"}})
+    assert visible["state"] == "verified"
+    item, = visible["media_store_items"]
+    assert item["origin"]["sha256"] == hashlib.sha256(pdf).hexdigest()
+    read = await app.call(service, "vibepublish_media_store", {
+        "command": {"kind": "get", "entry_ref": item["entry_ref"]}})
+    assert "operation_id" in read, read
+    await worker.run_once()
+    receipt = store.receipt(service, read["operation_id"])
+    assert receipt["state"] == "verified"
+    assets = [media["source"]["id"] for item in receipt.get("items", [])
+              for media in item.get("media", [])
+              if media.get("source", {}).get("kind") == "asset"]
+    assert len(assets) == 1
+    exact, mime, sha = app.read_asset(service, assets[0])
+    assert exact == pdf
+    assert mime == "application/pdf"
+    assert sha == hashlib.sha256(pdf).hexdigest()
+
+    revoked = store.set_service_media_topic(owner, service.principal_id, "rkb-archive", "2",
+                                            enabled=False)
+    assert revoked["enabled"] is False
+    current_service = store.authenticate(token)
+    after = await app.call(current_service, "vibepublish_media_store", {
+        "command": {"kind": "list", "thread_ref": "https://t.me/c/4379835477/2"}})
+    assert after["error"]["code"] == "access_denied"
+    from social_operations.domain import DomainError
+    with pytest.raises(DomainError) as exc:
+        app.read_asset(current_service, assets[0])
+    assert exc.value.code == "access_denied"
+
+
+def test_service_media_topic_grants_validate_target_scope(tmp_path):
+    from social_operations.domain import DomainError
+    store, owner, asset, provider, app, worker = runtime(tmp_path)
+    service = store.authenticate(store.create_principal(
+        "t", "knowledge-service", scopes={"bootstrap", "status", "media.store"}))
+    store.bind(owner, service.principal_id, "rkb-archive", "connection",
+               "-1004379835477", rights=("publish",))
+    for topic in ("0", "02", "invalid", "-1", "9" * 40):
+        with pytest.raises(DomainError):
+            store.set_service_media_topic(owner, service.principal_id, "rkb-archive", topic)
+    other = store.authenticate(store.create_principal(
+        "t", "ordinary-service", scopes={"bootstrap", "status"}))
+    with pytest.raises(DomainError):
+        store.set_service_media_topic(owner, other.principal_id, "rkb-archive", "2")
+    with pytest.raises(DomainError):
+        store.set_service_media_topic(service, service.principal_id, "rkb-archive", "2")
