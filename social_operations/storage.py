@@ -338,11 +338,14 @@ class Store:
             raise DomainError("stale_worker", next_action="refresh")
         return row
 
-    def claim(self, worker: str, *, connection_ids=None, include_unrouted=True):
+    def claim(self, worker: str, *, connection_ids=None, include_unrouted=True, operation_id=None):
         with self.tx() as db:
             now = self.clock()
             query="SELECT o.* FROM operations o WHERE (work_state='ready' OR (work_state='working' AND lease_until<?))"
             values=[now]
+            if operation_id is not None:
+                query += ' AND o.id=?'
+                values.append(operation_id)
             if connection_ids is not None:
                 marks=','.join('?' for _ in connection_ids)
                 routed="(SELECT json_extract(a.plan,'$.connection_id') FROM attempts a WHERE a.operation_id=o.id LIMIT 1)"

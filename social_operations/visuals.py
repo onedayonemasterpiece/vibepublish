@@ -74,7 +74,7 @@ class VisualService:
         if 'visual' not in actor.scopes:
             raise DomainError('visual_scope_required', next_action='contact_owner')
         spec = self._spec(spec, plans)
-        descriptors = ([spec['source']] if spec['kind'] == 'tune' else spec.get('sources', []))
+        descriptors = ([spec['source']] if spec['kind'] in {'tune', 'frame_source'} else spec.get('sources', []))
         sources = []
         for descriptor in self.app._media(db, actor, descriptors):
             row = db.execute('SELECT * FROM assets WHERE id=?', (descriptor['ref'],)).fetchone()
@@ -155,6 +155,10 @@ class VisualService:
                     if not args.get('request_key'):
                         raise DomainError('recomposition_requires_request_key')
                     op = self.recompose(db, actor, command, intent)
+                elif command['kind'] == 'frame_source':
+                    if not args.get('request_key'):
+                        raise DomainError('source_frame_requires_request_key')
+                    op = self.frame_source(db, actor, command, intent)
                 else:
                     job = self.job(db, actor, command['job_id'])
                     candidate = db.execute('SELECT id FROM visual_candidates WHERE id=? AND job_id=?', (command['candidate_id'], job['id'])).fetchone()
@@ -167,6 +171,61 @@ class VisualService:
                 if args.get('request_key'):
                     self.app._key(db, actor, args['request_key'], digest(['visual', intent]), op)
         return self.store.receipt(actor, op)
+
+    def frame_source(self, db, actor, command, intent):
+        """Standalone exact photo layer + explicit copy through the existing renderer.
+
+        No executor, publication or original-visual recovery is implied. Admission,
+        private assets, immutable candidate lineage and selection remain shared.
+        """
+        if not command['copy']:
+            raise DomainError('source_frame_copy_required')
+        spec = {'kind': 'frame_source', 'source': command['source'],
+            'copy': command['copy'], 'source_layout': command['layout'],
+            'brief': 'Immutable complete source frame with explicit editorial copy',
+            'formats': [command.get('format', 'original')], 'candidates': 1, 'selection': 'human'}
+        op = self.app._new_operation(db, actor, 'visual', intent)
+        job_id = self.create(db, actor, spec, op)
+        job = self.job(db, actor, job_id)
+        source = json.loads(job['sources'])[0]
+        stored = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
+            (source['ref'], actor.tenant_id, actor.principal_id)).fetchone()
+        if not stored or hashlib.sha256(stored['bytes']).hexdigest() != source['sha256']:
+            raise DomainError('asset_integrity')
+        art = verify_image(stored['bytes'], stored['mime'])
+        art_ref = source['ref'] if art.data == stored['bytes'] else insert_verified_image(self.store, db, actor, art)
+        art_sha = hashlib.sha256(art.data).hexdigest()
+        format = spec['formats'][0]
+        composite = render(art.data, spec['copy'], format, source_layout=spec['source_layout'])
+        final = verify_image(composite.png, 'image/png')
+        asset_ref = insert_verified_image(self.store, db, actor, final)
+        fixture = bool(db.execute('SELECT MAX(fixture) FROM visual_asset_origins WHERE asset_id=?',
+            (source['ref'],)).fetchone()[0])
+        for ref, kind in ((art_ref, 'art'), (asset_ref, 'final')):
+            db.execute('INSERT OR IGNORE INTO visual_asset_origins VALUES(?,?,?,?)', (ref, job_id, int(fixture), kind))
+        sha = hashlib.sha256(final.data).hexdigest()
+        token, candidate_id = secrets.token_urlsafe(32), new_id('candidate')
+        provenance = {'source_frame_contract': 'immutable-source-frame-svg-v1',
+            'original_source_ref': source['ref'], 'original_source_sha256': source['sha256'],
+            'actual_executor': 'svg-path-cairosvg-v6-text-plate', 'actual_model': None, 'generation_dispatch': 'not_sent',
+            'sources': json.loads(job['sources']), 'input_digest': job['input_digest'],
+            'fixture': fixture, 'consent': json.loads(job['consent']),
+            'typography_evidence': 'explicit_copy_compositor_only',
+            'choice_binding': digest([job['input_digest'], candidate_id, sha, format, job['revision']])}
+        db.execute('INSERT INTO visual_candidates VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            (candidate_id, job_id, 0, asset_ref, sha, art_ref, art_sha, final.width, final.height, format,
+             composite.recipe_json, canonical(provenance), self.store.token_hash(token), int(fixture), 1))
+        result = {'resource_id': job_id, 'visual_job_id': job_id, 'visual_revision': job['revision'],
+            'generation_dispatch': 'not_sent',
+            'candidates': [{'id': candidate_id, 'asset_ref': asset_ref, 'sha256': sha,
+                'width': final.width, 'height': final.height, 'format': format,
+                'selection_token': token, 'requires_review': True}]}
+        db.execute("UPDATE visual_jobs SET state='needs_selection',observation=? WHERE id=?", (canonical(provenance), job_id))
+        db.execute("UPDATE operations SET state='needs_selection',complete=1,work_state='done',result=? WHERE id=?",
+            (canonical(result), op))
+        self.store.event(db, op, 'rendering', 'completed',
+            'Complete original photo frame composed with explicit copy; no image generation or social effect')
+        return op
 
     def recompose(self, db, actor, command, intent):
         """New immutable standalone derivative from owned stored art, no executor.
@@ -212,7 +271,7 @@ class VisualService:
             raise DomainError('asset_integrity')
         spec = json.loads(source['spec'])
         format = command.get('format', candidate['format'])
-        composite = render(art.data, spec['copy'], format)
+        composite = render(art.data, spec['copy'], format, source_layout=spec.get('source_layout'))
         final = verify_image(composite.png, 'image/png')
         lineage = {'job_id': source['id'], 'candidate_id': candidate['id'],
             'visual_revision': source['revision'], 'candidate_sha256': candidate['sha256'],
@@ -220,6 +279,8 @@ class VisualService:
         new_spec = {'kind': 'recompose', 'brief': spec['brief'], 'copy': spec['copy'],
             'formats': [format], 'candidates': 1, 'selection': 'human', 'recompose_from': lineage,
             'sources': [{'source': {'kind': 'asset', 'id': candidate['art_ref']}}]}
+        if spec.get('source_layout') is not None:
+            new_spec['source_layout'] = spec['source_layout']
         op = self.app._new_operation(db, actor, 'visual', intent)
         job_id = self.create(db, actor, new_spec, op)
         job = self.job(db, actor, job_id)
@@ -372,8 +433,14 @@ class VisualService:
                 if (job['operation_id'] != op['id'] or job['revision'] != command['expected_visual_revision']
                         or op['revision'] != command['expected_revision']):
                     raise DomainError('visual_revision_conflict', next_action='refresh')
+                spec = json.loads(job['spec'])
+                render_recovery = (op['state'] == job['state'] == 'blocked'
+                    and (json.loads(op['error']) if op['error'] else {}).get('error', {}).get('code') == 'visual_preset_not_available'
+                    and spec.get('formats') == ['original'] and not spec.get('copy')
+                    and not job['parent_publication'])
+                terminal_state = 'blocked' if render_recovery else 'outcome_unknown'
                 if ('visual' not in actor.scopes or actor.routing_revision != job['routing_revision']
-                        or op['state'] != 'outcome_unknown' or job['state'] != 'outcome_unknown'
+                        or op['state'] != terminal_state or job['state'] != terminal_state
                         or not op['complete'] or op['work_state'] != 'done'
                         or op['lease_until'] > self.store.clock() or job['dispatched'] != 1
                         or job['execution_ref'] != job['id'] or job['selected_candidate']
@@ -385,6 +452,10 @@ class VisualService:
                 result = json.loads(op['result'])
                 if result.get('candidates'):
                     raise DomainError('imagegen_observation_reconciliation_conflict', next_action='review_outcome')
+                if render_recovery:
+                    self.store.event(db, op['id'], 'rendering', 'blocked',
+                        'Retained original renderer failure: ' + canonical({'state': op['state'],
+                            'revision': op['revision'], 'error': json.loads(op['error'])}))
                 result.update(visual_revision=job['revision'] + 1, observation_recovery={
                     'job_id': job['id'], 'execution_ref': job['execution_ref'], 'input_digest': job['input_digest'],
                     'operation_revision': op['revision'] + 1, 'visual_revision': job['revision'] + 1,
@@ -392,9 +463,9 @@ class VisualService:
                     'read_deadline': self.store.clock() + VISUAL_OBSERVATION_RECOVERY_SECONDS})
                 changed = db.execute("UPDATE operations SET state='accepted',complete=0,work_state='ready',"
                     "revision=revision+1,fence=fence+1,lease_owner=NULL,lease_until=0,result=?,error=NULL "
-                    "WHERE id=? AND revision=? AND fence=? AND state='outcome_unknown' "
+                    "WHERE id=? AND revision=? AND fence=? AND state=? "
                     "AND complete=1 AND work_state='done' AND lease_until<=?",
-                    (canonical(result), op['id'], op['revision'], op['fence'], self.store.clock())).rowcount
+                    (canonical(result), op['id'], op['revision'], op['fence'], terminal_state, self.store.clock())).rowcount
                 if changed != 1:
                     raise DomainError('stale_worker', next_action='refresh')
                 changed = db.execute("UPDATE visual_jobs SET state='running',revision=revision+1 WHERE id=? AND revision=? AND dispatched=1",
