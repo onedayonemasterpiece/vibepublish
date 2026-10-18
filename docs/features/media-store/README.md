@@ -86,6 +86,38 @@ the VibePublish reference even if the Telegram mirror still exists.
 
 ## Availability boundary
 
+### Opt-in durable get replay — 2026-10-18
+
+Status: `Not confirmed by user`. Source preparation does not establish deployment
+or live consumer acceptance. The previous `get` implementation ignored an optional
+request key, so recovering a lost admission response could admit another read.
+
+`get` accepts an optional top-level `request_key`. When supplied, its exact logical
+command (`kind=get`, `entry_ref`) is durably bound to one existing read operation,
+atomically with admission, using the existing tenant-and-principal key registry.
+Generated item refs are not part of that logical identity. Same-key replay returns
+that operation's current receipt, including pending or terminal failure, after
+process restart or a lost response. A different command using the same key fails
+with `idempotency_conflict`; keys already used for `put` also conflict. No key keeps
+the prior behavior: each get admits a fresh read.
+
+Replay checks current entry ownership, binding rights and exact-topic access, plus
+the original principal and binding epochs. It neither grants access nor redirects
+an existing read to a replacement binding. No schema migration, service, queue,
+provider timeout extension or automatic terminal-failure retry is introduced.
+
+Returned transfer assets still expire after one hour. Replaying a completed read
+preserves its original asset refs even after those bytes expire; it does not
+silently download again. A consumer should persist its key before get, persist the
+returned operation ID, and resume status for that same operation while pending.
+After explicit proof that a verified receipt's transfer asset has expired, a fresh
+retrieval uses a new key. An unknown HTTP/admission result is not such proof.
+
+Regression coverage includes lost admission response, process restart, interrupted
+pending work, provider timeout, concurrent admission and full command quota,
+cross-principal/tenant isolation, intent conflicts, revocation, cache expiry and
+unchanged no-key behavior. All fixtures are synthetic and perform no live writes.
+
 No software can guarantee Telegram byte reads during a provider or
 network outage. The product guarantee is therefore: local put admission and
 text-only metadata reads remain available while SQLite/storage are healthy;

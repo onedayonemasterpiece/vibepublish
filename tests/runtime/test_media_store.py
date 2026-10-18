@@ -432,7 +432,8 @@ async def test_scoped_machine_archive_put_get_and_denials(tmp_path):
     item, = visible["media_store_items"]
     assert item["origin"]["sha256"] == hashlib.sha256(pdf).hexdigest()
     read = await app.call(service, "vibepublish_media_store", {
-        "command": {"kind": "get", "entry_ref": item["entry_ref"]}})
+        "command": {"kind": "get", "entry_ref": item["entry_ref"]},
+        "request_key": "scoped-get"})
     assert "operation_id" in read, read
     await worker.run_once()
     receipt = store.receipt(service, read["operation_id"])
@@ -453,6 +454,11 @@ async def test_scoped_machine_archive_put_get_and_denials(tmp_path):
     after = await app.call(current_service, "vibepublish_media_store", {
         "command": {"kind": "list", "thread_ref": "https://t.me/c/4379835477/2"}})
     assert after["error"]["code"] == "access_denied"
+    denied_replay = await app.call(current_service, "vibepublish_media_store", {
+        "command": {"kind": "get", "entry_ref": item["entry_ref"]},
+        "request_key": "scoped-get"})
+    assert denied_replay["error"]["code"] == "access_denied"
+    assert provider.reads == 1
     from social_operations.domain import DomainError
     with pytest.raises(DomainError) as exc:
         app.read_asset(current_service, assets[0])
@@ -475,3 +481,219 @@ def test_service_media_topic_grants_validate_target_scope(tmp_path):
         store.set_service_media_topic(owner, other.principal_id, "rkb-archive", "2")
     with pytest.raises(DomainError):
         store.set_service_media_topic(service, service.principal_id, "rkb-archive", "2")
+
+
+
+def get_args(entry_ref, key=None):
+    result = {'command': {'kind': 'get', 'entry_ref': entry_ref}}
+    if key is not None:
+        result['request_key'] = key
+    return result
+
+
+@pytest.mark.asyncio
+async def test_get_key_recovers_lost_admission_response_across_restart(tmp_path, monkeypatch):
+    import sqlite3
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    put = await app.call(actor, 'vibepublish_media_store', args(asset))
+    await worker.run_once()
+    command = get_args(put['resource_id'], 'durable-get')
+    receipt = store.receipt
+    def lost_response(*args, **kwargs):
+        raise sqlite3.OperationalError('synthetic lost admission response')
+    monkeypatch.setattr(store, 'receipt', lost_response)
+    lost = await app.call(actor, 'vibepublish_media_store', command)
+    assert lost['error']['code'] == 'store_unavailable'
+    with store.connection() as db:
+        original = db.execute("select operation_id from request_keys where key='durable-get'").fetchone()[0]
+        assert db.execute("select count(*) from operations where action='read'").fetchone()[0] == 1
+    monkeypatch.setattr(store, 'receipt', receipt)
+    restarted = Store(store.path)
+    app = Application(restarted)
+    replay = await app.call(actor, 'vibepublish_media_store', command)
+    assert replay['operation_id'] == original
+    assert replay['operation_complete'] is False
+    await Worker(restarted, {'telegram': provider}).run_once()
+    replay = await app.call(actor, 'vibepublish_media_store', command)
+    assert replay['operation_id'] == original
+    assert replay['state'] == 'verified'
+    assert provider.reads == 1
+    with restarted.connection() as db:
+        assert db.execute("select count(*) from operations where action='read'").fetchone()[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_key_survives_interrupted_pending_worker(tmp_path):
+    import asyncio
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    put = await app.call(actor, 'vibepublish_media_store', args(asset))
+    await worker.run_once()
+    command = get_args(put['resource_id'], 'pending-get')
+    accepted = await app.call(actor, 'vibepublish_media_store', command)
+    entered = asyncio.Event()
+    original_read = provider.read
+    async def interrupted(*args):
+        entered.set()
+        await asyncio.Event().wait()
+    provider.read = interrupted
+    task = asyncio.create_task(worker.run_once())
+    await asyncio.wait_for(entered.wait(), 2)
+    replay = await app.call(actor, 'vibepublish_media_store', command)
+    assert replay['operation_id'] == accepted['operation_id']
+    assert replay['operation_complete'] is False
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    provider.read = original_read
+    with store.tx() as db:
+        db.execute('update operations set lease_until=0 where id=?', (accepted['operation_id'],))
+    restarted = Store(store.path)
+    await Worker(restarted, {'telegram': provider}).run_once()
+    replay = await Application(restarted).call(actor, 'vibepublish_media_store', command)
+    assert replay['operation_id'] == accepted['operation_id']
+    assert replay['state'] == 'verified'
+    assert provider.reads == 1
+
+
+@pytest.mark.asyncio
+async def test_get_provider_timeout_replays_original_terminal_failure(tmp_path):
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    put = await app.call(actor, 'vibepublish_media_store', args(asset))
+    await worker.run_once()
+    async def timeout(*args):
+        provider.reads += 1
+        raise TimeoutError
+    provider.read = timeout
+    command = get_args(put['resource_id'], 'timeout-get')
+    accepted = await app.call(actor, 'vibepublish_media_store', command)
+    await worker.run_once()
+    restarted = Store(store.path)
+    replay = await Application(restarted).call(actor, 'vibepublish_media_store', command)
+    assert replay['operation_id'] == accepted['operation_id']
+    assert replay['operation_complete'] is True
+    assert replay['state'] == 'blocked'
+    assert replay['error']['code'] == 'provider_read_deadline'
+    assert provider.reads == 1
+    assert await Worker(restarted, {'telegram': provider}).run_once() is False
+
+
+@pytest.mark.asyncio
+async def test_get_key_is_atomic_under_concurrent_admission_and_quota(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    put = await app.call(actor, 'vibepublish_media_store', args(asset))
+    await worker.run_once()
+    with store.tx() as db:
+        db.execute('update tenants set command_limit=1 where id=?', (actor.tenant_id,))
+    command = get_args(put['resource_id'], 'concurrent-get')
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        receipts = list(pool.map(lambda _: app.media_store(actor, command), range(8)))
+    assert len({r['operation_id'] for r in receipts}) == 1
+    with store.connection() as db:
+        assert db.execute("select count(*) from operations where action='read'").fetchone()[0] == 1
+        assert db.execute("select count(*) from request_keys where key='concurrent-get'").fetchone()[0] == 1
+    assert provider.reads == 0
+
+
+@pytest.mark.asyncio
+async def test_get_key_conflicts_with_other_entry_or_put_intent(tmp_path):
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    first = await app.call(actor, 'vibepublish_media_store', args(asset, 'first-put'))
+    await worker.run_once()
+    second = await app.call(actor, 'vibepublish_media_store', args(asset, 'second-put', text='Another source'))
+    await worker.run_once()
+    accepted = await app.call(actor, 'vibepublish_media_store', get_args(first['resource_id'], 'bound-get'))
+    assert accepted['operation_complete'] is False
+    for entry, key in ((second['resource_id'], 'bound-get'), (first['resource_id'], 'first-put')):
+        conflict = await app.call(actor, 'vibepublish_media_store', get_args(entry, key))
+        assert conflict['error']['code'] == 'idempotency_conflict'
+    with store.connection() as db:
+        assert db.execute("select count(*) from operations where action='read'").fetchone()[0] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('other_tenant', [False, True])
+async def test_get_key_does_not_share_entry_or_operation_across_owners(tmp_path, other_tenant):
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    first = await app.call(actor, 'vibepublish_media_store', args(asset))
+    await worker.run_once()
+    accepted = await app.call(actor, 'vibepublish_media_store', get_args(first['resource_id'], 'same-key'))
+    other = store.authenticate(store.create_principal('other-t' if other_tenant else 't', 'other-owner', owner=True))
+    store.add_connection(other, 'other-connection', 'telegram', account_type='fake')
+    store.bind(other, other.principal_id, 'vault', 'other-connection', '-1004379835477')
+    denied = await app.call(other, 'vibepublish_media_store', get_args(first['resource_id'], 'same-key'))
+    assert denied['error']['code'] == 'media_store_entry_not_found'
+    with store.tx() as db:
+        other_asset = insert_verified_image(store, db, other, verify_image(png(), 'image/png'))
+    second = await app.call(other, 'vibepublish_media_store', args(other_asset, 'other-put'))
+    await worker.run_once()
+    await worker.run_once()
+    own = await app.call(other, 'vibepublish_media_store', get_args(second['resource_id'], 'same-key'))
+    assert own['operation_id'] != accepted['operation_id']
+    with store.connection() as db:
+        assert db.execute("select count(*) from request_keys where key='same-key'").fetchone()[0] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('revocation', ['actor', 'binding'])
+async def test_get_key_does_not_reauthorize_old_receipt_after_epoch_change(tmp_path, revocation):
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    put = await app.call(actor, 'vibepublish_media_store', args(asset))
+    await worker.run_once()
+    command = get_args(put['resource_id'], 'epoch-get')
+    accepted = await app.call(actor, 'vibepublish_media_store', command)
+    await worker.run_once()
+    with store.tx() as db:
+        if revocation == 'actor':
+            db.execute('update principals set epoch=epoch+1 where id=?', (actor.principal_id,))
+            actor = replace(actor, epoch=actor.epoch + 1)
+        else:
+            db.execute('update bindings set epoch=epoch+1,alias=? where principal_id=?', ('renamed-vault', actor.principal_id))
+    replay = await app.call(actor, 'vibepublish_media_store', command)
+    assert replay['error']['code'] == 'access_revoked'
+    assert provider.reads == 1
+
+
+@pytest.mark.asyncio
+async def test_get_replay_preserves_expired_asset_receipt_without_redownload(tmp_path):
+    from social_operations.domain import DomainError
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    put = await app.call(actor, 'vibepublish_media_store', args(asset))
+    await worker.run_once()
+    command = get_args(put['resource_id'], 'cache-get')
+    accepted = await app.call(actor, 'vibepublish_media_store', command)
+    await worker.run_once()
+    done = store.receipt(actor, accepted['operation_id'])
+    asset_id = done['items'][0]['media'][0]['source']['id']
+    with store.connection() as db:
+        expiry = db.execute('select expires from media_store_assets where asset_id=?', (asset_id,)).fetchone()[0]
+    store.clock = lambda: expiry + 1
+    replay = await app.call(actor, 'vibepublish_media_store', command)
+    assert replay['operation_id'] == accepted['operation_id']
+    assert replay['items'] == done['items']
+    with pytest.raises(DomainError) as exc:
+        app.read_asset(actor, asset_id)
+    assert exc.value.code == 'asset_not_available'
+    assert provider.reads == 1
+    fresh = await app.call(actor, 'vibepublish_media_store', get_args(put['resource_id'], 'fresh-cache-get'))
+    assert fresh['operation_id'] != accepted['operation_id']
+    await worker.run_once()
+    fresh_done = store.receipt(actor, fresh['operation_id'])
+    assert fresh_done['state'] == 'verified'
+    fresh_id = fresh_done['items'][0]['media'][0]['source']['id']
+    assert fresh_id != asset_id
+    assert app.read_asset(actor, fresh_id)[0]
+    assert provider.reads == 2
+
+
+@pytest.mark.asyncio
+async def test_get_without_key_keeps_fresh_read_semantics(tmp_path):
+    store, actor, asset, provider, app, worker = runtime(tmp_path)
+    put = await app.call(actor, 'vibepublish_media_store', args(asset))
+    await worker.run_once()
+    first = await app.call(actor, 'vibepublish_media_store', get_args(put['resource_id']))
+    second = await app.call(actor, 'vibepublish_media_store', get_args(put['resource_id']))
+    assert first['operation_id'] != second['operation_id']
+    await worker.run_once()
+    await worker.run_once()
+    assert provider.reads == 2
