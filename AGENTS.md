@@ -92,3 +92,13 @@ Purpose: keep `vibepublish` work requirement-led, easy to route, and safe to ext
 - Never commit secrets, local env files, cache files, build output, or `artifacts/`.
 - Keep durable project changes reasonably synced to the remote once the repository has an origin.
 
+## Devserver local interservice policy (mandatory)
+
+Apply [canonical same-host service standard](https://github.com/onedayonemasterpiece/codex-devcoveer-mcp/blob/main/docs/operations/local-service-connections.md) and
+[devserver-interservice skill](https://github.com/onedayonemasterpiece/codex-devcoveer-mcp/blob/main/skills/devserver-interservice/SKILL.md) to internal producers and consumers
+(Street Story, RKB, etc.). Reuse loopback HTTP and dedicated service principals
+instead of user OAuth/browser/public HTTPS for work on one server. Never weaken
+owner-only gates without equivalent method + binding + exact-topic checks and
+negative tests. Preserve idempotent receipts, provider reconciliation and
+separate public MCP OAuth for people and external clients. A draft/code/CI pass
+does not mean archive delivery or deployment.
