@@ -16,7 +16,8 @@ from .domain import Actor, DomainError, canonical, new_id, timestamp
 from contracts.social_mcp_v1 import STAGE
 
 ALL_SCOPES = frozenset({"bootstrap", "publish", "publication.manage", "visual", "status",
-                        "engage", "destinations", "forward", "destination.profile", "media.store"})
+                        "engage", "destinations", "forward", "destination.profile"})
+SERVICE_SCOPES = ALL_SCOPES | {"media.store"}
 DEFAULT_BINDING_RIGHTS = ("publish", "edit", "reschedule", "cancel", "delete", "forward")
 ALL_BINDING_RIGHTS = frozenset((*DEFAULT_BINDING_RIGHTS, "reply", "react", "basic_group_schedule"))
 
@@ -128,7 +129,7 @@ class Store:
     def create_principal(self, tenant: str, principal: str, *, owner=False,
                          scopes=ALL_SCOPES, timezone="Europe/Kaliningrad") -> str:
         """Local owner CLI only. No model-facing account administration method."""
-        scopes = _validated_permissions(scopes, ALL_SCOPES, "invalid_principal_scopes")
+        scopes = _validated_permissions(scopes, SERVICE_SCOPES, "invalid_principal_scopes")
         ZoneInfo(timezone)
         token = secrets.token_urlsafe(32)
         with self.tx() as db:
