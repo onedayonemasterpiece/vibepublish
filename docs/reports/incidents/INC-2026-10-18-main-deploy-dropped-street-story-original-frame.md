@@ -67,4 +67,3 @@ Retained evidence: `/home/dev/artifacts/vibepublish/20261018T103745Z-street-stor
 - Done: lineage guard and the main-only rule in `docs/operations/production-runtime.md` and in the
   server-wide `/home/dev/AGENTS.md`.
 - Done: Street Story moved its production to `main` as well (it ran from a chain of unmerged branches).
-
