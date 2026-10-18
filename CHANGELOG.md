@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Authorize dedicated local non-owner media-store principals only for explicit
+  per-binding Telegram topic grants, with target-scoped put/list/get/search,
+  cached-document readback checks and revocation fencing. Preserve interactive
+  OAuth and public-publishing authority; add no new server or gateway.
+
+
 - Shorten the automatic MAX current-channel footer label to `Max`, preserving URLs, cross-network labels, order and separators. Telegram keeps `Подписаться`; existing provider posts and frozen queued plans are not rewritten.
 
 - Support explicit destination-scoped publication edits with immutable sibling evidence, desired/applied revision status and provider CAS; require exact revision and request key, reject uncertain selected targets, and preserve the all-target convergence path.
