@@ -78,7 +78,9 @@ def retry_failed(app, actor, args):
         actor = store.current(db, actor)
         key = args.get('request_key')
         publish_only = 'publication.manage' not in actor.scopes
-        if publish_only and ('publish' not in actor.scopes or not key):
+        media_only = (publish_only and 'media.store' in actor.scopes
+                      and 'publish' not in actor.scopes)
+        if publish_only and (not key or not media_only and 'publish' not in actor.scopes):
             raise DomainError('access_denied', next_action='contact_owner')
         replay = db.execute('SELECT * FROM request_keys WHERE tenant_id=? AND principal_id=? AND key=?',
                             (actor.tenant_id, actor.principal_id, key)).fetchone() if key else None
@@ -90,7 +92,9 @@ def retry_failed(app, actor, args):
         pub = db.execute('SELECT revision,kind FROM publications WHERE id=?', (op['publication_id'],)).fetchone()
         # Application guard, independent of the projected public schema. A publish
         # grant cannot recover a later edit/delete/forward or an adopted native item.
-        if publish_only and (op['action'] != 'publish' or pub['kind'] != 'publish'):
+        if publish_only and (
+                (media_only and (op['action'] != 'media_store' or pub['kind'] != 'media_store'))
+                or (not media_only and (op['action'] != 'publish' or pub['kind'] != 'publish'))):
             raise DomainError('access_denied', next_action='contact_owner')
         children = list(db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)))
         aliases = set(args['change']['destinations'])
@@ -100,7 +104,11 @@ def retry_failed(app, actor, args):
         if publish_only:
             for child in selected:
                 binding = store.binding(db, actor, binding_id=child['binding_id'])
-                if json.loads(child['plan'])['action'] != 'publish' or 'publish' not in json.loads(binding['rights']):
+                plan = json.loads(child['plan'])
+                if plan['action'] != 'publish' or 'publish' not in json.loads(binding['rights']):
+                    raise DomainError('access_denied', next_action='contact_owner')
+                if media_only and not store.service_media_topic_allowed(
+                        db, actor, binding, str(plan.get('topic_root_id') or '')):
                     raise DomainError('access_denied', next_action='contact_owner')
         # A matching key authorizes one admission only. Even another terminal
         # zero-dispatch failure is observation-only on replay, never a new send.
