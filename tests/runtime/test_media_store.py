@@ -378,6 +378,11 @@ async def test_scoped_machine_archive_put_get_and_denials(tmp_path):
                "-1004379835477", rights=("publish",))
     tools = {item["name"] for item in app.tools(service)}
     assert "vibepublish_media_store" in tools
+    assert "vibepublish_publication_update" in tools
+    update_tool = next(tool for tool in app.tools(service)
+                       if tool["name"] == "vibepublish_publication_update")
+    allowed_changes = update_tool["inputSchema"]["properties"]["change"]["oneOf"]
+    assert [part["properties"]["kind"]["const"] for part in allowed_changes] == ["retry_failed"]
     assert "vibepublish_publish" not in tools
     assert "vibepublish_visual" not in tools
     assert "vibepublish_destinations" not in tools
