@@ -163,8 +163,29 @@ class Application:
                 if not self.store.service_media_topic_allowed(
                         db, actor, binding, str(remote.get('reply_to_native_id') or '')):
                     raise DomainError('access_denied', next_action='contact_owner')
-                projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
-                get_ref = projected['ref']
+                if args.get('request_key'):
+                    # Stable logical identity, never the fresh item_ref generated
+                    # below. Admission and key binding commit in one transaction.
+                    if 'publish' not in json.loads(binding['rights']) and not actor.owner:
+                        raise DomainError('access_denied', next_action='contact_owner')
+                    op = self._replay(db, actor, 'media_store_get', command, args, implicit=False)
+                    if op:
+                        previous = self.store.private_operation(db, actor, op)
+                        saved = json.loads(previous['request'])
+                        if (saved['_binding_id'] != binding['id'] or
+                                saved['_binding_epoch'] != binding['epoch']):
+                            raise DomainError('access_revoked', next_action='reauthorize')
+                    else:
+                        projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
+                        intent = {'query': {'kind': 'item', 'item_ref': projected['ref']},
+                                  '_media_store_get': True, '_media_store_entry_ref': command['entry_ref'],
+                                  '_binding_id': binding['id'], '_binding_epoch': binding['epoch'],
+                                  '_native_item': remote['native_id'], '_namespace': remote['namespace']}
+                        op = self._new_operation(db, actor, 'read', intent)
+                        self._key(db, actor, args['request_key'], digest(['media_store_get', command]), op)
+                else:
+                    projected = self.project_item(db, actor, binding, remote, publication=command['entry_ref'])
+                    get_ref = projected['ref']
             elif command['kind'] == 'list':
                 try:
                     binding, topic = self._telegram_thread(db, actor, command['thread_ref'],alias=command.get('to'))

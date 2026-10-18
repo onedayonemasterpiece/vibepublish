@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Honor optional media-store `get` request keys with atomic, principal-scoped
+  durable read replay across lost responses and restarts. Reject intent conflicts
+  and revoked bindings; preserve original terminal/expired-asset receipts and
+  unchanged fresh-read behavior for clients without a key. No ACL grants, new
+  queue or provider retry policy changes.
+
 - Add a release-lineage guard for production deploys: the candidate must be in `origin/main` and contain every running release (INC-2026-10-18).
 - Authorize dedicated local non-owner media-store principals only for explicit
   per-binding Telegram topic grants, with target-scoped put/list/get/search,
