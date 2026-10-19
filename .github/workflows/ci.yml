@@ -9,7 +9,9 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Full regression alone took 13m on 2026-10-19; include clean dependency,
+    # browser and offline-wheel verification within a bounded job budget.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
