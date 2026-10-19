@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Allow 20 minutes for the complete verification CI job, including locked/offline dependency and browser setup. The 19 October full Python 3.13 suite took 13 minutes; Python 3.12 hit the previous 15-minute whole-job limit. Keep every check and all product timeouts unchanged.
+
 - Accept explicitly pinned legacy illustration origin-v1 document evidence for exact-entry reads, retaining current origin SHA checks and actual downloaded-byte validation. Keep historical metadata, source/display/provider hash roles, and native verification distinct; no grants are implied.
 
 - Add exact-entry read-only legacy media grants with immutable source and authority proofs, current grant fences through replay/worker/cache, and actual-byte SHA validation. List/search and publication ownership remain unchanged; schema 11 requires a separately coordinated server+worker release and compatible fail-closed rollback.

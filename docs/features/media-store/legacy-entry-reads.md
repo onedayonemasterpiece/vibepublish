@@ -1,9 +1,7 @@
 # Exact legacy-entry reads
 
 Requirements: `Fixed` for the owner's four canonical Regional Knowledge archive
-originals and separately enumerated thirty historical illustration entries. Implementation: `Not confirmed by user`. The legacy ownership mismatch
-is `Not done` until the reviewed release and exact live byte readbacks complete.
-Source/test preparation is not runtime acceptance.
+originals and separately enumerated thirty historical illustration entries. Owner acceptance status: `Not confirmed by user`. Implementation and scoped live byte verification are complete on release `d1f880b24788f609398a660ba53dd8c4731b7aec` (#84), API and worker, schema 11. The independent 19 October check reconstructed all 34 current exact grants, downloaded three active legacy images through RKB MCP, and downloaded all four legacy PDF originals through RKB's dedicated loopback service client; each actual SHA matched its pinned proof. See the [RKB acceptance report](https://github.com/onedayonemasterpiece/regional-knowledge-base/blob/13c5354/docs/reports/illustration-archive-live-acceptance-20261019.md). This status does not authorize additional entries or call source/test preparation runtime acceptance.
 
 ## Boundary
 
@@ -43,7 +41,7 @@ The existing one-hour cache remains temporary. No document is republished.
 
 ## Historical illustration origin v1
 
-The previously missing compatibility path is `Not done` until live acceptance.
+The legacy-v1 compatibility path is deployed and byte-verified for the approved active archive sample. It is no longer an unimplemented ownership-mismatch blocker.
 It is explicit, not a chain of fallback hash guesses: origin has exactly
 `system=regional_knowledge` and `ref=knowledge://illustrations/<UUID>`, with no
 SHA field; the source is in native topic 4 with one document attachment and one
@@ -67,6 +65,8 @@ entry pending; do not impersonate the owner or bypass the existing ACL.
 
 ## Migration and release gate
 
+The schema-11 rollout and exact 30-image / 4-original grant installation have already completed on #84. Do not repeat migration or grant application merely because an older audit describes them as pending. The following are safeguards for any future deployment or recovery.
+
 This change is not compatible with an API-only rollout. Old workers do not know
 the grant guard and old Store initialization rejects schema 11. Do not initialize
 the new Store on the live ledger, admit shared reads or apply grants until:
@@ -88,8 +88,8 @@ the new Store on the live ledger, admit shared reads or apply grants until:
    original operation, then verify the actual asset SHA. Verify denied foreign
    entry/topic/tenant/principal and revoked-grant cases with synthetic fixtures.
 
-Runtime work remains coordinator-gated by topic-4 acceptance, disk admission and
-an independently verified worker window; green source CI is not runtime approval.
+Future runtime work remains coordinator-gated by topic-4 acceptance, disk admission and
+an independently verified worker window; green source CI is not runtime approval. Draft #87 is source-only recovery material, not an instruction to merge, downgrade schema or switch the live worker.
 
 ## Recovery without schema downgrade
 
@@ -107,6 +107,8 @@ binary on the migrated ledger, drop grant/data tables, lower user_version, delet
 provider messages, or relaunch a read whose outcome is uncertain.
 
 ## Verification
+
+The complete `verify` CI job has a bounded 20-minute budget. On 19 October the Python 3.13 full suite passed 2,178 tests and 358 subtests in 13m01s, while Python 3.12 reached the former 15-minute whole-job limit after successful prerequisite checks. The budget includes clean dependencies, offline wheel verification and browser setup; no test, product timeout or other CI job limit is removed.
 
 Synthetic coverage includes exact proof fields, current authority changes,
 immutable revisions, foreign tenant/principal, unchanged list/search, generic
