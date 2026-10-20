@@ -1,5 +1,11 @@
 # Changelog
 
+### Telegram-first media persistence: consumer preservation contract — 2026-10-20
+
+- Record the owner's fixed requirement to remove permanent binary-image storage from the VibePublish SQLite ledger only through a verified Telegram-backed migration, not by deleting existing BLOBs. **Implementation Not done.**
+- Preserve the existing MCP preview WebP envelope (768 px / 384 KiB), stable authorized asset URIs and HTTP bytes/SHA-256, plus Wonderful Lections and Regional Knowledge Base exact-source consumers, visual/emoji/draft references, metadata-only media search, and the shared rolling 20-media/60-second upload budget.
+- Define dual-read, no-loss queued staging, provider readback and integration/live canary gates before enabling migration or garbage collection. No runtime behavior is modified by this documentation change.
+
 ## [Unreleased]
 
 - Allow 20 minutes for the complete verification CI job, including locked/offline dependency and browser setup. The 19 October full Python 3.13 suite took 13 minutes; Python 3.12 hit the previous 15-minute whole-job limit. Keep every check and all product timeouts unchanged.
