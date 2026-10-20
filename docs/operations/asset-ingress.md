@@ -69,6 +69,12 @@ receive buffers beyond the per-request body limit and upstream connection limits
 On DevCoveer the dedicated VibePublish virtual host allows20MiB; existing hosts
 retain their limits. Uploads above1MiB have been read back through public HTTPS.
 
+## Persistence redesign compatibility (owner decision 2026-10-20)
+
+**Fixed requirement; implementation Not done.** The original/derivative BLOB writes described above are the current legacy behavior, not the target persistent storage model. The Telegram-first replacement MUST preserve idempotent ingress receipts, resource IDs, byte-exact authenticated GET /v1/assets/{id}, and the bounded model-facing vibepublish_asset_preview WebP (768 px / 384 KiB), including its preview_data_url fallback for clients without MCP ImageContent. Preserve resumable workspace import_begin/import_chunk/import_finish and the existing temporary admission limits. Existing Wonderful Lections and Regional Knowledge Base consumers must continue to work without changing their resource URIs, readback hashes or authorization. Upload admission must remain durable until provider archival is verified; a preview must never be mistaken for the exact source.
+
+Migration safety, all supported image/emoji/visual/queued asset lifecycles, the provider upload budget and live release gates are specified in the canonical [media-store consumer compatibility contract](../features/media-store/README.md#telegram-first-persistence-and-consumer-compatibility--2026-10-20). Do not delete current legacy BLOBs as an ad-hoc disk cleanup.
+
 ## Chat attachment import through MCP
 
 Status: **Not confirmed by user**. `vibepublish_visual` also accepts
