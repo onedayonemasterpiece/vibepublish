@@ -563,6 +563,16 @@ access, or replace the immutable source. The server returns neither provider URL
 nor credentials. ChatGPT delivery requires an exact deployed connector refresh and
 a real model-visible image smoke; local SDK success alone is not that acceptance.
 
+The media-persistence migration must not change this preview behavior, including the preview_data_url fallback, or the existing
+exact-byte asset resource/HTTP behavior for Wonderful Lections, Regional Knowledge
+Base and other consumers. The owner's fixed compatibility and protected-delete
+requirements are canonical in
+[Telegram-first media persistence](../media-store/README.md#telegram-first-persistence-and-consumer-compatibility--2026-10-20).
+The compatibility migration is **Not done**; this clause does not authorize
+deleting current SQLite BLOBs.
+
+
+
 
 ## 1.5 runtime delta: Telegram palettes and semantic entities
 
