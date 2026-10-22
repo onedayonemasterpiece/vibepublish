@@ -108,7 +108,7 @@ provider messages, or relaunch a read whose outcome is uncertain.
 
 ## Verification
 
-The complete `verify` CI job has a bounded 20-minute budget. On 19 October the Python 3.13 full suite passed 2,178 tests and 358 subtests in 13m01s, while Python 3.12 reached the former 15-minute whole-job limit after successful prerequisite checks. The budget includes clean dependencies, offline wheel verification and browser setup; no test, product timeout or other CI job limit is removed.
+The complete `verify` CI job has a bounded 60-minute budget as of 22 October 2026. A 20-minute run was cancelled on both Python versions due to unusually slow Ubuntu package mirror downloads; 3.12 was still executing the full test suite (16% complete after 5 minutes of tests), and 3.13 was still installing browser packages when the budget expired. On 19 October the Python 3.13 full suite passed 2,178 tests and 358 subtests in 13m01s, while Python 3.12 reached the former 15-minute whole-job limit after successful prerequisite checks. The new budget retains every clean dependency, offline wheel, browser and full test check; no product timeout or test is removed.
 
 Synthetic coverage includes exact proof fields, current authority changes,
 immutable revisions, foreign tenant/principal, unchanged list/search, generic
