@@ -40,7 +40,7 @@ def _launch_failure_category(exc: Exception) -> str:
     if ("devtoolsactiveport" in message or "target page, context or browser has been closed" in message
             or "browser has been closed" in message):
         return "browser_exited_before_connect"
-    if "timed out" in message or "timeout" in type(exc).__name__.lower():
+    if "timed out" in message or "timeout" in message or "timeout" in type(exc).__name__.lower():
         return "launch_timeout"
     return "unclassified"
 
