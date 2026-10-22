@@ -9,9 +9,12 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    # Full regression alone took 13m on 2026-10-19; include clean dependency,
-    # browser and offline-wheel verification within a bounded job budget.
-    timeout-minutes: 20
+    # GitHub Ubuntu mirror stalled on 2026-10-22: after >15m of install,
+    # Python 3.12 still had its mandatory full test suite running at the old
+    # 20m limit; 3.13 was still downloading system packages. Keep every
+    # dependency/offline/browser and product test, only raise the bounded CI
+    # wall-clock budget so verified results can be obtained.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
