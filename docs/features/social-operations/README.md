@@ -2,6 +2,20 @@
 
 **Cross-channel navigation:** [fixed owner footer routes and safe semantic compilation](network-footers.md); status: Not confirmed by user after rollout.
 
+## MAX existing-browser startup incident — 2026-10-22
+
+Status: **Not done** until the same production MAX profile starts successfully
+and provider-backed publication/readback is confirmed. The existing MAX lane
+repeatedly reports `max_existing_browser_unavailable` before authentication;
+the broad Playwright launch handler previously lost the underlying exception.
+Sanitized diagnostics now retain only the exception class, a fixed launch failure
+category and an opaque short fingerprint. Browser stderr, command line, account
+details, profile path and credentials are never logged. Diagnostics neither
+change Chromium launch arguments nor inspect/clear locks, reset the profile,
+create credentials, bypass authorization or retry uncertain publication effects.
+A passing source test or restarted service is not proof of authenticated MAX
+availability. Incident: `inc_78973c2315b3009a719989c7`.
+
 ## MAX native scheduling preparation (2026-10-10)
 
 Status: **Not confirmed by user**. The reported scheduled-publish/reschedule failures occurred before durable dispatch; live final native write/readback acceptance is still required. Preparation must observe the actual menu after a right click. One additional right click is allowed only while the same connected control, route, text and media remain unchanged and no menu exists; menu selection and final Save/Send are never retried. Named links, photo hashes, native identity and calendar guards remain mandatory. Record safe action/phase/exception-class diagnostics and preserve a primary browser failure if cleanup also fails. Bind authored caption/composer semantics and the native scheduled clock, excluding unrelated row UI metadata. Qualify a pinned browser/Playwright 1.63 pair separately; version alignment alone did not eliminate the reproduced native browser crash. Do not claim that a successful preparation proves a provider mutation. [Incident and evidence](../../reports/incidents/INC-2026-10-10-max-native-preparation.md).

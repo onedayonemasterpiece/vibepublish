@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Preserve a bounded diagnostic category, exception type and opaque fingerprint when the existing MAX Chromium launch fails before login; never log raw Playwright call logs, profile paths or secrets. Keep the original session, lock protocols, publication idempotency and provider permissions untouched. Live recovery remains a separate acceptance gate.
+
+
 - Allow 20 minutes for the complete verification CI job, including locked/offline dependency and browser setup. The 19 October full Python 3.13 suite took 13 minutes; Python 3.12 hit the previous 15-minute whole-job limit. Keep every check and all product timeouts unchanged.
 
 - Accept explicitly pinned legacy illustration origin-v1 document evidence for exact-entry reads, retaining current origin SHA checks and actual downloaded-byte validation. Keep historical metadata, source/display/provider hash roles, and native verification distinct; no grants are implied.
