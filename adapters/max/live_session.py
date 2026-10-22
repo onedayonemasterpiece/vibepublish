@@ -7,6 +7,44 @@ running browser. Only a well-formed bridge lock with a dead recorded PID is recl
 """
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import hashlib
+import logging
+
+_LOG = logging.getLogger(__name__)
+
+
+def _launch_failure_category(exc: Exception) -> str:
+    """Bounded Chromium launch diagnostic; never expose raw Playwright call logs.
+
+    Playwright exceptions can include profile paths, full argv, page URLs or
+    browser stderr, so only fixed diagnostic categories may reach journald.
+    """
+    message = str(exc).lower()
+    if "no space left on device" in message:
+        return "storage_full"
+    if "permission denied" in message or "eacces" in message:
+        return "permission_denied"
+    if ("executable doesn't exist" in message
+            or "executable not found" in message
+            or "no such file or directory" in message):
+        return "missing_executable_or_dependency"
+    if ("singletonlock" in message or "processsingleton" in message
+            or "profile appears to be in use" in message
+            or "user data directory is already in use" in message):
+        return "chromium_profile_owned"
+    if ("missing dependencies" in message or "error while loading shared libraries" in message
+            or "cannot open shared object file" in message):
+        return "missing_system_dependencies"
+    if ("sandbox" in message or "namespace" in message and "failed" in message):
+        return "sandbox_failure"
+    if ("devtoolsactiveport" in message or "target page, context or browser has been closed" in message
+            or "browser has been closed" in message):
+        return "browser_exited_before_connect"
+    if "timed out" in message or "timeout" in type(exc).__name__.lower():
+        return "launch_timeout"
+    return "unclassified"
+
+
 import json
 import os
 from pathlib import Path
@@ -100,7 +138,14 @@ async def existing_session(*, profile, executable, allowlist, explicit_live=Fals
                 try:
                     context = await pw.chromium.launch_persistent_context(str(profile),
                         executable_path=str(executable), headless=True, locale='ru-RU', timezone_id='Europe/Moscow')
-                except Exception:
+                except Exception as exc:
+                    # Classify only: raw Chromium/Playwright exception can contain
+                    # private profile paths, account data and browser command lines.
+                    _LOG.warning(
+                        "MAX chromium launch rejected: category=%s exception_type=%s fingerprint=%s",
+                        _launch_failure_category(exc), type(exc).__name__,
+                        hashlib.sha256(str(exc).encode('utf-8', 'replace')).hexdigest()[:12],
+                    )
                     raise MaxBlocked('existing_browser_unavailable') from None
                 try:
                     # Only pages created by this session are navigated. Never
