@@ -5,7 +5,8 @@
 - Simplify Worker W1 publishing reliability (D2–D6): remove connection-wide
   outcome quarantine, redundant VK known-effect proofs and separate VK/media-store
   retry schedulers. Keep one fixed-budget retry policy; isolate Telegram, VK and
-  MAX preflight faults; bound lane wait and provider observation; recognize
+  MAX preflight faults and start each prepared delivery without an all-target wait;
+  bound lane wait and provider observation; recognize
   checkpointed native IDs without manual review or duplicate sends; trust only
   adapter-supplied native URLs and use an explicit transient-code list with fixed
   backoff rather than parsing historical event bodies. Add fake transport failure-injection tests. No live acceptance or deploy in this change.

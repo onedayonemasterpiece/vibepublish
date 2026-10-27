@@ -833,7 +833,7 @@ class Application:
         change = args['change']
         kind = change['kind']
         if kind == 'retry_failed' or (previous['state'] == 'outcome_unknown' and not change.get('destinations')):
-            raise DomainError('retry_not_proven_safe', next_action='review_outcome')
+            raise DomainError('retry_not_proven_safe')
         if kind == 'approve':
             token = db.execute('SELECT * FROM decisions WHERE publication_id=? AND revision=? AND token_hash=? AND consumed_by IS NULL',
                                (pub['id'], pub['revision'], self.store.token_hash(change['token']))).fetchone()
@@ -848,7 +848,7 @@ class Application:
             old = json.loads(child['plan'])
             observed = json.loads(child['checkpoint']).get('remote')
             if kind != 'approve' and not observed:
-                raise DomainError('remote_item_not_bound', next_action='review_outcome')
+                raise DomainError('remote_item_not_bound')
             if kind == 'cancel' and observed['namespace'] != 'scheduled':
                 raise DomainError('already_published', 'Cancel applies only to a native queued item; deletion needs an explicit command')
             if kind in ('edit', 'reschedule') and old['action'] == 'forward':

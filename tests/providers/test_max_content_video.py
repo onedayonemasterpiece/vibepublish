@@ -179,14 +179,16 @@ async def test_max_rich_video_plan_lifecycle_roles_and_adoption(tmp_path,video_b
 
 
 @pytest.mark.asyncio
-async def test_missing_max_entities_never_verifies(tmp_path):
+async def test_missing_max_entities_does_not_override_native_id_success(tmp_path):
     store,actor,app=runtime(tmp_path)
     provider=SemanticMax();provider.drop_entities=True
     accepted=await app.call(actor,'vibepublish_publish',{'to':['target'],'content':RICH})
     await Worker(store,{'connection':provider}).run_once()
     result=store.receipt(actor,accepted['operation_id'])
-    assert result['state']=='outcome_unknown'
-    assert result['deliveries'][0]['missing_checks']==['entities_readback_mismatch']
+    # The network-returned post ID is authoritative even if nonessential
+    # entity readback differs; the publisher must not create a second post.
+    assert result['state']=='verified', result
+    assert result['deliveries'][0]['missing_checks']==[]
 
 
 @pytest.mark.asyncio
@@ -317,7 +319,15 @@ async def test_max_download_evidence_survives_adoption_and_blocks_changed_media(
     provider.changed=changed
     await worker.run_once()
     status=store.receipt(actor,edit['operation_id'])
-    assert status['state']==('outcome_unknown' if changed else 'verified'), status
+    assert status['state']==('running' if changed else 'verified'), status
+    if changed:
+        # Edit evidence is not a new publish ID; continue observation only,
+        # then automatically refuse on the original fixed horizon.
+        now=store.clock()
+        store.clock=lambda: now+901
+        await worker.run_once()
+        ended=store.receipt(actor,edit['operation_id'])
+        assert ended['state']=='blocked' and ended['error']['code']=='publication_unconfirmed', ended
     if changed:
         assert status['deliveries'][0]['missing_checks']==['download_media_lifecycle_changed']
     with store.connection() as db:

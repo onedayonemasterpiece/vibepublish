@@ -22,7 +22,7 @@ TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'ca
 # these codes to this one worker retry scheduler. All other errors are terminal.
 TRANSIENT_ERRORS = frozenset({
     'provider_preflight_failed', 'provider_preflight_timeout',
-    'provider_command_failed', 'provider_read_deadline', 'receipt_lost',
+    'provider_command_failed', 'provider_read_deadline', 'provider_reconcile_pending', 'receipt_lost',
     'telegram_rpc_failed', 'telegram_cooldown', 'telegram_queue_response_invalid',
     'telegram_history_response_invalid', 'telegram_thread_response_invalid',
     'telegram_response_identity_missing',
@@ -33,7 +33,7 @@ TRANSIENT_ERRORS = frozenset({
     'vk_story_upload_response_invalid', 'vk_video_upload_response_invalid',
     'vk_photo_read_failed', 'vk_upload_server_invalid', 'vk_queue_read_incomplete',
     'vk_readback_missing', 'vk_photo_binding_unavailable',
-    'connection_review_limit', 'incomplete_readback', 'exact_identity_not_observed',
+    'incomplete_readback', 'media_readback_mismatch', 'exact_identity_not_observed',
     'max_outcome_unknown', 'max_recovery_observation_unavailable',
 })
 
@@ -259,53 +259,52 @@ class Worker:
             with self.store.connection() as db:
                 children = [dict(c) for c in db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],))]
             pending = [c for c in children if c['state'] not in TERMINAL]
-            prepared = {}
             async def preflight(child):
                 r = self.request(op, child, actor)
                 if json.loads(child['plan']).get('admission_error'):
                     raise DomainError(json.loads(child['plan'])['admission_error'])
                 if child['dispatched']:
-                    return
+                    return None
                 remaining = self.deadline(op, child) - self.store.clock()
                 if remaining <= 0:
                     raise DomainError('command_expired')
                 hooks = self.hooks(op, child)
                 async with asyncio.timeout(remaining):
                     async with self.lane(r.connection_id):
-                        prepared[child['id']] = await self.adapter(child['provider'], r.connection_id).prepare(r, hooks)
-                if prepared[child['id']].capability.status != 'supported':
+                        prepared = await self.adapter(child['provider'], r.connection_id).prepare(r, hooks)
+                if prepared.capability.status != 'supported':
                     raise DomainError('capability_unsupported', next_action='contact_owner')
-                if prepared[child['id']].request != r:
+                if prepared.request != r:
                     raise DomainError('adapter_changed_request')
-            async def observed_preflight(child):
-                with diagnostic_scope(self.diagnostic_observer(op, child)):
-                    with provider_call(child['provider'], 'preflight'):
-                        return await preflight(child)
-            admission = next((json.loads(c['plan']).get('admission_error') for c in pending
-                              if json.loads(c['plan']).get('admission_error')), None)
-            if admission:
-                self.fail_operation(op, DomainError(admission))
-                return True
-            outcomes = await asyncio.gather(*(observed_preflight(c) for c in pending), return_exceptions=True)
-            # Frozen deterministic admission precedes these independent provider checks.
-            if pending and all(json.loads(c['plan'])['mode'] == 'preview' for c in pending) and not any(
-                    isinstance(e, BaseException) for e in outcomes):
-                self.preview(op, actor, pending)
-                return True
-            for child, outcome in zip(pending, outcomes):
-                if isinstance(outcome, BaseException):
-                    if isinstance(outcome, asyncio.CancelledError):
-                        raise outcome
-                    error = (outcome if isinstance(outcome, DomainError) else
-                             DomainError('provider_preflight_timeout' if isinstance(outcome, TimeoutError)
+                return prepared
+            async def prepare_and_run(child, *, preview=False):
+                try:
+                    with diagnostic_scope(self.diagnostic_observer(op, child)):
+                        with provider_call(child['provider'], 'preflight'):
+                            prepared = await preflight(child)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    error = (exc if isinstance(exc, DomainError) else
+                             DomainError('provider_preflight_timeout' if isinstance(exc, TimeoutError)
                                          else 'provider_preflight_failed'))
                     if self.store.clock() >= self.deadline(op, child):
                         self.expire_child(op, child, actor)
                     else:
                         self.fail(op, child, error)
-            await asyncio.gather(*(self.run_child(op, c, actor, prepared.get(c['id']))
-                                   for c, outcome in zip(pending, outcomes)
-                                   if not isinstance(outcome, BaseException)))
+                    return False
+                if not preview:
+                    await self.run_child(op, child, actor, prepared)
+                return True
+            # Order-wide validation is frozen by accept(); plan errors are per-target.
+            preview = bool(pending) and all(json.loads(c['plan'])['mode'] == 'preview' for c in pending)
+            outcomes = await asyncio.gather(*(prepare_and_run(c, preview=preview) for c in pending))
+            if preview:
+                if all(outcomes):
+                    self.preview(op, actor, pending)
+                else:
+                    self.fail_operation(op, DomainError('provider_preflight_failed'))
+                return True
             await self.finalize_pending(op, actor)
             self.aggregate(op)
             self.schedule_retry(op)
@@ -327,7 +326,8 @@ class Worker:
         with self.store.connection() as db:
             child = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
         plan = json.loads(child['plan'])
-        ident = self.saved_native_id(child) if child['dispatched'] and plan['action'] == 'publish' else None
+        ident = (self.saved_native_id(child) if child['dispatched'] and plan['action'] == 'publish'
+                 and plan.get('workload') != 'media_store' else None)
         if ident:
             try:
                 with self.store.connection() as db:
@@ -360,7 +360,7 @@ class Worker:
                         result['url'] = url
                     db.execute('UPDATE attempts SET result=? WHERE id=?', (canonical(result), child['id']))
                     self.store.event(db, op['id'], 'finished', 'completed',
-                                     'Provider native ID '+ident+' accepted; readback unavailable within budget', child['alias'])
+                                     'Provider native ID '+ident+' accepted; additional readback unavailable', child['alias'])
                 return
             except DomainError as error:
                 self.fail(op, child, error)
@@ -474,10 +474,19 @@ class Worker:
             raise
         except Exception as exc:
             try:
-                if self.store.clock() >= self.deadline(op, child):
+                error = exc if isinstance(exc, DomainError) else DomainError('provider_command_failed')
+                recorded = None
+                if isinstance(exc, OutcomeUnknown) or not self.transient(error.code):
+                    with self.store.connection() as db:
+                        recorded = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
+                known = (recorded and recorded['dispatched'] and self.saved_native_id(recorded)
+                         and json.loads(recorded['plan']).get('workload') != 'media_store')
+                if self.store.clock() >= self.deadline(op, child) or known:
                     self.expire_child(op, child, actor)
+                elif isinstance(exc, OutcomeUnknown) and recorded['dispatched']:
+                    self.fail(op, child, error if self.transient(error.code) else DomainError('provider_reconcile_pending'))
                 else:
-                    self.fail(op, child, exc if isinstance(exc, DomainError) else DomainError('provider_command_failed'))
+                    self.fail(op, child, error)
             except DomainError as stale:
                 if stale.code != 'stale_worker':
                     raise
@@ -583,15 +592,15 @@ class Worker:
             self.store.event(db,op['id'],'finished','completed','Original intent cancelled: trusted input guard proves no effect; no item fabricated',child['alias'])
 
     def finish_child(self, op, child, actor, observation, *, needs_finalize=False):
-        if (observation.items and json.loads(child['plan'])['action'] == 'publish'
-                and observation.items[0].native_id):
+        plan = json.loads(child['plan'])
+        if (observation.items and plan['action'] == 'publish'
+                and plan.get('workload') != 'media_store' and observation.items[0].native_id):
             # The provider has identified the post; no media-review quarantine.
             observation = replace(observation, missing_checks=())
         if getattr(observation,'no_effect',None) is not None:
             return self.finish_no_effect(op,child,actor,observation,needs_finalize=needs_finalize)
         if not observation.items or observation.missing_checks:
             raise OutcomeUnknown('incomplete_readback')
-        plan = json.loads(child['plan'])
         # The first core slice has single logical remote items. Never silently drop album members.
         if len(observation.items) != 1:
             raise OutcomeUnknown('multi_item_mapping_not_enabled')
@@ -637,7 +646,7 @@ class Worker:
                 raise OutcomeUnknown('lifecycle_identity_changed')
         elif observation.replacement is not None:
             raise OutcomeUnknown('unexpected_native_replacement')
-        if plan['action'] in ('publish', 'edit', 'reschedule', 'reply') and action != 'publish':
+        if plan['action'] in ('publish', 'edit', 'reschedule', 'reply') and (action != 'publish' or plan.get('workload') == 'media_store'):
             if remote.text != json.loads(plan['content_json'])['text']:
                 raise OutcomeUnknown('content_readback_mismatch')
             if plan['provider'] == 'max' and plan['account_type'] == 'max_web':

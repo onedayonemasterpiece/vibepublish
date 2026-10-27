@@ -39,6 +39,14 @@ class NativeIdReadbackDown(FakeProvider):
         return Observation('provider_scheduled' if request.scheduled_at else 'published', (item,))
 
 
+class NativeIdPermanentReadbackMismatch(NativeIdReadbackDown):
+    async def execute(self, prepared, hooks):
+        try:
+            await super().execute(prepared, hooks)
+        except DomainError:
+            raise DomainError('entities_readback_mismatch') from None
+
+
 class NoNativeId(FakeProvider):
     """The effect boundary was entered but no native identifier survived."""
     async def execute(self, prepared, hooks):
@@ -56,6 +64,32 @@ class TransientPrepare(FakeProvider):
     async def prepare(self, request, hooks):
         self.record('prepare', request.attempt_id)
         raise DomainError('provider_preflight_failed')
+
+
+class StalledPrepare(FakeProvider):
+    """A provider preflight can be slow while another provider is ready."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def prepare(self, request, hooks):
+        self.record('prepare', request.attempt_id)
+        self.entered.set()
+        await self.release.wait()
+        raise DomainError('provider_preflight_failed')
+
+
+class SentTelegram(FakeProvider):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sent = asyncio.Event()
+
+    async def execute(self, prepared, hooks):
+        try:
+            return await super().execute(prepared, hooks)
+        finally:
+            self.sent.set()
 
 
 class TransientExecute(FakeProvider):
@@ -148,6 +182,18 @@ class WorkerReliabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.tg.count('effect'), 1)
         self.assertFalse(await self.worker().run_once())
 
+    async def test_known_id_permanent_readback_mismatch_is_success_not_refusal(self):
+        vk = NativeIdPermanentReadbackMismatch(self.root / 'vk-mismatch.sqlite', 'vk', clock=lambda: self.now)
+        accepted = await self.publish(to=('vk',))
+        await self.worker(vk=vk).run_once()
+        result = self.receipt(accepted)
+        self.assertTrue(result['operation_complete'], result)
+        self.assertEqual(result['state'], 'verified', result)
+        self.assertEqual(result['deliveries'][0]['url'], 'https://vk.ru/wall-123_456')
+        self.assertEqual(vk.count('effect'), 1)
+        self.assertEqual(vk.count('execute'), 1)
+        self.assertEqual(vk.count('reconcile'), 0)
+
     async def test_max_checkpoint_without_url_does_not_invent_permalink(self):
         provider = NativeIdReadbackDown(self.root / 'max-read-down.sqlite', 'max', clock=lambda: self.now)
         accepted = await self.publish(to=('max',))
@@ -195,6 +241,10 @@ class WorkerReliabilityTests(unittest.IsolatedAsyncioTestCase):
         vk = NoNativeId(self.root / 'no-id.sqlite', 'vk', clock=lambda: self.now)
         accepted = await self.publish(to=('vk',))
         await self.worker(vk=vk).run_once()
+        self.now += 5.001
+        await self.worker(vk=vk).run_once()
+        self.assertEqual(vk.count('reconcile'), 1)
+        self.assertEqual(vk.count('execute'), 1)
         self.now += 901
         await self.worker(vk=vk).run_once()
         result = self.receipt(accepted)
@@ -202,7 +252,7 @@ class WorkerReliabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['state'], 'blocked', result)
         self.assertEqual(result['deliveries'][0]['missing_checks'], ['publication_unconfirmed'])
         self.assertEqual(vk.count('execute'), 1)
-        self.assertEqual(vk.count('reconcile'), 0)
+        self.assertEqual(vk.count('reconcile'), 1)
         self.assertNotEqual(result['next_action'], 'review_outcome')
 
     async def test_transient_before_dispatch_exhausts_fixed_horizon(self):
@@ -241,6 +291,23 @@ class WorkerReliabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(final['state'], 'partial', final)
         self.assertEqual(self.tg.count('effect'), 1)
         self.assertEqual(vk.count('effect'), 1)
+
+    async def test_stalled_max_preflight_does_not_hold_telegram_delivery(self):
+        self.tg = SentTelegram(self.root / 'tg-independent.sqlite', 'telegram', clock=lambda: self.now)
+        mx = StalledPrepare(self.root / 'max-stalled.sqlite', 'max', clock=lambda: self.now)
+        accepted = await self.publish(to=('telegram', 'max'))
+        task = asyncio.create_task(self.worker(mx=mx).run_once())
+        try:
+            await asyncio.wait_for(mx.entered.wait(), 1)
+            # Telegram must dispatch while MAX's prepare remains blocked.
+            await asyncio.wait_for(self.tg.sent.wait(), 1)
+            self.assertFalse(task.done())
+            self.assertEqual(self.tg.count('effect'), 1)
+        finally:
+            mx.release.set()
+            await asyncio.wait_for(task, 2)
+        self.assertEqual(mx.count('effect'), 0)
+        self.assertFalse(self.receipt(accepted)['operation_complete'])
 
     async def test_permanent_auth_failure_does_not_retry(self):
         vk = NeedsAuthPrepare(self.root / 'auth.sqlite', 'vk', clock=lambda: self.now)

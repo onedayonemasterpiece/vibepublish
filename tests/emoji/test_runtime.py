@@ -183,9 +183,8 @@ async def test_E09_edit_and_reschedule_preserve_exact_native_entities(runtime):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('bad,expected',[('dropped','verified'),('wrong_id','verified'),
-                                         ('wrong_offset','outcome_unknown'),('wrong_link','verified')])
-async def test_E10_provider_normalized_native_entities_do_not_quarantine_completed_send(runtime,bad,expected):
+@pytest.mark.parametrize('bad',['dropped','wrong_id','wrong_offset','wrong_link'])
+async def test_E10_provider_normalized_native_entities_do_not_quarantine_completed_send(runtime,bad):
     c=await register(runtime); await select(runtime,c)
     def corrupt(_):
         m=next(iter(runtime[4].messages.values()))
@@ -195,7 +194,7 @@ async def test_E10_provider_normalized_native_entities_do_not_quarantine_complet
         else: next(e for e in m.entities if hasattr(e,'document_id')).offset+=1
     runtime[4].after_mutation=corrupt
     r=await call(runtime,'publish',{'to':['telegram'],'content':rich()})
-    await runtime[3].run_once(); assert done(runtime,r)['state']==expected
+    await runtime[3].run_once(); assert done(runtime,r)['state']=='verified'
     assert runtime[4].effects==1
 
 
@@ -223,7 +222,9 @@ async def test_E10_restart_reconciles_without_second_send(runtime,failure):
     with runtime[0].tx() as db:
         db.execute('UPDATE operations SET lease_until=? WHERE id=?',(NOW-1,op['id']))
     await Worker(runtime[0],{'telegram':adapter}).run_once()
-    assert done(runtime,r)['state']==('outcome_unknown' if failure=='no_response' else 'verified'),done(runtime,r)
+    # A missing response without a native ID stays in automatic reconciliation
+    # until the fixed horizon; a checkpointed native ID completes normally.
+    assert done(runtime,r)['state']==('running' if failure=='no_response' else 'verified'),done(runtime,r)
     assert runtime[4].effects==1
 
 
