@@ -378,7 +378,7 @@ class Application:
     def bootstrap(self, actor, args):
         skill = SKILL.read_text()
         if args.get('section') == 'emoji':
-            skill = skill.split('## Start and choose a task', 1)[0] + skill[skill.index('## Telegram custom emoji:'):]
+            skill = skill.split('## Обычная публикация — короткий рецепт', 1)[0] + skill[skill.index('## Telegram custom emoji:'):]
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             scope = str(actor.routing_revision)

@@ -489,9 +489,9 @@ class IngressApplication(Application):
             actor = self.store.current(db, actor)
             existing = db.execute(
                 "SELECT id FROM assets WHERE tenant_id=? AND principal_id=? "
-                "AND sha256=? AND source_sha256=? AND mime='image/png' "
+                "AND sha256=? AND source_sha256=? AND mime=? "
                 "ORDER BY rowid DESC LIMIT 1",
-                (actor.tenant_id, actor.principal_id, clean_sha, source_sha),
+                (actor.tenant_id, actor.principal_id, clean_sha, source_sha, verified.mime),
             ).fetchone()
             if existing:
                 return existing["id"]

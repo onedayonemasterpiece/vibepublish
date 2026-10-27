@@ -116,7 +116,7 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': LostReceipt(sys.argv[2], 'te
                     run = await asyncio.to_thread(subprocess.run, [sys.executable, '-c', script, str(self.store.path), str(self.root/'remote.sqlite')], capture_output=True, timeout=15)
                     self.assertEqual(run.returncode, 0, run.stderr.decode())
                     status = (await session.call_tool('vibepublish_status', {'ids': [original['operation_id']]})).structuredContent['receipts'][0]
-                    self.assertEqual(status['state'], 'outcome_unknown')
+                    self.assertEqual(status['state'], 'blocked')  # Brief user view; internal recovery preserves the original record
                     args = {'publication_id': original['resource_id'], 'expected_revision': 1,
                             'change': {'kind': 'reconcile', 'operation_id': original['operation_id']}, 'request_key': 'recovery'}
                     admitted = (await session.call_tool('vibepublish_publication_update', args)).structuredContent
@@ -244,7 +244,7 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': BlockedEdit(sys.argv[2], 'te
                         return result
                     for section in ('all','forwarding','destinations','visuals'):
                         boot=await tool('get_started',{'section':section})
-                        self.assertIn('Native forwarding',boot['skill'])
+                        self.assertIn('mcp-contract-v1.md',boot['skill'])  # Rare forwarding documented by link
                     await tool('destinations',{'command':{'kind':'profile_update','alias':'telegram','expected_revision':0,'profile':{'notes':'Personal profile'}},'request_key':'profile'})
                     boot=await tool('get_started',{'section':'destinations'})
                     self.assertEqual(boot['destinations'][0]['profile']['notes'],'Personal profile')

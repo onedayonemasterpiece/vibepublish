@@ -518,6 +518,15 @@ class Store:
                             "summary": {"result": overall, "networks": outcomes}}
                 if op["publication_id"]:
                     snapshot["resource_id"] = op["publication_id"]
+                if operation_result.get("review_token"):
+                    snapshot["review_token"] = operation_result["review_token"]
+                dependency = db.execute(
+                    "SELECT id,state,reason,event_status,child_operation_id,expires "
+                    "FROM vk_story_dependencies WHERE parent_attempt_id IN "
+                    "(SELECT id FROM attempts WHERE operation_id=?)", (op["id"],)
+                ).fetchone()
+                if dependency:
+                    snapshot["linked_story"] = dict(dependency)
                 if op["error"] and op["state"] != "outcome_unknown":
                     snapshot["error"] = json.loads(op["error"])["error"]
                 return snapshot

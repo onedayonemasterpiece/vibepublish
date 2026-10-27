@@ -121,6 +121,8 @@ The worker may process accepted commands, imports, uploads and observations now.
 
 `Fixed` The agent must receive accepted state and successive atomic stages without waiting for all providers to finish. Every meaningful operation transition and per-destination result is durably recorded and exposed immediately through incremental status results. Telegram completion must be observable while VK is uploading and MAX is still checking the channel.
 
+The image ingress contract preserves common phone JPEGs: store sanitized PNG when at most 20 MiB, otherwise sanitize the same white-composited pixels as JPEG quality 92, with the derivative's actual MIME carried into publication. Both source and derivative respect the native 20 MiB limit; no additional upload or provider verification stage is introduced. See [asset ingress](../../operations/asset-ingress.md).
+
 The normal publication path is an initial accepted receipt followed by the current per-network `vibepublish_status` summary without a cursor. `wait_final=true` waits at most 40 seconds for all destinations, yet a pending network never hides another's native post/queue reference. A summary read is a read-only SQLite query, not a cursor insert or publication retry. Detailed event consumers retain resumable cursors; MCP progress notifications remain optional. A partial network outcome is a normal finite result, with no agent-side recovery or manual investigation.
 
 An operation that successfully placed all requested items in provider queues is complete as a scheduling command. It does not remain running until publication time. Actual later publication is a separate provider observation.

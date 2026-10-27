@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
+import random
 import sqlite3
 
 import pytest
@@ -75,6 +77,7 @@ def test_transparent_png_is_composited_over_white():
     stream = io.BytesIO()
     image.save(stream, "PNG")
     clean = verify_image(stream.getvalue(), "image/png")
+    assert clean.mime == "image/png"
     with Image.open(io.BytesIO(clean.data)) as actual:
         assert actual.mode == "RGB"
         assert actual.getpixel((0, 0)) == (255, 255, 255)
@@ -93,14 +96,14 @@ def test_image_limit_is_identical_before_decode_and_after_sanitization(tmp_path,
     assert caught.value.code == "asset_size_limit"
     assert "Document" not in caught.value.message
 
-    # A valid compressed source can expand beyond the native 20 MiB limit:
+    # If neither cleaned PNG nor quality-92 JPEG fits the configured budget,
     # fail during sanitization rather than at provider dispatch.
     source = Image.effect_noise((128, 128), 70).convert("RGB")
     stream = io.BytesIO()
     source.save(stream, "JPEG", quality=80)
     limit = len(stream.getvalue()) + 128
     monkeypatch.setattr("social_operations.assets.VERIFIED_IMAGE_MAX_BYTES", limit)
-    with pytest.raises(DomainError, match="Sanitized PNG") as caught:
+    with pytest.raises(DomainError, match="Sanitized image") as caught:
         verify_image(stream.getvalue(), "image/jpeg", max_input_bytes=limit)
     assert caught.value.code == "asset_size_limit"
 
@@ -202,3 +205,64 @@ async def test_status_formats_next_attempt_in_tenant_time_without_cursor(tmp_pat
     assert vk["status"] == "выполняется"
     assert vk["next_attempt_at"] == "2026-10-27T14:05:00Z"
     assert vk["next_attempt_time"] == "16:05"
+
+
+
+@pytest.mark.asyncio
+async def test_phone_jpeg_png_expansion_uses_jpeg_and_publishes_to_tg_vk(tmp_path):
+    # Deterministic full-color sensor noise: JPEG fits, sanitized PNG cannot.
+    width, height = 4000, 3000
+    pixels = random.Random(20261027).randbytes(width * height * 3)
+    phone = Image.frombytes("RGB", (width, height), pixels)
+    source_stream = io.BytesIO()
+    phone.save(source_stream, format="JPEG", quality=82)
+    source = source_stream.getvalue()
+    assert len(source) < INGRESS_IMAGE_MAX_BYTES
+    png_stream = io.BytesIO()
+    phone.save(png_stream, format="PNG")
+    assert len(png_stream.getvalue()) > VERIFIED_IMAGE_MAX_BYTES
+
+    store, actor = setup(tmp_path)
+    app = IngressApplication(store)
+    ingress_receipt = upload_image(app, actor, source, "image/jpeg", "phone-jpeg")
+    assert ingress_receipt["mime"] == "image/jpeg"
+    asset_id = ingress_receipt["asset_id"]
+    derivative, actual_mime, _ = app.read_asset(actor, asset_id)
+    assert actual_mime == "image/jpeg"
+    assert len(derivative) <= VERIFIED_IMAGE_MAX_BYTES
+    with Image.open(io.BytesIO(derivative)) as decoded:
+        assert decoded.format == "JPEG"
+        assert decoded.size == (width, height)
+
+    # HTTPS import must reuse the JPEG derivative, not assume a PNG MIME.
+    urls = []
+    async def fake_fetch(url):
+        urls.append(url)
+        return PublicImage(source, "image/jpeg", url)
+    public = IngressApplication(store, fetcher=fake_fetch)
+    assert await public._import_url(actor, "https://images.example.test/phone.jpg") == asset_id
+    assert len(urls) == 1
+
+    accepted = await app.call(actor, "vibepublish_publish", {
+        "to": ["telegram", "vk"],
+        "content": {"text": "Phone photo"},
+        "media": [{"source": {"kind": "asset", "id": asset_id}}],
+        "request_key": "phone-to-two-networks",
+    })
+    assert accepted["state"] == "accepted", accepted
+    with store.connection() as db:
+        plans = [json.loads(row["plan"]) for row in db.execute(
+            "SELECT plan FROM attempts WHERE operation_id=?", (accepted["operation_id"],))]
+    assert len(plans) == 2
+    assert all(plan["assets"][0]["mime"] == "image/jpeg" for plan in plans)
+
+    providers = {network: FakeProvider(tmp_path / "remote.sqlite", network)
+                 for network in ("telegram", "vk")}
+    await Worker(store, providers).run_once()
+    final = (await app.call(actor, "vibepublish_status", {
+        "ids": [accepted["operation_id"]], "wait_final": True, "wait_seconds": 1,
+    }))["receipts"][0]
+    assert final["operation_complete"], final
+    assert final["summary"]["result"] == "доставлено во все сети"
+    assert providers["telegram"].count("effect") == 1
+    assert providers["vk"].count("effect") == 1

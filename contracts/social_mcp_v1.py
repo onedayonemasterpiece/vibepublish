@@ -418,7 +418,9 @@ DEFS["status_summary"] = obj({"result": string(120),
 DEFS["status_snapshot"] = obj({"operation_id": ID, "revision": REV,
     "action": string(80), "state": STATE, "operation_complete": {"type": "boolean"},
     "resource_id": ID, "deliveries": array(ref("delivery_result"), 0, 100),
-    "summary": ref("status_summary"), "error": ref("error")},
+    "summary": ref("status_summary"), "error": ref("error"),
+    "review_token": string(512),
+    "linked_story": DEFS["receipt"]["properties"]["linked_story"]},
     ("operation_id", "action", "state", "operation_complete", "deliveries", "summary"))
 
 tool("status", "Read an immediate, read-only per-network summary without a cursor; optional wait_final waits for every destination within the MCP budget. after_event retains detailed resumable journal reads.",
