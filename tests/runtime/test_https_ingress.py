@@ -112,7 +112,7 @@ async def test_public_https_image_becomes_private_document_asset_for_exact_topic
         assert replay["operation_id"] == accepted["operation_id"]
         with store.connection() as db:
             assert db.execute("SELECT count(*) FROM assets").fetchone()[0] == 2
-        assert calls == [IMAGE_URL, IMAGE_URL]
+        assert calls == [IMAGE_URL]
         assert command["media"][0]["source"] == {"kind": "url", "url": IMAGE_URL}
 
 

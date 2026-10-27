@@ -364,4 +364,5 @@ async def test_palette_storage_snapshots_are_immutable_and_emoji_bootstrap_is_bo
     brief=rt[2].bootstrap(rt[1],{'section':'emoji'})
     full=rt[2].bootstrap(rt[1],{})
     assert len(brief['skill'])<len(full['skill'])
-    assert 'emoji_alias_select' in brief['skill'] and 'unknown outcome' in brief['skill']
+    assert 'telegram-custom-emoji-v1.md' in brief['skill']
+    assert '## Обычная публикация — короткий рецепт' not in brief['skill']

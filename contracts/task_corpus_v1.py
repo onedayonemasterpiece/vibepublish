@@ -178,7 +178,7 @@ INVALID += [
     ("status", {"ids": ["op_1", "op_2"], "after_event": "event_1"}, "event_cursor_single_operation"),
     ("status", {"after_event": "event_1"}, "event_cursor_requires_operation"),
     ("status", {"ids": ["op_1"], "after_event": "event_1", "cursor": "list_1"}, "cursor_domains_not_mixable"),
-    ("status", {"ids": ["op_1"], "wait_seconds": 11}, "bounded_progress_wait"),
+    ("status", {"ids": ["op_1"], "wait_seconds": 41}, "bounded_progress_wait"),
     ("read", {"query": {"kind": "search", "text": "все каналы"}}, "no_unscoped_search"),
     ("read", {"query": {"kind": "scheduled", "destination": "pka", "cache_only": True}}, "queue_requires_provider_read"),
     ("read", {"query": {"kind": "analytics", "publication_ids": ["pub_1"], "destination": "pka"}}, "analytics_target_conflict"),

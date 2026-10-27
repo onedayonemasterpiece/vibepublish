@@ -10,6 +10,7 @@
   checkpointed native IDs without manual review or duplicate sends; trust only
   adapter-supplied native URLs and use an explicit transient-code list with fixed
   backoff rather than parsing historical event bodies. Add fake transport failure-injection tests. No live acceptance or deploy in this change.
+- W3: replay keyed HTTPS-image publication before URL fetch, harmonize the 20 MiB source/derivative/native image limit (sanitized PNG if it fits, otherwise JPEG quality 92, with white alpha compositing), and give publication status a cursor-free per-network summary plus a bounded all-network wait. Shorten the normal agent recipe; preserve explicit detailed event cursors and independent provider outcomes.
 
 - Allow 20 minutes for the complete verification CI job, including locked/offline dependency and browser setup. The 19 October full Python 3.13 suite took 13 minutes; Python 3.12 hit the previous 15-minute whole-job limit. Keep every check and all product timeouts unchanged.
 

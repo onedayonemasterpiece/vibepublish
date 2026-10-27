@@ -378,7 +378,7 @@ class Application:
     def bootstrap(self, actor, args):
         skill = SKILL.read_text()
         if args.get('section') == 'emoji':
-            skill = skill.split('## Start and choose a task', 1)[0] + skill[skill.index('## Telegram custom emoji:'):]
+            skill = skill.split('## Обычная публикация — короткий рецепт', 1)[0] + skill[skill.index('## Telegram custom emoji:'):]
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             scope = str(actor.routing_revision)
@@ -877,18 +877,26 @@ class Application:
             if args.get('cursor'):
                 raise DomainError('list_cursor_not_enabled', next_action='refresh')
             ids = args.get('ids') or [r[0] for r in db.execute('SELECT id FROM operations WHERE tenant_id=? AND principal_id=? ORDER BY created DESC LIMIT ?', (actor.tenant_id, actor.principal_id, args.get('limit', 20)))]
-        deadline = asyncio.get_running_loop().time()+args.get('wait_seconds', 0)
+        deadline = asyncio.get_running_loop().time() + args.get('wait_seconds', 0)
         while True:
-            ready = not ids
+            ready = not ids if args.get('wait_final') else True
+            kinds = {}
             with self.store.connection() as db:
                 for ident in ids:
                     op = self.store.private_operation(db, actor, ident)
-                    seq = self.store.cursor_position(db, actor, args['after_event'], 'events', op['id']) if args.get('after_event') else 0
-                    event = db.execute('SELECT 1 FROM events WHERE operation_id=? AND seq>? LIMIT 1', (op['id'], seq)).fetchone()
-                    ready = ready or event is not None or bool(op['complete'])
+                    kinds[ident] = op['action']
+                    if args.get('wait_final'):
+                        ready = ready and bool(op['complete'])
+                    elif args.get('after_event'):
+                        seq = self.store.cursor_position(db, actor, args['after_event'], 'events', op['id'])
+                        event = db.execute('SELECT 1 FROM events WHERE operation_id=? AND seq>? LIMIT 1', (op['id'], seq)).fetchone()
+                        ready = ready and (event is not None or bool(op['complete']))
             if ready or asyncio.get_running_loop().time() >= deadline:
-                return {'receipts': [self.store.receipt(actor, ident, after=args.get('after_event'), event_limit=args.get('limit', 50)) for ident in ids]}
-            await asyncio.sleep(0.025)  # Journal wait only; never a publication timer.
+                return {'receipts': [self.store.receipt(
+                    actor, ident, after=args.get('after_event'), event_limit=args.get('limit', 50),
+                    brief=not args.get('after_event') and kinds[ident] == 'publish',
+                ) for ident in ids]}
+            await asyncio.sleep(0.1)  # Wait only for durable completion; never send or write here.
 
     def destinations(self, actor, args):
         intent = normalize_intent('destinations', args)
