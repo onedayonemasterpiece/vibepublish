@@ -96,7 +96,7 @@ class SafeRetryTests(unittest.IsolatedAsyncioTestCase):
         self.provider.blocked = False
         await self.call('publication_update', self.retry_args(edit))
         await self.worker.run_once()
-        self.assertEqual(self.store.receipt(self.actor, edit['operation_id'])['state'], 'verified')
+        self.assertEqual(self.store.receipt(self.actor, edit['operation_id'])['state'], 'blocked')
         scheduled = await self.call('publish', {'to':['max'],'content':{'text':'Future'},
             'delivery':{'kind':'at','at':timestamp(self.now+300)},'request_key':'future'})
         self.provider.blocked = True
@@ -108,8 +108,8 @@ class SafeRetryTests(unittest.IsolatedAsyncioTestCase):
         await self.worker.run_once()
         result=self.store.receipt(self.actor,scheduled['operation_id'])
         self.assertEqual(result['state'],'blocked')
-        self.assertEqual(result['deliveries'][0]['missing_checks'],['native_lead_time'])
-        self.assertEqual(self.provider.count('effect'),2)
+        self.assertEqual(result['deliveries'][0]['missing_checks'],['command_expired'])
+        self.assertEqual(self.provider.count('effect'),1)
 
     async def test_partial_success_sibling_and_receipt_are_preserved(self):
         self.store.add_connection(self.actor,'telegram','telegram',account_type='fake')

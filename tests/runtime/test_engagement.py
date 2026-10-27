@@ -92,7 +92,8 @@ async def test_wrong_native_social_evidence_does_not_become_success(runtime,kind
     command={'kind':kind,'item_ref':source,**({'content':{'text':'Reply'}} if kind=='reply' else {'reaction':'👍','mode':'add'})}
     admitted=await app.call(actor,'vibepublish_engage',{'command':command})
     await worker.run_once();result=store.receipt(actor,admitted['operation_id'])
-    assert result['state']=='outcome_unknown' and result['error']['code']==code
+    assert result['state']=='running' and not result['operation_complete']
+    assert result['deliveries'][0]['observed'] != 'reacted'
     assert p.effects==2
 
 
@@ -116,7 +117,9 @@ async def test_missing_reaction_observation_is_not_proof_of_removal(runtime):
     store.grant_binding_rights(actor,binding,['react']);p.missing=True
     admitted=await app.call(actor,'vibepublish_engage',{'command':{'kind':'react','item_ref':source,'reaction':'👍','mode':'remove'}})
     await worker.run_once();result=store.receipt(actor,admitted['operation_id'])
-    assert result['state']=='outcome_unknown' and result['error']['code']=='reaction_subject_or_state_mismatch'
+    assert result['state']=='running' and not result['operation_complete']
+    assert result['deliveries'][0]['observed'] != 'reacted'
+    assert p.effects==2
 
 
 @pytest.mark.asyncio

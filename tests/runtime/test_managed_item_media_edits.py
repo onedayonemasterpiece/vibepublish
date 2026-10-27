@@ -135,7 +135,7 @@ async def fresh_read(env, item_ref):
     return result["items"][0]["ref"], read
 
 
-async def published(env, *, siblings=True, role="image", asset_ref=None):
+async def published(env, *, siblings=True, role="image", asset_ref=None, settle_vk=False):
     original = await call(env, "publish", {
         "to": ["telegram", "vk"] if siblings else ["telegram"],
         "content": {"text": "Original caption"},
@@ -144,6 +144,13 @@ async def published(env, *, siblings=True, role="image", asset_ref=None):
     })
     assert "error" not in original, original
     assert await env.worker.run_once()
+    if settle_vk and siblings:
+        # The original VK command now retries automatically until its fixed horizon.
+        # Finish it before editing the same managed publication; never resend it.
+        env.now[0] += 901
+        assert await env.worker.run_once()
+        assert receipt(env, original)["operation_complete"]
+        env.tg.remote = replace(env.tg.remote, observed_at=timestamp(env.store.clock()))
     result = receipt(env, original)
     tg = next(item for item in result["deliveries"] if item["provider"] == "telegram")
     assert tg["state"] == "verified", result
@@ -160,7 +167,7 @@ def update_args(env, reference, *, key="replace-media", role="image", asset_ref=
 @pytest.mark.asyncio
 async def test_scoped_edit_keeps_publication_native_identity_and_unknown_sibling(env):
     from social_operations.managed_item_edits import latest_attempts
-    original, fresh, _, _ = await published(env)
+    original, fresh, _, _ = await published(env, settle_vk=True)
     before = old_evidence(env, original)
     original_receipt = receipt(env, original)
     args = update_args(env, fresh)
@@ -180,14 +187,14 @@ async def test_scoped_edit_keeps_publication_native_identity_and_unknown_sibling
         assert projection["telegram"]["target_operation_id"] == accepted["operation_id"]
         assert projection["vk"]["target_revision"] == 1
         assert projection["vk"]["target_operation_id"] == original["operation_id"]
-        assert projection["vk"]["state"] == "outcome_unknown"
+        assert projection["vk"]["state"] == "blocked"
     assert old_evidence(env, original) == before
     assert await env.worker.run_once()
     done = receipt(env, accepted)
-    assert done["state"] in {"partial", "outcome_unknown"}, done
+    assert done["state"] == "partial", done
     delivery = {item["provider"]: item for item in done["deliveries"]}
     assert delivery["telegram"]["state"] == "verified" and delivery["telegram"]["observed"] == "edited"
-    assert delivery["vk"]["state"] == "outcome_unknown"
+    assert delivery["vk"]["state"] == "blocked"
     assert env.tg.remote.native_id == NATIVE
     assert [request.action for request in env.tg.effects] == ["publish", "edit"]
     assert len(env.vk.effects) == 1
@@ -310,7 +317,7 @@ async def test_replacement_requires_exactly_one_asset(env, count):
 
 @pytest.mark.asyncio
 async def test_changed_native_snapshot_blocks_before_edit_effect(env):
-    original, fresh, _, _ = await published(env)
+    original, fresh, _, _ = await published(env, settle_vk=True)
     before = old_evidence(env, original)
     accepted = await call(env, "publication_update", update_args(env, fresh))
     assert "error" not in accepted, accepted
@@ -326,7 +333,7 @@ async def test_changed_native_snapshot_blocks_before_edit_effect(env):
 
 @pytest.mark.asyncio
 async def test_unknown_edit_replay_is_observation_only(env):
-    original, fresh, _, _ = await published(env)
+    original, fresh, _, _ = await published(env, settle_vk=True)
     args = update_args(env, fresh)
     accepted = await call(env, "publication_update", args)
     assert "error" not in accepted, accepted
@@ -335,7 +342,7 @@ async def test_unknown_edit_replay_is_observation_only(env):
     terminal = ledger(env)
     replay = await call(env, "publication_update", args)
     assert replay["operation_id"] == accepted["operation_id"]
-    assert any(item["state"] == "outcome_unknown" for item in replay["deliveries"])
+    assert any(item["state"] == "running" for item in replay["deliveries"])
     assert ledger(env) == terminal and not await env.worker.run_once()
     assert len(env.tg.effects) == 2 and len(env.vk.effects) == 1
     assert env.tg.remote.native_id == NATIVE
@@ -344,7 +351,7 @@ async def test_unknown_edit_replay_is_observation_only(env):
 @pytest.mark.asyncio
 async def test_second_managed_revision_keeps_original_vk_projection(env):
     from social_operations.managed_item_edits import latest_attempts
-    original, fresh, _, _ = await published(env)
+    original, fresh, _, _ = await published(env, settle_vk=True)
     before = old_evidence(env, original)
     first = await call(env, "publication_update", update_args(env, fresh))
     assert "error" not in first, first
@@ -384,7 +391,7 @@ async def test_managed_replacement_requires_request_key_before_revision_or_effec
 @pytest.mark.asyncio
 async def test_partial_vk_sibling_keeps_opaque_proof_and_partial_aggregate(env):
     from social_operations.managed_item_edits import latest_attempts
-    original, fresh, _, _ = await published(env)
+    original, fresh, _, _ = await published(env, settle_vk=True)
     # Preservation fixture only. This opaque value is not allocation authority
     # and deliberately does not exercise or claim to validate the VK resolver.
     checkpoint = canonical({"adapter": {"allocation_proof": {
@@ -484,7 +491,7 @@ async def test_owned_video_replacement_passes_normal_integrity_and_keeps_message
 
 @pytest.mark.asyncio
 async def test_explicit_destination_edit_keeps_one_publication_and_unknown_sibling(env):
-    original, _, _, _ = await published(env)
+    original, _, _, _ = await published(env, settle_vk=True)
     before = old_evidence(env, original)
     args = {"publication_id": original["resource_id"], "expected_revision": 1,
             "change": {"kind": "edit", "destinations": ["telegram"],
@@ -498,10 +505,10 @@ async def test_explicit_destination_edit_keeps_one_publication_and_unknown_sibli
     deliveries = {item["provider"]: item for item in done["deliveries"]}
     assert deliveries["telegram"]["sync_status"] == "current"
     assert deliveries["telegram"]["applied_revision"] == 2
-    assert deliveries["vk"]["state"] == "outcome_unknown"
+    assert deliveries["vk"]["state"] == "blocked"
     assert deliveries["vk"]["sync_status"] == "unknown"
     assert deliveries["vk"]["applied_revision"] is None
-    assert done["state"] == "outcome_unknown"
+    assert done["state"] == "partial"
     assert old_evidence(env, original) == before
     after = ledger(env)
     assert (await call(env, "publication_update", args))["operation_id"] == accepted["operation_id"]

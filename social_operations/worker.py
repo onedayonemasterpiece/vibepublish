@@ -5,7 +5,6 @@ import fcntl
 import hashlib
 import json
 import os
-import re
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
@@ -18,6 +17,25 @@ from .media_budget import MediaBudgetDeferred, reserve
 from .provider_diagnostics import diagnostic_scope, provider_call, safe_diagnostic, budget_diagnostic
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled', 'partial'}
+
+# Shared provider error policy: VK (including W2), Telegram and MAX report
+# these codes to this one worker retry scheduler. All other errors are terminal.
+TRANSIENT_ERRORS = frozenset({
+    'provider_preflight_failed', 'provider_preflight_timeout',
+    'provider_command_failed', 'provider_read_deadline', 'provider_reconcile_pending', 'receipt_lost',
+    'telegram_rpc_failed', 'telegram_cooldown', 'telegram_queue_response_invalid',
+    'telegram_history_response_invalid', 'telegram_thread_response_invalid',
+    'telegram_response_identity_missing',
+    'vk_api_failed', 'vk_http_failed', 'vk_transport_failed', 'vk_cooldown',
+    'vk_response_invalid', 'vk_response_identity_missing', 'vk_queue_response_invalid',
+    'vk_event_response_invalid', 'vk_upload_failed', 'vk_story_upload_failed',
+    'vk_upload_transient_empty_photo', 'vk_upload_response_invalid',
+    'vk_story_upload_response_invalid', 'vk_video_upload_response_invalid',
+    'vk_photo_read_failed', 'vk_upload_server_invalid', 'vk_queue_read_incomplete',
+    'vk_readback_missing', 'vk_photo_binding_unavailable',
+    'incomplete_readback', 'media_readback_mismatch', 'exact_identity_not_observed',
+    'max_outcome_unknown', 'max_recovery_observation_unavailable',
+})
 
 
 class Worker:
@@ -34,6 +52,38 @@ class Worker:
 
     def adapter(self, provider, connection):
         return self.adapters.get(connection, self.adapters.get(provider, UnavailableAdapter()))
+
+    def deadline(self, op, child, *, min_lead=60):
+        """Frozen acceptance-to-provider horizon; retries cannot move this time."""
+        plan = json.loads(child['plan'])
+        if op['action'] not in {'publish', 'publication_update'} or plan.get('workload') == 'media_store':
+            return op['deadline']
+        when = plan.get('scheduled_at')
+        return parse_time(when) - min_lead if when else op['created'] + 900
+
+    @staticmethod
+    def transient(code):
+        return code in TRANSIENT_ERRORS
+
+    @staticmethod
+    def saved_native_id(child):
+        """An actual provider checkpoint ID, never a guessed text/time match."""
+        try:
+            saved = json.loads(child['checkpoint'])
+            data = saved.get('adapter', saved)
+            if (data.get('attempt') != child['id']
+                    or data.get('plan') != child['plan_digest']
+                    or data.get('target') != json.loads(child['plan'])['native_target']):
+                return None
+            state = data.get('driver', data)
+            ident = state.get('native_id') or state.get('id') or (
+                (state.get('ids') or [None])[0])
+            if not isinstance(ident, (str, int)):
+                return None
+            ident = str(ident)
+            return ident if ident and all(c.isalnum() or c in '_-' for c in ident) else None
+        except (TypeError, ValueError, KeyError, IndexError):
+            return None
 
     @asynccontextmanager
     async def lane(self, connection):
@@ -117,25 +167,13 @@ class Worker:
                     raise DomainError('access_revoked', next_action='reauthorize')
                 if current['lease_until'] < self.store.clock():
                     raise DomainError('stale_worker', next_action='refresh')
-                if self.store.clock() > op['deadline']:
-                    raise DomainError('command_expired', 'The immediate command expired; choose a new time')
+                if self.store.clock() >= self.deadline(op, child, min_lead=min_lead):
+                    raise DomainError('command_expired', 'The original publication window has expired')
                 if plan.get('scheduled_at') and parse_time(plan['scheduled_at']) < self.store.clock()+min_lead:
                     raise DomainError('native_lead_time', 'Native submission window closed; no fallback send')
                 restore = db.execute("SELECT value FROM settings WHERE key='restore_guard'").fetchone()
                 if restore and restore[0] == '1':
                     raise DomainError('restore_requires_reconciliation', next_action='contact_owner')
-                is_media_store = plan.get('workload') == 'media_store'
-                unresolved_rows = [] if is_media_store else db.execute("SELECT a.* FROM attempts a JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND a.id!=? AND a.dispatched=1 AND a.state NOT IN ('verified','scheduled','cancelled') AND COALESCE(json_extract(a.plan,'$.workload'),'publication')!='media_store' AND NOT EXISTS (SELECT 1 FROM attempt_resolutions z WHERE z.attempt_id=a.id) LIMIT 101", (plan['connection_id'], child['id'])).fetchall()
-                if len(unresolved_rows) > 100:
-                    raise DomainError('connection_review_limit',
-                                      'Too many retained uncertain or media-review attempts; review connection history.',
-                                      'review_outcome')
-                unresolved = any(not self.known_effect_resolved(db, row) for row in unresolved_rows)
-                pending_release = None if is_media_store else db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id JOIN bindings b ON b.id=a.binding_id JOIN destinations d ON d.id=b.destination_id WHERE d.connection_id=? AND COALESCE(json_extract(a.plan,'$.workload'),'publication')!='media_store' AND r.finalize_state='pending' LIMIT 1", (plan['connection_id'],)).fetchone()
-                if pending_release:
-                    raise DomainError('connection_finalization_pending', next_action='check_status')
-                if unresolved:
-                    raise DomainError('connection_outcome_unknown', next_action='review_outcome')
                 if attempt_id != child['id'] or plan_digest != child['plan_digest']:
                     raise DomainError('plan_mismatch')
                 changed = db.execute('UPDATE attempts SET dispatched=1,dispatch_at=?,state=\'running\',stage=\'submitting\' WHERE id=? AND dispatched=0', (self.store.clock(), attempt_id)).rowcount
@@ -160,7 +198,7 @@ class Worker:
                 assets.append(Asset(**a, data=row['bytes']))
         return ProviderRequest(op['id'], child['id'], child['plan_digest'], plan['connection_id'], plan['account_type'], plan['secret_ref'],
                                plan['destination_id'], plan['native_target'], plan['action'], plan['surface'], plan['content_json'], tuple(assets),
-                               plan['scheduled_at'], op['deadline'], RemoteItem(**plan['existing']) if plan['existing'] else None,
+                               plan['scheduled_at'], self.deadline(op, child), RemoteItem(**plan['existing']) if plan['existing'] else None,
                                NativeSource(**plan['source']) if plan['source'] else None, plan['source_authorized'], plan['selection'],
                                subject=RemoteItem(**plan['subject']) if plan.get('subject') else None,
                                reaction=plan.get('reaction'),reaction_mode=plan.get('reaction_mode'),
@@ -221,51 +259,55 @@ class Worker:
             with self.store.connection() as db:
                 children = [dict(c) for c in db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],))]
             pending = [c for c in children if c['state'] not in TERMINAL]
-            prepared = {}
             async def preflight(child):
                 r = self.request(op, child, actor)
                 if json.loads(child['plan']).get('admission_error'):
                     raise DomainError(json.loads(child['plan'])['admission_error'])
                 if child['dispatched']:
-                    return
-                if self.store.clock() > op['deadline']:
+                    return None
+                remaining = self.deadline(op, child) - self.store.clock()
+                if remaining <= 0:
                     raise DomainError('command_expired')
                 hooks = self.hooks(op, child)
-                async with self.lane(r.connection_id):
-                    prepared[child['id']] = await self.adapter(child['provider'], r.connection_id).prepare(r, hooks)
-                if prepared[child['id']].capability.status != 'supported':
+                async with asyncio.timeout(remaining):
+                    async with self.lane(r.connection_id):
+                        prepared = await self.adapter(child['provider'], r.connection_id).prepare(r, hooks)
+                if prepared.capability.status != 'supported':
                     raise DomainError('capability_unsupported', next_action='contact_owner')
-                if prepared[child['id']].request != r:
+                if prepared.request != r:
                     raise DomainError('adapter_changed_request')
-            async def observed_preflight(child):
-                with diagnostic_scope(self.diagnostic_observer(op, child)):
-                    with provider_call(child['provider'], 'preflight'):
-                        return await preflight(child)
-            outcomes = await asyncio.gather(*(observed_preflight(c) for c in pending), return_exceptions=True)
-            errors = [e for e in outcomes if isinstance(e, BaseException)]
-            if errors and all(isinstance(e, DomainError) and e.code in {'emoji_fallback_required', 'rich_fallback_needs_review'} for e in errors) and all(json.loads(c['plan'])['mode'] == 'execute' for c in pending):
-                # Only explicit per-target rendering gates are independent; preserve existing global preflight policy for other failures.
-                for child, outcome in zip(pending, outcomes):
-                    if isinstance(outcome, BaseException):
-                        self.fail(op, child, outcome)
-                await asyncio.gather(*(self.run_child(op, c, actor, prepared.get(c['id'])) for c, outcome in zip(pending, outcomes) if not isinstance(outcome, BaseException)))
-            elif errors:
-                error = errors[0] if isinstance(errors[0], DomainError) else DomainError('provider_preflight_failed', next_action='contact_owner')
-                # Already-attempted children must still be observed, not called "not attempted".
-                for child in pending:
-                    if not child['dispatched']:
+                return prepared
+            async def prepare_and_run(child, *, preview=False):
+                try:
+                    with diagnostic_scope(self.diagnostic_observer(op, child)):
+                        with provider_call(child['provider'], 'preflight'):
+                            prepared = await preflight(child)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    error = (exc if isinstance(exc, DomainError) else
+                             DomainError('provider_preflight_timeout' if isinstance(exc, TimeoutError)
+                                         else 'provider_preflight_failed'))
+                    if self.store.clock() >= self.deadline(op, child):
+                        self.expire_child(op, child, actor)
+                    else:
                         self.fail(op, child, error)
-                await asyncio.gather(*(self.run_child(op, c, actor, None) for c in pending if c['dispatched']))
-            elif pending and all(json.loads(c['plan'])['mode'] == 'preview' for c in pending):
-                self.preview(op, actor, pending)
+                    return False
+                if not preview:
+                    await self.run_child(op, child, actor, prepared)
                 return True
-            else:
-                await asyncio.gather(*(self.run_child(op, c, actor, prepared.get(c['id'])) for c in pending))
+            # Order-wide validation is frozen by accept(); plan errors are per-target.
+            preview = bool(pending) and all(json.loads(c['plan'])['mode'] == 'preview' for c in pending)
+            outcomes = await asyncio.gather(*(prepare_and_run(c, preview=preview) for c in pending))
+            if preview:
+                if all(outcomes):
+                    self.preview(op, actor, pending)
+                else:
+                    self.fail_operation(op, DomainError('provider_preflight_failed'))
+                return True
             await self.finalize_pending(op, actor)
             self.aggregate(op)
-            self.schedule_vk_completion_retry(op)
-            self.schedule_media_store_retry(op)
-            self.schedule_media_budget_retry(op)
+            self.schedule_retry(op)
         except asyncio.CancelledError:
             # A stopped worker leaves its durable claim for observation-only recovery.
             raise
@@ -273,148 +315,96 @@ class Worker:
             if exc.code != 'stale_worker':
                 self.fail_operation(op, exc)
         except Exception:
-            self.fail_operation(op, DomainError('worker_failure', 'Worker failed; inspect the durable operation', 'review_outcome'))
+            self.fail_operation(op, DomainError('worker_failure', 'Worker failed before a confirmed result'))
         finally:
             pulse.cancel()
             await asyncio.gather(pulse, return_exceptions=True)
         return True
 
-    def schedule_vk_completion_retry(self, op):
-        """Continue only the same VK publish attempt under bounded safe evidence."""
-        before_dispatch = {
-            'vk_http_failed', 'vk_transport_failed', 'vk_api_failed',
-            'vk_cooldown', 'provider_command_failed', 'provider_preflight_failed',
-        }
-        after_dispatch = before_dispatch | {
-            'vk_response_identity_missing', 'vk_response_invalid',
-        }
-        with self.store.tx() as db:
-            current = db.execute('SELECT * FROM operations WHERE id=?', (op['id'],)).fetchone()
-            if not current or current['complete'] == 0:
-                return
-            result = json.loads(current['result'])
-            counts = result.get('vk_completion_retry_counts', {})
-            if not isinstance(counts, dict):
-                counts = {}
-            candidates = []
-            children = [dict(row) for row in db.execute(
-                'SELECT * FROM attempts WHERE operation_id=?', (op['id'],)
-            )]
-            for child in children:
-                plan = json.loads(child['plan'])
-                if (child['provider'] != 'vk' or plan.get('action') != 'publish'
-                        or plan.get('surface', 'post') != 'post'):
-                    continue
-                try:
-                    count = int(counts.get(child['id'], 0))
-                except (TypeError, ValueError):
-                    count = 0
-                if count >= 3:
-                    continue
-                missing = set(json.loads(child['result']).get('missing_checks', ()))
-                if not child['dispatched']:
-                    safe = child['state'] == 'blocked' and bool(missing & before_dispatch)
-                    next_state = 'accepted'
-                else:
-                    payload = json.loads(child['checkpoint'])
-                    checkpoint = payload.get('adapter', payload)
-                    safe = (
-                        child['state'] == 'outcome_unknown'
-                        and bool(plan.get('scheduled_at'))
-                        and checkpoint.get('version') == 1
-                        and checkpoint.get('attempt') == child['id']
-                        and checkpoint.get('plan') == child['plan_digest']
-                        and checkpoint.get('target') == plan.get('native_target')
-                        and checkpoint.get('id') is None
-                        and bool(missing & after_dispatch)
-                    )
-                    next_state = 'running'
-                if safe:
-                    candidates.append((child, next_state, count + 1))
-            if not candidates:
-                return
-
-            reopen = list(candidates)
-            if any(not child['dispatched'] for child, _, _ in candidates):
-                selected = {child['id'] for child, _, _ in reopen}
-                for sibling in children:
-                    if (sibling['id'] not in selected and not sibling['dispatched']
-                            and sibling['state'] in {'blocked', 'failed'}):
-                        reopen.append((sibling, 'accepted', None))
-
-            now = self.store.clock()
-            delays = []
-            for child, next_state, count in reopen:
-                if count is not None:
-                    counts[child['id']] = count
-                    delays.append(min(8, 2 ** (count - 1)))
-                db.execute(
-                    "UPDATE attempts SET state=?,stage='waiting_connection' WHERE id=?",
-                    (next_state, child['id']),
-                )
-            retry_at = now + min(delays or [1])
-            result['vk_completion_retry_counts'] = counts
-            result['vk_completion_retry_at'] = timestamp(retry_at)
-            from .execution_budgets import command_seconds
-            retry_budget = command_seconds(json.loads(child['plan']) for child, _, _ in reopen)
-            db.execute(
-                "UPDATE operations SET state='running',complete=0,work_state='working',"
-                "lease_owner=NULL,lease_until=?,deadline=MAX(deadline,?),error=NULL,result=? WHERE id=?",
-                (retry_at, now + retry_budget, canonical(result), op['id']),
-            )
-            self.store.event(
-                db, op['id'], 'waiting_connection', 'started',
-                'VK completion retry scheduled inside the original business operation',
-            )
-
-    def schedule_media_store_retry(self, op):
-        """Durably retry safe pre-dispatch failures and known-ID observations."""
-        transient = {'telegram_rpc_failed', 'telegram_cooldown', 'provider_command_failed',
-                     'provider_preflight_failed', 'provider_read_deadline'}
-        with self.store.tx() as db:
-            current = db.execute('SELECT * FROM operations WHERE id=?', (op['id'],)).fetchone()
-            if not current or current['complete'] == 0:
-                return
-            candidates = []
-            for child in db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)):
-                plan = json.loads(child['plan'])
-                if plan.get('workload') != 'media_store' or child['state'] not in {'blocked','outcome_unknown'}:
-                    continue
-                missing = json.loads(child['result']).get('missing_checks', [])
+    def expire_child(self, op, child, actor):
+        """Finish an exhausted attempt from a checkpointed provider ID, otherwise refuse."""
+        with self.store.connection() as db:
+            child = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
+        plan = json.loads(child['plan'])
+        ident = (self.saved_native_id(child) if child['dispatched'] and plan['action'] == 'publish'
+                 and plan.get('workload') != 'media_store' else None)
+        if ident:
+            try:
+                with self.store.connection() as db:
+                    self.recovery_authority(db, op, child, actor)
+                scheduled = plan.get('scheduled_at')
+                target = plan['native_target']
                 saved = json.loads(child['checkpoint'])
-                saved = saved.get('adapter', saved)
-                safe = (not child['dispatched'] and bool(set(missing) & transient)) or (
-                    child['dispatched'] and bool(saved.get('ids')))
-                if safe:
-                    candidates.append(child)
-            if not candidates or self.store.clock() >= current['deadline']:
+                state = saved.get('adapter', saved).get('driver') or saved.get('adapter', saved)
+                # The provider owns permalink construction; never guess an address.
+                url = state.get('recovery_reference') or state.get('url')
+                if not url and isinstance(state.get('item'), dict):
+                    url = state['item'].get('url')
+                if not isinstance(url, str) or not url.startswith('https://'):
+                    url = None
+                remote = RemoteItem(
+                    ident, 'scheduled' if scheduled else 'published',
+                    json.loads(plan['content_json'])['text'], digest([child['id'], ident]),
+                    timestamp(self.store.clock()), scheduled,
+                    native_target=target, url=url,
+                    media_check='incomplete' if plan['assets'] else 'not_applicable',
+                    entities_json=canonical(json.loads(plan['content_json']).get('entities', [])),
+                )
+                self.finish_child(op, child, actor, Observation(
+                    'provider_scheduled' if scheduled else 'published', (remote,)))
+                with self.store.tx() as db:
+                    self.store.fence(db, op['id'], self.id, op['fence'])
+                    row = db.execute('SELECT result FROM attempts WHERE id=?', (child['id'],)).fetchone()
+                    result = json.loads(row['result'])
+                    if url:
+                        result['url'] = url
+                    db.execute('UPDATE attempts SET result=? WHERE id=?', (canonical(result), child['id']))
+                    self.store.event(db, op['id'], 'finished', 'completed',
+                                     'Provider native ID '+ident+' accepted; additional readback unavailable', child['alias'])
+                return
+            except DomainError as error:
+                self.fail(op, child, error)
+                return
+        self.fail(op, child, DomainError(
+            'publication_unconfirmed' if child['dispatched'] else 'command_expired',
+            'Publication could not be confirmed before the fixed deadline' if child['dispatched']
+            else 'Command expired before provider dispatch; no post was sent', 'none'))
+
+    def schedule_retry(self, op):
+        """One durable bounded backoff for every provider and the media-store lane."""
+        with self.store.tx() as db:
+            current = db.execute('SELECT * FROM operations WHERE id=?', (op['id'],)).fetchone()
+            if not current:
                 return
             result = json.loads(current['result'])
-            count = int(result.get('media_store_retry_count', 0))+1
-            delay = min(300, 2**min(count, 8))
-            result.update(media_store_retry_count=count,
-                          media_store_retry_at=timestamp(self.store.clock()+delay))
-            for child in candidates:
+            now = self.store.clock()
+            # Fixed backoff from command age, without counters or querying the event ledger.
+            age = now - current['created']
+            delay = 5 if age < 5 else 15 if age < 20 else 30 if age < 50 else 60
+            waits = []
+            for child in db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)):
+                if child['state'] == 'accepted' and child['stage'] == 'waiting_connection':
+                    at = json.loads(child['result']).get('media_budget_retry_at')
+                    if at is not None and now < self.deadline(op, child):
+                        waits.append(min(float(at), self.deadline(op, child)))
+                    continue
+                if child['state'] != 'blocked':
+                    continue
+                code = (json.loads(child['result']).get('missing_checks') or [''])[0]
+                if not self.transient(code) or now >= self.deadline(op, child):
+                    continue
+                waits.append(min(now + delay, self.deadline(op, child)))
                 db.execute("UPDATE attempts SET state=?,stage='waiting_connection' WHERE id=?",
                            ('running' if child['dispatched'] else 'accepted', child['id']))
-            db.execute("UPDATE operations SET state='running',complete=0,work_state='working',lease_owner=NULL,lease_until=?,error=NULL,result=? WHERE id=?",
-                       (self.store.clock()+delay, canonical(result), op['id']))
+            if not waits:
+                return
+            retry_at = min(waits)
+            result['poll_after_seconds'] = max(1, int(retry_at-now))
+            db.execute("UPDATE operations SET state='running',complete=0,work_state='working',"
+                       "lease_owner=NULL,lease_until=?,error=NULL,result=? WHERE id=?",
+                       (retry_at, canonical(result), op['id']))
             self.store.event(db, op['id'], 'waiting_connection', 'started',
-                             'Private media-store retry scheduled without blocking the connection')
-
-    def schedule_media_budget_retry(self, op):
-        with self.store.tx() as db:
-            current=db.execute('SELECT * FROM operations WHERE id=?',(op['id'],)).fetchone()
-            if not current or current['complete']:return
-            waits=[json.loads(row['result'])['media_budget_retry_at'] for row in db.execute("SELECT result FROM attempts WHERE operation_id=? AND state='accepted' AND stage='waiting_connection'",(op['id'],)) if 'media_budget_retry_at' in json.loads(row['result'])]
-            if not waits:return
-            self.store.fence(db,op['id'],self.id,op['fence'])
-            retry_at=min(waits)
-            db.execute(
-                "UPDATE operations SET lease_owner=NULL,lease_until=?,"
-                "deadline=MAX(deadline,?),error=NULL WHERE id=?",
-                (retry_at,retry_at+120,op['id']))
-            self.store.event(db,op['id'],'waiting_connection','started','Shared Telegram media budget deferred; original request identity retained')
+                             'Automatic provider retry within original acceptance horizon')
 
     async def run_child(self, op, child, actor, prepared):
         with diagnostic_scope(self.diagnostic_observer(op, child)):
@@ -425,50 +415,55 @@ class Worker:
             request = self.request(op, child, actor)
             hooks = self.hooks(op, child, prepared.capability.min_lead_seconds if prepared else 60)
             adapter = self.adapter(child['provider'], request.connection_id)
-            async with self.lane(request.connection_id):
-                # A lease fence is NOT proof that an old remote request is gone.
-                with self.store.tx() as db:
-                    self.store.fence(db, op['id'], self.id, op['fence'])
-                    current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
-                    if prepared and not current['dispatched'] and child['provider'] == 'vk':
-                        from .vk_staged_photos import select
-                        staging = select(db, op, current)
-                        if staging:
-                            prepared = replace(prepared, state_json=canonical({
-                                **json.loads(prepared.state_json), 'staged_photos': staging}))
-                    if not current['dispatched'] and child['provider']=='telegram':
-                        reserve(db, json.loads(child['plan']), child['id'], self.store.clock())
-                    if current['dispatched']:
-                        self.recovery_authority(db, op, child, actor)
-                checkpoint = current['checkpoint']
-                if current['dispatched']:
+            remaining = self.deadline(op, child, min_lead=prepared.capability.min_lead_seconds if prepared else 60) - self.store.clock()
+            if remaining <= 0:
+                self.expire_child(op, child, actor)
+                return
+            async with asyncio.timeout(remaining):
+                async with self.lane(request.connection_id):
+                    # A lease fence is NOT proof that an old remote request is gone.
                     with self.store.tx() as db:
                         self.store.fence(db, op['id'], self.id, op['fence'])
-                        db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,created) VALUES(?,?,?,?)',
-                                   (child['id'], child['plan_digest'], checkpoint, self.store.clock()))
-                        recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
-                        hint = {**json.loads(recovery['hint']), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
-                        checkpoint = canonical({**json.loads(checkpoint), 'core_recovery': hint})
-                from .execution_budgets import execution_seconds
-                execute_limit = execution_seconds(json.loads(child['plan']))
-                timeout = max(0.1, min(execute_limit, op['deadline']-self.store.clock())) if not current['dispatched'] else 90
-                async with asyncio.timeout(timeout) as execution_budget:
-                    if (not current['dispatched'] and child['provider']=='max'
-                            and request.action in {'publish','reschedule'} and request.scheduled_at):
-                        original_before_effect=hooks.before_effect
-                        async def before_effect(attempt_id,plan_digest):
-                            await original_before_effect(attempt_id,plan_digest)
-                            # One fresh bounded verification phase, only after
-                            # the durable guard succeeds. Never replay an effect.
-                            execution_budget.reschedule(asyncio.get_running_loop().time()+90)
-                        hooks=Hooks(hooks.emit_progress,hooks.checkpoint,before_effect)
-                    with provider_call(child['provider'], 'reconcile' if current['dispatched'] else 'execute') as diagnostic:
-                        observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
-                                       await adapter.execute(prepared, hooks))
-                        diagnostic.update(observed=observation.observed, items_count=len(observation.items))
-                        if observation.items:
-                            diagnostic['media_check'] = observation.items[0].media_check
-                self.finish_child(op, child, actor, observation, needs_finalize=callable(getattr(adapter, 'finalize', None)))
+                        current = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
+                        if prepared and not current['dispatched'] and child['provider'] == 'vk':
+                            from .vk_staged_photos import select
+                            staging = select(db, op, current)
+                            if staging:
+                                prepared = replace(prepared, state_json=canonical({
+                                    **json.loads(prepared.state_json), 'staged_photos': staging}))
+                        if not current['dispatched'] and child['provider']=='telegram':
+                            reserve(db, json.loads(child['plan']), child['id'], self.store.clock())
+                        if current['dispatched']:
+                            self.recovery_authority(db, op, child, actor)
+                    checkpoint = current['checkpoint']
+                    if current['dispatched']:
+                        with self.store.tx() as db:
+                            self.store.fence(db, op['id'], self.id, op['fence'])
+                            db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,created) VALUES(?,?,?,?)',
+                                       (child['id'], child['plan_digest'], checkpoint, self.store.clock()))
+                            recovery = db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
+                            hint = {**json.loads(recovery['hint']), 'operation_id': op['id'], 'attempt_id': child['id'], 'plan_digest': child['plan_digest']}
+                            checkpoint = canonical({**json.loads(checkpoint), 'core_recovery': hint})
+                    from .execution_budgets import execution_seconds
+                    execute_limit = execution_seconds(json.loads(child['plan']))
+                    timeout = min(execute_limit, self.deadline(op, child)-self.store.clock()) if not current['dispatched'] else 90
+                    async with asyncio.timeout(timeout) as execution_budget:
+                        if (not current['dispatched'] and child['provider']=='max'
+                                and request.action in {'publish','reschedule'} and request.scheduled_at):
+                            original_before_effect=hooks.before_effect
+                            async def before_effect(attempt_id,plan_digest):
+                                await original_before_effect(attempt_id,plan_digest)
+                                # One fresh bounded verification phase, only after
+                                # the durable guard succeeds. Never replay an effect.
+                                execution_budget.reschedule(asyncio.get_running_loop().time()+90)
+                            hooks=Hooks(hooks.emit_progress,hooks.checkpoint,before_effect)
+                        with provider_call(child['provider'], 'reconcile' if current['dispatched'] else 'execute') as diagnostic:
+                            observation = (await adapter.reconcile(request, checkpoint, hooks) if current['dispatched'] else
+                                           await adapter.execute(prepared, hooks))
+                            diagnostic.update(observed=observation.observed, items_count=len(observation.items))
+                            if observation.items:
+                                diagnostic['media_check'] = observation.items[0].media_check
+                    self.finish_child(op, child, actor, observation, needs_finalize=callable(getattr(adapter, 'finalize', None)))
         except MediaBudgetDeferred as deferred:
             with self.store.tx() as db:
                 self.store.fence(db,op['id'],self.id,op['fence'])
@@ -479,7 +474,19 @@ class Worker:
             raise
         except Exception as exc:
             try:
-                self.fail(op, child, exc if isinstance(exc, DomainError) else DomainError('provider_command_failed', next_action='contact_owner'))
+                error = exc if isinstance(exc, DomainError) else DomainError('provider_command_failed')
+                recorded = None
+                if isinstance(exc, OutcomeUnknown) or not self.transient(error.code):
+                    with self.store.connection() as db:
+                        recorded = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
+                known = (recorded and recorded['dispatched'] and self.saved_native_id(recorded)
+                         and json.loads(recorded['plan']).get('workload') != 'media_store')
+                if self.store.clock() >= self.deadline(op, child) or known:
+                    self.expire_child(op, child, actor)
+                elif isinstance(exc, OutcomeUnknown) and recorded['dispatched']:
+                    self.fail(op, child, error if self.transient(error.code) else DomainError('provider_reconcile_pending'))
+                else:
+                    self.fail(op, child, error)
             except DomainError as stale:
                 if stale.code != 'stale_worker':
                     raise
@@ -584,132 +591,16 @@ class Worker:
             db.execute("UPDATE attempts SET state='cancelled',stage='finished',observed='not_attempted',result=?,checkpoint=? WHERE id=?",(result,final,child['id']))
             self.store.event(db,op['id'],'finished','completed','Original intent cancelled: trusted input guard proves no effect; no item fabricated',child['alias'])
 
-    @staticmethod
-    def known_vk_effect_identity(child, plan, remote, checkpoint, observed):
-        """Bind an observed effect to one frozen VK wall intent, never its media."""
-        try:
-            cp = checkpoint['adapter']
-            expected_observed = ('provider_scheduled' if plan['scheduled_at'] else
-                                 'edited' if plan['existing'] else 'published')
-            if (plan['provider'] != 'vk' or plan.get('surface', 'post') != 'post'
-                    or plan['action'] not in {'publish', 'edit', 'reschedule'}
-                    or plan.get('source') or not plan['assets']
-                    or digest(plan) != child['plan_digest']
-                    or checkpoint['transition'] not in {'vk_response', 'vk_media_bound'}
-                    or type(cp['version']) is not int or cp['version'] != 1
-                    or cp.get('identity_source') == 'queue_match' or cp['attempt'] != child['id']
-                    or cp['plan'] != child['plan_digest'] or cp['target'] != plan['native_target']
-                    or not re.fullmatch(r'[1-9][0-9]*', str(cp['id']))
-                    or str(cp['id']) != remote.native_id
-                    or remote.native_target != plan['native_target']
-                    or remote.text != json.loads(plan['content_json'])['text']
-                    or remote.scheduled_at != plan['scheduled_at']
-                    or remote.namespace != ('scheduled' if plan['scheduled_at'] else 'published')
-                    or observed != expected_observed
-                    or remote.media_check != 'incomplete' or remote.media_hashes
-                    or not isinstance(cp['media'], list)
-                    or len(cp['media']) != len(plan['assets'])
-                    or (plan['existing'] and (
-                        plan['existing']['native_id'] != remote.native_id
-                        or plan['existing']['native_target'] != remote.native_target))):
-                return False
-            return True
-        except (KeyError, TypeError, ValueError, AttributeError):
-            return False
-
-    def known_effect_resolved(self, db, child):
-        """A generic partial state cannot release a connection's unknown fence."""
-        from .vk_allocation_recovery import resolved
-        if resolved(db, child):
-            return True
-        try:
-            if child['state'] != 'partial' or not child['dispatched']:
-                return False
-            plan = json.loads(child['plan'])
-            checkpoint = json.loads(child['checkpoint'])
-            proof = checkpoint.pop('known_effect')
-            result = json.loads(child['result'])
-            op = db.execute('SELECT * FROM operations WHERE id=?', (child['operation_id'],)).fetchone()
-            principal = db.execute('SELECT epoch,active FROM principals WHERE id=? AND tenant_id=?',
-                                   (op['principal_id'], op['tenant_id'])).fetchone()
-            binding = db.execute('SELECT b.*,d.native_id,d.connection_id FROM bindings b '
-                                 'JOIN destinations d ON d.id=b.destination_id WHERE b.id=?',
-                                 (child['binding_id'],)).fetchone()
-            remote = RemoteItem(**proof['remote'])
-            return (proof['kind'] == 'vk_known_effect_media_review'
-                    and proof['checkpoint_digest'] == digest(checkpoint)
-                    and proof['operation_id'] == op['id']
-                    and proof['attempt_id'] == child['id']
-                    and proof['plan_digest'] == child['plan_digest']
-                    and type(proof['actor_epoch']) is int
-                    and type(proof['binding_epoch']) is int
-                    and proof['actor_epoch'] == op['actor_epoch'] == principal['epoch']
-                    and principal['active'] and binding['active']
-                    and proof['binding_epoch'] == child['binding_epoch'] == binding['epoch']
-                    and binding['native_id'] == plan['native_target']
-                    and binding['connection_id'] == plan['connection_id']
-                    and binding['destination_id'] == plan['destination_id']
-                    and binding['tenant_id'] == op['tenant_id']
-                    and binding['principal_id'] == op['principal_id']
-                    and plan['binding_epoch'] == binding['epoch']
-                    and plan['action'] in json.loads(binding['rights'])
-                    and proof['observed'] == child['observed']
-                    and result.get('media_check') == 'incomplete'
-                    and result.get('missing_checks') == ['media_identity_or_order_mismatch']
-                    and result.get('retry_safe') is False
-                    and self.known_vk_effect_identity(child, plan, remote, checkpoint, child['observed']))
-        except (KeyError, TypeError, ValueError, AttributeError):
-            return False
-
-    def finish_known_effect(self, op, child, actor, observation, *, needs_finalize):
-        if (needs_finalize or len(observation.items) != 1
-                or observation.missing_checks != ('media_identity_or_order_mismatch',)
-                or observation.no_effect is not None or observation.replacement is not None):
-            raise OutcomeUnknown('known_effect_proof_invalid')
-        remote = observation.items[0]
-        plan = json.loads(child['plan'])
-        with self.store.tx() as db:
-            self.store.fence(db, op['id'], self.id, op['fence'])
-            self.recovery_authority(db, op, child, actor)
-            current = db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone()
-            checkpoint = json.loads(current['checkpoint'])
-            if (not current['dispatched'] or 'known_effect' in checkpoint
-                    or not self.known_vk_effect_identity(child, plan, remote, checkpoint, observation.observed)):
-                raise OutcomeUnknown('known_effect_proof_invalid')
-            proof = {'kind': 'vk_known_effect_media_review',
-                     'operation_id': op['id'], 'attempt_id': child['id'],
-                     'plan_digest': child['plan_digest'], 'checkpoint_digest': digest(checkpoint),
-                     'actor_epoch': actor.epoch, 'binding_epoch': child['binding_epoch'],
-                     'observed': observation.observed, 'remote': asdict(remote)}
-            binding = db.execute('SELECT * FROM bindings WHERE id=?', (child['binding_id'],)).fetchone()
-            item = self.app.project_item(db, actor, binding, asdict(remote), publication=op['publication_id'])
-            self.save_fact(db, plan['destination_id'], remote, actor.principal_id, op['publication_id'])
-            result = {'item_ref': item['ref'], 'observed_at': remote.observed_at,
-                      'media_check': 'incomplete', 'missing_checks': list(observation.missing_checks),
-                      'reason': 'known_effect_media_review', 'retry_safe': False}
-            if remote.scheduled_at:
-                result.update(queue_ref=item['ref'], requested_at=plan['scheduled_at'],
-                              effective_at=remote.scheduled_at, scheduling_owner='provider')
-            db.execute("UPDATE attempts SET state='partial',stage='finished',observed=?,result=?,checkpoint=? WHERE id=?",
-                       (observation.observed, canonical(result),
-                        canonical({**checkpoint, 'known_effect': proof}), child['id']))
-            db.execute("UPDATE attempt_recovery SET observation=?,finalize_state='done',resolved=? WHERE attempt_id=?",
-                       (canonical(asdict(observation)), self.store.clock(), child['id']))
-            warning = DomainError('media_identity_or_order_mismatch',
-                                  'Exact VK effect observed; media identity needs owner review. Do not retry.',
-                                  'review_outcome')
-            db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(warning.output()), op['id']))
-            self.store.event(db, op['id'], 'verifying', 'blocked',
-                             'Exact VK effect is known; media remains unverified and retry is forbidden', child['alias'])
-
     def finish_child(self, op, child, actor, observation, *, needs_finalize=False):
-        if observation.missing_checks == ('media_identity_or_order_mismatch',):
-            return self.finish_known_effect(op, child, actor, observation, needs_finalize=needs_finalize)
+        plan = json.loads(child['plan'])
+        if (observation.items and plan['action'] == 'publish'
+                and plan.get('workload') != 'media_store' and observation.items[0].native_id):
+            # The provider has identified the post; no media-review quarantine.
+            observation = replace(observation, missing_checks=())
         if getattr(observation,'no_effect',None) is not None:
             return self.finish_no_effect(op,child,actor,observation,needs_finalize=needs_finalize)
         if not observation.items or observation.missing_checks:
             raise OutcomeUnknown('incomplete_readback')
-        plan = json.loads(child['plan'])
         # The first core slice has single logical remote items. Never silently drop album members.
         if len(observation.items) != 1:
             raise OutcomeUnknown('multi_item_mapping_not_enabled')
@@ -755,7 +646,7 @@ class Worker:
                 raise OutcomeUnknown('lifecycle_identity_changed')
         elif observation.replacement is not None:
             raise OutcomeUnknown('unexpected_native_replacement')
-        if plan['action'] in ('publish', 'edit', 'reschedule', 'reply'):
+        if plan['action'] in ('publish', 'edit', 'reschedule', 'reply') and (action != 'publish' or plan.get('workload') == 'media_store'):
             if remote.text != json.loads(plan['content_json'])['text']:
                 raise OutcomeUnknown('content_readback_mismatch')
             if plan['provider'] == 'max' and plan['account_type'] == 'max_web':
@@ -818,11 +709,7 @@ class Worker:
             if plan['source']:
                 result['forward_origin'] = {'source_ref': new_id('source'), 'provider': child['provider'], 'mode': 'native', 'origin_check': 'matched', 'original_url': remote.origin}
             state = 'scheduled' if observation.observed == 'provider_scheduled' else 'cancelled' if observation.observed == 'cancelled' else 'verified'
-            current_checkpoint = db.execute('SELECT checkpoint FROM attempts WHERE id=?', (child['id'],)).fetchone()[0]
-            evidence = self.vk_copy_evidence(child, plan, remote, current_checkpoint)
             final_checkpoint = {'remote': asdict(remote), 'core_recovery': hint}
-            if evidence is not None:
-                final_checkpoint['provider_evidence'] = evidence
             db.execute('UPDATE attempts SET state=?,stage=\'finished\',observed=?,result=?,checkpoint=? WHERE id=?',
                        (state, observation.observed, canonical(result), canonical(final_checkpoint), child['id']))
             if plan.get('workload') == 'media_store' and state == 'verified':
@@ -831,49 +718,6 @@ class Worker:
                     (op['publication_id'],))]
                 db.executemany('DELETE FROM assets WHERE id=?', [(ident,) for ident in staging])
             self.store.event(db, op['id'], 'finished', 'completed', 'Exact provider item observed: '+observation.observed, child['alias'])
-
-    @staticmethod
-    def vk_copy_evidence(child, plan, remote, checkpoint):
-        """Persist only validated scalar copy evidence, never adapter URLs/secrets."""
-        if plan['provider'] != 'vk':
-            return None
-        payload = json.loads(checkpoint)
-        if payload.get('transition') != 'vk_media_bound':
-            return None
-        try:
-            cp = payload['adapter']
-            if (cp['version'] != 1 or cp['attempt'] != child['id'] or cp['plan'] != child['plan_digest']
-                    or cp['target'] != plan['native_target'] or str(cp['id']) != remote.native_id):
-                raise ValueError()
-            rows, proofs, media = cp['media_bindings'], cp['photo_proofs'], cp['media']
-            count = len(plan['assets'])
-            if (not isinstance(rows, list) or not rows or len(rows) > count or count > 20
-                    or not isinstance(proofs, list) or len(proofs) != count
-                    or not isinstance(media, list) or len(media) != count or len(remote.provider_media) != count):
-                raise ValueError()
-            sanitized, seen = [], set()
-            for row in rows:
-                ordinal = row['ordinal']
-                if type(ordinal) is not int or not 0 <= ordinal < count or ordinal in seen:
-                    raise ValueError()
-                seen.add(ordinal)
-                old, new, sha = row['saved'], row['current'], row['provider_sha256']
-                proof = proofs[ordinal]
-                if (not isinstance(old, str) or not re.fullmatch(r'photo[1-9][0-9]*_[1-9][0-9]*', old)
-                        or not isinstance(new, str) or not re.fullmatch(r'photo' + re.escape(plan['native_target']) + r'_[1-9][0-9]*', new)
-                        or old != media[ordinal] or new != remote.provider_media[ordinal]
-                        or not isinstance(sha, str) or not re.fullmatch(r'[a-f0-9]{64}', sha)
-                        or proof['sha256'] != sha or proof['mime'] not in {'image/png', 'image/jpeg', 'image/webp'}
-                        or any(type(proof[k]) is not int or proof[k] <= 0 for k in ('size', 'width', 'height'))):
-                    raise ValueError()
-                sanitized.append({'ordinal': ordinal, 'saved': old, 'current': new,
-                                  'rendition': {k: proof[k] for k in ('sha256', 'size', 'mime', 'width', 'height')}})
-            if seen != {i for i in range(count) if media[i] != remote.provider_media[i]}:
-                raise ValueError()
-            return {'kind': 'vk_photo_copy', 'native_target': remote.native_target, 'native_id': remote.native_id,
-                    'attempt_id': child['id'], 'plan_digest': child['plan_digest'], 'mappings': sanitized}
-        except (KeyError, TypeError, ValueError):
-            raise OutcomeUnknown('vk_photo_evidence_invalid') from None
 
     def save_fact(self, db, destination, remote, actor=None, publication=None):
         snapshot = asdict(remote)
@@ -896,18 +740,16 @@ class Worker:
                    (new_id('fact'), destination, remote.native_id, remote.namespace, actor, publication, 'forward' if remote.origin else 'original', canonical(snapshot), remote.text, remote.observed_at))
 
     def fail(self, op, child, error):
+        """A failed provider attempt is local; no terminal outcome_unknown or review action."""
+        final = DomainError(error.code, error.message, 'none' if error.next_action == 'review_outcome' else error.next_action)
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
             row = db.execute('SELECT dispatched FROM attempts WHERE id=?', (child['id'],)).fetchone()
-            uncertain = bool(row['dispatched'])
-            state = 'outcome_unknown' if uncertain else 'blocked'
-            db.execute('UPDATE attempts SET state=?,stage=?,observed=? WHERE id=?', (state, state, 'unknown' if uncertain else 'not_attempted', child['id']))
-            if uncertain:
-                db.execute("UPDATE operations SET state='outcome_unknown' WHERE id=?", (op['id'],))
-            db.execute('UPDATE attempts SET result=? WHERE id=?', (canonical({'missing_checks': [error.code]}), child['id']))
-            final = OutcomeUnknown(error.code) if uncertain else error
+            db.execute("UPDATE attempts SET state='blocked',stage='blocked',observed=?,result=? WHERE id=?",
+                       ('unknown' if row['dispatched'] else 'not_attempted',
+                        canonical({'missing_checks': [final.code], 'reason': final.message}), child['id']))
             db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(final.output()), op['id']))
-            self.store.event(db, op['id'], state, 'unknown' if uncertain else 'blocked', final.message, child['alias'])
+            self.store.event(db, op['id'], 'finished', 'blocked', final.message, child['alias'])
 
     def fail_operation(self, op, error):
         with self.store.connection() as db:
@@ -928,8 +770,6 @@ class Worker:
             states = [row['state'] for row in projected]
             if len(states) > len(own_states) and any(s not in TERMINAL for s in own_states):
                 state = 'running'
-            elif 'outcome_unknown' in states:
-                state = 'outcome_unknown'
             elif any(s not in TERMINAL for s in states):
                 state = 'running'
             elif any(row.get('sync_status') == 'outdated' for row in projected):

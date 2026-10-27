@@ -1,5 +1,9 @@
 # VibePublish Social Operations
 
+## W1 automatic outcomes and status regression — 2026-10-28
+
+Status: **Not confirmed by user** until live acceptance. Temporary provider failures stay within the command's original fixed retry horizon; a prior uncertain child cannot repeat a native effect or block independent networks. The short per-network status maps the saved `needs_auth` code to «Нет действующей авторизации сети», rather than exposing an adapter's raw English error message. The 23 scoped source regressions passed offline; no deployment or live publication is implied.
+
 **Cross-channel navigation:** [fixed owner footer routes and safe semantic compilation](network-footers.md); status: Not confirmed by user after rollout.
 
 ## MAX native scheduling preparation (2026-10-10)
@@ -187,7 +191,7 @@ An active partner publisher normally receives six core methods, including `read`
 
 ## Reliability and related features
 
-Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. Preserve per-provider successes. Perform deterministic all-target preflight while publishing its stages; after dispatch, providers proceed independently. Record the dispatch boundary before side effects. Unknown outcomes are reconciled, never blindly retried. The owner-authorized additive [original-terminal recovery contract](mcp-contract-v1.md#original-terminal-recovery-owner-max-completion-correction-2026-09-08) reopens the original operation for observation only and durably finalizes matching provider quarantine after resolution; successful siblings are preserved. Media evidence distinguishes input hashes from provider-transcoded results.
+Keep request identity separate from the immutable execution plan; freeze concrete set members, content, selected assets and schedule. The common deterministic admission checks intent and authority before publishing; each Telegram, VK or MAX delivery starts immediately after its own prepare, without waiting for other provider preflights. A slow or failed provider prepare never delays or cancels successful siblings. The original command has a fixed horizon: 15 minutes from acceptance for immediate posts, or provider native scheduling time minus lead for delayed posts. Lane wait, preflight, submission and observation share that horizon; retries never extend it. Record the dispatch marker before the effect. Before dispatch retry only the explicitly classified transient provider codes with a fixed 5/15/30/60-second backoff derived from the command age; every other failure (including input/auth/scheduling) ends in a clear refusal. After dispatch observe/reconcile the same attempt only; a saved post ID becomes a success with a post/queue reference (and the adapter-provided URL, if any) even if readback remains unavailable at deadline. Without a confirmed ID, the exhausted attempt ends in a clear refusal without prompting manual review. Historical [recovery contracts](unknown-resolution.md) remain documented separately; they are not a prerequisite for new publications.
 
 [Social visuals](../social-visuals/README.md) preserves `$imagegen` through the requested `gpt-5.6-luna` route, candidate choice, deterministic exact typography and separate training consent. A pending visual is not yet a queued provider post; approval/selection after the native lead-time window blocks submission instead of sending immediately.
 
@@ -199,10 +203,10 @@ This is a design/contract correction, not provider implementation or deployment.
 
 ## VK copied-photo recovery delta
 
-See [ordered photo-ID binding](vk-media-binding.md) and
-[owner-only unknown resolution](unknown-resolution.md) for the narrow native
-postponed correction and immutable absence evidence. Live evidence is maintained
-in [DevCoveer acceptance](../../operations/devcoveer-acceptance-20260905.md).
+See [ordered photo-ID binding](vk-media-binding.md) for VK-owned media and
+[automatic original-attempt recovery](unknown-resolution.md). No VK media warning
+places unrelated publications in connection quarantine. Live verification
+remains separate in [DevCoveer acceptance](../../operations/devcoveer-acceptance-20260905.md).
 
 ## Telegram P0 acceptance integration — 2026-09-12
 

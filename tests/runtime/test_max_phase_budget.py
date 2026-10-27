@@ -110,7 +110,7 @@ class MaxPhaseBudgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_post_dispatch_expiry_is_still_unknown_with_one_effect(self):
         self.timed();receipt=await self.scheduled();self.provider.post=120
         with short_budgets() as budgets:await self.worker.run_once()
-        self.assertEqual(self.result(receipt)['state'],'outcome_unknown')
+        self.assertEqual(self.result(receipt)['state'],'running')
         self.assertEqual(self.attempt(receipt)['dispatched'],1)
         self.assertEqual(self.provider.count('effect'),1)
         self.assertEqual(sum(len(b.resets) for b in budgets),1)
@@ -118,7 +118,7 @@ class MaxPhaseBudgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_receipt_does_not_become_success(self):
         self.timed();receipt=await self.scheduled();self.provider.mode='missing_receipt'
         with short_budgets():await self.worker.run_once()
-        self.assertEqual(self.result(receipt)['state'],'outcome_unknown')
+        self.assertEqual(self.result(receipt)['state'],'running')
         self.assertEqual(self.provider.count('effect'),1)
 
     async def test_cancellation_restart_only_observes_existing_effect(self):
@@ -136,5 +136,5 @@ class MaxPhaseBudgetTests(unittest.IsolatedAsyncioTestCase):
         self.timed();receipt=await self.call('publish',{'to':['max'],'content':{'text':'Now'}})
         self.provider.pre=60;self.provider.post=60
         with short_budgets() as budgets:await self.worker.run_once()
-        self.assertEqual(self.result(receipt)['state'],'outcome_unknown')
+        self.assertEqual(self.result(receipt)['state'],'running')
         self.assertFalse(any(b.resets for b in budgets))
