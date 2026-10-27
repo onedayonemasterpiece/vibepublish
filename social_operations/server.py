@@ -141,7 +141,7 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'),
             current = store.current(db, current)
         if not current.scopes.intersection({'visual', 'publish'}):
             return []
-        return [types.ResourceTemplate(uriTemplate='vibepublish://assets/{asset_id}', name='Private verified visual', mimeType='image/png')]
+        return [types.ResourceTemplate(uriTemplate='vibepublish://assets/{asset_id}', name='Private verified visual')]
 
     @mcp.read_resource()
     async def read_resource(uri):

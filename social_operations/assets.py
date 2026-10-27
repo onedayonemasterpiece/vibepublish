@@ -13,6 +13,7 @@ class VerifiedImage:
     original: bytes
     original_mime: str
     data: bytes
+    mime: str
     width: int
     height: int
 
@@ -26,14 +27,14 @@ class AssetPreview:
 PREVIEW_MAX_EDGE = 768
 PREVIEW_MAX_BYTES = 384 * 1024
 INGRESS_IMAGE_MAX_BYTES = 20 * 1024 * 1024
-VERIFIED_IMAGE_MAX_BYTES = 32 * 1024 * 1024
+VERIFIED_IMAGE_MAX_BYTES = INGRESS_IMAGE_MAX_BYTES
 
 
 def verify_image(data: bytes, mime: str, *, max_input_bytes: int = INGRESS_IMAGE_MAX_BYTES) -> VerifiedImage:
-    if type(max_input_bytes) is not int or not 1 <= max_input_bytes <= VERIFIED_IMAGE_MAX_BYTES:
+    if type(max_input_bytes) is not int or not 1 <= max_input_bytes <= 32 * 1024 * 1024:
         raise ValueError('invalid image byte limit')
     if not isinstance(data, bytes) or not 1 <= len(data) <= max_input_bytes:
-        raise DomainError('asset_size_limit')
+        raise DomainError('asset_size_limit', f'Image input exceeds the {max_input_bytes // (1024 * 1024)} MiB limit')
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
@@ -44,17 +45,27 @@ def verify_image(data: bytes, mime: str, *, max_input_bytes: int = INGRESS_IMAGE
                 image.load()
                 # A separate immutable sanitized derivative strips EXIF/location.
                 oriented = ImageOps.exif_transpose(image)
-                clean = Image.new('RGB', oriented.size)
-                clean.paste(oriented.convert('RGB'))
+                clean = Image.new('RGB', oriented.size, 'white')
+                if 'A' in oriented.getbands() or 'transparency' in oriented.info:
+                    rgba = oriented.convert('RGBA')
+                    clean.paste(rgba, mask=rgba.getchannel('A'))
+                else:
+                    clean.paste(oriented.convert('RGB'))
                 output = io.BytesIO()
                 clean.save(output, format='PNG')
                 verified = output.getvalue()
+                derivative_mime = 'image/png'
+                if len(verified) > VERIFIED_IMAGE_MAX_BYTES:
+                    output = io.BytesIO()
+                    clean.save(output, format='JPEG', quality=92)
+                    verified = output.getvalue()
+                    derivative_mime = 'image/jpeg'
                 width, height = clean.size
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
         raise DomainError('invalid_image') from exc
     if len(verified) > VERIFIED_IMAGE_MAX_BYTES:
-        raise DomainError('asset_size_limit')
-    return VerifiedImage(data, mime, verified, width, height)
+        raise DomainError('asset_size_limit', 'Sanitized image exceeds the 20 MiB limit')
+    return VerifiedImage(data, mime, verified, derivative_mime, width, height)
 
 
 def insert_verified_image(store, db, actor, image: VerifiedImage) -> str:
@@ -65,9 +76,9 @@ def insert_verified_image(store, db, actor, image: VerifiedImage) -> str:
     existing = db.execute(
         """SELECT id,bytes FROM assets
            WHERE tenant_id=? AND principal_id=? AND source_sha256=? AND sha256=?
-             AND mime='image/png' AND width=? AND height=?
+             AND mime=? AND width=? AND height=?
            ORDER BY created DESC""",
-        (actor.tenant_id, actor.principal_id, source_hash, verified_hash, width, height),
+        (actor.tenant_id, actor.principal_id, source_hash, verified_hash, image.mime, width, height),
     ).fetchall()
     for row in existing:
         stored = row['bytes']
@@ -83,7 +94,7 @@ def insert_verified_image(store, db, actor, image: VerifiedImage) -> str:
     derivative = new_id('asset')
     db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
                (derivative, actor.tenant_id, actor.principal_id, verified_hash,
-                'image/png', width, height, verified, source_hash, store.clock()))
+                image.mime, width, height, verified, source_hash, store.clock()))
     return derivative
 
 

@@ -383,34 +383,27 @@ source/native/attempt mismatches and preserved/changed-media adoption.
 
 The read response now uses the same durable receipt as other potentially long operations, with `items`, `truncated` and optional `next_cursor`. Fast local reads can return complete immediately; remote reads/refreshes can return accepted and then expose items through status. An accepted read with no items is not an empty final result. Every returned read item carries source, freshness and observed_at; statistics add metrics_observed_at and per-item error where necessary.
 
-## 3. Progress: no wait-for-all barrier
+## 3. Progress: immediate network summary and optional bounded wait
 
-Every accepted operation receipt requires:
-
-- operation_id, action, state, message, operation_complete;
-- per-destination deliveries with state, current stage and observed provider state;
-- progress.events, progress.cursor and progress.has_more;
-- next_action, retry_safe and receipt_ref.
+The initial accepted receipt retains the detailed event cursor and per-destination data. A normal publication `status` request **without** `after_event` returns a read-only snapshot: `operation_id`, `operation_complete`, `summary.result`, `summary.networks` and the established deliveries. No new cursor row, BEGIN IMMEDIATE, provider call or publication effect occurs. Each network reports only `готово` (native URL or queue reference), `выполняется` (next automatic attempt if known) or `отказ` (one clear reason). Final product results are `доставлено во все сети`, `доставлено в N из M`, `не доставлено`. Partial success is an ordinary terminal result.
 
 The initial receipt is returned after durable local acceptance, before waiting on uploads or remote providers. Healthy-local-store acceptance target is two seconds, a release budget rather than a measured claim. Events are committed alongside state changes. Stage values include accepted, validating, importing_media, rendering, awaiting_approval/selection, waiting_connection, uploading, submitting, reading_back, verifying, finished, blocked and outcome_unknown.
 
 Each event has an operation-local sequence number, operation ID, timestamp, stage, status and brief message, plus destination/media ordinal/evidence where applicable. Atomic means a committed meaningful transition, not every browser mouse movement. Do not fabricate percentage-complete estimates.
 
-Example status request using a returned cursor:
+Normal publication status:
 
 ```json
-{
-  "ids": ["op_1"],
-  "after_event": "event_cursor_3",
-  "wait_seconds": 10
-}
+{"ids":["op_1"],"wait_final":true,"wait_seconds":40}
 ```
 
-It returns on the first new event from any child of op_1, an automatic-work termination/block, or the bounded timeout; it never waits for every provider. The response contains receipts with updated child snapshots and only the next event page. `wait_seconds` defaults to zero and is capped at ten. With after_event or wait_seconds, exactly one ID is required and it must resolve to one operation. The list-pagination cursor cannot be combined with an event cursor.
+`wait_final` returns when **all** destination attempts reach an operation-final state, or after the bounded wait (maximum 40 seconds), whichever comes first. A timeout still returns already successful Telegram/VK/MAX deliveries alongside pending networks. No `after_event` is needed for the normal recipe; another status call uses the same operation ID. The wait belongs to the observation request, not to the worker's publication budget.
+
+Detailed event consumers may pass `after_event` and `wait_seconds` (up to 40) to get the next event page as before. `wait_final` cannot be combined with `after_event`. Exactly one `ids` entry is required when waiting or using event cursors; list pagination cannot be combined with a wait.
 
 Event cursors are scoped to principal, policy epoch and operation, replayable after disconnect/restart. Use the returned cursor, not a guessed sequence. `has_more` means fetch remaining events without waiting. Cursor expiration or revocation returns a typed refresh/denial, never silently loses the gap or widens access. Snapshot state may be newer than the last returned event when paging; advance the cursor only over emitted events. Repeated event pages are deduplicated by operation ID and sequence.
 
-Snapshots obtained without after_event give current states and a bounded recent-event window; detailed recovery uses the supplied durable cursor. `worker_seen_at`, last event time and explicit blocked/error state distinguish a waiting provider from a stopped worker. No new event means no invented progress.
+Publication snapshots without `after_event` are compact and do not allocate event cursors. Other operation types and detailed event requests retain their existing receipt and pagination behavior. No new event means no invented progress.
 
 MCP progress notifications mirror events only if the client supplied a valid active request token. They stop when that request ends, even if the durable job continues. Some clients may not display notifications or pass them to the agent; structured status is mandatory for all clients. In a polling client the agent reports useful partial outcomes to the user as they appear instead of staying silent until MAX finishes. Reconnection never invokes publish again.
 

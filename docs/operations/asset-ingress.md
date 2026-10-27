@@ -1,5 +1,9 @@
 # Private original image upload
 
+All image paths (public HTTPS URL, chat attachment and HTTP binary ingress) accept at most **20 MiB of source bytes** and produce a derivative of at most **20 MiB**: sanitized PNG if it fits, otherwise EXIF-free JPEG at quality 92. The native adapter has the same bound. Both failures return `asset_size_limit` at ingress, not a late provider `asset_integrity` failure. Transparency is explicitly composited over white before either encoding. PDF/DjVu document ingress retains its independent 128 MiB contract.
+
+For `publish` with an HTTPS media URL, a previously accepted `request_key` replays the original frozen assets and operation **before** any URL fetch. An expired or changed source URL cannot disrupt that replay. Reusing the key with changed text/targets remains an idempotency conflict.
+
 ## Processed-image workspace import
 
 Status: **Not confirmed by user**. The existing authenticated
@@ -48,7 +52,7 @@ scope is required. Maximum body is 20 MiB, with the existing 10-second total
 read deadline. All other JSON and MCP bodies retain their 512 KiB limit.
 
 The service validates decoding, actual MIME, dimensions and tenant storage quota.
-It stores the original privately and a sanitized PNG derivative without EXIF.
+It stores the original privately and a sanitized derivative without EXIF: PNG when the result fits 20 MiB, otherwise JPEG quality 92 of the same white-composited pixels. Both representations must satisfy the image byte limit, and the returned MIME reflects the actual derivative.
 The returned `asset_id` identifies that derivative, not a byte-identical upload;
 `source_sha256` identifies original bytes. This performs **no AI generation,
 retouching, composition or publication**. GET `/v1/assets/{asset_id}` reads the

@@ -1,37 +1,37 @@
-"""Canonical skill text/examples, not a weak-agent effectiveness benchmark."""
-import json
-import re
+"""Normal-agent skill contract: short default recipe, links for rare operations."""
 import unittest
 from pathlib import Path
-from jsonschema import Draft202012Validator, FormatChecker
-from contracts.social_mcp_v1 import catalog
 
-SKILL = Path(__file__).resolve().parents[2]/'docs/llm/vibepublish-social-skill.md'
+SKILL = Path(__file__).resolve().parents[2] / 'docs/llm/vibepublish-social-skill.md'
 
 
 class SkillExamplesTests(unittest.TestCase):
-    def test_all_tagged_examples_match_the_canonical_schema(self):
-        tools = {t['name']: t for t in catalog()['tools']}
-        current = None
-        count = 0
-        tokens = re.split(r'(### `vibepublish_[a-z_]+`[^\n]*\n)', SKILL.read_text())
-        for token in tokens:
-            heading = re.match(r'### `(vibepublish_[a-z_]+)`', token)
-            if heading:
-                current = heading.group(1)
-            else:
-                for source in re.findall(r'```json\n(.*?)\n```', token, flags=re.S):
-                    self.assertIsNotNone(current)
-                    Draft202012Validator(tools[current]['inputSchema'], format_checker=FormatChecker()).validate(json.loads(source))
-                    count += 1
-        self.assertGreaterEqual(count, 8)
-
-    def test_current_skill_contains_forwarding_routing_and_offline_boundary(self):
+    def test_normal_recipe_is_short_and_executable(self):
         text = SKILL.read_text()
-        for phrase in ('Version: `1.7.1`', '### Private Telegram media database',
-                       'command.kind=search', '## Native forwarding', '## Saved editorial destinations',
-                       'routing_revision', 'expected_revision', '## Current offline implementation boundary'):
-            self.assertIn(phrase, text)
+        recipe = text.split('## Обычная публикация — короткий рецепт', 1)[1].split(
+            '## Boundaries and exceptional paths', 1
+        )[0].strip()
+        self.assertLessEqual(len(recipe.splitlines()), 40)
+        for phrase in ('vibepublish_get_started', 'vibepublish_visual',
+                       'vibepublish_publish', 'vibepublish_status',
+                       '"wait_final":true', 'request_key', 'summary.networks'):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, recipe)
+        for forbidden in ('import_begin', 'import_chunk', 'retry_failed',
+                          'review_outcome', 'source_sha256'):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, recipe)
+
+    def test_rare_flows_are_linked_not_inlined(self):
+        text = SKILL.read_text()
+        self.assertIn('Version: `1.7.1`', text)
+        for path in ('mcp-contract-v1.md', 'asset-ingress.md', 'media-store/README.md',
+                     'vk-media-binding.md', 'network-footers.md',
+                     'telegram-custom-emoji-v1.md'):
+            with self.subTest(path=path):
+                self.assertIn(path, text)
+        self.assertIn('No manual LLM base64 or SHA-256', text)
+        self.assertNotIn('## Native forwarding', text)
 
 
 if __name__ == '__main__':

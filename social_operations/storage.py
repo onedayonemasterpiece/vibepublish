@@ -8,6 +8,7 @@ import secrets
 import sqlite3
 import time
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 from zoneinfo import ZoneInfo
@@ -432,13 +433,15 @@ class Store:
         EmojiService(SimpleNamespace(store=self)).receipt_access(db, actor, row)
         return row
 
-    def receipt(self, actor: Actor, ident: str, *, after: str | None = None, event_limit=50):
-        with self.tx() as db:
+    def receipt(self, actor: Actor, ident: str, *, after: str | None = None, event_limit=50, brief=False):
+        # Ordinary publication status is a read: no write lock or cursor row.
+        with (self.connection() if brief else self.tx()) as db:
             op = self.private_operation(db, actor, ident)
-            seq = self.cursor_position(db, actor, after, "events", op["id"]) if after else 0
-            rows = db.execute("SELECT seq,body FROM events WHERE operation_id=? AND seq>? ORDER BY seq LIMIT ?",
-                              (op["id"], seq, event_limit + 1)).fetchall()
-            page = rows[:event_limit]
+            if not brief:
+                seq = self.cursor_position(db, actor, after, "events", op["id"]) if after else 0
+                rows = db.execute("SELECT seq,body FROM events WHERE operation_id=? AND seq>? ORDER BY seq LIMIT ?",
+                                  (op["id"], seq, event_limit + 1)).fetchall()
+                page = rows[:event_limit]
             deliveries = []
             from .managed_item_edits import latest_attempts
             for child in latest_attempts(db, op):
@@ -461,6 +464,72 @@ class Store:
                     if result.get("requested_at") is None:
                         result.pop("requested_at", None)
                 deliveries.append(result)
+            if brief:
+                outcomes = []
+                delivered = 0
+                operation_result = json.loads(op["result"])
+                for item in deliveries:
+                    success = item["observed"] in ("published", "provider_scheduled", "edited", "reacted")
+                    state = "готово" if success else "отказ" if op["complete"] else "выполняется"
+                    view = {"destination": item["destination"], "provider": item["provider"], "status": state}
+                    if success:
+                        delivered += 1
+                        for key in ("url", "queue_ref", "item_ref"):
+                            if item.get(key):
+                                view[key] = item[key]
+                        if not view.get("url") and str(item.get("navigate_hint", "")).startswith("https://"):
+                            view["url"] = item["navigate_hint"]
+                        if not any(key in view for key in ("url", "queue_ref", "item_ref")):
+                            view["reason"] = "Сеть подтвердила публикацию без прямой ссылки"
+                    elif state == "выполняется":
+                        next_at = (item.get("next_attempt_at") or item.get("media_budget_retry_at")
+                                   or (operation_result.get("vk_completion_retry_at") if item["provider"] == "vk" else None))
+                        if isinstance(next_at, str):
+                            view["next_attempt_at"] = next_at
+                            try:
+                                view["next_attempt_time"] = datetime.fromisoformat(
+                                    next_at.replace("Z", "+00:00")
+                                ).astimezone(ZoneInfo(actor.timezone)).strftime("%H:%M")
+                            except (ValueError, KeyError):
+                                pass
+                    else:
+                        reason = item.get("reason") or next(iter(item.get("missing_checks") or ()), None)
+                        reasons = {"needs_auth": "Нет действующей авторизации сети",
+                                   "access_revoked": "Нет прав на публикацию",
+                                   "command_expired": "Истекло время отправки",
+                                   "vk_upload_failed": "Не удалось загрузить изображение"}
+                        view["reason"] = (reasons.get(reason, reason.replace("_", " ")[:200])
+                                          if isinstance(reason, str) and "review" not in reason
+                                          and "unknown" not in reason
+                                          else "Сеть не смогла доставить публикацию")
+                    outcomes.append(view)
+                count = len(outcomes)
+                if not op["complete"]:
+                    overall = "выполняется"
+                elif count and delivered == count:
+                    overall = "доставлено во все сети"
+                elif delivered:
+                    overall = f"доставлено в {delivered} из {count}"
+                else:
+                    overall = "не доставлено"
+                snapshot = {"operation_id": op["id"], "revision": op["revision"],
+                            "action": op["action"], "state": op["state"] if op["state"] != "outcome_unknown" else "blocked",
+                            "operation_complete": bool(op["complete"]), "deliveries": deliveries,
+                            "summary": {"result": overall, "networks": outcomes}}
+                if op["publication_id"]:
+                    snapshot["resource_id"] = op["publication_id"]
+                if operation_result.get("review_token"):
+                    snapshot["review_token"] = operation_result["review_token"]
+                dependency = db.execute(
+                    "SELECT id,state,reason,event_status,child_operation_id,expires "
+                    "FROM vk_story_dependencies WHERE parent_attempt_id IN "
+                    "(SELECT id FROM attempts WHERE operation_id=?)", (op["id"],)
+                ).fetchone()
+                if dependency:
+                    snapshot["linked_story"] = dict(dependency)
+                if op["error"] and op["state"] != "outcome_unknown":
+                    snapshot["error"] = json.loads(op["error"])["error"]
+                return snapshot
             state = op["state"]
             next_action = ("review_outcome" if state == "outcome_unknown" else "approve" if state == "needs_approval"
                            else "select_visual" if state == "needs_selection" else "none" if op["complete"] else "check_status")
