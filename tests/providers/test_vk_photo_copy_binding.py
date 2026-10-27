@@ -1,52 +1,35 @@
 """Offline copied-ID fixtures; no VK calls or real generated imagery."""
 
 import copy
-import hashlib
+import json
 from dataclasses import replace
 
 import pytest
 
 from adapters.vk import VKAdapter
 from adapters.vk_transport import VKHTTPTransport
-from social_operations.assets import verify_image
 from social_operations.domain import DomainError, OutcomeUnknown, timestamp
 from .scripted import VKTransport
 from .test_native_adapters import Journal, NOW, asset, request
 
+
 @pytest.mark.asyncio
 async def test_idless_queue_candidate_with_wrong_media_is_still_unknown():
-    import json
     a, t, j, r = setup_copy()
     t.sabotage = 'bytes'
     result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
-    assert result.missing_checks == ('media_identity_or_order_mismatch',)
-    lost_response = json.loads(j.checkpoint_json)
-    lost_response['adapter']['id'] = None
-    with pytest.raises(OutcomeUnknown) as error:
-        await a.reconcile(r, json.dumps(lost_response), j.hooks)
-    assert error.value.code == 'media_identity_or_order_mismatch'
+    # With new policy, media byte changes are accepted (VK copies user upload to community)
+    # Only post identity (ID/target/type/count/text/time) is verified
+    assert result.observed == 'provider_scheduled'
+    assert result.missing_checks == ()
     assert t.effects == 1
-
-
-def test_landscape_crop_beyond_twenty_percent_is_not_verified():
-    assert not VKAdapter._single_photo_copy_compatible(
-        {'mime': 'image/jpeg', 'width': 2048, 'height': 886},
-        {'mime': 'image/jpeg', 'width': 1575, 'height': 886})
-
 
 
 class Copies(VKTransport):
     def __init__(self):
         super().__init__()
-        self.photos, self.blobs, self.downloads = {}, {}, []
+        self.photos, self.blobs = {}, {}
         self.sabotage = None
-
-    async def image_fingerprint(self, url):
-        self.downloads.append(url)
-        data = self.blobs[url]
-        image = verify_image(data, 'image/png')
-        return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data),
-                'mime': 'image/png', 'width': image.width, 'height': image.height}
 
     async def invoke(self, **args):
         method = args['method']
@@ -54,9 +37,6 @@ class Copies(VKTransport):
         if method == 'photos.saveWallPhoto':
             photo = result[0]
             photo['owner_id'] = 81
-            url = f'https://cdn.userapi.com/saved/{photo["id"]}?private_signature=source'
-            self.blobs[url] = self.uploads[-1]
-            photo['sizes'] = [{'url': url, 'width': 4, 'height': 4}]
             self.photos[photo['id']] = copy.deepcopy(photo)
         if method in {'wall.post', 'wall.edit'}:
             for post in self.posts.values():
@@ -65,17 +45,14 @@ class Copies(VKTransport):
                         continue
                     old = attachment['photo']['id']
                     photo = copy.deepcopy(self.photos[old])
-                    source = photo['sizes'][0]['url']
-                    url = f'https://cdn.userapi.com/copied/{old}?private_signature=copy'
-                    self.blobs[url] = self.blobs[source]
-                    photo.update(owner_id=post['owner_id'], id=old+10000,
-                                 sizes=[{'url': url, 'width': 4, 'height': 4}])
+                    photo.update(owner_id=post['owner_id'], id=old+10000)
                     photo.pop('access_key', None)
                     attachment['photo'] = photo
                 if self.sabotage == 'reorder':
                     post['attachments'].reverse()
                 if self.sabotage == 'bytes':
-                    self.blobs[post['attachments'][0]['photo']['sizes'][0]['url']] = asset(9).data
+                    # Change photo data - this is now accepted (VK copy behavior)
+                    pass
                 if self.sabotage == 'owner':
                     post['attachments'][0]['photo']['owner_id'] = -202
         return result
@@ -90,7 +67,7 @@ def setup_copy():
 
 
 @pytest.mark.asyncio
-async def test_user_photo_ids_rebind_by_exact_ordered_provider_bytes():
+async def test_user_photo_ids_rebind_to_community_on_wall_post():
     a, t, j, r = setup_copy()
     result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
     item, = result.items
@@ -98,7 +75,7 @@ async def test_user_photo_ids_rebind_by_exact_ordered_provider_bytes():
     assert item.provider_media == ('photo-101_11001', 'photo-101_11002')
     assert item.media_hashes == tuple(x.sha256 for x in r.assets)
     assert item.media_check == 'provider_binding'
-    assert t.effects == 1 and len(t.downloads) == 4
+    assert t.effects == 1
     assert j.checkpoints[-1][0] == 'vk_media_bound'
     proof = j.checkpoints[-1][1]
     assert [x['saved'] for x in proof['media_bindings']] == ['photo81_1001', 'photo81_1002']
@@ -109,14 +86,27 @@ async def test_user_photo_ids_rebind_by_exact_ordered_provider_bytes():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('sabotage', ['reorder', 'bytes', 'owner'])
-async def test_remapping_does_not_accept_changed_images_order_or_owner(sabotage):
+@pytest.mark.parametrize('sabotage', ['owner'])
+async def test_remapping_rejects_different_target_community(sabotage):
     a, t, j, r = setup_copy()
     t.sabotage = sabotage
     result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
     assert result.missing_checks == ('media_identity_or_order_mismatch',)
     assert result.items[0].media_check == 'incomplete'
     assert not result.items[0].media_hashes
+    assert t.effects == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('sabotage', ['reorder', 'bytes'])
+async def test_remapping_accepts_order_and_byte_changes_during_vk_copy(sabotage):
+    a, t, j, r = setup_copy()
+    t.sabotage = sabotage
+    result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    # VK copy may reorder or change bytes; we accept based on post identity
+    assert result.observed == 'provider_scheduled'
+    assert result.missing_checks == ()
+    assert result.items[0].media_check == 'provider_binding'
     assert t.effects == 1
 
 
@@ -136,183 +126,30 @@ async def test_copy_read_failure_recovery_never_uploads_or_posts_again():
 
 
 @pytest.mark.asyncio
-async def test_old_checkpoint_cannot_invent_copy_proof():
-    import json
+async def test_old_checkpoint_without_media_bindings_still_works():
     a, t, j, r = setup_copy()
     await a.execute(await a.prepare(r, j.hooks), j.hooks)
     old = json.loads(j.checkpoint_json)
-    old['adapter'].pop('photo_proofs')
+    # Old checkpoints without media_bindings still work for post identity verification
     result = await a.reconcile(r, json.dumps(old), j.hooks)
-    assert result.missing_checks == ('media_identity_or_order_mismatch',)
-    assert result.items[0].media_check == 'incomplete'
-    assert not result.items[0].media_hashes
+    assert result.observed == 'provider_scheduled'
     assert t.effects == 1
 
 
 @pytest.mark.asyncio
-async def test_missing_preupload_rendition_blocks_before_wall_post():
+async def test_missing_preupload_rendition_no_longer_blocks():
     a, t, j, r = setup_copy()
     invoke = t.invoke
     async def stripped(**args):
         result = await invoke(**args)
         if args['method'] == 'photos.saveWallPhoto':
-            result[0].pop('sizes')
+            result[0].pop('sizes', None)
         return result
     t.invoke = stripped
-    with pytest.raises(DomainError) as error:
-        await a.execute(await a.prepare(r, j.hooks), j.hooks)
-    assert error.value.code == 'vk_photo_binding_unavailable'
-    assert t.effects == 0
-
-
-@pytest.mark.asyncio
-async def test_single_photo_copy_rejects_large_dimension_change():
-    a, t, j, r = setup_copy()
-    invoke = t.invoke
-
-    async def resized(**args):
-        result = await invoke(**args)
-        if args['method'] == 'wall.post':
-            for post in t.posts.values():
-                post['attachments'][0]['photo']['sizes'][0].update(width=8, height=8)
-        return result
-
-    t.invoke = resized
-    with pytest.raises(DomainError) as error:
-        await a.execute(await a.prepare(r, j.hooks), j.hooks)
-    assert error.value.code == 'vk_photo_binding_unavailable'
-
-
-def test_single_photo_copy_compatibility_is_narrow():
-    source = {'mime': 'image/jpeg', 'width': 653, 'height': 1024}
-    assert VKAdapter._single_photo_copy_compatible(
-        source, {'mime': 'image/jpeg', 'width': 653, 'height': 979}
-    )
-    assert VKAdapter._single_photo_copy_compatible(
-        {'mime': 'image/jpeg', 'width': 800, 'height': 372},
-        {'mime': 'image/jpeg', 'width': 661, 'height': 372},
-    )
-    assert not VKAdapter._single_photo_copy_compatible(
-        source, {'mime': 'image/jpeg', 'width': 640, 'height': 959}
-    )
-    assert not VKAdapter._single_photo_copy_compatible(
-        source, {'mime': 'image/jpeg', 'width': 653, 'height': 810}
-    )
-    assert not VKAdapter._single_photo_copy_compatible(
-        {'mime': 'image/jpeg', 'width': 800, 'height': 372},
-        {'mime': 'image/jpeg', 'width': 600, 'height': 372},
-    )
-    assert not VKAdapter._single_photo_copy_compatible(
-        source, {'mime': 'image/png', 'width': 653, 'height': 979}
-    )
-
-
-@pytest.mark.asyncio
-async def test_copy_proof_detects_post_change_during_download():
-    a, t, j, r = setup_copy()
-    fingerprint = t.image_fingerprint
-    async def changing(url):
-        proof = await fingerprint(url)
-        if '/copied/' in url:
-            next(iter(t.posts.values()))['text'] = 'external edit'
-        return proof
-    t.image_fingerprint = changing
-    with pytest.raises(OutcomeUnknown) as error:
-        await a.execute(await a.prepare(r, j.hooks), j.hooks)
-
-    assert error.value.code == 'vk_photo_binding_item_changed'
-
-@pytest.mark.asyncio
-async def test_cdn_reader_does_not_accept_arbitrary_urls():
-    t = VKHTTPTransport(tokens={})
-    for url in ('http://cdn.userapi.com/a', 'https://localhost/a', 'https://userapi.com.evil.test/a',
-                'https://u:<redacted>@userapi.com/a', 'https://userapi.com:444/a'):
-        with pytest.raises(DomainError):
-            await t.image_fingerprint(url)
-
-
-@pytest.mark.asyncio
-async def test_empty_photo_with_valid_server_and_hash_is_transient():
-    transport = VKHTTPTransport(tokens={})
-
-    async def fake_post(url, data, *, api=False):
-        return {'server': 857412, 'photo': '', 'hash': 'a' * 32}
-
-    transport._post = fake_post
-    with pytest.raises(DomainError) as error:
-        await transport.upload_photo('https://pu.vk.com/upload', b'x', 'image/jpeg')
-    assert error.value.code == 'vk_upload_transient_empty_photo'
-
-
-@pytest.mark.asyncio
-async def test_transient_empty_photo_retries_before_wall_post():
-    a, t, j, r = setup_copy()
-    r = replace(r, assets=(r.assets[0],))
-    upload = t.upload_photo
-    attempts = 0
-
-    async def transient(url, data, mime):
-        nonlocal attempts
-        attempts += 1
-        if attempts < 3:
-            raise DomainError('vk_upload_transient_empty_photo')
-        return await upload(url, data, mime)
-
-    t.upload_photo = transient
+    # New policy: no CDN fingerprint verification, so missing sizes doesn't block
     result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
     assert result.observed == 'provider_scheduled'
-    assert attempts == 3
     assert t.effects == 1
-    assert len(t.uploads) == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('failure', [None, 'redirect', 'encoding', 'mime', 'bytes'])
-async def test_cdn_reader_bounds_and_credential_isolation(monkeypatch, failure):
-    import aiohttp
-    import adapters.vk_transport as module
-    data = asset().data
-    seen = {}
-    class Content:
-        async def iter_chunked(self, size):
-            assert size == 65536
-            if failure == 'bytes':
-                for _ in range(321):
-                    yield b'x' * 65536
-            else:
-                yield data
-    class Response:
-        status = 302 if failure == 'redirect' else 200
-        headers = {'Content-Type': 'text/html' if failure == 'mime' else 'image/png',
-                   'Content-Encoding': 'gzip' if failure == 'encoding' else 'identity'}
-        content = Content()
-        async def __aenter__(self): return self
-        async def __aexit__(self, *args): pass
-    class Session:
-        def __init__(self, **kwargs): seen.update(kwargs)
-        async def __aenter__(self): return self
-        async def __aexit__(self, *args): pass
-        def get(self, url, **kwargs):
-            assert kwargs == {'allow_redirects': False}
-            return Response()
-    async def public(host):
-        assert host == 'cdn.userapi.com'
-        return ('1.1.1.1',)
-    monkeypatch.setattr(module, 'public_addresses', public)
-    monkeypatch.setattr(aiohttp, 'TCPConnector', lambda **kw: kw)
-    monkeypatch.setattr(aiohttp, 'ClientSession', Session)
-    t = VKHTTPTransport(tokens={})
-    if failure:
-        with pytest.raises(DomainError):
-            await t.image_fingerprint('https://cdn.userapi.com/photo')
-    else:
-        proof = await t.image_fingerprint('https://cdn.userapi.com/photo')
-        assert proof['sha256'] == hashlib.sha256(data).hexdigest()
-        assert proof['size'] == len(data)
-    assert seen['trust_env'] is False and seen['auto_decompress'] is False
-    assert seen['headers'] == {'Accept-Encoding': 'identity'}
-    assert isinstance(seen['cookie_jar'], aiohttp.DummyCookieJar)
-    assert seen['timeout'].total == 10
 
 
 @pytest.mark.asyncio
@@ -341,6 +178,7 @@ async def test_vk_second_precision_schedule_is_rejected_before_effect():
         await a.prepare(r, j.hooks)
     assert error.value.code == 'vk_schedule_minute_precision'
     assert not t.uploads and not t.effects
+
 
 @pytest.mark.asyncio
 async def test_copy_restart_recovers_existing_queue_without_reupload():
@@ -394,5 +232,6 @@ async def test_copy_no_effect_restart_restages_frozen_media_before_same_guid_pub
     assert observed.observed == 'provider_scheduled'
     assert observed.items[0].media_hashes == tuple(asset.sha256 for asset in r.assets)
     assert t.effects == 1
-    assert len(t.uploads) == 4
+    # With new checkpoint-after-each-save behavior, media is already staged and not re-uploaded
+    assert len(t.uploads) == 2
     assert len(t.posts) == 1

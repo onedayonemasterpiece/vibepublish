@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- VK adapter W2 reliability (§18.1 / 2026-10-27): remove all CDN fingerprint verification (_photo_proof, _renditions, _single_photo_copy_compatible, image_fingerprint transport). Accept VK user-upload → community-copy remapping based on post identity (ID/target/type/count/text/time) without post-fetched hash. Link ordered native media IDs with frozen asset hashes via native.bind_media. Checkpoint immediately after each photos.saveWallPhoto (including 10-photo scheduled); remove scheduled_at selector; never persist access_key.
+
+- VK photo upload retry: increase to 5 attempts with fresh getWallUploadServer each time; add HTTP 429 to transient conditions (5xx incl 500, 429, timeout/network, vk_upload_transient_empty_photo, vk_upload_response_invalid); 403/SSRF remain non-retryable. Backoff 1/2/3/4s.
+
+- VK scheduled recovery (D1 revised): queue_match by text/time/attachment count; pick newest by time/ID when multiple matches; no 60-min guard; repeat wall.post with same guid if no queue match; returned ID = success.
+
+- VK queue traversal (D7): read complete postponed queue; parse only target fields for other posts (don't fail on poll/link/article attachments of OTHER posts); completeness required to conclude not found; unrecognized attachments of TARGET cannot be dropped silently.
+
+- VK staged photos (§16): allow scheduled posts; make photo_proofs optional; accept negative owner_ids in regex (community photos); checkpoint after each save.
+
+- §18.1 product decision: returned VK post ID = success Observation with URL/native item ref; readback failure only warning via existing channel, not OutcomeUnknown/manual. Small known post ID mismatches = warning only, not partial/review.
+
 - Allow 20 minutes for the complete verification CI job, including locked/offline dependency and browser setup. The 19 October full Python 3.13 suite took 13 minutes; Python 3.12 hit the previous 15-minute whole-job limit. Keep every check and all product timeouts unchanged.
 
 - Accept explicitly pinned legacy illustration origin-v1 document evidence for exact-entry reads, retaining current origin SHA checks and actual downloaded-byte validation. Keep historical metadata, source/display/provider hash roles, and native verification distinct; no grants are implied.

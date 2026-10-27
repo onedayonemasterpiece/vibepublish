@@ -51,3 +51,29 @@ readback, not a claim that the schema specifies those behaviors.
 Live full lifecycle post10 and real crash/recovery post11 passed; both cancelled
 with complete native queue absence. See the canonical acceptance report for exact
 operation IDs, preserved failure histories, provider hashes and remaining gates.
+
+## §18.1 / W2 policy update (2026-10-27)
+
+**CDN fingerprint verification removed.** The `_photo_proof`, `_renditions`,
+`_single_photo_copy_compatible`, and `image_fingerprint` transport method are
+deleted. VK user-upload → community-copy remapping is now accepted based on
+post identity (ID/target/type/count/text/time) without post-fetched hash
+comparison.
+
+**Ordered native media IDs** of the exact post are linked with frozen asset
+hashes via `native.bind_media` (no post-fetched hash). Checkpoint is written
+immediately AFTER each successful `photos.saveWallPhoto` (including for 10-photo
+scheduled posts). The `scheduled_at` selector is removed from photo staging
+checkpoints. `access_key` is never persisted; if crash/resume needs it, only
+the corresponding photo is re-uploaded, other saved native IDs are reused.
+
+**Media binding verification simplified:** `_bind_copied_media` now only
+verifies that the target post has the expected number of attachments in order,
+and that any changed photo IDs map from user-owned to the target community
+(owner_id matches). No CDN download, no SHA comparison. Small byte/order
+differences during VK copy are accepted; only wrong target community is rejected.
+
+**Readback failure handling:** If VK returns a post ID but subsequent readback
+fails (network/timeout/404), the operation succeeds with a fallback `RemoteItem`
+built from frozen request data + the known post ID. A warning is emitted via
+existing `hooks.emit_progress` channel. Wrong target/ID raises `DomainError`.

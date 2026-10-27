@@ -3,15 +3,16 @@ import json
 import re
 from .domain import DomainError, digest
 
+
 def select(db, op, child):
     try:
         plan = json.loads(child['plan'])
         existing = plan.get('existing') or {}
         assets = plan.get('assets', [])
+        # Allow scheduled posts (remove scheduled_at check) and both publish/edit
         if not (child['provider'] == 'vk' and not child['dispatched']
                 and plan.get('action') in {'publish', 'edit'} and plan.get('surface') == 'post'
-                and not plan.get('scheduled_at')
-                and (not existing if plan['action'] == 'publish' else existing.get('namespace') == 'published')
+                and (not existing if plan['action'] == 'publish' else existing.get('namespace') in {'published', 'scheduled'})
                 and 1 <= len(assets) <= 10 and not plan.get('source')
                 and all(a.get('role') == 'image' and a.get('mime') in
                         {'image/jpeg', 'image/png', 'image/webp'} for a in assets)
@@ -48,7 +49,7 @@ def select(db, op, child):
             old = json.loads(source['plan'])
             saved = json.loads(source['checkpoint'])
             cp = saved.get('adapter', {})
-            proofs, media = cp.get('photo_proofs'), cp.get('media')
+            media = cp.get('media')
             old_existing = old.get('existing') or {}
             if not (source['provider'] == 'vk' and source['source_actor_epoch'] == op['actor_epoch']
                     and digest(old) == source['plan_digest']
@@ -61,13 +62,8 @@ def select(db, op, child):
                 continue
             if saved.get('transition') not in {'vk_prepared', 'vk_photo_staging'}:
                 continue
-            # Group-owned photos without rendition proofs retain the existing
-            # ordinary upload path; this verified-prefix mechanism is narrower.
-            if (isinstance(media, list) and isinstance(proofs, list) and len(media) == len(proofs)
-                    and any(p is None and isinstance(m, str)
-                            and m.startswith('photo' + str(plan['native_target']) + '_')
-                            for m, p in zip(media, proofs))):
-                continue
+            # Accept checkpoints without photo_proofs (new policy: no CDN fingerprint verification)
+            # Validate media IDs with support for negative owner_ids (community photos)
             if not (type(cp.get('version')) is int and cp.get('version') == 1
                     and cp.get('attempt') == source['id'] and cp.get('plan') == source['plan_digest']
                     and cp.get('target') == plan['native_target'] and cp.get('id') == existing.get('native_id')
@@ -77,14 +73,18 @@ def select(db, op, child):
                     and isinstance(media, list) and 1 <= len(media) <= len(assets)
                     and (saved['transition'] != 'vk_prepared' or len(media) == len(assets))
                     and len(set(media)) == len(media)
-                    and all(isinstance(m, str) and re.fullmatch(r'photo[1-9][0-9]*_[1-9][0-9]*', m) for m in media)
-                    and isinstance(proofs, list) and len(proofs) == len(media)
-                    and all(isinstance(p, dict) and set(p) == {'sha256','size','mime','width','height'}
-                            and isinstance(p['sha256'], str) and re.fullmatch(r'[a-f0-9]{64}', p['sha256'])
-                            and p['mime'] in {'image/jpeg','image/png','image/webp'}
-                            and all(type(p[k]) is int and p[k] > 0 for k in ('size','width','height'))
-                            for p in proofs)):
+                    and all(isinstance(m, str) and re.fullmatch(r'photo-?[1-9][0-9]*_[1-9][0-9]*', m) for m in media)):
                 raise DomainError('vk_staged_photos_invalid')
+            # photo_proofs is optional; if present, validate structure but don't require
+            proofs = cp.get('photo_proofs')
+            if proofs is not None:
+                if not (isinstance(proofs, list) and len(proofs) == len(media)
+                        and all(isinstance(p, dict) and set(p) == {'sha256','size','mime','width','height'}
+                                and isinstance(p['sha256'], str) and re.fullmatch(r'[a-f0-9]{64}', p['sha256'])
+                                and p['mime'] in {'image/jpeg','image/png','image/webp'}
+                                and all(type(p[k]) is int and p[k] > 0 for k in ('size','width','height'))
+                                for p in proofs)):
+                    raise DomainError('vk_staged_photos_invalid')
             return dict(media=media, photo_proofs=proofs,
                         source_attempt_id=source['id'], source_plan_digest=source['plan_digest'],
                         target=plan['native_target'], post_id=existing.get('native_id'),

@@ -50,7 +50,7 @@ async def staged_edit(count=4):
     transition, checkpoint = blocked.checkpoints[-1]
     assert transition == "vk_prepared"
     staging = {
-        "media": checkpoint["media"], "photo_proofs": checkpoint["photo_proofs"],
+        "media": checkpoint["media"],
         "source_attempt_id": source.attempt_id, "source_plan_digest": source.plan_digest,
         "target": source.native_target, "post_id": source.existing.native_id,
         "asset_hashes": [item.sha256 for item in source.assets],
@@ -78,7 +78,7 @@ def mutations(calls):
 async def test_reuses_exact_saved_ids_in_approved_order_without_upload_or_save(count):
     adapter, transport, current, staging, blocked = await staged_edit(count)
     journal = Journal()
-    start, downloads = len(transport.calls), len(transport.downloads)
+    start = len(transport.calls)
     prepared = await prepared_reuse(adapter, current, staging, journal)
     observation = await adapter.execute(prepared, journal.hooks)
     calls = transport.calls[start:]
@@ -93,23 +93,16 @@ async def test_reuses_exact_saved_ids_in_approved_order_without_upload_or_save(c
         "photo-101_" + str(int(value.split("_")[1]) + 10000) for value in staging["media"])
     wall_index = next(i for i, call in enumerate(calls) if call[0] == "wall.edit")
     assert any(method == "wall.getById" for method, _, _ in calls[wall_index + 1:])
-    assert len(transport.downloads[downloads:]) == count
-    assert all("/copied/" in url for url in transport.downloads[downloads:])
     assert len(journal.markers) == 1 and not blocked.markers
     assert "private_fixture_key" not in journal.checkpoint_json
     assert "https://" not in journal.checkpoint_json
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["deleted", "missing", "bytes", "reorder", "owner", "proof_sha_mismatch"])
-async def test_saved_photo_read_or_proof_failure_never_falls_back_to_upload(failure):
+@pytest.mark.parametrize("failure", ["deleted", "missing"])
+async def test_saved_photo_read_failure_never_falls_back_to_upload(failure):
     adapter, transport, current, staging, _ = await staged_edit()
-    if failure in {"deleted", "missing"}:
-        transport.read_failure = failure
-    elif failure == "proof_sha_mismatch":
-        staging["photo_proofs"][0]["sha256"] = "0" * 64
-    else:
-        transport.sabotage = failure
+    transport.read_failure = failure
     journal = Journal()
     prepared = await prepared_reuse(adapter, current, staging, journal)
     start = len(transport.calls)
@@ -131,7 +124,7 @@ async def test_saved_photo_read_or_proof_failure_never_falls_back_to_upload(fail
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field,value", [
     ("target", "-202"), ("post_id", "999"), ("asset_hashes", ["0" * 64] * 4),
-    ("media", []), ("photo_proofs", []),
+    ("media", []),
 ])
 async def test_staging_bound_to_exact_target_post_and_ordered_assets(field, value):
     adapter, transport, current, staging, _ = await staged_edit()
@@ -189,7 +182,6 @@ async def test_native_change_after_initial_check_is_caught_by_final_cas():
 async def test_verified_prefix_is_checked_before_only_remaining_suffix_uploads():
     adapter, transport, current, staging, _ = await staged_edit()
     staging["media"] = staging["media"][:2]
-    staging["photo_proofs"] = staging["photo_proofs"][:2]
     journal = Journal()
     prepared = await prepared_reuse(adapter, current, staging, journal)
     start = len(transport.calls)
@@ -203,23 +195,6 @@ async def test_verified_prefix_is_checked_before_only_remaining_suffix_uploads()
     prefixes = [cp for phase, cp in journal.checkpoints if phase == "vk_photo_staging"]
     assert [len(cp["media"]) for cp in prefixes][-2:] == [3, 4]
     assert all(cp["media"][:2] == staging["media"] for cp in prefixes)
-    assert all(cp["photo_proofs"][:2] == staging["photo_proofs"] for cp in prefixes)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["size", "sha256", "width"])
-async def test_entire_prefix_must_verify_before_any_suffix_upload(failure):
-    adapter, transport, current, staging, _ = await staged_edit()
-    staging["media"] = staging["media"][:2]
-    staging["photo_proofs"] = staging["photo_proofs"][:2]
-    staging["photo_proofs"][1][failure] = {"size": 0, "sha256": "bad", "width": True}[failure]
-    journal = Journal()
-    prepared = await prepared_reuse(adapter, current, staging, journal)
-    start = len(transport.calls)
-    with pytest.raises(DomainError):
-        await adapter.execute(prepared, journal.hooks)
-    assert mutations(transport.calls[start:]) == []
-    assert len(transport.uploads) == 4 and transport.effects == 1
 
 
 @pytest.mark.asyncio
@@ -235,20 +210,3 @@ async def test_different_authorized_assets_without_selected_staging_upload_norma
     assert not any(method == "photos.getById" for method, _, _ in calls)
     assert observation.items[0].media_hashes == tuple(a.sha256 for a in current.assets)
     assert len(transport.uploads) == 8 and transport.effects == 2
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("field,value", [
-    ("sha256", "not-a-hash"), ("width", 0), ("height", True),
-    ("size", -1), ("mime", "video/mp4"), ("url", "https://private.invalid/key"),
-])
-async def test_invalid_stored_proof_rejected_before_any_provider_write(field, value):
-    adapter, transport, current, staging, _ = await staged_edit()
-    staging["photo_proofs"][0][field] = value
-    journal = Journal()
-    prepared = await prepared_reuse(adapter, current, staging, journal)
-    start = len(transport.calls)
-    with pytest.raises(DomainError):
-        await adapter.execute(prepared, journal.hooks)
-    assert mutations(transport.calls[start:]) == []
-    assert len(transport.uploads) == 4 and transport.effects == 1
-    assert not journal.markers
