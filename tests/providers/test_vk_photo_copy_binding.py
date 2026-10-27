@@ -216,6 +216,60 @@ async def test_exact_post_in_second_queue_page_ignores_neighbor_poll_link_articl
     assert t.effects == 0
 
 
+
+@pytest.mark.asyncio
+async def test_exact_queue_item_needs_no_later_page_but_absence_needs_complete_scan():
+    a, t, _, _ = setup_copy()
+    t.posts[(-101, 1000)] = {
+        'id': 1000, 'owner_id': -101, 'text': 'Exact',
+        'date': NOW + 3600, 'post_type': 'postpone', 'attachments': [],
+    }
+    for number in range(1, 102):
+        t.posts[(-101, number)] = {
+            'id': number, 'owner_id': -101, 'text': 'Neighbor',
+            'date': NOW + 3600, 'post_type': 'postpone', 'attachments': [],
+        }
+    invoke = t.invoke
+
+    async def second_page_down(**args):
+        if args['method'] == 'wall.get' and args['params'].get('offset', 0) >= 100:
+            raise DomainError('vk_transport_failed')
+        return await invoke(**args)
+
+    t.invoke = second_page_down
+    exact = await a._exact('-101', '1000', 'scheduled')
+    assert exact is not None and exact.native_id == '1000'
+    assert len([call for call in t.calls if call[0] == 'wall.get']) == 1
+    with pytest.raises(DomainError) as error:
+        await a._exact('-101', '9999', 'scheduled')
+    assert error.value.code == 'vk_transport_failed'
+
+
+@pytest.mark.asyncio
+async def test_lost_scheduled_id_queue_match_chooses_newest_numeric_post_without_post():
+    from adapters.native import saved_checkpoint
+
+    a, t, j, r = setup_copy()
+    for ident in (9, 10):
+        t.posts[(-101, ident)] = {
+            'id': ident, 'owner_id': -101, 'text': 'Fixture',
+            'date': NOW + 3600, 'post_type': 'postpone',
+            'attachments': [
+                {'type': 'photo', 'photo': {'owner_id': -101, 'id': ident * 100 + 1}},
+                {'type': 'photo', 'photo': {'owner_id': -101, 'id': ident * 100 + 2}},
+            ],
+        }
+    checkpoint = saved_checkpoint(
+        r, id=None, media=['photo-101_900', 'photo-101_901'],
+        retryable_wall_post=True,
+    )
+    result = await a.reconcile(r, checkpoint, j.hooks)
+    assert result.observed == 'provider_scheduled'
+    assert result.items[0].native_id == '10'
+    assert t.effects == 0
+    assert not any(call[0] == 'wall.post' for call in t.calls)
+
+
 @pytest.mark.asyncio
 async def test_old_checkpoint_without_media_bindings_still_works():
     a, t, j, r = setup_copy()

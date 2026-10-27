@@ -310,10 +310,14 @@ class VKAdapter:
                     raise DomainError('vk_queue_moved', next_action='refresh')
                 seen.add(ident)
                 try:
-                    values.append(self._item(raw, 'scheduled', target))
+                    item = self._item(raw, 'scheduled', target)
                 except DomainError:
                     if str(ident) == exact_id:
                         raise
+                else:
+                    if item.native_id == exact_id:
+                        return [item]
+                    values.append(item)
             if len(seen) == count:
                 return values
             if len(rows) < 100:
@@ -803,7 +807,7 @@ class VKAdapter:
         ]
         if len(candidates) >= 1:
             # Take the newest by time/ID when multiple matches
-            candidates.sort(key=lambda i: (i.scheduled_at or '', i.native_id), reverse=True)
+            candidates.sort(key=lambda i: (i.scheduled_at or '', int(i.native_id)), reverse=True)
             checkpoint['id'] = candidates[0].native_id
             checkpoint['identity_source'] = 'queue_match'
             await hooks.checkpoint('vk_response', saved_checkpoint(request, **checkpoint))
