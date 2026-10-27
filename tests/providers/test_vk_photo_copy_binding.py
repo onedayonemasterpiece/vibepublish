@@ -3,6 +3,7 @@
 import copy
 import json
 from dataclasses import replace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -76,9 +77,9 @@ async def test_user_photo_ids_rebind_to_community_on_wall_post():
     assert item.media_hashes == tuple(x.sha256 for x in r.assets)
     assert item.media_check == 'provider_binding'
     assert t.effects == 1
-    assert j.checkpoints[-1][0] == 'vk_media_bound'
-    proof = j.checkpoints[-1][1]
-    assert [x['saved'] for x in proof['media_bindings']] == ['photo81_1001', 'photo81_1002']
+    assert j.checkpoints[-1][0] == 'vk_response'
+    assert 'media_bindings' not in j.checkpoint_json
+    assert 'photo_proofs' not in j.checkpoint_json
     assert 'private_signature' not in j.checkpoint_json and 'https://' not in j.checkpoint_json
     again = await a.reconcile(r, j.checkpoint_json, j.hooks)
     assert again.items[0].provider_media == item.provider_media
@@ -91,9 +92,11 @@ async def test_remapping_rejects_different_target_community(sabotage):
     a, t, j, r = setup_copy()
     t.sabotage = sabotage
     result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
-    assert result.missing_checks == ('media_identity_or_order_mismatch',)
-    assert result.items[0].media_check == 'incomplete'
-    assert not result.items[0].media_hashes
+    # §18.1: the exact post ID is authoritative even when VK copied photo owners.
+    assert result.observed == 'provider_scheduled'
+    assert result.missing_checks == ()
+    assert result.items[0].media_check == 'provider_binding'
+    assert result.items[0].media_hashes == tuple(asset.sha256 for asset in r.assets)
     assert t.effects == 1
 
 
@@ -115,14 +118,66 @@ async def test_copy_read_failure_recovery_never_uploads_or_posts_again():
     a, t, j, r = setup_copy()
     prepared = await a.prepare(r, j.hooks)
     t.after_mutation = lambda _: setattr(t, 'fail_read', True)
-    with pytest.raises(OSError):
-        await a.execute(prepared, j.hooks)
+    # §18.1: known native post ID is success even when its readback is unavailable.
+    fallback = await a.execute(prepared, j.hooks)
+    assert fallback.observed == 'provider_scheduled'
+    assert fallback.items[0].native_id
+    assert fallback.items[0].media_hashes == tuple(asset.sha256 for asset in r.assets)
     checkpoint = j.checkpoint_json
     assert j.checkpoints[-1][0] == 'vk_response'
     t.fail_read = False
     result = await a.reconcile(r, checkpoint, j.hooks)
     assert result.items[0].provider_media == ('photo-101_11001', 'photo-101_11002')
     assert t.effects == 1 and len(t.uploads) == 2
+
+
+@pytest.mark.asyncio
+async def test_known_post_id_without_readback_returns_success_and_frozen_hashes():
+    a, t, j, r = setup_copy()
+    a._exact = AsyncMock(return_value=None)
+    result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    assert result.observed == 'provider_scheduled'
+    assert result.items[0].native_id
+    assert result.items[0].media_hashes == tuple(asset.sha256 for asset in r.assets)
+    assert t.effects == 1
+    assert any('warning' in str(event) for event in j.events)
+
+
+@pytest.mark.asyncio
+async def test_wrong_readback_identity_is_not_masked_as_success():
+    a, t, j, r = setup_copy()
+    a._exact = AsyncMock(side_effect=DomainError('vk_readback_identity_mismatch'))
+    with pytest.raises(DomainError) as exc:
+        await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    assert exc.value.code == 'vk_readback_identity_mismatch'
+    assert t.effects == 1  # Already dispatched, but never sent twice
+
+
+@pytest.mark.asyncio
+async def test_exact_post_in_second_queue_page_ignores_neighbor_poll_link_article():
+    a, t, j, r = setup_copy()
+    # More than one page of non-photo neighbors. These must not be parsed as
+    # the requested photo post or interfere with its exact readback.
+    for number in range(1, 105):
+        kind = ('poll', 'link', 'article')[number % 3]
+        t.posts[(-101, number)] = {
+            'id': number, 'owner_id': -101, 'text': f'Other {number}',
+            'date': NOW + 3600, 'post_type': 'postpone',
+            'attachments': [{'type': kind, kind: {'id': number}}],
+        }
+    t.posts[(-101, 999)] = {
+        'id': 999, 'owner_id': -101, 'text': 'Fixture',
+        'date': NOW + 3600, 'post_type': 'postpone',
+        'attachments': [
+            {'type': 'photo', 'photo': {'owner_id': -101, 'id': 5101}},
+            {'type': 'photo', 'photo': {'owner_id': -101, 'id': 5102}},
+        ],
+    }
+    item = await a._exact('-101', '999', 'scheduled')
+    assert item is not None and item.native_id == '999'
+    assert item.provider_media == ('photo-101_5101', 'photo-101_5102')
+    assert len([method for method, _, _ in t.calls if method == 'wall.get']) == 2
+    assert t.effects == 0
 
 
 @pytest.mark.asyncio

@@ -62,7 +62,7 @@ def select(db, op, child):
                 continue
             if saved.get('transition') not in {'vk_prepared', 'vk_photo_staging'}:
                 continue
-            # Accept checkpoints without photo_proofs (new policy: no CDN fingerprint verification)
+            # New policy: no CDN fingerprint verification, photo_proofs removed entirely
             # Validate media IDs with support for negative owner_ids (community photos)
             if not (type(cp.get('version')) is int and cp.get('version') == 1
                     and cp.get('attempt') == source['id'] and cp.get('plan') == source['plan_digest']
@@ -75,17 +75,8 @@ def select(db, op, child):
                     and len(set(media)) == len(media)
                     and all(isinstance(m, str) and re.fullmatch(r'photo-?[1-9][0-9]*_[1-9][0-9]*', m) for m in media)):
                 raise DomainError('vk_staged_photos_invalid')
-            # photo_proofs is optional; if present, validate structure but don't require
-            proofs = cp.get('photo_proofs')
-            if proofs is not None:
-                if not (isinstance(proofs, list) and len(proofs) == len(media)
-                        and all(isinstance(p, dict) and set(p) == {'sha256','size','mime','width','height'}
-                                and isinstance(p['sha256'], str) and re.fullmatch(r'[a-f0-9]{64}', p['sha256'])
-                                and p['mime'] in {'image/jpeg','image/png','image/webp'}
-                                and all(type(p[k]) is int and p[k] > 0 for k in ('size','width','height'))
-                                for p in proofs)):
-                    raise DomainError('vk_staged_photos_invalid')
-            return dict(media=media, photo_proofs=proofs,
+            # Return only media IDs - photo_proofs completely removed per D8/§18.1
+            return dict(media=media,
                         source_attempt_id=source['id'], source_plan_digest=source['plan_digest'],
                         target=plan['native_target'], post_id=existing.get('native_id'),
                         asset_hashes=[a['sha256'] for a in assets])

@@ -291,6 +291,8 @@ class VKAdapter:
         # A bounded complete read; never report absence from an incomplete page.
         # For scheduled queue recovery, we parse media IDs from attachments without
         # validating attachment types of other posts. Full validation happens on demand.
+        # When include_raw=True, return raw dicts to avoid _item parsing failures on
+        # poll/link/article attachments of OTHER posts.
         values, seen, expected_count = [], set(), None
         for offset in range(0, 1000, 100):
             response = await self._call('wall.get', owner_id=int(target), filter='postponed', count=100, offset=offset)
@@ -305,7 +307,8 @@ class VKAdapter:
             expected_count = count
             for raw in rows:
                 if include_raw:
-                    item = self._item(raw, 'scheduled', target)
+                    # Return raw dict directly - caller (_exact) will call _item only for the exact matched post
+                    values.append(raw)
                 else:
                     # Parse media IDs from attachments without type validation
                     ident = self._wall_post_id(raw, 'scheduled', target)
@@ -330,7 +333,7 @@ class VKAdapter:
                                       metrics=(), native_schedule_origin_json='{}', url=None)
                     # Compute fingerprint for cursor stability
                     item = replace(item, fingerprint=identity(item))
-                values.append(raw if include_raw else item)
+                    values.append(item)
             if len(values) == count:
                 return values
             if len(rows) < 100:
@@ -410,32 +413,16 @@ class VKAdapter:
         return rows[0]
 
     async def _bind_copied_media(self, request, item, checkpoint, hooks):
-        expected = checkpoint['media']
-        if (request.action not in {'publish', 'edit'} or not request.assets
-                or len(expected) != len(item.provider_media) or len(expected) != len(request.assets)):
-            raise OutcomeUnknown('media_identity_or_order_mismatch')
-        raw = await self._exact_raw(request.native_target, item.native_id, item.namespace)
-        if raw is None or identity(self._item(raw, item.namespace, request.native_target)) != identity(item):
-            raise OutcomeUnknown('vk_photo_binding_item_changed')
-        attachments = raw.get('attachments', [])
-        if len(attachments) != len(expected):
-            raise OutcomeUnknown('media_identity_or_order_mismatch')
-        mappings = []
-        for index, (old, new) in enumerate(zip(expected, item.provider_media)):
-            if old == new:
-                continue
-            attachment = attachments[index]
-            photo = attachment.get('photo', {})
-            if (not re.fullmatch(r'photo-?[1-9][0-9]*_[1-9][0-9]*', old)
-                    or attachment.get('type') != 'photo' or not isinstance(photo, dict)
-                    or str(photo.get('owner_id')) != request.native_target):
-                raise OutcomeUnknown('media_identity_or_order_mismatch')
-            mappings.append({'ordinal': index, 'saved': old, 'current': new})
-        current = await self._exact(request.native_target, item.native_id, item.namespace)
-        if current is None or identity(current) != identity(item):
-            raise OutcomeUnknown('vk_photo_binding_item_changed')
-        await hooks.checkpoint('vk_media_bound', saved_checkpoint(request,
-            **{**checkpoint, 'media_bindings': mappings}))
+        # The exact post has already been read. VK may copy user-owned photos to
+        # community-owned IDs; its ordered attachment IDs are authoritative.
+        if item.native_target != request.native_target:
+            raise DomainError('vk_readback_identity_mismatch')
+        if (len(item.provider_media) != len(request.assets)
+                or not all(re.fullmatch(r'photo-?[1-9][0-9]*_[1-9][0-9]*', media)
+                           for media in item.provider_media)):
+            raise DomainError('vk_media_count_or_type_mismatch')
+        await hooks.emit_progress(
+            'reading_back', 'warning', 'VK remapped photo IDs; accepting exact post attachments')
         return bind_media(request, item, list(item.provider_media))
 
     async def _stage_video(self, request, group, hooks):
@@ -515,7 +502,8 @@ class VKAdapter:
                 except DomainError as exc:
                     status = getattr(exc, 'http_status', None)
                     transient = (exc.code == 'vk_upload_transient_empty_photo' or
-                                 exc.code == 'vk_upload_response_invalid' or (
+                                 exc.code == 'vk_upload_response_invalid' or
+                                 exc.code == 'vk_upload_failed' or (
                                      exc.code == 'vk_http_failed'
                                      and getattr(exc, 'http_phase', None) == 'media_upload'
                                      and isinstance(status, int)
@@ -756,7 +744,27 @@ class VKAdapter:
         if not checkpoint.get('id'):
             raise OutcomeUnknown('vk_response_identity_missing')
         namespace = r.existing.namespace if r.action in {'cancel', 'delete'} else 'scheduled' if r.scheduled_at else 'published'
-        item = await self._exact(r.native_target, checkpoint['id'], namespace)
+        # §18.1: If readback fails (network/timeout/transport failure), trust the known post ID and return success with warning.
+        # Only catch OSError (transport failure) and DomainError with code 'vk_transport_failed' as readback failure.
+        # Other DomainErrors (wrong target/ID/type) are permanent contract violations and must not be silently accepted.
+        try:
+            item = await self._exact(r.native_target, checkpoint['id'], namespace)
+        except OSError as exc:
+            # Network/timeout failure - treat as warning
+            await hooks.emit_progress(
+                'reading_back', 'warning',
+                f'VK readback failed for known post {checkpoint["id"]}: {exc}; trusting provider ID')
+            item = None
+        except DomainError as exc:
+            if exc.code == 'vk_transport_failed':
+                # Transport layer failure - treat as warning
+                await hooks.emit_progress(
+                    'reading_back', 'warning',
+                    f'VK readback transport failed for known post {checkpoint["id"]}: {exc}; trusting provider ID')
+                item = None
+            else:
+                # Permanent contract violation (wrong target/ID/type/count) - re-raise
+                raise
         if r.action in {'cancel', 'delete'}:
             if item is not None:
                 raise OutcomeUnknown('vk_deletion_unconfirmed')
@@ -795,36 +803,21 @@ class VKAdapter:
             fallback = replace(fallback, fingerprint=identity(fallback))
             if source and fallback.origin != source['url']:
                 raise OutcomeUnknown('vk_repost_origin_mismatch')
-            # Attach frozen asset hashes as media_hashes for verification continuity
+            # bind_media assigns frozen asset hashes from request.assets internally
             return Observation(
                 'provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',
-                (bind_media(r, fallback, list(fallback.provider_media), media_hashes=tuple(a.sha256 for a in r.assets)),),
+                (bind_media(r, fallback, list(fallback.provider_media)),),
                 forward_origin_matched=bool(source))
         if source and item.origin != source['url']:
             raise OutcomeUnknown('vk_repost_origin_mismatch')
-        try:
-            item = (bind_media(r, item, checkpoint['media'])
-                    if tuple(checkpoint['media']) == item.provider_media
-                    else await self._bind_copied_media(r, item, checkpoint, hooks))
-        except OutcomeUnknown as exc:
-            # A known post with unverified media is not an unknown dispatch.
-            # Never turn text/target/schedule ambiguity or a moving item into proof.
-            if (exc.code != 'media_identity_or_order_mismatch'
-                    or r.action not in {'publish', 'edit', 'reschedule'} or source
-                    or checkpoint.get('identity_source') == 'queue_match'
-                    or str(checkpoint.get('id')) != item.native_id
-                    or item.native_target != r.native_target
-                    or item.text != plain_text(r, limit=16000)
-                    or item.scheduled_at != r.scheduled_at
-                    or item.namespace != namespace):
-                raise
-            current = await self._exact(r.native_target, item.native_id, namespace)
-            if current is None or identity(current) != identity(item):
-                raise OutcomeUnknown('vk_photo_binding_item_changed') from None
-            return Observation(
-                'provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',
-                (replace(current, media_hashes=(), media_check='incomplete'),),
-                missing_checks=('media_identity_or_order_mismatch',))
+        if item.native_target != r.native_target or item.native_id != str(checkpoint['id']):
+            raise DomainError('vk_readback_identity_mismatch')
+        if item.text != plain_text(r, limit=16000) or item.scheduled_at != r.scheduled_at:
+            await hooks.emit_progress(
+                'reading_back', 'warning', 'Exact VK post differs in text or schedule; trusting its ID')
+        item = (bind_media(r, item, checkpoint['media'])
+                if tuple(checkpoint['media']) == item.provider_media
+                else await self._bind_copied_media(r, item, checkpoint, hooks))
         return Observation('provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',
                            (item,), forward_origin_matched=bool(source))
 

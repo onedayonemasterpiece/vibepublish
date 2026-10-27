@@ -256,8 +256,15 @@ async def test_response_checkpoint_recovers_after_adapter_restart(provider):
     r = request(provider, scheduled_at=timestamp(NOW+3600), assets=(asset(), asset(2)))
     prepared = await adapter.prepare(r, journal.hooks)
     transport.after_mutation = lambda _: setattr(transport, 'fail_read', True)
-    with pytest.raises((DomainError, OSError)):
-        await adapter.execute(prepared, journal.hooks)
+    if provider == 'vk':
+        # VK §18.1 trusts a returned post ID; readback outages are warnings.
+        first = await adapter.execute(prepared, journal.hooks)
+        assert first.observed == 'provider_scheduled'
+        assert first.items[0].native_id
+        assert first.items[0].media_hashes == (asset().sha256, asset(2).sha256)
+    else:
+        with pytest.raises((DomainError, OSError)):
+            await adapter.execute(prepared, journal.hooks)
     assert transport.effects == 1
     transport.fail_read = False
     restarted = (TelegramAdapter(transport, connection_id='connection', tl=ScriptedTL(), clock=lambda: NOW)
