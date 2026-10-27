@@ -29,7 +29,7 @@ Times are **UTC** on 2026-10-27; add 2 hours for Kaliningrad.
 | 07:54:00–07:54:02 | VibePublish automatically resumed the same business operation (one server continuation). Staging restarted from image 1/4. |
 | 07:54:33 | Image 2 reached successful `photos.saveWallPhoto` on continuation, after repeated HTTP 200 uploads. |
 | 07:54:37 | `execute` failed with `vk_photo_read_failed` about 3.9 seconds after `photos.saveWallPhoto`; terminal state `blocked`, `dispatched=false`. |
-| 08:11:~ | The agent invoked **one** explicit `retry_failed` with a stable recovery key, scoped only to `lovekenig_vk`. Server admitted the frozen original revision. |
+| ~08:11 | The agent invoked **one** explicit `retry_failed` with a stable recovery key, scoped only to `lovekenig_vk`. Server admitted the frozen original revision. |
 | 08:12:46 | On explicit recovery, the four-photo staging completed; `wall.post` was invoked and completed. |
 | 08:12:48–08:13:01 | The provider-owned scheduled item was read back: `state=scheduled`, `observed=provider_scheduled`, `media_check=provider_binding`, `requested_at=effective_at=2026-10-27T13:00:00Z`. |
 | 08:13:39 | Separate `vibepublish_read(kind=item)` returned the target community post's full editorial text and `scheduled_at=2026-10-27T13:00:00Z` from the provider. |
@@ -97,10 +97,10 @@ The successful manual recovery used these same original assets, dimensions and o
 
 ## Related code and prior fixes
 
-- [`adapters/vk.py`](../../../../adapters/vk.py) — `_stage_images`, `_photo_proof`, checkpoint logic.
-- [`adapters/vk_transport.py`](../../../../adapters/vk_transport.py) — upload transport and `image_fingerprint`.
-- [`adapters/vk_photo_wire.py`](../../../../adapters/vk_photo_wire.py) — size-reducing JPEG derivative without changing immutable source assets.
-- [`social_operations/recovery.py`](../../../../social_operations/recovery.py) — exact guarded `retry_failed` admission.
+- [`adapters/vk.py`](../../../adapters/vk.py) — `_stage_images`, `_photo_proof`, checkpoint logic.
+- [`adapters/vk_transport.py`](../../../adapters/vk_transport.py) — upload transport and `image_fingerprint`.
+- [`adapters/vk_photo_wire.py`](../../../adapters/vk_photo_wire.py) — size-reducing JPEG derivative without changing immutable source assets.
+- [`social_operations/recovery.py`](../../../social_operations/recovery.py) — exact guarded `retry_failed` admission.
 - Prior merged PRs: [#69](https://github.com/onedayonemasterpiece/vibepublish/pull/69) (sanitized HTTP failure phase), [#72](https://github.com/onedayonemasterpiece/vibepublish/pull/72) (JPEG wire derivative/502–504 retry), [#73](https://github.com/onedayonemasterpiece/vibepublish/pull/73) (multi-photo budget), [#75](https://github.com/onedayonemasterpiece/vibepublish/pull/75) and [#76](https://github.com/onedayonemasterpiece/vibepublish/pull/76) (photo staging), [#77](https://github.com/onedayonemasterpiece/vibepublish/pull/77) (upload observability).
 
 ## Release evidence and follow-ups
