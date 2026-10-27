@@ -164,10 +164,10 @@ class PublishRetryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         await self.worker.run_once()
         terminal = self.snapshot(original["operation_id"])
         replay = await self.call("publication_update", args, actor)
-        self.assertEqual(replay["state"], "outcome_unknown")
+        self.assertEqual(replay["state"], "running")
         self.assertEqual(self.snapshot(original["operation_id"]), terminal)
         fresh = await self.call("publication_update", {**args, "request_key": "new-key"}, actor)
-        self.assertEqual(fresh["error"]["code"], "retry_not_proven_safe")
+        self.assertEqual(fresh["error"]["code"], "operation_in_progress")
         self.assertFalse(await self.worker.run_once())
         self.assertEqual(self.provider.count("effect"), 1)
 

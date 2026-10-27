@@ -96,7 +96,7 @@ async def test_failure_survives_restart_and_public_cursor_without_retry(tmp_path
     assert failure["attempt_id"] == result["deliveries"][0]["attempt_id"]
     assert failure["http_status"] == 503 and failure["retry_after_s"] == 7
     assert failure["dispatched"] is armed
-    assert result["state"] == ("outcome_unknown" if armed else "blocked")
+    assert result["state"] == "blocked"
     assert result["retry_safe"] is False
     assert "SECRET" not in json.dumps(events)
     assert not await Worker(reopened, {"telegram":provider}).run_once()

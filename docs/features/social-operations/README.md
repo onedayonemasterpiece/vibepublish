@@ -1,5 +1,9 @@
 # VibePublish Social Operations
 
+## W1 automatic outcomes and status regression — 2026-10-28
+
+Status: **Not confirmed by user** until live acceptance. Temporary provider failures stay within the command's original fixed retry horizon; a prior uncertain child cannot repeat a native effect or block independent networks. The short per-network status maps the saved `needs_auth` code to «Нет действующей авторизации сети», rather than exposing an adapter's raw English error message. The 23 scoped source regressions passed offline; no deployment or live publication is implied.
+
 **Cross-channel navigation:** [fixed owner footer routes and safe semantic compilation](network-footers.md); status: Not confirmed by user after rollout.
 
 ## MAX native scheduling preparation (2026-10-10)

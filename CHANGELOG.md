@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Align the 23 targeted W1 reliability regressions with the fixed-horizon automatic worker policy. Preserve one native send per frozen attempt and restore the localized `needs_auth` refusal in the cursor-free per-network summary; focused offline tests pass (23/23). No deployment or live publication.
+
 - Simplify Worker W1 publishing reliability (D2–D6): remove connection-wide
   outcome quarantine, redundant VK known-effect proofs and separate VK/media-store
   retry schedulers. Keep one fixed-budget retry policy; isolate Telegram, VK and

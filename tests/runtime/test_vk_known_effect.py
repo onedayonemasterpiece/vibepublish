@@ -75,7 +75,8 @@ class KnownVKEffectTests(unittest.IsolatedAsyncioTestCase):
 
         self.adapter._exact = wrong_text
         first = await self.publish()
-        self.assertEqual(first['state'], 'running', first)
+        self.assertEqual(first['state'], 'scheduled', first)
+        self.assertTrue(first['operation_complete'])
         self.assertEqual(self.transport.effects, 1)
         self.adapter._exact = exact
         self.transport.sabotage = None

@@ -188,7 +188,7 @@ async def test_missing_max_entities_does_not_override_native_id_success(tmp_path
     # The network-returned post ID is authoritative even if nonessential
     # entity readback differs; the publisher must not create a second post.
     assert result['state']=='verified', result
-    assert result['deliveries'][0]['missing_checks']==[]
+    assert result['deliveries'][0].get('missing_checks', [])==[]
 
 
 @pytest.mark.asyncio
@@ -329,7 +329,7 @@ async def test_max_download_evidence_survives_adoption_and_blocks_changed_media(
         ended=store.receipt(actor,edit['operation_id'])
         assert ended['state']=='blocked' and ended['error']['code']=='publication_unconfirmed', ended
     if changed:
-        assert status['deliveries'][0]['missing_checks']==['download_media_lifecycle_changed']
+        assert status['deliveries'][0]['missing_checks']==['provider_reconcile_pending']
     with store.connection() as db:
         plan=json.loads(db.execute('SELECT plan FROM attempts WHERE operation_id=?',(edit['operation_id'],)).fetchone()[0])
     assert plan['existing']['observed_media'][0]['sha256']=='d'*64

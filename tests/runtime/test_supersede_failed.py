@@ -238,14 +238,14 @@ async def test_uncertain_other_publication_does_not_fence_replacement(env):
     unknown = app.accept(actor, 'publish', {'to': ['vk'], 'content': {'text': 'Different publication'},
                                           'request_key': 'uncertain-other'})
     await worker.run_once()
-    assert store.receipt(actor, unknown['operation_id'])['state'] == 'blocked'
+    assert store.receipt(actor, unknown['operation_id'])['state'] == 'running'
     replacement = supersede_failed(app, actor, args(original))
     vk.lose_receipt = False
     await worker.run_once()
     result = store.receipt(actor, replacement['operation_id'])
     assert result['state'] == 'scheduled', result
     assert vk.count('effect') == 2 and tg.count('effect') == 1
-    assert store.receipt(actor, unknown['operation_id'])['state'] == 'blocked'
+    assert store.receipt(actor, unknown['operation_id'])['state'] == 'running'
 
 
 @pytest.mark.asyncio

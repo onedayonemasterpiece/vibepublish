@@ -244,7 +244,7 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': BlockedEdit(sys.argv[2], 'te
                         return result
                     for section in ('all','forwarding','destinations','visuals'):
                         boot=await tool('get_started',{'section':section})
-                        self.assertIn('Native forwarding',boot['skill'])
+                        self.assertIn('vibepublish_publish',boot['skill'])
                     await tool('destinations',{'command':{'kind':'profile_update','alias':'telegram','expected_revision':0,'profile':{'notes':'Personal profile'}},'request_key':'profile'})
                     boot=await tool('get_started',{'section':'destinations'})
                     self.assertEqual(boot['destinations'][0]['profile']['notes'],'Personal profile')

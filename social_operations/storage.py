@@ -493,11 +493,12 @@ class Store:
                             except (ValueError, KeyError):
                                 pass
                     else:
-                        reason = item.get("reason") or next(iter(item.get("missing_checks") or ()), None)
+                        code = next(iter(item.get("missing_checks") or ()), None)
                         reasons = {"needs_auth": "Нет действующей авторизации сети",
                                    "access_revoked": "Нет прав на публикацию",
                                    "command_expired": "Истекло время отправки",
                                    "vk_upload_failed": "Не удалось загрузить изображение"}
+                        reason = code if code in reasons else item.get("reason") or code
                         view["reason"] = (reasons.get(reason, reason.replace("_", " ")[:200])
                                           if isinstance(reason, str) and "review" not in reason
                                           and "unknown" not in reason

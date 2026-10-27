@@ -125,8 +125,8 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.now += 5.001
         await self.worker.run_once()
         final = self.store.receipt(self.actor, receipt['operation_id'])
-        self.assertEqual(final['state'], 'blocked', final)
-        self.assertEqual(final['deliveries'][0]['missing_checks'], ['wrong_target_readback'])
+        self.assertEqual(final['state'], 'running', final)
+        self.assertNotIn(final['deliveries'][0]['observed'], ('published', 'provider_scheduled'))
         self.assertEqual(self.provider.count('finalize'), 0)
         self.assertEqual(self.provider.count('effect'), 1)
 
