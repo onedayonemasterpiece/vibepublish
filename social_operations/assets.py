@@ -26,14 +26,14 @@ class AssetPreview:
 PREVIEW_MAX_EDGE = 768
 PREVIEW_MAX_BYTES = 384 * 1024
 INGRESS_IMAGE_MAX_BYTES = 20 * 1024 * 1024
-VERIFIED_IMAGE_MAX_BYTES = 32 * 1024 * 1024
+VERIFIED_IMAGE_MAX_BYTES = INGRESS_IMAGE_MAX_BYTES
 
 
 def verify_image(data: bytes, mime: str, *, max_input_bytes: int = INGRESS_IMAGE_MAX_BYTES) -> VerifiedImage:
     if type(max_input_bytes) is not int or not 1 <= max_input_bytes <= VERIFIED_IMAGE_MAX_BYTES:
         raise ValueError('invalid image byte limit')
     if not isinstance(data, bytes) or not 1 <= len(data) <= max_input_bytes:
-        raise DomainError('asset_size_limit')
+        raise DomainError('asset_size_limit', 'Image input exceeds the 20 MiB limit')
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
@@ -44,8 +44,12 @@ def verify_image(data: bytes, mime: str, *, max_input_bytes: int = INGRESS_IMAGE
                 image.load()
                 # A separate immutable sanitized derivative strips EXIF/location.
                 oriented = ImageOps.exif_transpose(image)
-                clean = Image.new('RGB', oriented.size)
-                clean.paste(oriented.convert('RGB'))
+                clean = Image.new('RGB', oriented.size, 'white')
+                if 'A' in oriented.getbands() or 'transparency' in oriented.info:
+                    rgba = oriented.convert('RGBA')
+                    clean.paste(rgba, mask=rgba.getchannel('A'))
+                else:
+                    clean.paste(oriented.convert('RGB'))
                 output = io.BytesIO()
                 clean.save(output, format='PNG')
                 verified = output.getvalue()
@@ -53,7 +57,7 @@ def verify_image(data: bytes, mime: str, *, max_input_bytes: int = INGRESS_IMAGE
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
         raise DomainError('invalid_image') from exc
     if len(verified) > VERIFIED_IMAGE_MAX_BYTES:
-        raise DomainError('asset_size_limit')
+        raise DomainError('asset_size_limit', 'Sanitized PNG exceeds the 20 MiB limit')
     return VerifiedImage(data, mime, verified, width, height)
 
 

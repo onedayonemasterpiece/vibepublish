@@ -21,11 +21,11 @@ import aiohttp
 from aiohttp.abc import AbstractResolver
 from jsonschema import Draft202012Validator
 
-from .assets import insert_verified_image, verify_image
-from .domain import DomainError, canonical, new_id, parse_source
+from .assets import INGRESS_IMAGE_MAX_BYTES, insert_verified_image, verify_image
+from .domain import DomainError, canonical, new_id, normalize_intent, parse_source
 from .service import Application, FORMATS
 
-_MAX_SOURCE_BYTES = 20 * 1024 * 1024
+_MAX_SOURCE_BYTES = INGRESS_IMAGE_MAX_BYTES
 _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp"}
 _REDIRECTS = {301, 302, 303, 307, 308}
 _DIRECT_ALIAS_PREFIX = "vp_direct_tg_"
@@ -527,6 +527,29 @@ class IngressApplication(Application):
             prepared = self._rewrite_direct_thread(actor, name, arguments)
             if list(validator.iter_errors(prepared)):
                 return await super().call(actor, name, prepared)
+            if name == "vibepublish_publish" and prepared.get("request_key") and any(
+                item["source"]["kind"] == "url" for item in prepared.get("media", ())
+            ):
+                # Reuse the frozen asset slots before touching expiring HTTPS links.
+                with self.store.connection() as db:
+                    current = self.store.current(db, actor)
+                    row = db.execute(
+                        "SELECT o.request FROM request_keys k JOIN operations o ON o.id=k.operation_id "
+                        "WHERE k.tenant_id=? AND k.principal_id=? AND k.key=?",
+                        (current.tenant_id, current.principal_id, prepared["request_key"]),
+                    ).fetchone()
+                    if row:
+                        frozen = json.loads(row["request"])
+                        candidate = json.loads(canonical(prepared))
+                        for media, old in zip(candidate.get("media", ()), frozen.get("media", ())):
+                            if media["source"]["kind"] == "url" and old["source"]["kind"] == "asset":
+                                media["source"] = old["source"]
+                        replay = self._replay(
+                            db, current, "publish", normalize_intent("publish", candidate),
+                            prepared, implicit=False,
+                        )
+                        if replay:
+                            return self.store.receipt(current, replay)
             if name == "vibepublish_publish" and any(
                 entry.get("source", {}).get("kind") in {"url", "upload"}
                 for entry in prepared.get("media", [])

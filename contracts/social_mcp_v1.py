@@ -408,16 +408,34 @@ tool("asset_preview", "Return a small metadata-free WebP preview of one authoriz
         ("resource_uri", "source_sha256", "preview_sha256", "mime_type", "width", "height", "size_bytes")),
     "visual", True)
 
-tool("status", "Read local receipts and atomic progress, never retry. Watch one operation with after_event; return on its first new event, not all providers.",
-    obj({"ids": array(ID, 1, 20), "limit": LIMIT, "cursor": string(512),
-        "after_event": string(512), "wait_seconds": {"type": "integer", "minimum": 0, "maximum": 10}}),
-    obj({"receipts": array(ref("receipt"), 0, 50), "next_cursor": string(512)}, ("receipts",)), "status", True)
+DEFS["status_network"] = obj({"destination": ALIAS, "provider": PROVIDER,
+    "status": enum("готово", "выполняется", "отказ"), "url": URL,
+    "queue_ref": ID, "item_ref": ID, "reason": string(200), "next_attempt_at": DATE,
+    "next_attempt_time": string(5, pattern=r"^[0-2][0-9]:[0-5][0-9]$")},
+    ("destination", "provider", "status"))
+DEFS["status_summary"] = obj({"result": string(120),
+    "networks": array(ref("status_network"), 0, 100)}, ("result", "networks"))
+DEFS["status_snapshot"] = obj({"operation_id": ID, "revision": REV,
+    "action": string(80), "state": STATE, "operation_complete": {"type": "boolean"},
+    "resource_id": ID, "deliveries": array(ref("delivery_result"), 0, 100),
+    "summary": ref("status_summary"), "error": ref("error")},
+    ("operation_id", "action", "state", "operation_complete", "deliveries", "summary"))
 
-# Event cursors are bound to one operation, principal and policy epoch.
+tool("status", "Read an immediate, read-only per-network summary without a cursor; optional wait_final waits for every destination within the MCP budget. after_event retains detailed resumable journal reads.",
+    obj({"ids": array(ID, 1, 20), "limit": LIMIT, "cursor": string(512),
+        "after_event": string(512), "wait_seconds": {"type": "integer", "minimum": 0, "maximum": 40},
+        "wait_final": {"type": "boolean"}}),
+    obj({"receipts": array({"oneOf": [ref("receipt"), ref("status_snapshot")]}, 0, 50),
+         "next_cursor": string(512)}, ("receipts",)), "status", True)
+
+# Event cursors remain supported for detailed diagnostics, not normal publishing.
 TOOLS[-1]["inputSchema"]["allOf"] = [{
-    "if": {"anyOf": [{"required": ["after_event"]}, {"required": ["wait_seconds"]}]},
+    "if": {"anyOf": [{"required": ["after_event"]}, {"required": ["wait_seconds"]},
+                      {"required": ["wait_final"]}]},
     "then": {"required": ["ids"], "properties": {"ids": {"maxItems": 1}},
-             "not": {"required": ["cursor"]}}}]
+             "not": {"required": ["cursor"]}}},
+    {"if": {"properties": {"wait_final": {"const": True}}, "required": ["wait_final"]},
+     "then": {"not": {"required": ["after_event"]}}}]
 
 queries = [arm("item", {"item_ref": {"oneOf": [ID, URL]}}, ("item_ref",)),
     arm("dialogs", {"provider": PROVIDER}, ("provider",))]

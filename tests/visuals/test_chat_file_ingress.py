@@ -144,7 +144,7 @@ async def test_download_transport_policy(monkeypatch, scenario, code):
     monkeypatch.setattr(ingress,'pinned_addresses',dns)
     monkeypatch.setattr(ingress.aiohttp,'ClientSession',Session)
     monkeypatch.setattr(ingress.aiohttp,'TCPConnector',connector)
-    if scenario in {'stream_large','declared_large'}: monkeypatch.setattr(ingress,'MAX_UPLOAD_BYTES',100)
+    if scenario in {'stream_large','declared_large'}: monkeypatch.setattr(ingress,'INGRESS_IMAGE_MAX_BYTES',100)
     if code:
         with pytest.raises(DomainError) as exc: await ingress.download_file('https://files.example/a?secret=yes')
         assert exc.value.code==code and 'secret' not in str(exc.value)

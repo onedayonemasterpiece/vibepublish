@@ -121,7 +121,7 @@ The worker may process accepted commands, imports, uploads and observations now.
 
 `Fixed` The agent must receive accepted state and successive atomic stages without waiting for all providers to finish. Every meaningful operation transition and per-destination result is durably recorded and exposed immediately through incremental status results. Telegram completion must be observable while VK is uploading and MAX is still checking the channel.
 
-The portable contract is a prompt initial receipt plus resumable event cursors through `vibepublish_status`. MCP progress notifications are an optional additional projection during an active request, never the sole visibility mechanism. No promise is made that every client displays or passes notifications to its model. Stage events survive disconnect/restart and never imply permission to retry an uncertain mutation.
+The normal publication path is an initial accepted receipt followed by the current per-network `vibepublish_status` summary without a cursor. `wait_final=true` waits at most 40 seconds for all destinations, yet a pending network never hides another's native post/queue reference. A summary read is a read-only SQLite query, not a cursor insert or publication retry. Detailed event consumers retain resumable cursors; MCP progress notifications remain optional. A partial network outcome is a normal finite result, with no agent-side recovery or manual investigation.
 
 An operation that successfully placed all requested items in provider queues is complete as a scheduling command. It does not remain running until publication time. Actual later publication is a separate provider observation.
 

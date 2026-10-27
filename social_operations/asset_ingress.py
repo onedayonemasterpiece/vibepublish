@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib
 import json
-from .assets import verify_image, insert_verified_image
+from .assets import INGRESS_IMAGE_MAX_BYTES, verify_image, insert_verified_image
 from .domain import DomainError, digest, new_id
 
 MAX_UPLOAD_BYTES = 128 * 1024 * 1024
@@ -15,8 +15,9 @@ def upload_image(service, actor, data: bytes, mime: str, key: str | None):
         raise DomainError('idempotency_key_required')
     if mime not in {'image/png', 'image/jpeg', 'image/webp'} | DOCUMENT_MIMES:
         raise DomainError('asset_format_or_dimensions')
-    if not 1 <= len(data) <= MAX_UPLOAD_BYTES:
-        raise DomainError('asset_size_limit')
+    limit = MAX_UPLOAD_BYTES if mime in DOCUMENT_MIMES else INGRESS_IMAGE_MAX_BYTES
+    if not 1 <= len(data) <= limit:
+        raise DomainError('asset_size_limit', 'Image input exceeds the 20 MiB limit' if mime not in DOCUMENT_MIMES else 'Document exceeds the 128 MiB limit')
     store = service.store
     # Check authority before expensive decoding, then again inside admission.
     with store.connection() as db:
