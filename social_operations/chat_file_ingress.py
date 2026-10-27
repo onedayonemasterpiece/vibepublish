@@ -9,8 +9,7 @@ from urllib.parse import urlsplit
 import aiohttp
 from yarl import URL
 from adapters.vk_transport import PinnedResolver
-from .assets import insert_verified_image, verify_image
-from .asset_ingress import MAX_UPLOAD_BYTES
+from .assets import INGRESS_IMAGE_MAX_BYTES, insert_verified_image, verify_image
 from .domain import DomainError, digest
 
 ACTION = 'chat_file_import'
@@ -72,11 +71,11 @@ async def download_file(url):
                         raise DomainError('file_download_failed')
                     if response.headers.get('Content-Encoding', '').lower() not in {'', 'identity'}:
                         raise DomainError('file_encoding_unsupported')
-                    if response.content_length is not None and response.content_length > MAX_UPLOAD_BYTES:
+                    if response.content_length is not None and response.content_length > INGRESS_IMAGE_MAX_BYTES:
                         raise DomainError('asset_size_limit')
                     data = bytearray()
                     async for chunk in response.content.iter_chunked(65536):
-                        if len(data) + len(chunk) > MAX_UPLOAD_BYTES:
+                        if len(data) + len(chunk) > INGRESS_IMAGE_MAX_BYTES:
                             raise DomainError('asset_size_limit')
                         data.extend(chunk)
                     return bytes(data)
