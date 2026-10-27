@@ -21,9 +21,11 @@ class NativeIdReadbackDown(FakeProvider):
         self.record('execute', request.attempt_id)
         await hooks.before_effect(request.attempt_id, request.plan_digest)
         self.record('effect', request.attempt_id)
-        await hooks.checkpoint('vk_response', canonical(dict(
-            attempt=request.attempt_id, plan=request.plan_digest,
-            target=request.native_target, id='456')))
+        checkpoint = dict(attempt=request.attempt_id, plan=request.plan_digest,
+                          target=request.native_target, id='456')
+        if self.provider == 'vk':
+            checkpoint['url'] = 'https://vk.ru/wall-123_456'
+        await hooks.checkpoint('vk_response', canonical(checkpoint))
         raise DomainError('provider_read_deadline')
 
     async def reconcile(self, request, checkpoint, hooks):
@@ -57,9 +59,11 @@ class TransientPrepare(FakeProvider):
 
 
 class TransientExecute(FakeProvider):
+    code = 'vk_http_failed'
+
     async def execute(self, prepared, hooks):
         self.record('execute', prepared.request.attempt_id)
-        raise DomainError('vk_http_failed')
+        raise DomainError(self.code)
 
 
 class NeedsAuthPrepare(FakeProvider):
@@ -113,7 +117,7 @@ class WorkerReliabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.vk.count('effect'), 1)
         self.assertEqual(self.vk.count('execute'), 1)
         self.vk.fail_read = False
-        self.now += 3
+        self.now += 5.001
         self.assertTrue(await self.worker().run_once())
         final = self.receipt(accepted)
         self.assertTrue(final['operation_complete'], final)
@@ -133,12 +137,59 @@ class WorkerReliabilityTests(unittest.IsolatedAsyncioTestCase):
         result = self.receipt(accepted)
         self.assertEqual(result['state'], 'verified', result)
         vk = next(r for r in result['deliveries'] if r['provider'] == 'vk')
-        self.assertEqual(vk['url'], 'https://vk.com/wall-123_456')
+        self.assertEqual(vk['url'], 'https://vk.ru/wall-123_456')
         self.assertTrue(any('native ID 456' in e['message'] for e in result['progress']['events']))
+        self.assertNotIn('missing_checks', vk)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT native_id FROM item_refs WHERE id=?',
+                                        (vk['item_ref'],)).fetchone()[0], '456')
         self.assertEqual((await self.publish())['state'], 'verified')
         self.assertEqual(self.vk.count('effect'), 1)
         self.assertEqual(self.tg.count('effect'), 1)
         self.assertFalse(await self.worker().run_once())
+
+    async def test_max_checkpoint_without_url_does_not_invent_permalink(self):
+        provider = NativeIdReadbackDown(self.root / 'max-read-down.sqlite', 'max', clock=lambda: self.now)
+        accepted = await self.publish(to=('max',))
+        await self.worker(mx=provider).run_once()
+        self.now += 901
+        await self.worker(mx=provider).run_once()
+        result = self.receipt(accepted)
+        self.assertEqual(result['state'], 'verified', result)
+        delivery = result['deliveries'][0]
+        self.assertIn('item_ref', delivery)
+        self.assertNotIn('url', delivery)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT native_id FROM item_refs WHERE id=?',
+                                        (delivery['item_ref'],)).fetchone()[0], '456')
+        self.assertEqual(provider.count('effect'), 1)
+        self.assertEqual(provider.count('execute'), 1)
+
+    async def test_explicit_transient_code_and_fixed_backoff_without_counters(self):
+        vk = TransientExecute(self.root / 'vk-invalid-response.sqlite', 'vk', clock=lambda: self.now)
+        vk.code = 'vk_upload_response_invalid'
+        accepted = await self.publish(to=('vk',))
+        for elapsed, expected_delay in ((0, 5), (5.001, 15), (20.002, 30), (50.003, 60)):
+            self.now = 1_800_000_000.0 + elapsed
+            await self.worker(vk=vk).run_once()
+            with self.store.connection() as db:
+                current = db.execute('SELECT lease_until, result FROM operations WHERE id=?',
+                                     (accepted['operation_id'],)).fetchone()
+                self.assertEqual(current['lease_until'], self.now + expected_delay)
+                self.assertNotIn('retry_counts', json.loads(current['result']))
+        self.assertEqual(vk.count('effect'), 0)
+        self.assertEqual(vk.count('execute'), 4)
+
+    async def test_nontransient_upload_url_invalid_refuses_immediately(self):
+        vk = TransientExecute(self.root / 'vk-invalid-url.sqlite', 'vk', clock=lambda: self.now)
+        vk.code = 'vk_upload_url_invalid'
+        accepted = await self.publish(to=('vk',))
+        await self.worker(vk=vk).run_once()
+        result = self.receipt(accepted)
+        self.assertEqual(result['state'], 'blocked')
+        self.assertTrue(result['operation_complete'])
+        self.assertEqual(vk.count('execute'), 1)
+        self.assertFalse(await self.worker(vk=vk).run_once())
 
     async def test_dispatched_without_id_finishes_with_refusal_and_no_second_send(self):
         vk = NoNativeId(self.root / 'no-id.sqlite', 'vk', clock=lambda: self.now)

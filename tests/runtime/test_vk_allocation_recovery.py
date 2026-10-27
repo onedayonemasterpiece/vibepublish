@@ -222,7 +222,6 @@ def test_resolution_preserves_allocation_dispatch_and_original_checkpoint(case):
     assert json.loads(after["result"])["retry_safe"] is False
     with case.store.connection() as db:
         assert resolved(db, after)
-        assert case.worker.known_effect_resolved(db, after)
     assert case.provider.count("execute") == case.provider.count("effect") == 0
 
 
@@ -246,10 +245,10 @@ def test_tampered_durable_allocation_proof_never_releases_gate(case, field, valu
 
 
 @pytest.mark.asyncio
-async def test_only_explicit_reconcile_releases_carousel_without_repeating_video(case):
-    blocked = await case.carousel("before-explicit-reconcile")
-    assert blocked["state"] == "blocked", blocked
-    assert blocked["error"]["code"] == "connection_outcome_unknown"
+async def test_explicit_legacy_reconcile_is_not_a_gate_for_independent_carousels(case):
+    before = await case.carousel("before-explicit-reconcile")
+    assert before["state"] == "verified", before
+    assert case.provider.count("effect") == 1
     op_before, child_before = case.rows()
     executes_before = case.provider.count("execute")
     result = await case.reconcile()
@@ -262,7 +261,7 @@ async def test_only_explicit_reconcile_releases_carousel_without_repeating_video
                   if t["name"] == "vibepublish_publication_update")["outputSchema"]
     Draft202012Validator(schema).validate(result)
     assert case.provider.count("execute") == executes_before
-    assert case.provider.count("effect") == 0
+    assert case.provider.count("effect") == 1
     replay = await case.app.call(case.actor, "vibepublish_publication_update", case.reconcile_args())
     assert replay["operation_id"] == result["operation_id"]
     assert not await case.worker.run_once()
@@ -274,14 +273,14 @@ async def test_only_explicit_reconcile_releases_carousel_without_repeating_video
     assert "error" in denied
     fresh = await case.carousel("after-explicit-reconcile")
     assert fresh["state"] == "verified", fresh
-    assert case.provider.count("effect") == 1
+    assert case.provider.count("effect") == 2
     _, child_after = case.rows()
     assert child_after["dispatched"] == child_before["dispatched"] == 1
     assert json.loads(child_after["checkpoint"])["adapter"] == json.loads(child_before["checkpoint"])["adapter"]
 
 
 @pytest.mark.asyncio
-async def test_unrelated_second_unknown_keeps_connection_fenced(case):
+async def test_unrelated_legacy_unknown_does_not_fence_other_vk_post(case):
     second = case.seed("unrelated-unknown")
     _, other = case.rows(second)
     with case.store.tx() as db:
@@ -290,10 +289,9 @@ async def test_unrelated_second_unknown_keeps_connection_fenced(case):
         db.execute("UPDATE attempts SET checkpoint=? WHERE id=?",
                    (canonical(checkpoint), other["id"]))
     await case.reconcile()
-    blocked = await case.carousel("still-blocked-by-second-unknown")
-    assert blocked["state"] == "blocked", blocked
-    assert blocked["error"]["code"] == "connection_outcome_unknown"
-    assert case.provider.count("effect") == 0
+    result = await case.carousel("independent-of-second-unknown")
+    assert result["state"] == "verified", result
+    assert case.provider.count("effect") == 1
     _, preserved = case.rows(second)
     assert preserved["state"] == "outcome_unknown"
     assert preserved["dispatched"] == 1
@@ -390,13 +388,13 @@ def test_validation_evidence_is_durable_and_cannot_be_removed_or_altered(case, m
 
 
 @pytest.mark.asyncio
-async def test_multiple_safe_diagnostics_do_not_authorize_automatic_recovery(case):
+async def test_legacy_diagnostics_never_block_independent_vk_publication(case):
     for _ in range(3):
         insert_validation_before_execute(case)
     assert case.proof()
-    blocked = await case.carousel("diagnostics-before-explicit-reconcile")
-    assert blocked["state"] == "blocked" and blocked["error"]["code"] == "connection_outcome_unknown"
+    before = await case.carousel("diagnostics-before-explicit-reconcile")
+    assert before["state"] == "verified"
     await case.reconcile()
     fresh = await case.carousel("diagnostics-after-explicit-reconcile")
     assert fresh["state"] == "verified"
-    assert case.provider.count("effect") == 1
+    assert case.provider.count("effect") == 2

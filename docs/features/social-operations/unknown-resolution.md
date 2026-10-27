@@ -10,8 +10,8 @@ and MAX attempts. The worker owns completion within the original absolute budget
 schedule minus its native submission lead. Waiting for the connection lane and
 preflight consume the same budget; retries never move the deadline.
 
-- Before the dispatch marker: transient provider/transport faults retry with
-  bounded backoff. Invalid input, expired native lead time, missing authorization
+- Before the dispatch marker: only explicitly classified transient provider/transport
+  codes retry with fixed age-based backoff (5/15/30/60 seconds). Invalid input, expired native lead time, missing authorization
   and revoked rights produce an explicit failure. A failing provider never blocks
   an authorized sibling.
 - After the dispatch marker: the same attempt goes to the adapter's
@@ -20,8 +20,8 @@ preflight consume the same budget; retries never move the deadline.
   original `guid`; Telegram and MAX retain their own exact recovery behavior.
 - A saved native post ID proves provider acceptance. The worker re-reads that ID
   while time remains; if readback is still unavailable at the deadline, the
-  published/scheduled result contains the original ID, a post URL where derivable,
-  a private item/queue reference and a short event warning.
+  published/scheduled result contains the original ID, a URL only if provided by
+  the adapter, a private item/queue reference and a short event warning.
 - If no provider identity can be established by the deadline, the attempt ends
   `blocked` with `publication_unconfirmed`. It is not automatically sent again
   after expiry. No terminal `outcome_unknown` and no `review_outcome`

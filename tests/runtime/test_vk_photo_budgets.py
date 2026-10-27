@@ -62,7 +62,7 @@ async def test_four_photo_edit_can_stage_beyond_old_ninety_second_cap(tmp_path,m
 
 
 @pytest.mark.asyncio
-async def test_explicit_retry_uses_same_bounded_plan_budget(tmp_path):
+async def test_automatic_retry_keeps_original_bounded_command_budget(tmp_path):
     store,actor,app,worker,t,native,desired,failed,args,now = await scenario(tmp_path)
     await app.call(actor,"vibepublish_publication_update",args)
     async def failed_upload(*args):
@@ -72,19 +72,17 @@ async def test_explicit_retry_uses_same_bounded_plan_budget(tmp_path):
         "publication_id":args["publication_id"],"expected_revision":3,
         "change":desired,"request_key":"budget-failure"})
     await worker.run_once()
-    now[0] += 10
-    retry = {"publication_id":args["publication_id"],"expected_revision":4,
-        "change":{"kind":"retry_failed","destinations":["vk"]},"request_key":"budget-retry"}
-    result = await app.call(actor,"vibepublish_publication_update",retry)
-    assert result["operation_id"] == edit["operation_id"]
     with store.connection() as db:
-        deadline = db.execute("SELECT deadline FROM operations WHERE id=?",(edit["operation_id"],)).fetchone()[0]
-        assert deadline == now[0]+390
-    # Same-key observation never extends the admitted deadline again.
-    now[0] += 10
-    await app.call(actor,"vibepublish_publication_update",retry)
+        deadline = db.execute("SELECT deadline,created FROM operations WHERE id=?",
+                              (edit["operation_id"],)).fetchone()
+        assert deadline["deadline"] == deadline["created"] + 390
+    assert store.receipt(actor,edit["operation_id"])["state"] == "running"
+    now[0] += 5.001
+    await worker.run_once()  # Same attempt retries; no explicit recovery command.
     with store.connection() as db:
-        assert db.execute("SELECT deadline FROM operations WHERE id=?",(edit["operation_id"],)).fetchone()[0] == deadline
+        after = db.execute("SELECT deadline FROM operations WHERE id=?",
+                           (edit["operation_id"],)).fetchone()[0]
+        assert after == deadline["deadline"]
 
 
 @pytest.mark.asyncio
@@ -114,7 +112,8 @@ async def test_supersede_and_auto_resume_keep_carousel_budget(tmp_path):
         db.execute("UPDATE attempts SET result=? WHERE operation_id=?",
                    (json.dumps({"missing_checks":["vk_http_failed"]}),replacement["operation_id"]))
         operation = dict(db.execute("SELECT * FROM operations WHERE id=?",(replacement["operation_id"],)).fetchone())
-    worker.schedule_vk_completion_retry(operation)
+    worker.schedule_retry(operation)
     with store.connection() as db:
-        row = db.execute("SELECT deadline,complete FROM operations WHERE id=?",(replacement["operation_id"],)).fetchone()
-        assert row["deadline"] == now[0]+390 and row["complete"] == 0
+        row = db.execute("SELECT created,deadline,complete FROM operations WHERE id=?",
+                         (replacement["operation_id"],)).fetchone()
+        assert row["deadline"] == row["created"] + 390 and row["complete"] == 0

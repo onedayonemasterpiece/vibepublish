@@ -456,8 +456,11 @@ class Application:
             raise DomainError('repeat_requires_new_key')
         else:
             previous = self.store.private_operation(db, actor, args['repeat_of'])
-            if previous['state'] == 'outcome_unknown' or not previous['complete']:
-                raise DomainError('repeat_not_proven_safe', next_action='review_outcome')
+            if (previous['state'] == 'outcome_unknown' or not previous['complete']
+                    or db.execute("SELECT 1 FROM attempts WHERE operation_id=? AND dispatched=1 "
+                                  "AND state IN ('blocked','failed','partial') LIMIT 1",
+                                  (previous['id'],)).fetchone()):
+                raise DomainError('repeat_not_proven_safe')
         return None
 
     def _key(self, db, actor, key, identity, op):

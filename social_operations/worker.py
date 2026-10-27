@@ -18,11 +18,24 @@ from .provider_diagnostics import diagnostic_scope, provider_call, safe_diagnost
 
 TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'cancelled', 'partial'}
 
-PERMANENT = {'needs_auth', 'access_revoked', 'source_access_revoked', 'native_lead_time',
-             'command_expired', 'plan_mismatch', 'asset_integrity', 'stale_worker',
-             'restore_requires_reconciliation', 'recovery_binding_changed'}
-PERMANENT_PARTS = ('invalid', 'unsupported', 'denied', 'forbidden', 'quota', 'limit',
-                   'mismatch', 'revoked', 'expired', 'not_authorized', 'not_supported')
+# Shared provider error policy: VK (including W2), Telegram and MAX report
+# these codes to this one worker retry scheduler. All other errors are terminal.
+TRANSIENT_ERRORS = frozenset({
+    'provider_preflight_failed', 'provider_preflight_timeout',
+    'provider_command_failed', 'provider_read_deadline', 'receipt_lost',
+    'telegram_rpc_failed', 'telegram_cooldown', 'telegram_queue_response_invalid',
+    'telegram_history_response_invalid', 'telegram_thread_response_invalid',
+    'telegram_response_identity_missing',
+    'vk_api_failed', 'vk_http_failed', 'vk_transport_failed', 'vk_cooldown',
+    'vk_response_invalid', 'vk_response_identity_missing', 'vk_queue_response_invalid',
+    'vk_event_response_invalid', 'vk_upload_failed', 'vk_story_upload_failed',
+    'vk_upload_transient_empty_photo', 'vk_upload_response_invalid',
+    'vk_story_upload_response_invalid', 'vk_video_upload_response_invalid',
+    'vk_photo_read_failed', 'vk_upload_server_invalid', 'vk_queue_read_incomplete',
+    'vk_readback_missing', 'vk_photo_binding_unavailable',
+    'connection_review_limit', 'incomplete_readback', 'exact_identity_not_observed',
+    'max_outcome_unknown', 'max_recovery_observation_unavailable',
+})
 
 
 class Worker:
@@ -49,8 +62,8 @@ class Worker:
         return parse_time(when) - min_lead if when else op['created'] + 900
 
     @staticmethod
-    def permanent(code):
-        return code in PERMANENT or any(part in code for part in PERMANENT_PARTS)
+    def transient(code):
+        return code in TRANSIENT_ERRORS
 
     @staticmethod
     def saved_native_id(child):
@@ -321,13 +334,14 @@ class Worker:
                     self.recovery_authority(db, op, child, actor)
                 scheduled = plan.get('scheduled_at')
                 target = plan['native_target']
-                url = None
-                if child['provider'] == 'vk' and target.startswith('-') and ident.isdecimal():
-                    url = f'https://vk.com/wall{target}_{ident}'
-                elif child['provider'] == 'telegram' and target.startswith('-100') and ident.isdecimal():
-                    url = f'https://t.me/c/{target[4:]}/{ident}'
-                elif child['provider'] == 'max' and target.startswith('-'):
-                    url = f'https://max.ru/c/{target}/{ident}'
+                saved = json.loads(child['checkpoint'])
+                state = saved.get('adapter', saved).get('driver') or saved.get('adapter', saved)
+                # The provider owns permalink construction; never guess an address.
+                url = state.get('recovery_reference') or state.get('url')
+                if not url and isinstance(state.get('item'), dict):
+                    url = state['item'].get('url')
+                if not isinstance(url, str) or not url.startswith('https://'):
+                    url = None
                 remote = RemoteItem(
                     ident, 'scheduled' if scheduled else 'published',
                     json.loads(plan['content_json'])['text'], digest([child['id'], ident]),
@@ -364,9 +378,9 @@ class Worker:
                 return
             result = json.loads(current['result'])
             now = self.store.clock()
-            retries = db.execute(
-                "SELECT count(*) FROM events WHERE operation_id=? AND body LIKE '%Automatic provider retry%'",
-                (op['id'],)).fetchone()[0]
+            # Fixed backoff from command age, without counters or querying the event ledger.
+            age = now - current['created']
+            delay = 5 if age < 5 else 15 if age < 20 else 30 if age < 50 else 60
             waits = []
             for child in db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)):
                 if child['state'] == 'accepted' and child['stage'] == 'waiting_connection':
@@ -377,9 +391,8 @@ class Worker:
                 if child['state'] != 'blocked':
                     continue
                 code = (json.loads(child['result']).get('missing_checks') or [''])[0]
-                if self.permanent(code) or now >= self.deadline(op, child):
+                if not self.transient(code) or now >= self.deadline(op, child):
                     continue
-                delay = min(300, 2 ** min(retries + 1, 8))
                 waits.append(min(now + delay, self.deadline(op, child)))
                 db.execute("UPDATE attempts SET state=?,stage='waiting_connection' WHERE id=?",
                            ('running' if child['dispatched'] else 'accepted', child['id']))

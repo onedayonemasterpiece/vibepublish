@@ -235,13 +235,14 @@ async def partial_worker_case(root):
     from social_operations.worker import Worker
     from tests.providers.test_vk_staged_photo_reuse import SavedPhotos
 
-    store = Store(root / "partial.sqlite", clock=lambda: NOW)
+    now = [NOW]
+    store = Store(root / "partial.sqlite", clock=lambda: now[0])
     actor = store.authenticate(store.create_principal("t", "owner", owner=True))
     store.add_connection(actor, "vk", "vk", account_type="vk_user")
     store.bind(actor, "owner", "vk", "vk", "-101", rights=("publish", "edit"))
     app = Application(store)
     transport = SavedPhotos()
-    adapter = VKAdapter(transport, connection_id="vk", clock=lambda: NOW)
+    adapter = VKAdapter(transport, connection_id="vk", clock=lambda: now[0])
     worker = Worker(store, {"vk": adapter})
     initial = app.accept(actor, "publish", {
         "to": ["vk"], "content": {"text": "Original"}, "request_key": "partial-original"})
@@ -262,9 +263,9 @@ async def partial_worker_case(root):
                    "media": [{"source": {"kind": "asset", "id": ref}, "role": "image"} for ref in refs]},
         "request_key": "partial-edit"})
     await worker.run_once()
-    assert store.receipt(actor, edited["operation_id"])["state"] == "blocked"
+    assert store.receipt(actor, edited["operation_id"])["state"] == "running"
     assert len(transport.uploads) == 2 and transport.effects == 1
-    return store, actor, app, worker, transport, edited, failure
+    return store, actor, app, worker, transport, edited, failure, now
 
 
 def staged_row(store, operation):
@@ -277,25 +278,23 @@ def retry_args(receipt, key):
             "change": {"kind": "retry_failed", "destinations": ["vk"]}, "request_key": key}
 
 
-def replacement_worker(store, transport):
+def replacement_worker(store, transport, now):
     from adapters.vk import VKAdapter
     from social_operations.worker import Worker
-    reopened = Store(store.path, clock=lambda: NOW)
-    return Worker(reopened, {"vk": VKAdapter(transport, connection_id="vk", clock=lambda: NOW)})
+    reopened = Store(store.path, clock=lambda: now[0])
+    return Worker(reopened, {"vk": VKAdapter(transport, connection_id="vk", clock=lambda: now[0])})
 
 
 @pytest.mark.asyncio
-async def test_official_retry_new_worker_resumes_two_of_four_without_reupload(tmp_path):
-    store, actor, app, worker, transport, edited, failure = await partial_worker_case(tmp_path)
+async def test_automatic_retry_new_worker_resumes_two_of_four_without_reupload(tmp_path):
+    store, actor, app, worker, transport, edited, failure, now = await partial_worker_case(tmp_path)
     before = staged_row(store, edited["operation_id"])
     cp = json.loads(before["checkpoint"])
     assert cp["transition"] == "vk_photo_staging"
     assert len(cp["adapter"]["media"]) == len(cp["adapter"]["photo_proofs"]) == 2
-    args = retry_args(edited, "resume-two-photos")
-    admitted = await app.call(actor, "vibepublish_publication_update", args)
-    assert admitted["operation_id"] == edited["operation_id"]
     start = len(transport.calls)
-    restarted = replacement_worker(store, transport)
+    now[0] += 5.001
+    restarted = replacement_worker(store, transport, now)
     await restarted.run_once()
     result = store.receipt(actor, edited["operation_id"])
     assert result["state"] == "verified", result
@@ -306,64 +305,32 @@ async def test_official_retry_new_worker_resumes_two_of_four_without_reupload(tm
     assert sum(method == "upload_photo" for method, _, _ in calls) == 2
     final_checkpoint = json.loads(staged_row(store, edited["operation_id"])["checkpoint"])
     assert final_checkpoint["remote"]["provider_media"][:2] == ["photo-101_11001", "photo-101_11002"]
-    replay = await app.call(actor, "vibepublish_publication_update", args)
-    assert replay["operation_id"] == result["operation_id"]
     assert not await restarted.run_once()
     assert len(transport.uploads) == 4 and transport.effects == 2
 
 
 @pytest.mark.asyncio
-async def test_later_suffix_failure_retains_three_and_spent_key_never_rearms(tmp_path):
-    store, actor, app, worker, transport, edited, failure = await partial_worker_case(tmp_path)
+async def test_later_suffix_failure_retries_without_new_key_or_manual_rebase(tmp_path):
+    store, actor, app, worker, transport, edited, failure, now = await partial_worker_case(tmp_path)
     initial = json.loads(staged_row(store, edited["operation_id"])["checkpoint"])["adapter"]
     failure["at"] = 4
-    args = retry_args(edited, "resume-then-final-upload-fails")
-    await app.call(actor, "vibepublish_publication_update", args)
-    restarted = replacement_worker(store, transport)
+    now[0] += 5.001
+    restarted = replacement_worker(store, transport, now)
     await restarted.run_once()
     result = store.receipt(actor, edited["operation_id"])
-    assert result["state"] == "blocked", result
-    after = staged_row(store, edited["operation_id"])
-    cp = json.loads(after["checkpoint"])
+    assert result["state"] == "running", result
+    cp = json.loads(staged_row(store, edited["operation_id"])["checkpoint"])
     assert cp["transition"] == "vk_photo_staging"
     assert len(cp["adapter"]["media"]) == len(cp["adapter"]["photo_proofs"]) == 3
     assert cp["adapter"]["media"][:2] == initial["media"]
     assert cp["adapter"]["photo_proofs"][:2] == initial["photo_proofs"]
     assert len(transport.uploads) == 3 and transport.effects == 1
-    replay = await app.call(actor, "vibepublish_publication_update", args)
-    assert replay["state"] == "blocked"
-    assert not await restarted.run_once()
-    assert len(transport.uploads) == 3 and transport.effects == 1
-    # A spent key is never replaced by another retry key. Obtain fresh native
-    # evidence, rebase locally, then admit a separately authorized edit revision.
-    with store.connection() as db:
-        original = db.execute(
-            "SELECT a.result FROM attempts a JOIN operations o ON o.id=a.operation_id "
-            "WHERE o.publication_id=? AND json_extract(a.plan,'$.action')='publish' AND a.state='verified'",
-            (edited["resource_id"],)).fetchone()
-    reference = json.loads(original["result"])["item_ref"]
-    reading = await app.call(actor, "vibepublish_read",
-                             {"query": {"kind": "item", "item_ref": reference}})
-    await replacement_worker(store, transport).run_once()
-    fresh_ref = store.receipt(actor, reading["operation_id"])["items"][0]["ref"]
-    rebased = await app.call(actor, "vibepublish_publication_update", {
-        "publication_id": edited["resource_id"], "expected_revision": edited["revision"],
-        "change": {"kind": "reconcile", "operation_id": edited["operation_id"],
-                   "attempt_id": after["id"], "native_reference": fresh_ref},
-        "request_key": "explicit-prefix-baseline-rebase"})
-    assert rebased["state"] == "verified", rebased
-    plan = json.loads(after["plan"])
-    new_edit = await app.call(actor, "vibepublish_publication_update", {
-        "publication_id": edited["resource_id"], "expected_revision": rebased["revision"],
-        "change": {"kind": "edit", "content": json.loads(plan["content_json"]),
-                   "media": [{"source": {"kind": "asset", "id": a["ref"]}, "role": "image"}
-                             for a in plan["assets"]]},
-        "request_key": "separate-authorized-edit-after-prefix-rebase"})
-    assert new_edit["operation_id"] != edited["operation_id"]
-    await replacement_worker(store, transport).run_once()
-    final = store.receipt(actor, new_edit["operation_id"])
-    assert final["state"] == "verified", final
+    now[0] += 15.001
+    await restarted.run_once()
+    result = store.receipt(actor, edited["operation_id"])
+    assert result["state"] == "verified", result
     assert len(transport.uploads) == 4 and transport.effects == 2
+    assert not await restarted.run_once()
 
 
 def current_prefix(case, action, count):

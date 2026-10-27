@@ -73,6 +73,14 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
     async def stuck(self, targets=None):
         receipt = await self.call('publish', {'to': targets or ['max'], 'content': {'text': 'Original'}})
         await self.worker.run_once()
+        # An archived operation can predate the automatic finite worker policy.
+        # Seed its historical terminal state explicitly; new commands never write it.
+        with self.store.tx() as db:
+            db.execute("UPDATE attempts SET state='outcome_unknown',stage='outcome_unknown' "
+                       "WHERE operation_id=? AND state NOT IN ('verified','scheduled','cancelled')",
+                       (receipt['operation_id'],))
+            db.execute("UPDATE operations SET state='outcome_unknown',complete=1,work_state='done',"
+                       "lease_owner=NULL,lease_until=0 WHERE id=?", (receipt['operation_id'],))
         self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
         return receipt
 
@@ -84,7 +92,7 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         receipt = await self.stuck()
         with self.store.connection() as db:
             attempt = dict(db.execute('SELECT * FROM attempts').fetchone())
-        self.now += 9999  # An expired send deadline never prevents observation.
+        self.now += 1  # Legacy reconciliation remains within this command's frozen horizon.
         self.provider.unknown = False
         args = self.args(receipt, attempt_id=attempt['id'], native_reference='https://max.ru/exact')
         accepted = await self.call('publication_update', args)
@@ -108,16 +116,17 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(row['finalize_state'], 'done')
             self.assertTrue(row['observation'])
 
-    async def test_insufficient_or_mismatched_evidence_never_releases(self):
+    async def test_invalid_observation_cannot_be_marked_success_or_replayed_as_send(self):
         receipt = await self.stuck()
         await self.call('publication_update', self.args(receipt))
         await self.worker.run_once()
-        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
+        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'running')
         self.provider.unknown, self.provider.wrong_target = False, True
-        args = self.args(receipt); args['request_key'] = 'fresh-observation'
-        await self.call('publication_update', args)
+        self.now += 5.001
         await self.worker.run_once()
-        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
+        final = self.store.receipt(self.actor, receipt['operation_id'])
+        self.assertEqual(final['state'], 'blocked', final)
+        self.assertEqual(final['deliveries'][0]['missing_checks'], ['wrong_target_readback'])
         self.assertEqual(self.provider.count('finalize'), 0)
         self.assertEqual(self.provider.count('effect'), 1)
 
@@ -136,7 +145,7 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(other.count('execute'), 1)
         self.assertEqual(other.count('reconcile'), 1)
 
-    async def test_release_failure_restart_and_connection_guard(self):
+    async def test_release_failure_restart_does_not_block_other_publication(self):
         receipt = await self.stuck()
         self.provider.unknown, self.provider.release_failures = False, 1
         await self.call('publication_update', self.args(receipt))
@@ -144,16 +153,16 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         result = self.store.receipt(self.actor, receipt['operation_id'])
         self.assertFalse(result['operation_complete'])
         self.assertEqual(result['deliveries'][0]['state'], 'verified')
-        # New effect cannot bypass the pending-finalize journal.
-        new = await self.call('publish', {'to': ['max'], 'content': {'text': 'Blocked until release'}})
+        # One pending provider finalization cannot poison independent publications.
+        new = await self.call('publish', {'to': ['max'], 'content': {'text': 'Unrelated publication'}})
         await self.worker.run_once()
-        self.assertEqual(self.store.receipt(self.actor, new['operation_id'])['state'], 'blocked')
+        self.assertEqual(self.store.receipt(self.actor, new['operation_id'])['state'], 'verified')
         self.now += 31
         restarted = Worker(Store(self.store.path, clock=lambda: self.now), {'max': self.provider})
         await restarted.run_once()
         self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'verified')
-        self.assertEqual(self.provider.count('effect'), 1)
-        self.assertEqual(self.provider.count('finalize'), 2)
+        self.assertEqual(self.provider.count('effect'), 2)
+        self.assertEqual(self.provider.count('finalize'), 3)
 
     async def test_crash_after_release_before_ack_only_repeats_finalize(self):
         receipt = await self.stuck()
@@ -232,7 +241,7 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.provider.reconcile = revoke_during_read
         await self.worker.run_once()
         with self.store.connection() as db:
-            self.assertEqual(db.execute('SELECT state FROM attempts').fetchone()[0], 'outcome_unknown')
+            self.assertEqual(db.execute('SELECT state FROM attempts').fetchone()[0], 'blocked')
             self.assertIsNone(db.execute('SELECT observation FROM attempt_recovery').fetchone()[0])
         self.assertEqual(self.provider.count('finalize'), 0)
 
@@ -257,11 +266,12 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         args = self.args(receipt)
         await self.call('publication_update', args)
         await self.worker.run_once()
-        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'outcome_unknown')
+        self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'running')
         self.provider.unknown = False
         again = await self.call('publication_update', args)
         self.assertEqual(again['operation_id'], receipt['operation_id'])
         self.assertFalse(again['operation_complete'])
+        self.now += 5.001
         await self.worker.run_once()
         self.assertEqual(self.store.receipt(self.actor, receipt['operation_id'])['state'], 'verified')
         self.assertEqual(self.provider.count('effect'), 1)
@@ -328,21 +338,17 @@ class NoInputRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(db.execute('SELECT finalize_state FROM attempt_recovery WHERE attempt_id=?',(row['id'],)).fetchone()[0],'done')
 
 
-    async def test_invalid_no_effect_proof_never_releases_uncertainty(self):
+    async def test_new_no_input_failure_refuses_without_manual_review(self):
         for kind in ('checkpoint','absence','click'):
             with self.subTest(kind=kind):
                 self.provider.invalid_proof=kind
                 receipt=await self.call('publish',{'to':['max'],'content':{'text':'Guard '+kind}})
                 await self.worker.run_once()
-                self.assertEqual(self.store.receipt(self.actor,receipt['operation_id'])['state'],'outcome_unknown')
-                await self.call('publication_update',dict(self.args(receipt),request_key='reject-'+kind))
-                await self.worker.run_once()
-                self.assertEqual(self.store.receipt(self.actor,receipt['operation_id'])['state'],'outcome_unknown')
-                # Resolve this original test guard before admitting the next
-                # independent case; never manually reset connection quarantine.
+                result=self.store.receipt(self.actor,receipt['operation_id'])
+                self.assertEqual(result['state'],'blocked')
+                self.assertNotEqual(result['next_action'],'review_outcome')
+                self.assertEqual(self.provider.count('effect'),0)
                 self.provider.invalid_proof=None
-                await self.call('publication_update',dict(self.args(receipt),request_key='resolve-'+kind))
-                await self.worker.run_once()
 
     async def test_no_effect_release_is_durable_across_worker_restart(self):
         receipt=await self.stuck()

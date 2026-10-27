@@ -82,7 +82,7 @@ class VKFanoutCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.telegram.count('effect'), 1)
         self.assertEqual(self.vk.count('effect'), 0)
 
-        self.now += 3
+        self.now += 5.001
         restarted = Worker(self.store, {'telegram': self.telegram, 'vk': self.vk})
         self.assertTrue(await restarted.run_once())
 
@@ -109,7 +109,7 @@ class VKFanoutCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.telegram.count('effect'), 1)
         self.assertEqual(vk.count('effect'), 0)
 
-        self.now += 3
+        self.now += 5.001
         restarted = Worker(self.store, {'telegram': self.telegram, 'vk': vk})
         self.assertTrue(await restarted.run_once())
 
