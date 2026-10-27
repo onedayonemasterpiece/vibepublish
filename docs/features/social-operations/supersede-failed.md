@@ -19,9 +19,10 @@ Use `vibepublish_publication_update` with the original `publication_id`,
 This is an explicit content-changing replacement of selected original publish
 attempts that are `blocked` or `failed` with durable `dispatched=0`.
 It is not a retry of edited frozen bytes. Ordinary `retry_failed` remains
-content-preserving. No dispatched, uncertain, successful, scheduled, cancelled,
-or active selected attempt is eligible. Any outcome-unknown sibling or pending
-recovery finalization prevents admission. Native-item references, prior edits,
+content-preserving, but transient pre-dispatch errors are now automatically
+retried within the original fixed horizon and need no such request. No dispatched, uncertain, successful, scheduled, cancelled,
+or active selected attempt is eligible. An active selected attempt or pending provider finalization of that
+selected object prevents replacement; unrelated network attempts do not. Native-item references, prior edits,
 forwards, and preview intents are excluded.
 
 Either current publish or publication-management scope is required, along with
@@ -40,8 +41,8 @@ operations explain the lineage.
 Only content changes. Existing verified private assets, native requested time,
 surface, and topic are retained and revalidated. Expired native timing is rejected;
 it is never silently converted to immediate delivery. Normal content compilation,
-asset integrity, quotas, authorization, provider checks, and connection
-outcome-unknown fences apply to the replacement.
+asset integrity, quotas, authorization and per-attempt dispatch fencing apply
+to the replacement. There is no connection-wide outcome-unknown fence.
 
 Selected original attempts become locally cancelled before any dispatch. Their
 immutable plans/digests, original failure results, checkpoints, request, and

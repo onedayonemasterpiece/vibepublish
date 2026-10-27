@@ -163,8 +163,10 @@ async def test_actual_adapter_schedule_readback_cannot_downgrade_into_immediate_
         'delivery': {'kind': 'at', 'at': timestamp(NOW+3600)}})
     await worker.run_once()
     done = result(store, actor, receipt)
-    assert done['state'] == 'outcome_unknown', done
-    assert done['error']['code'] == 'native_schedule_not_observed'
+    # A checkpointed native queue ID is accepted; a malformed extra readback
+    # cannot turn a scheduled publication into a duplicate immediate send.
+    assert done['state'] == 'scheduled', done
+    assert done['deliveries'][0]['queue_ref']
     assert transports['telegram'].effects == 1
     assert not await worker.run_once()
 
@@ -178,6 +180,8 @@ async def test_unknown_native_child_never_erases_other_provider_success(runtime)
     receipt = await call(app, actor, 'publish', {'to': ['telegram', 'vk'], 'content': {'text': 'Independent children'}})
     await worker.run_once()
     done = result(store, actor, receipt)
-    assert [d['state'] for d in done['deliveries']] == ['outcome_unknown', 'verified']
+    # Lost response without a native ID stays in automatic reconcile; VK has
+    # already succeeded and is never rolled back or sent twice.
+    assert [d['state'] for d in done['deliveries']] == ['running', 'verified']
     assert all(t.effects == 1 for t in transports.values())
     assert not await worker.run_once()

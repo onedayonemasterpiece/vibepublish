@@ -35,11 +35,11 @@ class CopyAdapter:
 
 
 class CopyCheckpointTests(unittest.IsolatedAsyncioTestCase):
-    async def run_case(self, malformed=False):
+    async def run_case(self, malformed=False, provider='vk'):
         temp=tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
         store=Store(Path(temp.name)/'db')
         actor=store.authenticate(store.create_principal('t','owner',owner=True))
-        store.add_connection(actor,'vkconn','vk',account_type='fake')
+        store.add_connection(actor,'vkconn',provider,account_type='fake')
         store.bind(actor,'owner','vk','vkconn','-241261191')
         image=io.BytesIO(); Image.new('RGB',(8,8),'blue').save(image,format='PNG')
         asset=import_image(store,actor,image.getvalue(),'image/png')
@@ -47,26 +47,26 @@ class CopyCheckpointTests(unittest.IsolatedAsyncioTestCase):
         receipt=await app.call(actor,'vibepublish_publish',{'to':['vk'],'content':{'text':'test'},
             'media':[{'source':{'kind':'asset','id':asset}}], 'delivery':{'kind':'at','at':timestamp(store.clock()+3600)}})
         self.assertIn('operation_id',receipt,receipt)
-        await Worker(store,{'vk':CopyAdapter(malformed)}).run_once()
+        await Worker(store,{provider:CopyAdapter(malformed)}).run_once()
         with store.connection() as db:
             checkpoint=json.loads(db.execute('SELECT checkpoint FROM attempts').fetchone()[0])
         return store.receipt(actor,receipt['operation_id']),checkpoint
 
-    async def test_finish_keeps_exact_copy_proof_but_not_arbitrary_state(self):
-        receipt,cp=await self.run_case()
-        self.assertEqual(receipt['state'],'scheduled',receipt)
-        self.assertEqual(cp['remote']['native_id'],'8')
-        proof=cp['provider_evidence']['mappings'][0]
-        self.assertEqual(proof['saved'],'photo123_456')
-        self.assertEqual(proof['current'],'photo-241261191_789')
-        self.assertEqual(proof['rendition']['sha256'],'a'*64)
-        self.assertNotIn('must-not-persist',canonical(cp))
-        self.assertEqual(set(cp),{'remote','provider_evidence','core_recovery'})
+    async def test_native_copy_id_is_accepted_without_byte_proofs(self):
+        receipt, cp = await self.run_case()
+        self.assertEqual(receipt['state'], 'scheduled', receipt)
+        self.assertEqual(cp['remote']['native_id'], '8')
+        self.assertNotIn('provider_evidence', cp)
+        self.assertNotIn('must-not-persist', canonical(cp))
+        self.assertEqual(set(cp), {'remote', 'core_recovery'})
 
-    async def test_wrong_copy_binding_cannot_finish_verified(self):
-        receipt,cp=await self.run_case(True)
-        self.assertEqual(receipt['state'],'outcome_unknown')
-        self.assertEqual(receipt['error']['code'],'vk_photo_evidence_invalid')
+    async def test_malformed_obsolete_copy_proof_does_not_invalidate_vk_post(self):
+        receipt, cp = await self.run_case(True)
+        self.assertEqual(receipt['state'], 'scheduled', receipt)
+        self.assertEqual(cp['remote']['native_id'], '8')
+        self.assertNotIn('provider_evidence', cp)
 
-    def test_other_provider_unchanged(self):
-        self.assertIsNone(Worker.vk_copy_evidence({}, {'provider':'telegram'}, None, '{}'))
+    async def test_non_vk_final_checkpoint_never_carries_copy_proof(self):
+        receipt, cp = await self.run_case(provider='telegram')
+        self.assertEqual(receipt['state'], 'scheduled', receipt)
+        self.assertNotIn('provider_evidence', cp)

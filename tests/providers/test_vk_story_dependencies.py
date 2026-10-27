@@ -175,7 +175,7 @@ async def test_unknown_story_save_never_repeats(tmp_path):
     await worker.run_once()
     for _ in range(3):
         now[0] += 61;await worker.run_once()
-    assert dep(store)['state'] == 'outcome_unknown'
+    assert dep(store)['state'] == 'queued'
     assert transport.effects == 2 and len(transport.stories) == 1
 
 

@@ -1,102 +1,92 @@
-"""Explicit fresh-read recovery after a proven no-dispatch upload failure."""
-import json
+"""VK upload failure is retried by the original worker, not a manual rebase."""
 from unittest.mock import AsyncMock
+
 import pytest
+
 from social_operations.domain import DomainError
 from .test_baseline_rebase import scenario
 
 
-async def failed_upload(tmp_path):
-    values = await scenario(tmp_path)
-    store,actor,app,worker,t,native,desired,failed,args,now = values
-    await app.call(actor, "vibepublish_publication_update", args)
-    upload = t.upload_photo
-    # Three bounded upload tries are tested in the provider suite. This fixture
-    # returns the same safe failure directly to keep ledger tests quick.
-    t.upload_photo = AsyncMock(side_effect=DomainError(
-        "vk_http_failed", message="VK media_upload HTTP status 504"))
-    edit = await app.call(actor, "vibepublish_publication_update", {
-        "publication_id":args["publication_id"],"expected_revision":3,
-        "change":desired,"request_key":"upload-failure"})
+async def prepared_edit(tmp_path, *, code='vk_http_failed'):
+    store, actor, app, worker, transport, native, desired, failed, args, now = await scenario(tmp_path)
+    rebased = await app.call(actor, 'vibepublish_publication_update', args)
+    assert rebased['state'] == 'verified'
+    original_upload = transport.upload_photo
+    transport.upload_photo = AsyncMock(side_effect=DomainError(code))
+    edit = await app.call(actor, 'vibepublish_publication_update', {
+        'publication_id': args['publication_id'], 'expected_revision': 3,
+        'change': desired, 'request_key': 'upload-failure'})
+    assert 'operation_id' in edit, edit
     await worker.run_once()
-    retry_args = {"publication_id":args["publication_id"],"expected_revision":4,
-        "change":{"kind":"retry_failed","destinations":["vk"]},"request_key":"one-recovery"}
-    await app.call(actor,"vibepublish_publication_update",retry_args)
-    await worker.run_once()
-    receipt = store.receipt(actor,edit["operation_id"])
-    assert receipt["state"] == "blocked", receipt
-    with store.connection() as db:
-        row = db.execute("SELECT checkpoint,dispatched FROM attempts WHERE operation_id=?",
-                         (edit["operation_id"],)).fetchone()
-        assert not json.loads(row["checkpoint"]).get("remote") and not row["dispatched"]
-    read = await app.call(actor, "vibepublish_read", {"query":{
-        "kind":"item","item_ref":args["change"]["native_reference"]}})
-    await worker.run_once()
-    fresh = store.receipt(actor,read["operation_id"])["items"][0]["ref"]
-    rebase = {"publication_id":args["publication_id"],"expected_revision":4,
-        "change":{"kind":"reconcile","operation_id":edit["operation_id"],
-                  "attempt_id":receipt["deliveries"][0]["attempt_id"],"native_reference":fresh},
-        "request_key":"upload-rebase"}
-    t.upload_photo = upload
-    return values, edit, retry_args, rebase
+    return store, actor, app, worker, transport, native, desired, edit, now, original_upload
 
 
 @pytest.mark.asyncio
-async def test_terminal_upload_rebase_then_explicit_edit_preserves_receipt(tmp_path):
-    values,edit,retry_args,args = await failed_upload(tmp_path)
-    store,actor,app,worker,t,native,desired,_,_,now = values
-    before = store.receipt(actor,edit["operation_id"])
+async def test_transient_vk_upload_auto_resumes_same_attempt_without_extra_post(tmp_path):
+    store, actor, app, worker, transport, native, desired, edit, now, upload = await prepared_edit(tmp_path)
+    first = store.receipt(actor, edit['operation_id'])
+    assert first['state'] == 'running', first
     with store.connection() as db:
-        frozen = tuple(db.execute("SELECT plan,checkpoint,result FROM attempts WHERE operation_id=?",
-                                 (edit["operation_id"],)).fetchone())
-    rebased = await app.call(actor,"vibepublish_publication_update",args)
-    assert rebased["state"] == "verified" and rebased["revision"] == 5, rebased
-    assert t.effects == 1
-    replay = await app.call(actor,"vibepublish_publication_update",retry_args)
-    assert replay["operation_id"] == edit["operation_id"] and replay["state"] == "blocked"
-    with store.connection() as db:
-        assert tuple(db.execute("SELECT plan,checkpoint,result FROM attempts WHERE operation_id=?",
-                               (edit["operation_id"],)).fetchone()) == frozen
-    new = await app.call(actor,"vibepublish_publication_update",{
-        "publication_id":args["publication_id"],"expected_revision":5,
-        "change":desired,"request_key":"new-authorized-edit"})
+        child = db.execute('SELECT id,dispatched FROM attempts WHERE operation_id=?',
+                           (edit['operation_id'],)).fetchone()
+        assert child['dispatched'] == 0
+        original_attempt = child['id']
+    assert transport.effects == 1
+    transport.upload_photo = upload
+    now[0] += 5.001
     await worker.run_once()
-    assert store.receipt(actor,new["operation_id"])["state"] == "verified"
-    assert list(t.posts) == [native] and len(t.posts[native]["attachments"]) == 4
-    assert t.effects == 2
-    assert store.receipt(actor,edit["operation_id"])["error"] == before["error"]
+    final = store.receipt(actor, edit['operation_id'])
+    assert final['state'] == 'verified', final
+    assert final['operation_complete']
+    assert transport.effects == 2
+    assert list(transport.posts) == [native]
+    assert len(transport.posts[native]['attachments']) == 4
+    with store.connection() as db:
+        assert db.execute('SELECT id FROM attempts WHERE operation_id=?',
+                          (edit['operation_id'],)).fetchone()[0] == original_attempt
+    assert not await worker.run_once()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("unsafe", ["dispatched","unknown","api","timeout","stale"])
-async def test_upload_rebase_requires_exact_proven_safe_failure(tmp_path,unsafe):
-    values,edit,_,args = await failed_upload(tmp_path)
-    store,actor,app,worker,t,native,desired,_,_,now = values
-    if unsafe == "stale":
-        now[0] += 301
-    else:
-        with store.tx() as db:
-            if unsafe == "dispatched":
-                db.execute("UPDATE attempts SET dispatched=1 WHERE operation_id=?",(edit["operation_id"],))
-            elif unsafe == "unknown":
-                db.execute("UPDATE attempts SET state='outcome_unknown' WHERE operation_id=?",(edit["operation_id"],))
-            else:
-                message = "VK api HTTP status 504" if unsafe == "api" else "Upload timed out"
-                db.execute("UPDATE operations SET error=? WHERE id=?",
-                    (json.dumps({"error":{"code":"vk_http_failed","message":message}}),edit["operation_id"]))
-    result = await app.call(actor,"vibepublish_publication_update",args)
-    assert "error" in result and t.effects == 1
+async def test_continuous_transient_upload_expires_without_send_or_deadline_renewal(tmp_path):
+    store, actor, app, worker, transport, native, desired, edit, now, upload = await prepared_edit(tmp_path)
+    with store.connection() as db:
+        deadline, created = db.execute('SELECT deadline,created FROM operations WHERE id=?',
+                                       (edit['operation_id'],)).fetchone()
+    now[0] += 901
+    await worker.run_once()
+    result = store.receipt(actor, edit['operation_id'])
+    assert result['state'] == 'blocked', result
+    assert result['operation_complete']
+    assert result['deliveries'][0]['missing_checks'] == ['command_expired']
+    assert transport.effects == 1
+    with store.connection() as db:
+        assert db.execute('SELECT deadline FROM operations WHERE id=?',
+                          (edit['operation_id'],)).fetchone()[0] == deadline
+        assert deadline - created == 390
 
 
 @pytest.mark.asyncio
-async def test_native_change_after_upload_rebase_still_blocks(tmp_path):
-    values,edit,_,args = await failed_upload(tmp_path)
-    store,actor,app,worker,t,native,desired,_,_,now = values
-    await app.call(actor,"vibepublish_publication_update",args)
-    t.posts[native]["text"] = "Changed after fresh read"
-    new = await app.call(actor,"vibepublish_publication_update",{
-        "publication_id":args["publication_id"],"expected_revision":5,
-        "change":desired,"request_key":"new-edit-after-change"})
+async def test_invalid_upload_target_is_permanent_and_never_resends(tmp_path):
+    store, actor, app, worker, transport, native, desired, edit, now, upload = await prepared_edit(
+        tmp_path, code='vk_upload_url_invalid')
+    result = store.receipt(actor, edit['operation_id'])
+    assert result['state'] == 'blocked', result
+    assert result['operation_complete']
+    assert result['deliveries'][0]['missing_checks'] == ['vk_upload_url_invalid']
+    assert transport.effects == 1
+    now[0] += 120
+    assert not await worker.run_once()
+
+
+@pytest.mark.asyncio
+async def test_external_native_change_during_retry_is_not_overwritten(tmp_path):
+    store, actor, app, worker, transport, native, desired, edit, now, upload = await prepared_edit(tmp_path)
+    transport.posts[native]['text'] = 'Another owner change'
+    transport.upload_photo = upload
+    now[0] += 5.001
     await worker.run_once()
-    assert store.receipt(actor,new["operation_id"])["error"]["code"] == "remote_revision_conflict"
-    assert t.effects == 1
+    result = store.receipt(actor, edit['operation_id'])
+    assert result['state'] == 'blocked', result
+    assert result['deliveries'][0]['missing_checks'] == ['remote_revision_conflict']
+    assert transport.effects == 1

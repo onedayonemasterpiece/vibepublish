@@ -1,13 +1,25 @@
-# VK allocation-only recovery
+# VK allocation-only recovery (legacy case)
 
-Status: Not confirmed by user. Implementation and offline verification do not constitute live acceptance.
+Status: **historical compatibility**, not a publication prerequisite. W1 worker
+source is offline tested; live acceptance remains with the integrator.
 
-The existing explicit `publication_update` reconcile command can recognize one bounded outcome: an immediate VK wall publish with one MP4 allocated a native video, then synchronously rejected its upload URL before upload and wall submission. It does not call the provider, publish, upload, delete the allocated video, or retry the original intent.
+A failed video upload may have allocated a native video before any VK
+`wall.post` call. Earlier releases allowed an explicit, read-only
+`publication_update.reconcile` to classify that precise case by its existing
+checkpoint and diagnostics. This operation never uploads or posts another item;
+it does not infer that a wall publication succeeded.
 
-Admission requires the original dispatched unknown attempt, intact plan/checkpoint and actor/binding/connection authority, a `vk_video_allocated` checkpoint with one exact target-owned video and no wall ID, and correlated durable diagnostics ending in completed `video.save` followed by failed `execute` with `vk_upload_url_invalid`. Absence of logs is never sufficient. The local validation ordering is part of this invariant: the URL is validated immediately after the allocation checkpoint and before media upload.
+The current publication worker does **not** quarantine the whole VK connection
+because of that historical attempt. Another authorized publication proceeds
+independently. For a new attempt the same fixed deadline controls preparation,
+lane waiting, retries and recovery. A recoverable pre-dispatch failure retries;
+a known wall post ID is accepted as publication success; a dispatched attempt
+without a confirmable post ID ends in a clear `publication_unconfirmed` refusal
+when its budget expires. It never asks the user to verify a native queue by hand.
 
-The original attempt becomes partial with `vk_video_allocation_only`, `retry_safe=false`, and historical `dispatched=1`. Its native allocation and original checkpoint remain preserved with a digest-bound proof. No wall item or published receipt is fabricated. The existing connection guard exempts only that validated proof; any other unknown attempt continues blocking. Stale authority or tampered proof fails closed. Repeating reconciliation cannot rearm a provider effect.
+Existing authority checks, immutable plans and dispatch markers continue to
+protect a subsequent edit or replacement of the *same* object. Historical
+allocation-only records may be inspected without rewriting the old ledger.
 
-Upload interruptions, HTTP errors, unknown wall writes, scheduling, Stories, edits, multiple assets and missing/mismatched evidence are excluded. This change does not accept previously rejected upload hosts or repair video publishing.
-
-After this observation-only resolution, an independent, never-dispatched carousel edit may use its existing one-time `retry_failed` command if eligible. The frozen intent and native CAS still apply. Verify the same public post, its caption and ordered media after completion.
+Verification is limited to fake transports and local tests. No real VK calls,
+deployment or production database mutation were performed in W1.

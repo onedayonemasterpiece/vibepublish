@@ -116,18 +116,18 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': LostReceipt(sys.argv[2], 'te
                     run = await asyncio.to_thread(subprocess.run, [sys.executable, '-c', script, str(self.store.path), str(self.root/'remote.sqlite')], capture_output=True, timeout=15)
                     self.assertEqual(run.returncode, 0, run.stderr.decode())
                     status = (await session.call_tool('vibepublish_status', {'ids': [original['operation_id']]})).structuredContent['receipts'][0]
-                    self.assertEqual(status['state'], 'blocked')  # Brief user view; internal recovery preserves the original record
-                    args = {'publication_id': original['resource_id'], 'expected_revision': 1,
-                            'change': {'kind': 'reconcile', 'operation_id': original['operation_id']}, 'request_key': 'recovery'}
-                    admitted = (await session.call_tool('vibepublish_publication_update', args)).structuredContent
-                    self.assertEqual(admitted['operation_id'], original['operation_id'])
-                    self.assertFalse(admitted['operation_complete'])
-            # Disconnect/restart both the session and worker before recovery.
+                    self.assertEqual(status['state'], 'running')
+                    self.assertFalse(status['operation_complete'])
+            # The original durable attempt is due for automatic reconcile after restart.
+            with self.store.tx() as db:
+                db.execute("UPDATE operations SET lease_until=? WHERE id=?",
+                           (self.store.clock()-1, original['operation_id']))
             await self.run_worker()
             async with streamable_http_client(self.base+'/mcp/', http_client=http) as (read, write, _):
                 async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=15)) as session:
                     await session.initialize()
-                    result = (await session.call_tool('vibepublish_publication_update', args)).structuredContent
+                    result = (await session.call_tool('vibepublish_status',
+                        {'ids': [original['operation_id']]})).structuredContent['receipts'][0]
                     self.assertEqual(result['state'], 'verified', result)
                     self.assertEqual(result['operation_id'], original['operation_id'])
                     self.assertTrue(result['operation_complete'])
@@ -138,7 +138,7 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': LostReceipt(sys.argv[2], 'te
         self.assertEqual(remote.count('execute'), 1)
         with self.store.connection() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM operations').fetchone()[0], 1)
-            self.assertEqual(db.execute('SELECT finalize_state FROM attempt_recovery').fetchone()[0], 'done')
+            self.assertEqual(db.execute('SELECT finalized FROM attempt_recovery').fetchone()[0], None)
 
     async def test_sdk_safe_retry_of_predispatch_edit_preserves_original_operation(self):
         script = """
@@ -244,7 +244,7 @@ asyncio.run(Worker(Store(sys.argv[1]), {'telegram': BlockedEdit(sys.argv[2], 'te
                         return result
                     for section in ('all','forwarding','destinations','visuals'):
                         boot=await tool('get_started',{'section':section})
-                        self.assertIn('mcp-contract-v1.md',boot['skill'])  # Rare forwarding documented by link
+                        self.assertIn('vibepublish_publish',boot['skill'])
                     await tool('destinations',{'command':{'kind':'profile_update','alias':'telegram','expected_revision':0,'profile':{'notes':'Personal profile'}},'request_key':'profile'})
                     boot=await tool('get_started',{'section':'destinations'})
                     self.assertEqual(boot['destinations'][0]['profile']['notes'],'Personal profile')

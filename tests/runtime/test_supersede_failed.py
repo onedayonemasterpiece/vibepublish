@@ -231,21 +231,21 @@ async def test_retry_admission_and_stale_worker_are_fenced(env):
 
 
 @pytest.mark.asyncio
-async def test_unknown_connection_fence_applies_to_replacement(env):
+async def test_uncertain_other_publication_does_not_fence_replacement(env):
     store, _, actor, app, worker, vk, tg, _ = env
     original = await blocked(env)
     vk.blocked, vk.lose_receipt = False, True
     unknown = app.accept(actor, 'publish', {'to': ['vk'], 'content': {'text': 'Different publication'},
                                           'request_key': 'uncertain-other'})
     await worker.run_once()
-    assert store.receipt(actor, unknown['operation_id'])['state'] == 'outcome_unknown'
+    assert store.receipt(actor, unknown['operation_id'])['state'] == 'running'
     replacement = supersede_failed(app, actor, args(original))
     vk.lose_receipt = False
     await worker.run_once()
     result = store.receipt(actor, replacement['operation_id'])
-    assert result['state'] == 'blocked'
-    assert result['deliveries'][0]['missing_checks'] == ['connection_outcome_unknown']
-    assert vk.count('effect') == 1 and tg.count('effect') == 1
+    assert result['state'] == 'scheduled', result
+    assert vk.count('effect') == 2 and tg.count('effect') == 1
+    assert store.receipt(actor, unknown['operation_id'])['state'] == 'running'
 
 
 @pytest.mark.asyncio

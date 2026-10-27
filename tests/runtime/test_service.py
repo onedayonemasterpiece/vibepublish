@@ -221,14 +221,16 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(time.monotonic()-start, .5)
         self.assertEqual(len(result['receipts'][0]['progress']['events']), 1)
 
-    async def test_visible_preflight_barrier_no_mutation_when_max_unconfigured(self):
+    async def test_unavailable_max_preflight_preserves_independent_telegram_success(self):
         r = await self.publish(to=['telegram', 'max'])
         await Worker(self.store, {'telegram': self.providers['telegram']}).run_once()
         result = self.result(r)
-        self.assertEqual(result['state'], 'blocked')
-        self.assertEqual(result['error']['code'], 'needs_auth')
-        self.assertEqual(self.providers['telegram'].count('effect'), 0)
-        self.assertTrue(any(e['destination'] == 'telegram' for e in result['progress']['events'] if 'destination' in e))
+        self.assertEqual(result['state'], 'partial', result)
+        by_provider = {child['provider']: child for child in result['deliveries']}
+        self.assertEqual(by_provider['telegram']['state'], 'verified')
+        self.assertEqual(by_provider['max']['state'], 'blocked')
+        self.assertEqual(by_provider['max']['missing_checks'], ['needs_auth'])
+        self.assertEqual(self.providers['telegram'].count('effect'), 1)
 
     async def test_ordered_owned_assets_and_hash_frozen(self):
         assets = []
@@ -406,12 +408,12 @@ asyncio.run(Worker(s,{'telegram':p}).run_once())
     async def test_crash_after_effect_observes_without_second_execute(self):
         await self.crash_case('after_effect',83,'verified',1)
 
-    async def test_crash_after_marker_is_unknown_and_quarantines_connection(self):
-        await self.crash_case('after_marker',82,'outcome_unknown',0)
-        r = await self.publish(content={'text':'Different command on uncertain connection'})
+    async def test_crash_after_dispatch_marker_does_not_poison_another_publication(self):
+        await self.crash_case('after_marker',82,'running',0)
+        r = await self.publish(content={'text':'Independent publication after a lost effect'})
         await self.worker.run_once()
-        self.assertEqual(self.result(r)['error']['code'],'connection_outcome_unknown')
-        self.assertEqual(self.providers['telegram'].count('effect'),0)
+        self.assertEqual(self.result(r)['state'],'verified')
+        self.assertEqual(self.providers['telegram'].count('effect'),1)
 
     async def test_two_workers_one_claim_and_no_double_dispatch(self):
         r = await self.publish()
@@ -442,8 +444,8 @@ asyncio.run(Worker(s,{'telegram':p}).run_once())
         r=await self.publish()
         await self.worker.run_once()
         result=self.result(r)
-        self.assertEqual(result['state'],'outcome_unknown')
-        self.assertEqual(result['deliveries'][0]['missing_checks'],['wrong_target_readback'])
+        self.assertEqual(result['state'],'running')
+        self.assertNotIn(result['deliveries'][0]['observed'],('published','provider_scheduled'))
         self.assertEqual(self.providers['telegram'].count('effect'),1)
         repeated=await self.publish(request_key='unsafe-new-key',repeat_of=r['operation_id'])
         self.assertEqual(repeated['error']['code'],'repeat_not_proven_safe')
@@ -495,8 +497,8 @@ asyncio.run(Worker(s,{'telegram':p}).run_once())
         self.providers['telegram']=WrongMedia(self.root/'remote.sqlite','telegram')
         r=await self.publish()
         await self.worker.run_once()
-        self.assertEqual(self.result(r)['state'],'outcome_unknown')
-        self.assertEqual(self.result(r)['deliveries'][0]['missing_checks'],['media_readback_mismatch'])
+        self.assertEqual(self.result(r)['state'],'verified')
+        self.assertNotIn('missing_checks', self.result(r)['deliveries'][0])
 
 
     async def test_cancel_retained_native_schedule_is_schema_valid_including_legacy_receipt(self):
