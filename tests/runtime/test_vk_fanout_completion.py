@@ -82,7 +82,7 @@ class VKFanoutCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.telegram.count('effect'), 1)
         self.assertEqual(self.vk.count('effect'), 0)
 
-        self.now += 2
+        self.now += 3
         restarted = Worker(self.store, {'telegram': self.telegram, 'vk': self.vk})
         self.assertTrue(await restarted.run_once())
 
@@ -95,7 +95,7 @@ class VKFanoutCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.telegram.count('execute'), 1)
         self.assertEqual(self.vk.count('execute'), 2)
 
-    async def test_transient_vk_preflight_reopens_all_never_dispatched_siblings(self):
+    async def test_transient_vk_preflight_preserves_successful_telegram_sibling(self):
         vk = FlakyVKPreflight(self.root / 'remote.sqlite', 'vk', clock=lambda: self.now)
         accepted = await self.publish('fanout-preflight')
         operation_id = accepted['operation_id']
@@ -106,10 +106,10 @@ class VKFanoutCompletionTests(unittest.IsolatedAsyncioTestCase):
         midway = self.store.receipt(self.actor, operation_id)
         self.assertFalse(midway['operation_complete'])
         self.assertEqual(midway['state'], 'running')
-        self.assertEqual(self.telegram.count('effect'), 0)
+        self.assertEqual(self.telegram.count('effect'), 1)
         self.assertEqual(vk.count('effect'), 0)
 
-        self.now += 2
+        self.now += 3
         restarted = Worker(self.store, {'telegram': self.telegram, 'vk': vk})
         self.assertTrue(await restarted.run_once())
 
@@ -118,6 +118,7 @@ class VKFanoutCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(final['state'], 'scheduled')
         self.assertEqual({d['observed'] for d in final['deliveries']}, {'provider_scheduled'})
         self.assertEqual(self.telegram.count('effect'), 1)
+        self.assertEqual(self.telegram.count('execute'), 1)
         self.assertEqual(vk.count('effect'), 1)
 
 

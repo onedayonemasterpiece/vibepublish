@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Simplify Worker W1 publishing reliability (D2–D6): remove connection-wide
+  outcome quarantine, redundant VK known-effect proofs and separate VK/media-store
+  retry schedulers. Keep one fixed-budget retry policy; isolate Telegram, VK and
+  MAX preflight faults; bound lane wait and provider observation; recognize
+  checkpointed native IDs without manual review or duplicate sends. Add fake
+  transport failure-injection tests. No live acceptance or deploy in this change.
+
 - Allow 20 minutes for the complete verification CI job, including locked/offline dependency and browser setup. The 19 October full Python 3.13 suite took 13 minutes; Python 3.12 hit the previous 15-minute whole-job limit. Keep every check and all product timeouts unchanged.
 
 - Accept explicitly pinned legacy illustration origin-v1 document evidence for exact-entry reads, retaining current origin SHA checks and actual downloaded-byte validation. Keep historical metadata, source/display/provider hash roles, and native verification distinct; no grants are implied.
