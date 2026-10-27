@@ -1,17 +1,7 @@
 # Bounded VK multi-photo execution budgets
 
-Status: Not done until the corrected same-post carousel is verified live.
+Status: **Fixed** existing budget contract; **Not confirmed by user** for the current reliability correction until live acceptance.
 
-Observed defect: four-photo staging reached the generic 90-second execute cap after three successful saves, before wall.edit. The ordinary command also had a 120-second deadline. Per-upload 25-second timeout and three transient upload attempts remain unchanged.
+A prior four-photo edit reached the ordinary 90-second execute cap after three successful saves, before `wall.edit`. For VK wall publish/edit with **two or more images**, retain the existing 90 seconds per photo, capped at **600 seconds execute**, plus a 30-second overhead within **630 seconds admission**. Single-photo and other actions retain 90 seconds execute / 120 seconds admission. Do not extend the absolute admitted deadline, native scheduling lead time, lease or recovery horizon. Observation-only reconciliation after dispatch retains its 90-second bound.
 
-Fixed requirements:
-- Keep single-photo and all other provider/action budgets unchanged: 90 seconds execute and 120 seconds admission.
-- For VK post publish/edit with two or more image assets, allow 90 seconds per photo, capped at 600 seconds execute. The initial command and explicit safe recovery window include 30 seconds overhead, capped at 630 seconds.
-- Always respect the admitted absolute deadline, lease/fence, native schedule lead time and existing no-repeat rules. Reconciliation after dispatch keeps its existing 90-second bound.
-- Do not increase HTTP timeout or retry count. Do not persist private upload capabilities, clear unknown results, change assets, or automatically rearm terminal operations.
-
-An explicit VK HTTP502/503/504 is a separate upstream failure. This budget correction does not guarantee upload availability or restore partial staging from past attempts.
-
-## §18.1 / W2 policy update (2026-10-27)
-
-**No budget changes from W2.** The existing per-photo 90s / 600s cap and 630s admission remain. W2 changes (5 retries, 429 retry, no CDN fingerprint) operate within these bounds.
+W2 changes only the photo-upload loop: up to **five attempts**, refreshed upload server, 1/2/3/4-second backoff on temporary failures. No changes to the above command budgets, the HTTP 25-second timeout, frozen assets, authority or dispatch fencing. Saved photo checkpoints avoid uploading already saved photos again. A passing fixture does not establish live VK delivery.

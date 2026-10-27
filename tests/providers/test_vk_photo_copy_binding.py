@@ -143,6 +143,42 @@ async def test_known_post_id_without_readback_returns_success_and_frozen_hashes(
     assert any('warning' in str(event) for event in j.events)
 
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scheduled', [False, True])
+@pytest.mark.parametrize('failure', [
+    OSError('connection closed'), TimeoutError('timeout'),
+    DomainError('vk_transport_failed'), DomainError('vk_http_failed'),
+    DomainError('vk_cooldown'), DomainError('vk_response_invalid'),
+], ids=['network', 'timeout', 'transport', 'http', 'cooldown', 'invalid-response'])
+async def test_known_id_transient_readback_has_one_warning_and_no_second_post(scheduled, failure):
+    a, t, j, r = setup_copy()
+    if not scheduled:
+        r = replace(r, scheduled_at=None)
+    a._exact = AsyncMock(side_effect=failure)
+    result = await a.execute(await a.prepare(r, j.hooks), j.hooks)
+    item, = result.items
+    assert item.native_id
+    assert item.url == (None if scheduled else f'https://vk.com/wall-101_{item.native_id}')
+    assert item.media_hashes == tuple(asset.sha256 for asset in r.assets)
+    assert len([event for event in j.events if event[1] == 'warning']) == 1
+    assert t.effects == 1
+    assert len([call for call in t.calls if call[0] == 'wall.post']) == 1
+
+
+@pytest.mark.asyncio
+async def test_exact_scheduled_target_with_unknown_attachment_still_fails():
+    a, t, _, _ = setup_copy()
+    t.posts[(-101, 998)] = {
+        'id': 998, 'owner_id': -101, 'text': 'Target',
+        'date': NOW + 3600, 'post_type': 'postpone',
+        'attachments': [{'type': 'poll', 'poll': {'id': 4}}],
+    }
+    with pytest.raises(DomainError) as failure:
+        await a._exact('-101', '998', 'scheduled')
+    assert failure.value.code == 'vk_attachment_needs_review'
+
+
 @pytest.mark.asyncio
 async def test_wrong_readback_identity_is_not_masked_as_success():
     a, t, j, r = setup_copy()

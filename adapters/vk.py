@@ -232,7 +232,7 @@ class VKAdapter:
         if copies:
             if len(copies) != 1:
                 raise DomainError('vk_repost_chain_needs_review')
-            origin = f'https://vk.ru/wall{_int(copies[0].get("owner_id"))}_{_int(copies[0].get("id"))}'
+            origin = f'https://vk.com/wall{_int(copies[0].get("owner_id"))}_{_int(copies[0].get("id"))}'
         metrics = tuple((name, float(raw[name]['count']), 'count') for name in ('views', 'likes', 'comments', 'reposts')
                         if isinstance(raw.get(name), dict) and type(raw[name].get('count')) is int and raw[name]['count'] >= 0)
         media = self._media(copies[0] if copies else raw)
@@ -244,7 +244,7 @@ class VKAdapter:
                               'owner_id': target, 'postponed_id': str(raw['postponed_id']),
                               'published_id': str(ident), 'evidence': 'vk_postponed_id'
                           }) if namespace == 'published' and type(raw.get('postponed_id')) is int and raw['postponed_id'] > 0 else '{}',
-                          url=f'https://vk.ru/wall{target}_{ident}' if namespace == 'published' else None)
+                          url=f'https://vk.com/wall{target}_{ident}' if namespace == 'published' else None)
         return replace(item, fingerprint=identity(item))
 
     def _story_item(self, raw, target):
@@ -287,12 +287,9 @@ class VKAdapter:
             raise DomainError('vk_story_readback_identity_mismatch')
         return item
 
-    async def _queue(self, target, *, include_raw=False):
-        # A bounded complete read; never report absence from an incomplete page.
-        # For scheduled queue recovery, we parse media IDs from attachments without
-        # validating attachment types of other posts. Full validation happens on demand.
-        # When include_raw=True, return raw dicts to avoid _item parsing failures on
-        # poll/link/article attachments of OTHER posts.
+    async def _queue(self, target, *, exact_id=None):
+        # Every raw identity counts towards complete pagination; an unrelated
+        # unsupported attachment must not prevent reading the exact post.
         values, seen, expected_count = [], set(), None
         for offset in range(0, 1000, 100):
             response = await self._call('wall.get', owner_id=int(target), filter='postponed', count=100, offset=offset)
@@ -306,35 +303,18 @@ class VKAdapter:
                 raise DomainError('vk_queue_moved', next_action='refresh')
             expected_count = count
             for raw in rows:
-                if include_raw:
-                    # Return raw dict directly - caller (_exact) will call _item only for the exact matched post
-                    values.append(raw)
-                else:
-                    # Parse media IDs from attachments without type validation
-                    ident = self._wall_post_id(raw, 'scheduled', target)
-                    if str(ident) in seen:
-                        raise DomainError('vk_queue_moved', next_action='refresh')
-                    seen.add(str(ident))
-                    text = raw.get('text') or ''
-                    scheduled_at = timestamp(_int(raw.get('date'))) if raw.get('date') else None
-                    # Extract provider_media IDs from attachments (photo/video/doc/audio)
-                    provider_media = []
-                    for attachment in raw.get('attachments', []):
-                        kind = attachment.get('type')
-                        value = attachment.get(kind, {})
-                        if kind in {'photo', 'video', 'doc', 'audio'} and isinstance(value, dict):
-                            owner = value.get('owner_id')
-                            aid = value.get('id')
-                            if type(owner) is int and type(aid) is int and aid > 0:
-                                provider_media.append(f'{kind}{owner}_{aid}')
-                    item = RemoteItem(str(ident), 'scheduled', text, '', timestamp(self.clock()),
-                                      scheduled_at=scheduled_at, native_target=target,
-                                      provider_media=tuple(provider_media), member_ids=(str(ident),),
-                                      metrics=(), native_schedule_origin_json='{}', url=None)
-                    # Compute fingerprint for cursor stability
-                    item = replace(item, fingerprint=identity(item))
-                    values.append(item)
-            if len(values) == count:
+                ident = raw.get('id')
+                if type(ident) is not int or ident <= 0:
+                    raise DomainError('vk_queue_response_invalid')
+                if ident in seen:
+                    raise DomainError('vk_queue_moved', next_action='refresh')
+                seen.add(ident)
+                try:
+                    values.append(self._item(raw, 'scheduled', target))
+                except DomainError:
+                    if str(ident) == exact_id:
+                        raise
+            if len(seen) == count:
                 return values
             if len(rows) < 100:
                 raise DomainError('vk_queue_read_incomplete')
@@ -342,10 +322,8 @@ class VKAdapter:
 
     async def _exact(self, target, ident, namespace):
         if namespace == 'scheduled':
-            raw = next((row for row in await self._queue(target, include_raw=True) if str(row['id']) == ident), None)
-            if raw is None:
-                return None
-            return self._item(raw, 'scheduled', target)
+            return next((item for item in await self._queue(target, exact_id=ident)
+                         if item.native_id == ident), None)
         response = await self._call('wall.getById', posts=f'{target}_{ident}', extended=0)
         rows = _items(response)
         if not rows:
@@ -389,15 +367,12 @@ class VKAdapter:
                     if type(ident) is int and ident > 0:
                         candidates.add(str(ident))
         if len(candidates) > 1:
-            raise DomainError('linked_story_parent_mapping_ambiguous', next_action='review_outcome')
+            raise DomainError('linked_story_parent_mapping_ambiguous')
         if not candidates:
-            raise DomainError('linked_story_parent_mapping_unproven', next_action='review_outcome')
+            raise DomainError('linked_story_parent_mapping_unproven')
         return await self._exact(target, next(iter(candidates)), 'published')
 
     async def _exact_raw(self, target, ident, namespace):
-        if namespace == 'scheduled':
-            return next((row for row in await self._queue(target, include_raw=True)
-                         if str(row['id']) == ident), None)
         rows = _items(await self._call('wall.getById', posts=f'{target}_{ident}', extended=0))
         if not rows:
             return None
@@ -744,27 +719,15 @@ class VKAdapter:
         if not checkpoint.get('id'):
             raise OutcomeUnknown('vk_response_identity_missing')
         namespace = r.existing.namespace if r.action in {'cancel', 'delete'} else 'scheduled' if r.scheduled_at else 'published'
-        # §18.1: If readback fails (network/timeout/transport failure), trust the known post ID and return success with warning.
-        # Only catch OSError (transport failure) and DomainError with code 'vk_transport_failed' as readback failure.
-        # Other DomainErrors (wrong target/ID/type) are permanent contract violations and must not be silently accepted.
+        # A returned ID is authoritative when the provider read is temporarily unavailable.
         try:
             item = await self._exact(r.native_target, checkpoint['id'], namespace)
-        except OSError as exc:
-            # Network/timeout failure - treat as warning
-            await hooks.emit_progress(
-                'reading_back', 'warning',
-                f'VK readback failed for known post {checkpoint["id"]}: {exc}; trusting provider ID')
-            item = None
-        except DomainError as exc:
-            if exc.code == 'vk_transport_failed':
-                # Transport layer failure - treat as warning
-                await hooks.emit_progress(
-                    'reading_back', 'warning',
-                    f'VK readback transport failed for known post {checkpoint["id"]}: {exc}; trusting provider ID')
-                item = None
-            else:
-                # Permanent contract violation (wrong target/ID/type/count) - re-raise
+        except (DomainError, OSError, TimeoutError) as exc:
+            if (isinstance(exc, DomainError)
+                    and exc.code not in {'vk_transport_failed', 'vk_http_failed', 'vk_cooldown'}
+                    and not exc.code.endswith('_response_invalid')):
                 raise
+            item = None
         if r.action in {'cancel', 'delete'}:
             if item is not None:
                 raise OutcomeUnknown('vk_deletion_unconfirmed')
@@ -776,11 +739,9 @@ class VKAdapter:
             return Observation('cancelled' if r.action == 'cancel' else 'deleted', (replace(r.existing, observed_at=timestamp(self.clock())),))
         source = checkpoint.get('source')
         if item is None:
-            # §18.1: VK returned post ID, trust it even if readback fails.
-            # Emit warning via existing channel, return success with frozen data.
             await hooks.emit_progress(
                 'reading_back', 'warning',
-                f'VK readback failed for known post {checkpoint["id"]}; trusting provider ID')
+                f'VK readback unavailable for post {checkpoint["id"]}; trusting returned ID')
             # Build fallback item from frozen checkpoint/request data
             fallback = RemoteItem(
                 native_id=checkpoint['id'],
@@ -798,7 +759,7 @@ class VKAdapter:
                     'owner_id': r.native_target, 'postponed_id': checkpoint['id'],
                     'published_id': checkpoint['id'], 'evidence': 'vk_postponed_id'
                 }) if namespace == 'published' and r.scheduled_at else '{}',
-                url=f'https://vk.ru/wall{r.native_target}_{checkpoint["id"]}' if namespace == 'published' else None,
+                url=f'https://vk.com/wall{r.native_target}_{checkpoint["id"]}' if namespace == 'published' else None,
             )
             fallback = replace(fallback, fingerprint=identity(fallback))
             if source and fallback.origin != source['url']:
@@ -808,8 +769,10 @@ class VKAdapter:
                 'provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',
                 (bind_media(r, fallback, list(fallback.provider_media)),),
                 forward_origin_matched=bool(source))
-        if source and item.origin != source['url']:
-            raise OutcomeUnknown('vk_repost_origin_mismatch')
+        if source:
+            if item.origin != source['url'].replace('https://vk.ru/', 'https://vk.com/'):
+                raise DomainError('vk_repost_origin_mismatch')
+            item = replace(item, origin=source['url'])
         if item.native_target != r.native_target or item.native_id != str(checkpoint['id']):
             raise DomainError('vk_readback_identity_mismatch')
         if item.text != plain_text(r, limit=16000) or item.scheduled_at != r.scheduled_at:
