@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- VK stories are now actually published: the story upload request passes `add_to_news=1`. Without it VK saved a story that never appeared in the community's stories while readback by ID still succeeded.
+
 - Telegram photos are sent as the same compact JPEG wire copy as VK (Telegram rejects photos over 10 MB with `PhotoSaveFileInvalidError`); a file Telegram rejects is now a final `telegram_media_invalid` refusal instead of an endless automatic retry.
 
 - W4 Telegram lost-response (D12): recover accepted publish/forward messages from the original durable `random_id` values with Telegram's native deduplication, then read their exact message IDs in history or scheduled queue. Share the base RPC diagnostics with the resilient reconnect path so FloodWait/SlowModeWait `retry_after_s` survives and the worker saves it alongside the attempt failure and respects it as minimum cooldown without scanning diagnostic events or retrying a started RPC. Add offline lost-response and cooldown regressions; no deployment or live sends.
