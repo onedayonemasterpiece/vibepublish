@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- VK story photos are sent as the compact JPEG wire copy: phone photos sanitized to PNG exceeded VK's 10 MB story limit and failed with `vk_story_media_invalid`.
+
 - VK stories are now actually published: the story upload request passes `add_to_news=1`. Without it VK saved a story that never appeared in the community's stories while readback by ID still succeeded.
 
 - Telegram photos are sent as the same compact JPEG wire copy as VK (Telegram rejects photos over 10 MB with `PhotoSaveFileInvalidError`); a file Telegram rejects is now a final `telegram_media_invalid` refusal instead of an endless automatic retry.

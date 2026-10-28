@@ -344,6 +344,9 @@ class VKHTTPTransport:
     async def upload_story_photo(self, url: str, data: bytes, mime: str) -> str:
         """Upload one verified image to a VK story upload server and return its opaque result."""
         import aiohttp
+        from adapters.vk_photo_wire import photo_wire_bytes
+        # Phone photos sanitize to PNG above VK's 10 MB story limit; send the JPEG wire copy.
+        data, mime = photo_wire_bytes(data, mime)
         if mime not in {'image/png', 'image/jpeg', 'image/webp'} or not data or len(data) > 10 * 1024 * 1024:
             raise DomainError('vk_story_media_invalid')
         upload_payload(data, mime, 'story_photo')
