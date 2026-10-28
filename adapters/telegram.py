@@ -638,7 +638,8 @@ class TelegramAdapter:
                 if asset.role not in {'document', 'video'}:
                     # Telegram photos are limited to 10 MB; send the same compact JPEG wire copy as VK.
                     from adapters.vk_photo_wire import photo_wire_bytes
-                    data, mime = await asyncio.to_thread(photo_wire_bytes, data, mime)
+                    data, mime = await asyncio.to_thread(photo_wire_bytes, data, mime,
+                                                      1920 if r.surface == 'story' else None)
                 stream = io.BytesIO(data)
                 extension = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'application/pdf':'pdf', 'image/vnd.djvu':'djvu', 'video/mp4':'mp4'}[mime]
                 stream.name = f'verified-{ordinal+1}.{extension}'
