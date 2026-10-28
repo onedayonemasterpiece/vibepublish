@@ -23,7 +23,7 @@ def test_shared_post_uses_exact_requested_wall_identity():
     raw = shared_post()
     before = deepcopy(raw)
     item = adapter()._item(raw, 'published', '-101')
-    assert (item.native_target, item.native_id, item.url) == ('-101', '16', 'https://vk.ru/wall-101_16')
+    assert (item.native_target, item.native_id, item.url) == ('-101', '16', 'https://vk.com/wall-101_16')
     assert item.member_ids == ('16',)
     assert raw == before
 

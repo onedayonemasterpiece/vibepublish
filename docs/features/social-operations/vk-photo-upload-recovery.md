@@ -1,16 +1,11 @@
-# VK photo upload recovery
+# VK photo upload retry
 
-Status: Not confirmed by user. The reported HTTP 504 media-upload incident is Not done until the authorized same-post edit is verified live.
+Status: **Fixed** policy D4 / §18.1; reported upstream failures remain **Not done** until live acceptance.
 
-Fixed requirements:
-- Keep approved immutable assets and native post identity unchanged.
-- RGB single-frame PNG/WebP photos may use a metadata-free, same-dimension JPEG92 (4:4:4) wire derivative only when smaller. No resizing, visual generation, alpha flattening or asset replacement.
-- Retry only the photo staging upload for explicit HTTP502/503/504 or the existing valid empty-photo receipt. Use at most three total attempts with a fresh upload server/form and one/two-second delays.
-- No added retry of photos.saveWallPhoto, wall.post or wall.edit, API errors, timeouts or uncertain effects. Existing CAS, intent freezing and explicit recovery admission remain.
-- Log existing bounded HTTP/phase/timing diagnostics without bodies or private URLs.
+Native VK photo upload uses immutable source assets. RGB single-frame PNG/WebP may use the existing metadata-free same-dimension JPEG92 (4:4:4) wire derivative **only when smaller**; it does not replace the source, resize or flatten alpha.
 
-After a terminal HTTP upload failure whose explicit retry key was already consumed, do not mint another retry key. Use the existing owner-only reconcile with a fresh same-post item ref to create a local baseline revision, then submit a separate explicit edit. The old terminal receipt remains immutable; no provider effect occurs during baseline refresh. Unknown/dispatched attempts remain ineligible.
+On a **transient media-upload** error, retry up to **five total attempts**. Obtain a new `photos.getWallUploadServer` on every attempt, with backoff of 1, 2, 3 and 4 seconds. Transient classes: HTTP 5xx including 500, HTTP 429, network/timeout, empty photo (`vk_upload_transient_empty_photo`), `vk_upload_response_invalid`, `vk_upload_failed` and `vk_transport_failed`. HTTP 403, rejected URL/SSRF validation, permanent input/permission errors and `photos.saveWallPhoto` failures are **not** retried by this photo-upload loop.
 
-The observed incident returned HTTP504 in approximately4.4 seconds; the client deadline is25 seconds. Increasing that deadline is not a fix for an explicit upstream response. Four approved PNGs measured9,002,185 bytes and in-memory JPEG92 derivatives2,143,621 bytes, with unchanged dimensions. Size reduction is measured; elimination of upstream failures is not guaranteed.
+After each successful save, write `vk_photo_staging` with the saved native ID, including for scheduled posts. On restart, reuse saved prefix IDs without access keys; upload only assets not yet successfully checkpointed. The same-guid `wall.post` recovery is separate from upload retry and does not allow a second independent publication intent.
 
-Regressions cover smaller-only encoding, dimensions, source immutability, metadata exclusion, alpha preservation, multipart MIME, fresh-server retry budget, nonretryable statuses and no repeated photo save or public mutation.
+Original observed 504 incident: upstream returned after about 4.4 s under a 25 s client timeout. Increasing HTTP timeout would not fix that explicit response. No live provider calls, token changes or deployment are part of W2.

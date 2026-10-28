@@ -41,14 +41,12 @@ class StagingCase:
             child = dict(db.execute("SELECT * FROM attempts WHERE operation_id=?",
                                     (source["operation_id"],)).fetchone())
             plan = json.loads(child["plan"])
-            self.proofs = [
-                {"sha256": item["sha256"], "size": item["size"], "mime": item["mime"],
-                 "width": 4, "height": 4} for item in plan["assets"]]
+            self.asset_hashes = [item["sha256"] for item in plan["assets"]]
             self.media = ["photo81_" + str(1001 + i) for i in range(count)]
             cp = {"transition": "vk_prepared", "adapter": {
                 "version": 1, "attempt": child["id"], "plan": child["plan_digest"],
                 "target": "-101", "id": "77", "retryable_wall_post": False,
-                "source": None, "media": self.media, "photo_proofs": self.proofs,
+                "source": None, "media": self.media,
             }}
             db.execute("UPDATE attempts SET state='blocked',stage='blocked',checkpoint=?,result=? WHERE id=?",
                        (canonical(cp), canonical({"missing_checks": ["connection_outcome_unknown"]}), child["id"]))
@@ -98,10 +96,10 @@ def test_exact_prior_staging_selected_without_mutating_source(case):
         before = tuple(db.execute("SELECT * FROM attempts WHERE id=?", (case.source_attempt,)).fetchone())
     result = case.selected()
     assert result == {
-        "media": case.media, "photo_proofs": case.proofs,
+        "media": case.media,
         "source_attempt_id": case.source_attempt, "source_plan_digest": before[7],
         "target": "-101", "post_id": "77",
-        "asset_hashes": [item["sha256"] for item in case.proofs],
+        "asset_hashes": case.asset_hashes,
     }
     with case.store.connection() as db:
         assert tuple(db.execute("SELECT * FROM attempts WHERE id=?", (case.source_attempt,)).fetchone()) == before
@@ -131,7 +129,7 @@ def test_source_operation_scope_and_prior_revision_required(case, field, value):
     ("transition", "vk_response"), ("version", 2), ("attempt", "attempt_other"),
     ("plan", "0" * 64), ("target", "-202"), ("id", "78"),
     ("retryable_wall_post", True), ("source", {"untrusted": "forward"}),
-    ("media", []), ("photo_proofs", []),
+    ("media", []), ("retryable_wall_post", "invalid"),
 ])
 def test_incomplete_or_mismatched_checkpoint_is_not_reused(case, field, value):
     def mutate(cp):
@@ -144,23 +142,23 @@ def test_incomplete_or_mismatched_checkpoint_is_not_reused(case, field, value):
             case.selected()
 
 
-@pytest.mark.parametrize("mode", ["duplicate", "wrong_kind", "missing_proof", "extra_proof_field",
-                                  "bad_sha", "bad_size", "bool_width", "wrong_mime"])
-def test_all_native_ids_and_proofs_must_be_complete_and_sanitized(case, mode):
+@pytest.mark.parametrize("mode", ["duplicate", "wrong_kind", "empty_id", "missing_owner",
+                                  "zero_owner", "zero_photo", "bool_media", "access_key"])
+def test_all_native_photo_ids_must_be_complete_and_sanitized(case, mode):
     def mutate(cp):
         data = cp["adapter"]
         if mode == "duplicate":
             data["media"][1] = data["media"][0]
-        elif mode == "wrong_kind":
-            data["media"][0] = "video81_1001"
-        elif mode == "missing_proof":
-            data["photo_proofs"].pop()
-        elif mode == "extra_proof_field":
-            data["photo_proofs"][0]["url"] = "https://private.invalid/token"
         else:
-            key, value = {"bad_sha": ("sha256", "x" * 64), "bad_size": ("size", 0),
-                          "bool_width": ("width", True), "wrong_mime": ("mime", "video/mp4")}[mode]
-            data["photo_proofs"][0][key] = value
+            data["media"][0] = {
+                "wrong_kind": "video81_1001",
+                "empty_id": "",
+                "missing_owner": "photo_1001",
+                "zero_owner": "photo0_1001",
+                "zero_photo": "photo81_0",
+                "bool_media": True,
+                "access_key": "photo81_1001_secret",
+            }[mode]
     case.checkpoint(mutate)
     with pytest.raises(DomainError, match="vk staged photos invalid"):
         case.selected()
@@ -291,7 +289,11 @@ async def test_automatic_retry_new_worker_resumes_two_of_four_without_reupload(t
     before = staged_row(store, edited["operation_id"])
     cp = json.loads(before["checkpoint"])
     assert cp["transition"] == "vk_photo_staging"
-    assert len(cp["adapter"]["media"]) == len(cp["adapter"]["photo_proofs"]) == 2
+    assert len(cp["adapter"]["media"]) == 2
+    assert cp["adapter"]["attempt"] == before["id"]
+    assert cp["adapter"]["plan"] == before["plan_digest"]
+    assert cp["adapter"]["target"] == "-101"
+    assert "photo_proofs" not in cp["adapter"]
     start = len(transport.calls)
     now[0] += 5.001
     restarted = replacement_worker(store, transport, now)
@@ -303,6 +305,9 @@ async def test_automatic_retry_new_worker_resumes_two_of_four_without_reupload(t
     calls = transport.calls[start:]
     assert not any(method == "photos.getById" for method, _, _ in calls)
     assert sum(method == "upload_photo" for method, _, _ in calls) == 2
+    assert sum(method == "photos.saveWallPhoto" for method, _, _ in calls) == 2
+    assert sum(method == "wall.edit" for method, _, _ in calls) == 1
+    assert not any(method == "wall.post" for method, _, _ in calls)
     final_checkpoint = json.loads(staged_row(store, edited["operation_id"])["checkpoint"])
     assert final_checkpoint["remote"]["provider_media"][:2] == ["photo-101_11001", "photo-101_11002"]
     assert not await restarted.run_once()
@@ -321,15 +326,20 @@ async def test_later_suffix_failure_retries_without_new_key_or_manual_rebase(tmp
     assert result["state"] == "running", result
     cp = json.loads(staged_row(store, edited["operation_id"])["checkpoint"])
     assert cp["transition"] == "vk_photo_staging"
-    assert len(cp["adapter"]["media"]) == len(cp["adapter"]["photo_proofs"]) == 3
+    assert len(cp["adapter"]["media"]) == 3
     assert cp["adapter"]["media"][:2] == initial["media"]
-    assert cp["adapter"]["photo_proofs"][:2] == initial["photo_proofs"]
+    assert cp["adapter"]["attempt"] == initial["attempt"]
+    assert cp["adapter"]["plan"] == initial["plan"]
+    assert cp["adapter"]["target"] == initial["target"]
+    assert "photo_proofs" not in cp["adapter"]
     assert len(transport.uploads) == 3 and transport.effects == 1
     now[0] += 15.001
     await restarted.run_once()
     result = store.receipt(actor, edited["operation_id"])
     assert result["state"] == "verified", result
     assert len(transport.uploads) == 4 and transport.effects == 2
+    assert sum(method == "photos.saveWallPhoto" for method, _, _ in transport.calls) == 4
+    assert sum(method == "wall.edit" for method, _, _ in transport.calls) == 1
     assert not await restarted.run_once()
 
 
@@ -344,7 +354,7 @@ def current_prefix(case, action, count):
         "version": 1, "attempt": child["id"], "plan": child["plan_digest"],
         "target": "-101", "id": "77" if action == "edit" else None,
         "source": None, "retryable_wall_post": False,
-        "media": case.media[:count], "photo_proofs": case.proofs[:count],
+        "media": case.media[:count],
     }})
     return op, child
 
@@ -356,12 +366,15 @@ def test_current_attempt_prefix_precedes_prior_complete_staging(case, action, co
     with case.store.connection() as db:
         selected = select(db, op, child)
     assert selected["source_attempt_id"] == child["id"]
+    assert selected["source_plan_digest"] == child["plan_digest"]
+    assert selected["target"] == "-101"
+    assert selected["post_id"] == ("77" if action == "edit" else None)
     assert selected["media"] == case.media[:count]
-    assert selected["photo_proofs"] == case.proofs[:count]
+    assert selected["asset_hashes"] == case.asset_hashes
 
 
 @pytest.mark.parametrize("field,value", [
-    ("media", []), ("photo_proofs", []), ("version", True),
+    ("media", []), ("target", "-202"), ("version", True),
     ("attempt", "other"), ("plan", "0" * 64),
 ])
 def test_corrupt_matching_current_staging_cannot_fall_back_to_prior(case, field, value):
@@ -390,14 +403,17 @@ def test_dispatched_unknown_never_reuses_current_or_previous_staging(case):
         assert select(db, op, child) is None
 
 
-def test_group_owned_photo_without_rendition_proof_is_not_reused(case):
+def test_group_owned_photo_without_rendition_proof_is_reused(case):
     op, child = current_prefix(case, "publish", 2)
     cp = json.loads(child["checkpoint"])
     cp["adapter"]["media"] = ["photo-101_1001", "photo-101_1002"]
-    cp["adapter"]["photo_proofs"] = [None, None]
     child["checkpoint"] = canonical(cp)
     with case.store.connection() as db:
-        assert select(db, op, child) is None
+        selected = select(db, op, child)
+    assert selected["media"] == ["photo-101_1001", "photo-101_1002"]
+    assert selected["source_attempt_id"] == child["id"]
+    assert selected["target"] == "-101" and selected["post_id"] is None
+    assert selected["asset_hashes"] == case.asset_hashes
 
 
 def test_full_never_dispatched_publish_may_reuse_retryable_wall_post_staging(case):

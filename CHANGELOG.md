@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- VK adapter W2 (§18.1, D8): remove CDN image fingerprint/proof reads and their hash gates; bind ordered exact-post photo IDs to frozen asset hashes, including community-copied photos. Save each photo receipt immediately, including scheduled posts, without access keys; reuse saved prefixes after crashes.
+
+- VK upload/recovery (§18.1, D1/D4): five bounded photo-upload attempts on 5xx/429/transient network or malformed response, each with a fresh upload server, 1/2/3/4 s backoff; never retry 403 or rejected URLs. Scheduled lost-ID recovery uses the complete queue's text/time/count match (newest numeric post ID), otherwise repeats wall.post with the original guid; no artificial 60-minute limit.
+
+- VK readback/queue (D7/D8): one scheduled-post parser; unrelated poll/link/article attachments do not block a target read or undermine pagination completeness; stop exact reads when the ID is found and require complete scans only for absence. Known post ID is success even when transient readback fails (one warning, no second POST); preserve exact target checks, use vk.com published permalinks and no scheduled public permalink. Replace outdated CDN-proof and photo-budget requirements with the owner-approved trust boundary.
 - Align the 23 targeted W1 reliability regressions with the fixed-horizon automatic worker policy. Preserve one native send per frozen attempt and restore the localized `needs_auth` refusal in the cursor-free per-network summary; focused offline tests pass (23/23). No deployment or live publication.
 
 - Simplify Worker W1 publishing reliability (D2–D6): remove connection-wide

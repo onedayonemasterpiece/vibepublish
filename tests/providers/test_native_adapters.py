@@ -47,6 +47,8 @@ class Journal:
         self.hooks = Hooks(self.emit, self.checkpoint, self.before)
 
     async def emit(self, *args):
+        # Same status contract as Store.event; an invalid status fails in production.
+        assert args[1] in {'started', 'completed', 'failed', 'blocked', 'unknown'}, args
         self.events.append(args)
 
     async def checkpoint(self, transition, state):
@@ -256,8 +258,15 @@ async def test_response_checkpoint_recovers_after_adapter_restart(provider):
     r = request(provider, scheduled_at=timestamp(NOW+3600), assets=(asset(), asset(2)))
     prepared = await adapter.prepare(r, journal.hooks)
     transport.after_mutation = lambda _: setattr(transport, 'fail_read', True)
-    with pytest.raises((DomainError, OSError)):
-        await adapter.execute(prepared, journal.hooks)
+    if provider == 'vk':
+        # VK §18.1 trusts a returned post ID; readback outages are warnings.
+        first = await adapter.execute(prepared, journal.hooks)
+        assert first.observed == 'provider_scheduled'
+        assert first.items[0].native_id
+        assert first.items[0].media_hashes == (asset().sha256, asset(2).sha256)
+    else:
+        with pytest.raises((DomainError, OSError)):
+            await adapter.execute(prepared, journal.hooks)
     assert transport.effects == 1
     transport.fail_read = False
     restarted = (TelegramAdapter(transport, connection_id='connection', tl=ScriptedTL(), clock=lambda: NOW)
@@ -412,23 +421,23 @@ async def test_reordered_media_cannot_verify_even_when_count_matches(provider):
             await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
         assert err.value.code == 'media_identity_or_order_mismatch'
     else:
-        # Exact VK post identity is known, but reordered media is never verified.
-        # Core projects this incomplete observation as terminal partial.
+        # §18.1: VK returned post ID, trust it even if media order differs.
+        # VK copies user uploads to community wall; order/bytes may change.
         result = await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
         assert result.observed == 'published'
-        assert result.missing_checks == ('media_identity_or_order_mismatch',)
+        assert result.missing_checks == ()
         item, = result.items
         assert item.native_target == r.native_target
         assert item.text == 'Fixture'
-        assert item.media_check == 'incomplete'
-        assert not item.media_hashes
+        assert item.media_check == 'provider_binding'
+        assert item.media_hashes == tuple(a.sha256 for a in r.assets)
         assert transport.effects == 1
         uploads = len(transport.uploads)
         again = await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
         assert again.items[0].native_id == item.native_id
-        assert again.missing_checks == result.missing_checks
-        assert again.items[0].media_check == 'incomplete'
-        assert not again.items[0].media_hashes
+        assert again.missing_checks == ()
+        assert again.items[0].media_check == 'provider_binding'
+        assert again.items[0].media_hashes == item.media_hashes
         assert transport.effects == 1
         assert len(transport.uploads) == uploads
 

@@ -1,53 +1,11 @@
-# VK photo identity rebinding
+# VK photo identity binding
 
-Status: **Not confirmed by user** (engineering live lifecycle verified); owner requirement to support native VK
-postponed posts is **Fixed**. Engineering proof policy is **Not confirmed by user**.
+Status: **Fixed** product decision D8 / §18.1 (2026-10-27); implementation is **Not confirmed by user** until live acceptance.
 
-The existing design requires provider binding and ordered media verification
-(`implementation-design-v1.md`, Native execution/readback and Fingerprints).
-It does not require saved-photo IDs to survive VK copying a user upload to a
-community wall. Observed live VK evidence already shows that remapping.
+A successful `photos.saveWallPhoto` returns a native photo ID. VK may copy a user-owned upload to the community wall and change the final IDs or bytes. For an **exact known wall/postponed post ID and target**, trust the ordered provider attachment IDs; bind them to the ordered frozen asset SHA-256 values with `native.bind_media`. Source hashes describe the frozen inputs, not bytes later served by VK. Do not fetch VK CDN renditions, calculate fingerprints, persist `photo_proofs` or require source/final photo ID equality.
 
-Implement a narrow adapter proof, not a weaker count/text-only acceptance:
+The adapter reads the exact post where possible, checks target, namespace, attachment type/count, text and requested time. User-upload → community-copy remapping is valid. A small difference in text/schedule or remapping is reported through the existing progress warning, **not** as a manual-review outcome. With a known ID and temporarily unavailable readback, return the same published/scheduled outcome from the frozen request and ID, with one warning. A scheduled item has no public wall permalink; a published item uses `https://vk.com/wall{owner}_{id}`. Never invent a scheduled public link.
 
-1. For a user-owned saved wall photo destined for the authorized community,
-   fetch a bounded decoded provider image before wall.post/wall.edit. Persist
-   saved ID, SHA256 of its exact provider bytes, MIME, byte count and dimensions
-   in the existing durable pre-effect checkpoint; never persist CDN URLs/keys.
-2. On exact target/post readback, identical ordered IDs retain the existing fast
-   path. Changed IDs require a photo-by-photo proof in the same order: current
-   photo owner must be the target community; provider rendition dimensions and
-   exact bytes fingerprint must match that position's pre-effect evidence.
-3. Record the old-to-current ID binding in a response checkpoint. Source SHA256
-   remains the source identity, not a claimed hash of provider-transcoded bytes.
-4. Edits/reschedules reuse the verified current IDs. Crash recovery reads the
-   same checkpoint and remote object; it never repeats upload or wall.post.
-5. Missing evidence, changed bytes/order/count, incomplete/forbidden reads or
-   unstable post identity stay unresolved. Old checkpoints cannot invent proof.
+Persist ordered saved IDs immediately after each `photos.saveWallPhoto`, including scheduled posts. Do not store `access_key`, private upload URLs or CDN metadata. The selected prefix is scoped to one plan/target and exact frozen ordered assets. Later edits explicitly preserve observed attachments: VK wall.edit may clear attachments when omitted. No additional `photos.getById` permission or byte-proof step is required.
 
-Transport: HTTPS VK CDN allowlist, pinned public DNS, no redirects/proxy/cookies,
-no auth headers, 10-second total including DNS, 20MiB maximum per image, valid
-single-frame image with bounded decoded dimensions. Image URLs are untrusted API
-metadata and are not accepted as arbitrary client download endpoints.
-
-Reference: official VKCOM/vk-api-schema `photos/methods.json` (saveWallPhoto,
-getWallUploadServer) and `photos/objects.json` (photo identity and sizes). The
-observed additional orig_photo field is optional, not an assumed schema guarantee.
-Real before/after fingerprints and lifecycle receipts are required for acceptance.
-
-## Live lifecycle correction (engineering rechecked; owner confirmation pending)
-
-Live post9 proved exact copied-photo bytes. Its subsequent text edit exposed a
-separate incorrect transport assumption: VK clears attachments if wall.edit omits
-them. Preserve ordered verified community IDs explicitly on text edit/reschedule;
-do not reupload or restore by guessing. The same readback rounded publish_date to
-a minute. Require whole-minute VK schedules at preflight (no silent rounding),
-while retaining exact requested/effective-time verification. Existing cancel still
-works regardless of seconds in an old queue item. Official wall.edit schema lists
-attachments and publish_date but promises neither omission preservation nor
-second-precision round trips. These corrections follow observed authenticated
-readback, not a claim that the schema specifies those behaviors.
-
-Live full lifecycle post10 and real crash/recovery post11 passed; both cancelled
-with complete native queue absence. See the canonical acceptance report for exact
-operation IDs, preserved failure histories, provider hashes and remaining gates.
+Earlier native lifecycle checks demonstrated VK copy remapping and the need to retain attachments on wall.edit. Their historical SHA/CDN proofs do **not** remain a requirement for new publications. Live acceptance and ordinary native authorization, CAS and no-duplicate guards remain separate.

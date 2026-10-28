@@ -84,14 +84,6 @@ class VKAdapter:
             raise last
         raise OutcomeUnknown('vk_response_identity_missing')
 
-    def _scheduled_recovery_guard(self, request):
-        """Recovery ignores the original RPC deadline but never the frozen native time."""
-        epoch = parse_time(request.scheduled_at or '')
-        if epoch != int(epoch):
-            raise DomainError('native_time_precision', 'Native scheduling requires whole seconds')
-        if epoch < self.clock() + 60:
-            raise DomainError('native_lead_time', 'Native submission window closed; no fallback send')
-
     async def _rights(self, request):
         self._connection(request)
         group = -int(request.native_target)
@@ -240,7 +232,7 @@ class VKAdapter:
         if copies:
             if len(copies) != 1:
                 raise DomainError('vk_repost_chain_needs_review')
-            origin = f'https://vk.ru/wall{_int(copies[0].get("owner_id"))}_{_int(copies[0].get("id"))}'
+            origin = f'https://vk.com/wall{_int(copies[0].get("owner_id"))}_{_int(copies[0].get("id"))}'
         metrics = tuple((name, float(raw[name]['count']), 'count') for name in ('views', 'likes', 'comments', 'reposts')
                         if isinstance(raw.get(name), dict) and type(raw[name].get('count')) is int and raw[name]['count'] >= 0)
         media = self._media(copies[0] if copies else raw)
@@ -252,7 +244,7 @@ class VKAdapter:
                               'owner_id': target, 'postponed_id': str(raw['postponed_id']),
                               'published_id': str(ident), 'evidence': 'vk_postponed_id'
                           }) if namespace == 'published' and type(raw.get('postponed_id')) is int and raw['postponed_id'] > 0 else '{}',
-                          url=f'https://vk.ru/wall{target}_{ident}' if namespace == 'published' else None)
+                          url=f'https://vk.com/wall{target}_{ident}' if namespace == 'published' else None)
         return replace(item, fingerprint=identity(item))
 
     def _story_item(self, raw, target):
@@ -295,8 +287,9 @@ class VKAdapter:
             raise DomainError('vk_story_readback_identity_mismatch')
         return item
 
-    async def _queue(self, target, *, include_raw=False):
-        # A bounded complete read; never report absence from an incomplete page.
+    async def _queue(self, target, *, exact_id=None):
+        # Every raw identity counts towards complete pagination; an unrelated
+        # unsupported attachment must not prevent reading the exact post.
         values, seen, expected_count = [], set(), None
         for offset in range(0, 1000, 100):
             response = await self._call('wall.get', owner_id=int(target), filter='postponed', count=100, offset=offset)
@@ -310,12 +303,22 @@ class VKAdapter:
                 raise DomainError('vk_queue_moved', next_action='refresh')
             expected_count = count
             for raw in rows:
-                item = self._item(raw, 'scheduled', target)
-                if item.native_id in seen:
+                ident = raw.get('id')
+                if type(ident) is not int or ident <= 0:
+                    raise DomainError('vk_queue_response_invalid')
+                if ident in seen:
                     raise DomainError('vk_queue_moved', next_action='refresh')
-                seen.add(item.native_id)
-                values.append(raw if include_raw else item)
-            if len(values) == count:
+                seen.add(ident)
+                try:
+                    item = self._item(raw, 'scheduled', target)
+                except DomainError:
+                    if str(ident) == exact_id:
+                        raise
+                else:
+                    if item.native_id == exact_id:
+                        return [item]
+                    values.append(item)
+            if len(seen) == count:
                 return values
             if len(rows) < 100:
                 raise DomainError('vk_queue_read_incomplete')
@@ -323,7 +326,8 @@ class VKAdapter:
 
     async def _exact(self, target, ident, namespace):
         if namespace == 'scheduled':
-            return next((item for item in await self._queue(target) if item.native_id == ident), None)
+            return next((item for item in await self._queue(target, exact_id=ident)
+                         if item.native_id == ident), None)
         response = await self._call('wall.getById', posts=f'{target}_{ident}', extended=0)
         rows = _items(response)
         if not rows:
@@ -367,15 +371,12 @@ class VKAdapter:
                     if type(ident) is int and ident > 0:
                         candidates.add(str(ident))
         if len(candidates) > 1:
-            raise DomainError('linked_story_parent_mapping_ambiguous', next_action='review_outcome')
+            raise DomainError('linked_story_parent_mapping_ambiguous')
         if not candidates:
-            raise DomainError('linked_story_parent_mapping_unproven', next_action='review_outcome')
+            raise DomainError('linked_story_parent_mapping_unproven')
         return await self._exact(target, next(iter(candidates)), 'published')
 
     async def _exact_raw(self, target, ident, namespace):
-        if namespace == 'scheduled':
-            return next((row for row in await self._queue(target, include_raw=True)
-                         if str(row['id']) == ident), None)
         rows = _items(await self._call('wall.getById', posts=f'{target}_{ident}', extended=0))
         if not rows:
             return None
@@ -390,101 +391,17 @@ class VKAdapter:
         self._item(rows[0], namespace, target)
         return rows[0]
 
-    @staticmethod
-    def _renditions(photo):
-        sizes = photo.get('sizes', [])
-        if not isinstance(sizes, list) or len(sizes) > 20:
-            raise DomainError('vk_photo_renditions_invalid')
-        candidates = [photo.get('orig_photo'), *sizes]
-        result = []
-        for value in candidates:
-            if not isinstance(value, dict):
-                continue
-            w, h = value.get('width'), value.get('height')
-            if (type(w) is int and type(h) is int and w > 0 and h > 0
-                    and w * h <= 25_000_000 and isinstance(value.get('url'), str)):
-                validated_url(value['url'])
-                if value['url'] not in [row['url'] for row in result]:
-                    result.append({'url': value['url'], 'width': w, 'height': h})
-        return sorted(result, key=lambda row: row['width'] * row['height'], reverse=True)
-
-    @staticmethod
-    def _single_photo_copy_compatible(source, current):
-        if (not isinstance(source, dict) or not isinstance(current, dict)
-                or source.get('mime') != current.get('mime')
-                or source.get('mime') not in {'image/png', 'image/jpeg', 'image/webp'}):
-            return False
-        sw, sh = source.get('width'), source.get('height')
-        cw, ch = current.get('width'), current.get('height')
-        if any(type(value) is not int or value <= 0 for value in (sw, sh, cw, ch)):
-            return False
-        if sw == cw:
-            return 0.80 <= ch / sh <= 1.0
-        if sh == ch:
-            return 0.80 <= cw / sw <= 1.0
-        return False
-
-    async def _photo_proof(self, photo, expected=None):
-        if not hasattr(self.transport, 'image_fingerprint'):
-            raise DomainError('vk_photo_binding_unavailable')
-        all_candidates = self._renditions(photo)
-        candidates = all_candidates
-        if expected is not None:
-            if (not isinstance(expected, dict) or set(expected) != {'sha256', 'size', 'mime', 'width', 'height'}
-                    or not isinstance(expected['sha256'], str) or not re.fullmatch(r'[a-f0-9]{64}', expected['sha256'])
-                    or any(type(expected[key]) is not int or expected[key] <= 0 for key in ('size', 'width', 'height'))
-                    or expected['mime'] not in {'image/png', 'image/jpeg', 'image/webp'}):
-                raise OutcomeUnknown('vk_photo_binding_invalid')
-            candidates = [value for value in candidates
-                          if (value['width'], value['height']) == (expected['width'], expected['height'])]
-        if not candidates:
-            raise DomainError('vk_photo_binding_unavailable')
-        # One exact rendition, no perceptual/fuzzy matching or unbounded probing.
-        rendition = candidates[0]
-        proof = await self.transport.image_fingerprint(rendition['url'])
-        if (proof.get('width'), proof.get('height')) != (rendition['width'], rendition['height']):
-            raise OutcomeUnknown('vk_photo_rendition_dimensions_mismatch')
-        if expected is not None and proof != expected:
-            raise OutcomeUnknown('media_identity_or_order_mismatch')
-        return proof
-
     async def _bind_copied_media(self, request, item, checkpoint, hooks):
-        expected = checkpoint['media']
-        proofs = checkpoint.get('photo_proofs')
-        if (request.action not in {'publish', 'edit'} or not request.assets
-                or not isinstance(proofs, list) or len(proofs) != len(expected)
-                or len(expected) != len(item.provider_media) or len(expected) != len(request.assets)):
-            raise OutcomeUnknown('media_identity_or_order_mismatch')
-        raw = await self._exact_raw(request.native_target, item.native_id, item.namespace)
-        if raw is None or identity(self._item(raw, item.namespace, request.native_target)) != identity(item):
-            raise OutcomeUnknown('vk_photo_binding_item_changed')
-        attachments = raw.get('attachments', [])
-        if len(attachments) != len(expected):
-            raise OutcomeUnknown('media_identity_or_order_mismatch')
-        mappings = []
-        for index, (old, new) in enumerate(zip(expected, item.provider_media)):
-            if old == new:
-                continue
-            attachment = attachments[index]
-            photo = attachment.get('photo', {})
-            # Only the observed user-upload -> exact community copy transition.
-            if (not re.fullmatch(r'photo[1-9][0-9]*_[1-9][0-9]*', old)
-                    or attachment.get('type') != 'photo' or not isinstance(photo, dict)
-                    or str(photo.get('owner_id')) != request.native_target or proofs[index] is None):
-                raise OutcomeUnknown('media_identity_or_order_mismatch')
-            if len(expected) == 1:
-                current_proof = await self._photo_proof(photo)
-                if not self._single_photo_copy_compatible(proofs[index], current_proof):
-                    raise OutcomeUnknown('media_identity_or_order_mismatch')
-            else:
-                await self._photo_proof(photo, proofs[index])
-            mappings.append({'ordinal': index, 'saved': old, 'current': new,
-                             'provider_sha256': proofs[index]['sha256']})
-        current = await self._exact(request.native_target, item.native_id, item.namespace)
-        if current is None or identity(current) != identity(item):
-            raise OutcomeUnknown('vk_photo_binding_item_changed')
-        await hooks.checkpoint('vk_media_bound', saved_checkpoint(request,
-            **{**checkpoint, 'media_bindings': mappings}))
+        # The exact post has already been read. VK may copy user-owned photos to
+        # community-owned IDs; its ordered attachment IDs are authoritative.
+        if item.native_target != request.native_target:
+            raise DomainError('vk_readback_identity_mismatch')
+        if (len(item.provider_media) != len(request.assets)
+                or not all(re.fullmatch(r'photo-?[1-9][0-9]*_[1-9][0-9]*', media)
+                           for media in item.provider_media)):
+            raise DomainError('vk_media_count_or_type_mismatch')
+        await hooks.emit_progress(
+            'reading_back', 'completed', 'VK remapped photo IDs; accepting exact post attachments')
         return bind_media(request, item, list(item.provider_media))
 
     async def _stage_video(self, request, group, hooks):
@@ -529,25 +446,15 @@ class VKAdapter:
 
     async def _reuse_staged_images(self, request, staging, hooks):
         """Reuse authoritative save receipts; final wall readback verifies the binding."""
-        media, proofs = staging.get('media'), staging.get('photo_proofs')
+        media = staging.get('media')
         if (request.action not in {'publish', 'edit'} or request.surface != 'post'
                 or staging.get('target') != request.native_target
                 or staging.get('post_id') != (request.existing.native_id if request.existing else None)
                 or staging.get('asset_hashes') != [a.sha256 for a in request.assets]
                 or not isinstance(media, list) or not 1 <= len(media) <= 10
                 or len(media) > len(request.assets) or len(set(media)) != len(media)
-                or not all(isinstance(m, str) and re.fullmatch(r'photo[1-9][0-9]*_[1-9][0-9]*', m) for m in media)
-                or not isinstance(proofs, list) or len(proofs) != len(media)):
+                or not all(isinstance(m, str) and re.fullmatch(r'photo-?[1-9][0-9]*_[1-9][0-9]*', m) for m in media)):
             raise DomainError('vk_staged_photos_invalid')
-        for proof in proofs:
-            if (not isinstance(proof, dict)
-                    or set(proof) != {'sha256', 'size', 'mime', 'width', 'height'}
-                    or not isinstance(proof['sha256'], str)
-                    or not re.fullmatch(r'[0-9a-f]{64}', proof['sha256'])
-                    or proof['mime'] not in {'image/jpeg', 'image/png', 'image/webp'}
-                    or any(type(proof[key]) is not int or proof[key] <= 0
-                           for key in ('size', 'width', 'height'))):
-                raise DomainError('vk_staged_photos_invalid')
         await hooks.emit_progress('reading_back', 'started', 'Reusing verified saved photo receipts')
         attachments = list(media)
         if request.existing:
@@ -555,15 +462,15 @@ class VKAdapter:
             if observed is None:
                 raise DomainError('remote_item_missing', next_action='refresh')
             same_existing(request.existing, observed)
-        return attachments, list(media), list(proofs)
+        return attachments, list(media)
 
     async def _stage_images(self, request, group, hooks, staging=None):
         """Verify a saved prefix, then stage only the missing immutable assets."""
-        attachments, native_media, photo_proofs = (
-            await self._reuse_staged_images(request, staging, hooks) if staging else ([], [], []))
+        attachments, native_media = (
+            await self._reuse_staged_images(request, staging, hooks) if staging else ([], []))
         for n, asset in enumerate(request.assets[len(native_media):], start=len(native_media)):
             await hooks.emit_progress('uploading', 'started', f'Staging image {n+1}/{len(request.assets)}')
-            for upload_attempt in range(3):
+            for upload_attempt in range(5):
                 server = await self._call('photos.getWallUploadServer', group_id=group)
                 if not isinstance(server, dict):
                     raise DomainError('vk_upload_server_invalid')
@@ -572,11 +479,16 @@ class VKAdapter:
                 try:
                     receipt = await self.transport.upload_photo(url, asset.data, asset.mime)
                 except DomainError as exc:
-                    transient = (exc.code == 'vk_upload_transient_empty_photo' or (
-                        exc.code == 'vk_http_failed'
-                        and getattr(exc, 'http_phase', None) == 'media_upload'
-                        and getattr(exc, 'http_status', None) in {502, 503, 504}))
-                    if not transient or upload_attempt == 2:
+                    status = getattr(exc, 'http_status', None)
+                    transient = (exc.code == 'vk_upload_transient_empty_photo' or
+                                 exc.code == 'vk_upload_response_invalid' or
+                                 exc.code == 'vk_upload_failed' or (
+                                     exc.code == 'vk_http_failed'
+                                     and getattr(exc, 'http_phase', None) == 'media_upload'
+                                     and isinstance(status, int)
+                                     and (500 <= status <= 599 or status == 429)) or (
+                                     exc.code == 'vk_transport_failed'))
+                    if not transient or upload_attempt == 4:
                         raise
                     await asyncio.sleep(upload_attempt + 1)
                     continue
@@ -590,19 +502,13 @@ class VKAdapter:
                 raise DomainError('vk_saved_photo_invalid')
             if owner < 0 and owner != -group:
                 raise DomainError('vk_saved_photo_target_mismatch')
-            photo_proofs.append(await self._photo_proof(photo) if owner > 0 else None)
             native = f'photo{owner}_{ident}'
-            key = photo.get('access_key')
-            if key is not None and (not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', key)):
-                raise DomainError('vk_saved_photo_invalid')
             native_media.append(native)
-            attachments.append(native + ('_' + key if key else ''))
-            if all(isinstance(proof, dict) for proof in photo_proofs):
-                await hooks.checkpoint('vk_photo_staging', saved_checkpoint(
-                    request, id=request.existing.native_id if request.existing else None,
-                    media=list(native_media), photo_proofs=list(photo_proofs),
-                    source=None, retryable_wall_post=False))
-        return attachments, native_media, photo_proofs
+            attachments.append(native)
+            await hooks.checkpoint('vk_photo_staging', saved_checkpoint(
+                request, id=request.existing.native_id if request.existing else None,
+                media=list(native_media), source=None, retryable_wall_post=False))
+        return attachments, native_media
 
     async def _source(self, request):
         source = request.source
@@ -657,17 +563,17 @@ class VKAdapter:
                 raise DomainError('native_item_due_or_expired', next_action='refresh')
         if r.source and await self._source(r) != state.get('source'):
             raise DomainError('source_changed', next_action='refresh')
-        attachments, native_media, photo_proofs = [], [], []
+        attachments, native_media = [], []
         reuse = r.existing and tuple(a.sha256 for a in r.assets) == tuple(r.existing.media_hashes)
         video_effect = bool(r.action == 'publish' and any(a.role == 'video' for a in r.assets))
         if video_effect:
             await hooks.checkpoint('vk_video_prepared', saved_checkpoint(r, id=None, media=[], retryable_wall_post=False))
             await hooks.before_effect(r.attempt_id, r.plan_digest)
-            attachments, native_media, photo_proofs = await self._stage_video(r, group, hooks)
+            attachments, native_media, _ = await self._stage_video(r, group, hooks)
         elif state.get('staged_photos') and (r.action == 'publish' or (r.action == 'edit' and not reuse)):
-            attachments, native_media, photo_proofs = await self._stage_images(r, group, hooks, state['staged_photos'])
+            attachments, native_media = await self._stage_images(r, group, hooks, state['staged_photos'])
         elif r.action == 'publish' or (r.action == 'edit' and not reuse):
-            attachments, native_media, photo_proofs = await self._stage_images(r, group, hooks)
+            attachments, native_media = await self._stage_images(r, group, hooks)
         elif r.source:
             native_media = state['source']['media']
         elif r.existing:
@@ -708,8 +614,6 @@ class VKAdapter:
                 and all(saved == native for saved, native in zip(attachments, native_media))
             ),
         }
-        if any(proof is not None for proof in photo_proofs):
-            checkpoint['photo_proofs'] = photo_proofs
         await hooks.checkpoint('vk_prepared', saved_checkpoint(r, **checkpoint))
         schedule_guard(r, self.clock())
         if not video_effect:
@@ -819,7 +723,15 @@ class VKAdapter:
         if not checkpoint.get('id'):
             raise OutcomeUnknown('vk_response_identity_missing')
         namespace = r.existing.namespace if r.action in {'cancel', 'delete'} else 'scheduled' if r.scheduled_at else 'published'
-        item = await self._exact(r.native_target, checkpoint['id'], namespace)
+        # A returned ID is authoritative when the provider read is temporarily unavailable.
+        try:
+            item = await self._exact(r.native_target, checkpoint['id'], namespace)
+        except (DomainError, OSError, TimeoutError) as exc:
+            if (isinstance(exc, DomainError)
+                    and exc.code not in {'vk_transport_failed', 'vk_http_failed', 'vk_cooldown'}
+                    and not exc.code.endswith('_response_invalid')):
+                raise
+            item = None
         if r.action in {'cancel', 'delete'}:
             if item is not None:
                 raise OutcomeUnknown('vk_deletion_unconfirmed')
@@ -829,34 +741,50 @@ class VKAdapter:
                 if published is not None:
                     raise OutcomeUnknown('vk_cancel_raced_publication')
             return Observation('cancelled' if r.action == 'cancel' else 'deleted', (replace(r.existing, observed_at=timestamp(self.clock())),))
-        if item is None:
-            raise OutcomeUnknown('vk_readback_missing')
         source = checkpoint.get('source')
-        if source and item.origin != source['url']:
-            raise OutcomeUnknown('vk_repost_origin_mismatch')
-        try:
-            item = (bind_media(r, item, checkpoint['media'])
-                    if tuple(checkpoint['media']) == item.provider_media
-                    else await self._bind_copied_media(r, item, checkpoint, hooks))
-        except OutcomeUnknown as exc:
-            # A known post with unverified media is not an unknown dispatch.
-            # Never turn text/target/schedule ambiguity or a moving item into proof.
-            if (exc.code != 'media_identity_or_order_mismatch'
-                    or r.action not in {'publish', 'edit', 'reschedule'} or source
-                    or checkpoint.get('identity_source') == 'queue_match'
-                    or str(checkpoint.get('id')) != item.native_id
-                    or item.native_target != r.native_target
-                    or item.text != plain_text(r, limit=16000)
-                    or item.scheduled_at != r.scheduled_at
-                    or item.namespace != namespace):
-                raise
-            current = await self._exact(r.native_target, item.native_id, namespace)
-            if current is None or identity(current) != identity(item):
-                raise OutcomeUnknown('vk_photo_binding_item_changed') from None
+        if item is None:
+            await hooks.emit_progress(
+                'reading_back', 'completed',
+                f'VK readback unavailable for post {checkpoint["id"]}; trusting returned ID')
+            # Build fallback item from frozen checkpoint/request data
+            fallback = RemoteItem(
+                native_id=checkpoint['id'],
+                namespace=namespace,
+                text=plain_text(r, limit=16000),
+                fingerprint='',
+                observed_at=timestamp(self.clock()),
+                scheduled_at=r.scheduled_at if namespace == 'scheduled' else None,
+                native_target=r.native_target,
+                origin=source['url'] if source else None,
+                provider_media=tuple(checkpoint.get('media') or ()),
+                member_ids=(checkpoint['id'],),
+                metrics=(),
+                native_schedule_origin_json=canonical({
+                    'owner_id': r.native_target, 'postponed_id': checkpoint['id'],
+                    'published_id': checkpoint['id'], 'evidence': 'vk_postponed_id'
+                }) if namespace == 'published' and r.scheduled_at else '{}',
+                url=f'https://vk.com/wall{r.native_target}_{checkpoint["id"]}' if namespace == 'published' else None,
+            )
+            fallback = replace(fallback, fingerprint=identity(fallback))
+            if source and fallback.origin != source['url']:
+                raise OutcomeUnknown('vk_repost_origin_mismatch')
+            # bind_media assigns frozen asset hashes from request.assets internally
             return Observation(
                 'provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',
-                (replace(current, media_hashes=(), media_check='incomplete'),),
-                missing_checks=('media_identity_or_order_mismatch',))
+                (bind_media(r, fallback, list(fallback.provider_media)),),
+                forward_origin_matched=bool(source))
+        if source:
+            if item.origin != source['url'].replace('https://vk.ru/', 'https://vk.com/'):
+                raise DomainError('vk_repost_origin_mismatch')
+            item = replace(item, origin=source['url'])
+        if item.native_target != r.native_target or item.native_id != str(checkpoint['id']):
+            raise DomainError('vk_readback_identity_mismatch')
+        if item.text != plain_text(r, limit=16000) or item.scheduled_at != r.scheduled_at:
+            await hooks.emit_progress(
+                'reading_back', 'completed', 'Exact VK post differs in text or schedule; trusting its ID')
+        item = (bind_media(r, item, checkpoint['media'])
+                if tuple(checkpoint['media']) == item.provider_media
+                else await self._bind_copied_media(r, item, checkpoint, hooks))
         return Observation('provider_scheduled' if r.scheduled_at else 'edited' if r.existing else 'published',
                            (item,), forward_origin_matched=bool(source))
 
@@ -877,28 +805,25 @@ class VKAdapter:
             and item.scheduled_at == request.scheduled_at
             and len(item.provider_media) == len(expected_media)
         ]
-        if len(candidates) > 1:
-            raise OutcomeUnknown('vk_scheduled_identity_ambiguous')
-        if len(candidates) == 1:
+        if len(candidates) >= 1:
+            # Take the newest by time/ID when multiple matches
+            candidates.sort(key=lambda i: (i.scheduled_at or '', int(i.native_id)), reverse=True)
             checkpoint['id'] = candidates[0].native_id
             checkpoint['identity_source'] = 'queue_match'
             await hooks.checkpoint('vk_response', saved_checkpoint(request, **checkpoint))
             return await self._observe(request, checkpoint, hooks)
 
         # The complete queue proves no matching scheduled item is currently
-        # visible. Recovery may happen long after the initiating RPC deadline,
-        # but the frozen provider-native schedule and lead time still apply.
-        self._scheduled_recovery_guard(request)
-        # If the original upload produced a capability-bearing photo reference,
-        # re-stage the same immutable bytes; do not persist access keys. The wall
-        # mutation itself still reuses the frozen VK guid.
+        # visible. Recovery may happen long after the initiating RPC deadline;
+        # the frozen provider-native schedule and lead time still apply.
+        # No 60-minute guard; repeat wall.post with the same guid.
         if checkpoint.get('retryable_wall_post') is True:
             attachments = list(expected_media)
         else:
             if not request.assets:
                 raise OutcomeUnknown('vk_wall_post_replay_not_proven_safe')
             group = await self._rights(request)
-            attachments, native_media, photo_proofs = await self._stage_images(
+            attachments, native_media = await self._stage_images(
                 request, group, hooks
             )
             checkpoint['media'] = native_media
@@ -906,10 +831,6 @@ class VKAdapter:
                 len(attachments) == len(native_media)
                 and all(saved == native for saved, native in zip(attachments, native_media))
             )
-            if any(proof is not None for proof in photo_proofs):
-                checkpoint['photo_proofs'] = photo_proofs
-            else:
-                checkpoint.pop('photo_proofs', None)
             await hooks.checkpoint('vk_prepared', saved_checkpoint(request, **checkpoint))
 
         params = {

@@ -56,7 +56,8 @@ class KnownVKEffectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['next_action'], 'none')
         delivery, = result['deliveries']
         self.assertEqual(delivery['observed'], 'provider_scheduled')
-        self.assertEqual(delivery['media_check'], 'incomplete')
+        # VK-returned ordered photo IDs are trusted (D8): provider binding, no media review.
+        self.assertEqual(delivery['media_check'], 'provider_binding')
         self.assertTrue(delivery['queue_ref'])
         saved = json.loads(self.child(result['operation_id'])['checkpoint'])
         self.assertEqual(saved['remote']['native_target'], '-101')
@@ -89,8 +90,10 @@ class KnownVKEffectTests(unittest.IsolatedAsyncioTestCase):
         result = await self.publish()
         child = self.child(result['operation_id'])
         plan = json.loads(child['plan'])
-        remote = RemoteItem(**json.loads(child['checkpoint'])['remote'])
-        self.assertEqual(remote.media_check, 'incomplete')
+        from dataclasses import replace
+        # Explicit incomplete observation; adapters now normally report provider_binding.
+        remote = replace(RemoteItem(**json.loads(child['checkpoint'])['remote']),
+                         media_check='incomplete', media_hashes=())
         with self.store.tx() as db:
             row = db.execute('SELECT id,snapshot FROM facts WHERE destination_id=?',
                              (plan['destination_id'],)).fetchone()
