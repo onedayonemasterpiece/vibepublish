@@ -1,7 +1,5 @@
 # VibePublish Social Operations
 
-Telegram channel stories W5: [Draft / Not confirmed by user — native publish/read/delete](telegram-channel-stories.md). Same MCP `surface=story` as VK; no scheduled Telegram Stories and no live acceptance claim.
-
 ## W1 automatic outcomes and status regression — 2026-10-28
 
 Status: **Not confirmed by user** until live acceptance. Temporary provider failures stay within the command's original fixed retry horizon; a prior uncertain child cannot repeat a native effect or block independent networks. The short per-network status maps the saved `needs_auth` code to «Нет действующей авторизации сети», rather than exposing an adapter's raw English error message. The 23 scoped source regressions passed offline; no deployment or live publication is implied.
@@ -20,6 +18,7 @@ A MAX browser lease held by Browser Bridge must not crash the shared Telegram/VK
 
 Current destination lifecycle correction: [VK/Telegram durable destination lifecycle and VK Stories](destination-lifecycle-vk-v1.md).
 Telegram-specific discovery history remains in [Telegram destination discovery](telegram-destination-discovery.md).
+Stories (VK and Telegram, image/video, links): [stories](stories.md).
 
 > Current remote delivery: **partial, not a runnable release**. The implemented
 > behavior and historical test counts below describe the complete archived source.

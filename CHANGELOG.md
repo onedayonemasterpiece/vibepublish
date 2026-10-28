@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- W5 Telegram channel Stories (Draft / Not confirmed by user): publish one photo or MP4 with optional caption via `surface=story`, check MTProto channel story rights and quota, recover lost responses by original checkpointed random_id, read exact Story ID/public permalink, and delete via existing native item lifecycle. Reject scheduling, preserve independent provider outcomes. Offline mocks only; no real Telegram send or deployment.
+- W5 Telegram channel Stories (Done in code / Not confirmed by user): one photo or MP4 with optional caption, optional arbitrary HTTPS clickable URL via Telegram `MediaAreaUrl` (config-gated `stories_area_url_max`), and exact URL readback. Preserve the VK wall-only `story_link.item_ref` contract. Reuse existing channel rights/quota check, `random_id` recovery, Story ID/permalink, exact delete and independent worker outcome. Reject scheduling. Move Telegram requirements into canonical `stories.md`, delete duplicated page. Offline mocks only; no real Telegram send or deployment.
 
 - W4 Telegram lost-response (D12): recover accepted publish/forward messages from the original durable `random_id` values with Telegram's native deduplication, then read their exact message IDs in history or scheduled queue. Share the base RPC diagnostics with the resilient reconnect path so FloodWait/SlowModeWait `retry_after_s` survives and the worker saves it alongside the attempt failure and respects it as minimum cooldown without scanning diagnostic events or retrying a started RPC. Add offline lost-response and cooldown regressions; no deployment or live sends.
 

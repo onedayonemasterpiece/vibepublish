@@ -29,6 +29,7 @@ class StoryClient(TelegramClient):
     def __init__(self):
         super().__init__()
         self.story_quota = 2
+        self.story_link_limit = 3.0  # Telethon JsonNumber.value is a float
         self.boosts_required = False
         self.stories = {}
         self.random_stories = {}
@@ -42,6 +43,10 @@ class StoryClient(TelegramClient):
             if self.boosts_required:
                 raise BoostsRequiredError('fixture channels need boosts')
             return NS(count_remains=self.story_quota)
+        if name == 'GetAppConfigRequest':
+            self.calls.append((name, req))
+            return NS(config=obj('JsonObject', value=[
+                NS(key='stories_area_url_max', value=obj('JsonNumber', value=self.story_link_limit))]))
         if name == 'UploadMediaRequest' and type(req.media).__name__ == 'InputMediaUploadedDocument':
             self.calls.append((name, req))
             self.next_photo += 1
@@ -63,7 +68,7 @@ class StoryClient(TelegramClient):
                 else:
                     media = obj('MessageMediaDocument', document=obj('Document', id=media_id))
                 item = obj('StoryItem', id=self.next_story, media=media, caption=req.caption,
-                           entities=req.entities)
+                           entities=req.entities, media_areas=getattr(req, 'media_areas', None) or [])
                 self.stories[(req.peer.id, self.next_story)] = item
                 self.random_stories[req.random_id] = self.next_story
                 self.story_sends += 1
@@ -94,10 +99,15 @@ def test_telethon_144_compiles_story_requests_without_network():
     assert type(tl.request('story_can_send', peer=peer)).__name__ == 'CanSendStoryRequest'
     assert type(tl.request('story_by_id', peer=peer, id=[501])).__name__ == 'GetStoriesByIDRequest'
     assert type(tl.request('story_delete', peer=peer, id=[501])).__name__ == 'DeleteStoriesRequest'
+    coordinates = tl.type('MediaAreaCoordinates', x=50.0, y=80.0,
+                          w=70.0, h=10.0, rotation=0.0)
+    area = tl.type('MediaAreaUrl', coordinates=coordinates, url='https://example.com/news')
     sent = tl.request('story_send', peer=peer, media=media, random_id=99,
                       privacy_rules=[tl.type('InputPrivacyValueAllowAll')],
-                      period=86400, caption='Fixture', entities=[])
+                      media_areas=[area], period=86400, caption='Fixture', entities=[])
     assert type(sent).__name__ == 'SendStoryRequest' and sent.random_id == 99
+    assert type(sent.media_areas[0]).__name__ == 'MediaAreaUrl'
+    assert sent.media_areas[0].url == 'https://example.com/news'
     assert type(tl.types.UpdateStoryID(id=501, random_id=99)).__name__ == 'UpdateStoryID'
 
 
@@ -153,6 +163,108 @@ async def test_photo_caption_channel_privacy_24h_exact_readback_and_delete():
 
 
 @pytest.mark.asyncio
+async def test_linked_story_boost_denial_is_clear_and_pre_dispatch():
+    client, adapter, journal = build()
+    client.boosts_required = True
+    r = story_request(story_link_json=canonical({'url': 'https://example.com/news'}))
+    with pytest.raises(DomainError) as failure:
+        await adapter.prepare(r, journal.hooks)
+    assert failure.value.code == 'telegram_story_link_not_allowed'
+    assert 'boosts' in failure.value.message
+    assert client.story_sends == 0 and not client.uploads
+    assert not journal.markers
+
+
+@pytest.mark.asyncio
+async def test_link_area_refused_before_upload_when_provider_config_disables_urls():
+    client, adapter, journal = build()
+    client.story_link_limit = 0.0
+    r = story_request(story_link_json=canonical({'url': 'https://example.com/news'}))
+    with pytest.raises(DomainError) as failure:
+        await adapter.prepare(r, journal.hooks)
+    assert failure.value.code == 'telegram_story_link_not_allowed'
+    assert failure.value.message
+    assert 'GetAppConfigRequest' in [name for name, _ in client.calls]
+    assert not client.uploads and not client.story_sends
+    assert not journal.markers
+
+
+@pytest.mark.asyncio
+async def test_missing_link_area_is_not_reported_as_success():
+    client, adapter, journal = build()
+    r = story_request(story_link_json=canonical({'url': 'https://vk.com/wall-15_9'}))
+    await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
+    checkpoint = journal.checkpoint_json
+    client.stories[(101, 501)].media_areas.clear()
+    with pytest.raises(OutcomeUnknown) as failure:
+        await adapter.reconcile(r, checkpoint, journal.hooks)
+    assert failure.value.code == 'telegram_story_link_readback_mismatch'
+    assert client.story_sends == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('url', [
+    'https://example.org/article?ref=stories',
+    'https://vk.com/wall-124_2',
+    'https://another-site.net/landing',
+])
+async def test_mcp_accepts_generic_https_link_without_changing_vk_contract(tmp_path, url):
+    store = Store(tmp_path / 'telegram-linked.sqlite', clock=lambda: NOW)
+    actor = store.authenticate(store.create_principal('tenant', 'owner', owner=True))
+    store.add_connection(actor, 'tg', 'telegram', account_type='mtproto_user')
+    store.bind(actor, 'owner', 'tg-story', 'tg', '-1000000000101')
+    photo = asset()
+    with store.tx() as db:
+        db.execute(
+            'INSERT INTO assets(id,tenant_id,principal_id,sha256,mime,width,height,bytes,source_sha256,created) '
+            'VALUES(?,?,?,?,?,?,?,?,?,?)',
+            ('linked-story', actor.tenant_id, actor.principal_id, photo.sha256,
+             photo.mime, 4, 4, photo.data, photo.sha256, NOW))
+    app = Application(store)
+    payload = {
+        'to': ['tg-story'], 'surface': 'story', 'content': {'text': 'Story caption'},
+        'media': [{'source': {'kind': 'asset', 'id': 'linked-story'}, 'role': 'image'}],
+        'story_link': {'url': url, 'text': 'Подробнее'},
+        'request_key': 'tg-story-with-url',
+    }
+    accepted = await app.call(actor, 'vibepublish_publish', payload)
+    assert accepted['state'] == 'accepted', accepted
+    with store.connection() as db:
+        plan = __import__('json').loads(db.execute(
+            'SELECT plan FROM attempts WHERE operation_id=?', (accepted['operation_id'],)
+        ).fetchone()[0])
+    assert plan['story_link_json'] == canonical({'url': url})
+    assert not plan.get('story_link_binding_id')
+    client = StoryClient()
+    worker = Worker(store, {'tg': TelegramAdapter(
+        client, connection_id='tg', tl=ScriptedTL(), clock=lambda: NOW)})
+    assert await worker.run_once()
+    receipt = store.receipt(actor, accepted['operation_id'])
+    assert receipt['state'] == 'verified', receipt
+    assert receipt['deliveries'][0]['observed'] == 'published'
+    areas = client.stories[(101, 501)].media_areas
+    assert len(areas) == 1 and type(areas[0]).__name__ == 'MediaAreaUrl'
+    assert areas[0].url == url
+    assert 0 < areas[0].coordinates.x < 100
+    assert client.story_sends == 1
+
+
+@pytest.mark.asyncio
+async def test_mcp_rejects_insecure_story_link_without_provider_effect(tmp_path):
+    store = Store(tmp_path / 'telegram-invalid-url.sqlite', clock=lambda: NOW)
+    actor = store.authenticate(store.create_principal('tenant', 'owner', owner=True))
+    store.add_connection(actor, 'tg', 'telegram', account_type='mtproto_user')
+    store.bind(actor, 'owner', 'tg-story', 'tg', '-1000000000101')
+    app = Application(store)
+    reply = await app.call(actor, 'vibepublish_publish', {
+        'to': ['tg-story'], 'surface': 'story', 'content': {'text': 'Fixture'},
+        'story_link': {'url': 'http://example.org/unsafe'},
+        'request_key': 'insecure-link',
+    })
+    assert 'error' in reply
+
+
+@pytest.mark.asyncio
 async def test_video_mp4_and_private_channel_has_no_fabricated_permalink(monkeypatch):
     from social_operations import video_assets
     monkeypatch.setattr(video_assets, 'video_metadata', lambda data: (720, 1280, 7))
@@ -161,13 +273,16 @@ async def test_video_mp4_and_private_channel_has_no_fabricated_permalink(monkeyp
                   len(data), role='video', data=data)
     client, adapter, journal = build()
     client.entities[101] = channel(101, None)
-    r = story_request(assets=(video,), text='')
+    r = story_request(assets=(video,), text='',
+                      story_link_json=canonical({'url': 'https://example.org/movie'}))
     result = await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
     item, = result.items
     assert item.url is None and item.provider_media[0].startswith('document:')
     assert item.media_hashes == (video.sha256,)
     sent, = [req for name, req in client.calls if name == 'SendStoryRequest']
     assert type(sent.media).__name__ == 'InputMediaDocument' and sent.caption == ''
+    assert sent.media_areas[0].url == 'https://example.org/movie'
+    assert item.story_link_json == canonical({'url': 'https://example.org/movie'})
 
 
 @pytest.mark.asyncio
@@ -211,9 +326,10 @@ async def test_ineligible_story_rejected_before_upload_or_effect(kind):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('adapter_cls', [TelegramAdapter, ResilientTelegramAdapter])
-async def test_lost_response_replays_same_random_id_without_second_story(adapter_cls):
+@pytest.mark.parametrize('linked', [False, True])
+async def test_lost_response_replays_same_random_id_without_second_story(adapter_cls, linked):
     client, adapter, journal = build(adapter_cls)
-    r = story_request()
+    r = story_request(story_link_json=canonical({'url': 'https://example.com/item'}) if linked else '{}')
     prepared = await adapter.prepare(r, journal.hooks)
 
     def lose_response(_):
@@ -233,6 +349,9 @@ async def test_lost_response_replays_same_random_id_without_second_story(adapter
     assert client.story_sends == 1
     sends = [req for name, req in client.calls if name == 'SendStoryRequest']
     assert len(sends) == 2 and all(x.random_id == random_id for x in sends)
+    if linked:
+        assert all(x.media_areas[0].url == 'https://example.com/item' for x in sends)
+        assert result.items[0].story_link_json == canonical({'url': 'https://example.com/item'})
     assert len(journal.markers) == 1
 
 

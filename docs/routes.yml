@@ -94,7 +94,7 @@ features:
     latest_extension: docs/features/social-operations/destination-lifecycle-vk-v1.md
     destination_lifecycle_vk: docs/features/social-operations/destination-lifecycle-vk-v1.md
     vk_linked_story_dependency: docs/features/social-operations/vk-linked-story-dependency.md
-    telegram_channel_stories: docs/features/social-operations/telegram-channel-stories.md
+    stories: docs/features/social-operations/stories.md
     native_video_publication: docs/features/social-operations/native-video-publication.md
     vk_photo_budgets: docs/features/social-operations/vk-photo-budgets.md
     vk_allocation_recovery: docs/features/social-operations/vk-allocation-recovery.md

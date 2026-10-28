@@ -52,7 +52,7 @@ from .telegram_emoji import check_custom, load_set
 _TYPES = {'InputMediaUploadedPhoto', 'InputPhoto', 'InputMediaPhoto', 'InputSingleMedia', 'InputStickerSetShortName',
           'InputReplyToMessage', 'InputMediaUploadedDocument', 'DocumentAttributeFilename',
           'InputDocument', 'InputMediaDocument', 'DocumentAttributeVideo',
-           'InputPrivacyValueAllowAll'} | set(ENTITY_TYPES.values())
+           'InputPrivacyValueAllowAll', 'MediaAreaCoordinates', 'MediaAreaUrl'} | set(ENTITY_TYPES.values())
 
 
 class TelethonTypes:
@@ -166,6 +166,10 @@ class TelegramAdapter:
 
     def _rpc_error(self, kind: str, exc: Exception) -> DomainError:
         name = type(exc).__name__
+        if kind == 'story_send' and name in {'MediaAreaInvalidError', 'MediaAreaUrlInvalidError',
+                                              'MediaAreasTooMuchError'}:
+            return DomainError('telegram_story_link_not_allowed',
+                               'Telegram rejected the URL link area for this Story', 'none')
         if kind in {'story_can_send', 'story_send'}:
             refusal = {
                 'BoostsRequiredError': 'Channel needs more boosts to post Telegram Stories',
@@ -261,8 +265,17 @@ class TelegramAdapter:
                 if request.scheduled_at or request.source:
                     raise DomainError('telegram_story_schedule_or_forward_unsupported',
                                       'Telegram channel Stories cannot be scheduled or forwarded')
-                if request.topic_root_id or request.story_link_json != '{}' or request.story_parent_json != '{}':
+                if request.topic_root_id or request.story_parent_json != '{}':
                     raise DomainError('telegram_story_options_unsupported')
+                if request.story_link_json != '{}':
+                    try:
+                        link = json.loads(request.story_link_json)
+                        if (request.action != 'publish' or not isinstance(link, dict)
+                                or set(link) != {'url'} or not isinstance(link['url'], str)
+                                or not link['url'].startswith('https://')):
+                            raise ValueError()
+                    except (ValueError, TypeError, KeyError):
+                        raise DomainError('telegram_story_link_invalid') from None
                 if request.action == 'publish' and (len(request.assets) != 1 or
                         request.assets[0].mime not in {'image/png', 'image/jpeg', 'image/webp', 'video/mp4'}):
                     raise DomainError('telegram_story_media_invalid', 'A Story requires one image or one MP4 video')
@@ -298,12 +311,30 @@ class TelegramAdapter:
             elif request.action not in {'publish', 'forward'}:
                 raise DomainError('remote_item_required')
             if request.surface == 'story' and request.action == 'publish':
-                allowed = await self._call('story_can_send', peer=entity)
+                try:
+                    allowed = await self._call('story_can_send', peer=entity)
+                except DomainError as exc:
+                    if (request.story_link_json != '{}' and exc.code == 'telegram_story_not_allowed'
+                            and 'boost' in exc.message.lower()):
+                        raise DomainError('telegram_story_link_not_allowed',
+                                          'Channel needs more boosts to publish a linked Story') from None
+                    raise
                 remaining = getattr(allowed, 'count_remains', None)
                 if type(remaining) is not int:
                     raise DomainError('telegram_rpc_failed', 'Telegram did not return a Story capacity result')
                 if remaining <= 0:
                     raise DomainError('telegram_story_not_allowed', 'Telegram channel Story quota is exhausted')
+                if request.story_link_json != '{}':
+                    from .telegram_emoji import config_value
+                    config = await self._call('app_config', hash=0)
+                    try:
+                        values = config_value(config.config)
+                    except (DomainError, AttributeError):
+                        values = {}
+                    limit = values.get('stories_area_url_max') if isinstance(values, dict) else None
+                    if type(limit) not in {int, float} or not (1 <= limit <= 10000):
+                        raise DomainError('telegram_story_link_not_allowed',
+                                          'Telegram account does not permit URL link areas in Stories')
         except DomainError as exc:
             return Capability('unsupported', exc.code,
                               evidence=exc.message if request.surface == 'story' else 'not_canary_verified')
@@ -472,9 +503,15 @@ class TelegramAdapter:
         url = (f'https://t.me/{username}/s/{ident}'
                if isinstance(username, str) and re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{3,31}', username)
                else None)
+        # URL areas are native readback, not the caller's requested link text.
+        areas = getattr(story, 'media_areas', None) or ()
+        urls = [area.url for area in areas if type(area).__name__ == 'MediaAreaUrl']
+        if len(urls) > 1:
+            raise OutcomeUnknown('telegram_story_link_readback_ambiguous')
+        link = canonical({'url': urls[0]}) if urls else '{}'
         item = RemoteItem(str(ident), 'story', text, '', timestamp(self.clock()),
                           native_target=peer_key(entity), provider_media=provider_media,
-                          member_ids=(str(ident),), url=url,
+                          member_ids=(str(ident),), url=url, story_link_json=link,
                           entities_json=canonical(from_native(text, getattr(story, 'entities', ()) or ())))
         return replace(item, fingerprint=identity(item))
 
@@ -659,6 +696,11 @@ class TelegramAdapter:
                     peer=entity, media=compiled_media[0], caption=text, entities=native_entities,
                     privacy_rules=[self.tl.type('InputPrivacyValueAllowAll')],
                     random_id=random_ids[0], period=86400)
+                if r.story_link_json != '{}':
+                    coordinates = self.tl.type('MediaAreaCoordinates',
+                        x=50.0, y=80.0, w=70.0, h=10.0, rotation=0.0)
+                    values['media_areas'] = [self.tl.type('MediaAreaUrl',
+                        coordinates=coordinates, url=json.loads(r.story_link_json)['url'])]
             else:
                 kind, values = 'story_delete', dict(peer=entity, id=[int(existing.native_id)])
         elif r.action == 'forward':
@@ -746,6 +788,8 @@ class TelegramAdapter:
             return Observation('deleted', (replace(r.existing, observed_at=timestamp(self.clock())),))
         if item is None:
             raise OutcomeUnknown('incomplete_readback')
+        if r.story_link_json != '{}' and item.story_link_json != r.story_link_json:
+            raise OutcomeUnknown('telegram_story_link_readback_mismatch')
         if not telegram_content_matches(r.content_json, item.text,
                                         json.loads(item.entities_json), telegram_text_limit(r)):
             raise OutcomeUnknown('telegram_entities_readback_mismatch')
