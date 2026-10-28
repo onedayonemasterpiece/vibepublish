@@ -19,6 +19,8 @@ A MAX browser lease held by Browser Bridge must not crash the shared Telegram/VK
 Current destination lifecycle correction: [VK/Telegram durable destination lifecycle and VK Stories](destination-lifecycle-vk-v1.md).
 Telegram-specific discovery history remains in [Telegram destination discovery](telegram-destination-discovery.md).
 
+Stories (VK and Telegram, image/video, links): [stories](stories.md).
+
 > Current remote delivery: **partial, not a runnable release**. The implemented
 > behavior and historical test counts below describe the complete archived source.
 > Three production modules remain undelivered; current evidence and exact boundaries
