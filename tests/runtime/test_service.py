@@ -154,6 +154,23 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         await self.worker.run_once()
         self.assertEqual(self.providers['telegram'].count('effect'), 2)
 
+    async def test_same_content_after_refusal_without_send_is_a_new_operation(self):
+        prepare = self.providers['telegram'].prepare
+
+        async def refused(*args):
+            raise DomainError('needs_auth')
+
+        self.providers['telegram'].prepare = refused
+        first = await self.publish(request_key='before-fix')
+        await self.worker.run_once()
+        self.providers['telegram'].prepare = prepare
+        second = await self.publish(request_key='after-fix')
+        self.assertNotEqual(second['operation_id'], first['operation_id'])
+        await self.worker.run_once()
+        self.assertEqual(self.providers['telegram'].count('effect'), 1)
+        # A sent operation still deduplicates identical content under a new key.
+        self.assertEqual((await self.publish(request_key='third'))['operation_id'], second['operation_id'])
+
     async def test_sqlite_concurrent_identity_is_one_operation(self):
         def submit(_):
             store = Store(self.store.path)
