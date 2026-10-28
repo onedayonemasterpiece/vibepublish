@@ -445,7 +445,11 @@ class Application:
         if not implicit:
             return None
         if not args.get('repeat_of'):
-            row = db.execute('SELECT id FROM operations WHERE tenant_id=? AND principal_id=? AND request_digest=? AND created>=? ORDER BY created LIMIT 1',
+            # A finished operation that sent nothing anywhere is not a duplicate:
+            # the same content may be submitted again after a refusal is fixed.
+            row = db.execute('SELECT id FROM operations o WHERE tenant_id=? AND principal_id=? AND request_digest=? AND created>=? '
+                             'AND NOT (o.complete=1 AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.operation_id=o.id AND a.dispatched=1)) '
+                             'ORDER BY created LIMIT 1',
                              (actor.tenant_id, actor.principal_id, identity, self.store.clock()-86400)).fetchone()
             if row:
                 self.store.private_operation(db, actor, row['id'])

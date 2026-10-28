@@ -142,7 +142,8 @@ class VKAdapter:
                         raise DomainError('vk_story_text_unsupported')
                     if (len(request.assets) != 1
                             or request.assets[0].mime not in {'image/png', 'image/jpeg', 'image/webp', 'video/mp4'}
-                            or request.assets[0].size > (20 if request.assets[0].role == 'video' else 10) * 1024 * 1024):
+                            # Photos are compressed to the JPEG wire copy at upload; only video size is final here.
+                            or (request.assets[0].role == 'video' and request.assets[0].size > 20 * 1024 * 1024)):
                         raise DomainError('vk_story_media_invalid')
                 if request.existing:
                     if request.existing.native_target != request.native_target or request.existing.namespace != 'story':
@@ -641,7 +642,8 @@ class VKAdapter:
             asset = r.assets[0]
             await hooks.emit_progress('uploading', 'started', 'Staging VK Story image')
             link = self._story_link(r)
-            upload_params = {'group_id': group}
+            # add_to_news=1 publishes the story; without it VK only saves an invisible story.
+            upload_params = {'group_id': group, 'add_to_news': 1}
             if link:
                 source = await self._exact(link['target'], link['id'], 'published')
                 if source is None:

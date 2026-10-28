@@ -55,7 +55,7 @@ async def test_link_upload_exact_readback_and_fingerprint(visible_label):
     item = observation.items[0]
     assert json.loads(item.story_link_json) == {'url': LINK['url'], 'text': visible_label}
     upload = next(params for method, _, params in transport.calls if method == 'stories.getPhotoUploadServer')
-    assert upload == {'group_id': 101, 'link_url': LINK['url'], 'link_text': 'read'}
+    assert upload == {'group_id': 101, 'add_to_news': 1, 'link_url': LINK['url'], 'link_text': 'read'}
     assert transport.effects == 1 and item.media_check == 'provider_binding'
     assert identity(item) != identity(replace(item, story_link_json='{}'))
     again = await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
