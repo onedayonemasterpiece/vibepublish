@@ -401,7 +401,7 @@ class VKAdapter:
                            for media in item.provider_media)):
             raise DomainError('vk_media_count_or_type_mismatch')
         await hooks.emit_progress(
-            'reading_back', 'warning', 'VK remapped photo IDs; accepting exact post attachments')
+            'reading_back', 'completed', 'VK remapped photo IDs; accepting exact post attachments')
         return bind_media(request, item, list(item.provider_media))
 
     async def _stage_video(self, request, group, hooks):
