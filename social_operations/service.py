@@ -396,7 +396,7 @@ class Application:
             for d in page:
                 row = bindings.get(d['alias'])
                 if row:
-                    surfaces = ('post', 'story') if row['provider'] == 'vk' else ('post',)
+                    surfaces = ('post', 'story') if row['provider'] in {'vk', 'telegram'} else ('post',)
                     for surface in surfaces:
                         live_verified = self._recent_verified_capability(db, actor, row, surface)
                         preview_verified = surface == 'post' and self._recent_preview_preflight(db, actor, row)

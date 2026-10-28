@@ -41,13 +41,18 @@ _REQUESTS = {
     'cancel': ('messages', 'DeleteScheduledMessagesRequest'),
     'delete_channel': ('channels', 'DeleteMessagesRequest'),
     'delete_messages': ('messages', 'DeleteMessagesRequest'),
+    'story_can_send': ('stories', 'CanSendStoryRequest'),
+    'story_send': ('stories', 'SendStoryRequest'),
+    'story_by_id': ('stories', 'GetStoriesByIDRequest'),
+    'story_delete': ('stories', 'DeleteStoriesRequest'),
 }
 from social_operations.rich_text import (ENTITY_TYPES, from_native, to_native,
     provider_content, telegram_content_matches, telegram_text_limit)
 from .telegram_emoji import check_custom, load_set
 _TYPES = {'InputMediaUploadedPhoto', 'InputPhoto', 'InputMediaPhoto', 'InputSingleMedia', 'InputStickerSetShortName',
           'InputReplyToMessage', 'InputMediaUploadedDocument', 'DocumentAttributeFilename',
-          'InputDocument', 'InputMediaDocument', 'DocumentAttributeVideo'} | set(ENTITY_TYPES.values())
+          'InputDocument', 'InputMediaDocument', 'DocumentAttributeVideo',
+           'InputPrivacyValueAllowAll'} | set(ENTITY_TYPES.values())
 
 
 class TelethonTypes:
@@ -161,6 +166,17 @@ class TelegramAdapter:
 
     def _rpc_error(self, kind: str, exc: Exception) -> DomainError:
         name = type(exc).__name__
+        if kind in {'story_can_send', 'story_send'}:
+            refusal = {
+                'BoostsRequiredError': 'Channel needs more boosts to post Telegram Stories',
+                'ChatAdminRequiredError': 'Story-posting admin rights are required',
+                'PremiumAccountRequiredError': 'Telegram Premium is required for story posting',
+                'StoriesTooMuchError': 'Telegram channel has no active story slots remaining',
+                'ChannelInvalidError': 'This channel cannot post Telegram Stories',
+                'PeerIdInvalidError': 'The bound channel is not eligible for Stories',
+            }.get(name)
+            if refusal or name.startswith(('StorySendFloodWeekly', 'StorySendFloodMonthly')):
+                return DomainError('telegram_story_not_allowed', refusal or 'Telegram Story posting quota is exhausted', 'none')
         code = ('telegram_cooldown' if name in {'FloodWaitError', 'SlowModeWaitError'} else
                 'telegram_auth_required' if name in {'AuthKeyUnregisteredError', 'SessionRevokedError'} else
                 'telegram_rpc_failed')
@@ -203,13 +219,19 @@ class TelegramAdapter:
             raise DomainError('provider_access_denied')
         if (request.scheduled_at or (request.existing and request.existing.namespace == 'scheduled')) and self.account_type != 'mtproto_user':
             raise DomainError('telegram_bot_native_schedule_unsupported')
-        if request.action in {'edit', 'reschedule', 'cancel', 'delete'}:
+        if request.surface == 'story':
+            if self.account_type != 'mtproto_user' or not getattr(entity, 'broadcast', False):
+                raise DomainError('telegram_story_not_allowed', 'Stories require a channel and an MTProto user account')
+            required = 'delete_stories' if request.action == 'delete' else 'post_stories'
+        elif request.action in {'edit', 'reschedule', 'cancel', 'delete'}:
             required = 'delete_messages' if request.action in {'cancel', 'delete'} else 'edit_messages'
         else:
             required = 'post_messages'
         if getattr(entity, 'broadcast', False):
             permissions = await self.client.get_permissions(entity, me)
             if not (getattr(permissions, 'is_creator', False) or getattr(permissions, required, False)):
+                if request.surface == 'story':
+                    raise DomainError('telegram_story_not_allowed', f'Telegram channel requires {required} admin permission')
                 raise DomainError('provider_access_denied')
         elif type(entity).__name__.startswith('Chat') and not getattr(entity, 'megagroup', False):
             from .telegram_discovery import basic_publish_rights
@@ -231,14 +253,25 @@ class TelegramAdapter:
 
     async def inspect(self, request: ProviderRequest) -> Capability:
         try:
-            if request.surface != 'post':
+            if request.surface not in {'post', 'story'}:
                 raise DomainError('telegram_surface_needs_review')
-            if request.action not in {'publish', 'forward', 'edit', 'reschedule', 'cancel', 'delete'}:
+            if request.surface == 'story':
+                if request.action not in {'publish', 'delete'}:
+                    raise DomainError('telegram_story_action_unsupported')
+                if request.scheduled_at or request.source:
+                    raise DomainError('telegram_story_schedule_or_forward_unsupported',
+                                      'Telegram channel Stories cannot be scheduled or forwarded')
+                if request.topic_root_id or request.story_link_json != '{}' or request.story_parent_json != '{}':
+                    raise DomainError('telegram_story_options_unsupported')
+                if request.action == 'publish' and (len(request.assets) != 1 or
+                        request.assets[0].mime not in {'image/png', 'image/jpeg', 'image/webp', 'video/mp4'}):
+                    raise DomainError('telegram_story_media_invalid', 'A Story requires one image or one MP4 video')
+            elif request.action not in {'publish', 'forward', 'edit', 'reschedule', 'cancel', 'delete'}:
                 raise DomainError('telegram_action_unsupported')
             provider_content(request.content_json, telegram_text_limit(request))
-            verify_assets(request, allow_video=True, allow_document=True)
+            verify_assets(request, allow_video=True, allow_document=request.surface == 'post')
             roles = {'document' if asset.role == 'document' else 'photo' for asset in request.assets}
-            if len(request.assets) > 1 and len(roles) > 1:
+            if request.surface == 'post' and len(request.assets) > 1 and len(roles) > 1:
                 raise DomainError('telegram_mixed_media_album_needs_review')
             schedule_guard(request, self.clock())
             entity = await self._rights(request)
@@ -250,20 +283,30 @@ class TelegramAdapter:
             if request.existing:
                 if request.existing.native_target != request.native_target:
                     raise DomainError('remote_target_mismatch')
-                if request.existing.namespace not in {'scheduled', 'published'}:
+                if request.surface == 'story' and request.existing.namespace != 'story':
+                    raise DomainError('telegram_story_target_mismatch')
+                if request.surface == 'post' and request.existing.namespace not in {'scheduled', 'published'}:
                     raise DomainError('telegram_namespace_unsupported')
                 if request.action in {'edit', 'reschedule'} and len(request.existing.member_ids) > 1:
                     raise DomainError('telegram_album_edit_needs_review')
                 if request.action == 'cancel' and request.existing.namespace != 'scheduled':
                     raise DomainError('cancel_requires_native_queue')
-                if request.action == 'delete' and request.existing.namespace != 'published':
+                if request.surface == 'post' and request.action == 'delete' and request.existing.namespace != 'published':
                     raise DomainError('delete_requires_published')
                 if request.action == 'reschedule' and request.existing.namespace != 'scheduled':
                     raise DomainError('reschedule_requires_native_queue')
             elif request.action not in {'publish', 'forward'}:
                 raise DomainError('remote_item_required')
+            if request.surface == 'story' and request.action == 'publish':
+                allowed = await self._call('story_can_send', peer=entity)
+                remaining = getattr(allowed, 'count_remains', None)
+                if type(remaining) is not int:
+                    raise DomainError('telegram_rpc_failed', 'Telegram did not return a Story capacity result')
+                if remaining <= 0:
+                    raise DomainError('telegram_story_not_allowed', 'Telegram channel Story quota is exhausted')
         except DomainError as exc:
-            return Capability('unsupported', exc.code, evidence='not_canary_verified')
+            return Capability('unsupported', exc.code,
+                              evidence=exc.message if request.surface == 'story' else 'not_canary_verified')
         return Capability('supported', 'Scoped account/target preflight; live canary not performed',
                           evidence='provider_read_preflight_only')
 
@@ -405,6 +448,36 @@ class TelegramAdapter:
                           entities_json=canonical(from_native(text, getattr(next((m for m in members if getattr(m, 'message', '')), members[0]), 'entities', ()))))
         return replace(item, fingerprint=identity(item))
 
+    async def _story_exact(self, entity, ident: str) -> RemoteItem | None:
+        if not str(ident).isdecimal() or int(ident) <= 0:
+            raise DomainError('telegram_story_id_invalid')
+        result = await self._call('story_by_id', peer=entity, id=[int(ident)])
+        stories = getattr(result, 'stories', None)
+        if not isinstance(stories, (list, tuple)) or len(stories) > 1:
+            raise OutcomeUnknown('incomplete_readback')
+        if not stories:
+            return None
+        story = stories[0]
+        if type(getattr(story, 'id', None)) is not int or str(story.id) != str(ident):
+            raise OutcomeUnknown('telegram_readback_identity_mismatch')
+        if type(story).__name__ == 'StoryItemDeleted':
+            return None
+        if type(story).__name__ != 'StoryItem':
+            raise OutcomeUnknown('incomplete_readback')
+        provider_media = _media(story)
+        if len(provider_media) != 1:
+            raise OutcomeUnknown('incomplete_readback')
+        text = getattr(story, 'caption', None) or ''
+        username = getattr(entity, 'username', None)
+        url = (f'https://t.me/{username}/s/{ident}'
+               if isinstance(username, str) and re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{3,31}', username)
+               else None)
+        item = RemoteItem(str(ident), 'story', text, '', timestamp(self.clock()),
+                          native_target=peer_key(entity), provider_media=provider_media,
+                          member_ids=(str(ident),), url=url,
+                          entities_json=canonical(from_native(text, getattr(story, 'entities', ()) or ())))
+        return replace(item, fingerprint=identity(item))
+
     async def _exact(self, entity, remote: RemoteItem):
         if remote.namespace == 'scheduled':
             raw = await self._scheduled(entity)
@@ -480,10 +553,14 @@ class TelegramAdapter:
     async def prepare(self, request: ProviderRequest, hooks: Hooks) -> Prepared:
         capability = await self.inspect(request)
         if capability.status != 'supported':
-            raise DomainError(capability.reason, next_action='contact_owner')
+            raise DomainError(capability.reason,
+                              capability.evidence if request.surface == 'story' else None,
+                              'none' if request.surface == 'story' else 'contact_owner')
         state = {}
         if request.existing:
-            current = await self._exact(await self._entity(request.native_target), request.existing)
+            entity = await self._entity(request.native_target)
+            current = (await self._story_exact(entity, request.existing.native_id) if request.surface == 'story'
+                       else await self._exact(entity, request.existing))
             if current is None:
                 raise DomainError('remote_item_missing', next_action='refresh')
             self._same_existing(request.existing, current)
@@ -498,7 +575,8 @@ class TelegramAdapter:
         state = json.loads(prepared.state_json)
         existing = r.existing
         if existing:
-            current = await self._exact(entity, existing)
+            current = (await self._story_exact(entity, existing.native_id) if r.surface == 'story'
+                       else await self._exact(entity, existing))
             if current is None:
                 raise DomainError('remote_item_missing', next_action='refresh')
             self._same_existing(existing, current)
@@ -575,7 +653,15 @@ class TelegramAdapter:
         if r.topic_root_id:
             await self._topic(entity, r.topic_root_id)
             reply_to = self.tl.type('InputReplyToMessage', reply_to_msg_id=int(r.topic_root_id), top_msg_id=int(r.topic_root_id))
-        if r.action == 'forward':
+        if r.surface == 'story':
+            if r.action == 'publish':
+                kind, values = 'story_send', dict(
+                    peer=entity, media=compiled_media[0], caption=text, entities=native_entities,
+                    privacy_rules=[self.tl.type('InputPrivacyValueAllowAll')],
+                    random_id=random_ids[0], period=86400)
+            else:
+                kind, values = 'story_delete', dict(peer=entity, id=[int(existing.native_id)])
+        elif r.action == 'forward':
             kind, values = 'forward', dict(from_peer=source_entity, id=[int(i) for i in state['source']['ids']],
                 random_id=random_ids, to_peer=entity, schedule_date=schedule, drop_author=False, drop_media_captions=False)
         elif r.action in {'cancel', 'delete'}:
@@ -611,10 +697,10 @@ class TelegramAdapter:
         response = await self._call(kind, **values)
         if not ids:
             mapping = {getattr(u, 'random_id', None): getattr(u, 'id', None) for u in getattr(response, 'updates', [])
-                       if type(u).__name__ == 'UpdateMessageID'}
+                       if type(u).__name__ == ('UpdateStoryID' if r.surface == 'story' else 'UpdateMessageID')}
             ids = [str(mapping[n]) for n in random_ids if type(mapping.get(n)) is int and mapping[n] > 0]
             if len(ids) != len(random_ids):
-                if len(random_ids) == 1 and type(response).__name__ == 'UpdateShortSentMessage':
+                if r.surface == 'post' and len(random_ids) == 1 and type(response).__name__ == 'UpdateShortSentMessage':
                     ids = [_id(response)]
                 else:
                     raise OutcomeUnknown('telegram_response_identity_missing')
@@ -637,7 +723,8 @@ class TelegramAdapter:
             checkpoint['media'] = recovery['media']
         await hooks.checkpoint('telegram_response', saved_checkpoint(r, **checkpoint))
         try:
-            return await self._observe(r, checkpoint, hooks)
+            observe = self._observe_story if r.surface == 'story' else self._observe
+            return await observe(r, checkpoint, hooks)
         except OutcomeUnknown as exc:
             # If the crash preceded the original send, this replay sent the
             # post with freshly staged media. Only that exact binding may differ.
@@ -645,7 +732,26 @@ class TelegramAdapter:
                 raise
             checkpoint['media'] = staged_media
             await hooks.checkpoint('telegram_response', saved_checkpoint(r, **checkpoint))
-            return await self._observe(r, checkpoint, hooks)
+            return await observe(r, checkpoint, hooks)
+
+    async def _observe_story(self, r, checkpoint, hooks):
+        await hooks.emit_progress('reading_back', 'started', 'Reading exact Telegram Story ID')
+        ids = checkpoint.get('ids') or []
+        if len(ids) != 1:
+            raise OutcomeUnknown('telegram_response_identity_missing')
+        item = await self._story_exact(await self._entity(r.native_target), ids[0])
+        if r.action == 'delete':
+            if item is not None:
+                raise OutcomeUnknown('telegram_deletion_unconfirmed')
+            return Observation('deleted', (replace(r.existing, observed_at=timestamp(self.clock())),))
+        if item is None:
+            raise OutcomeUnknown('incomplete_readback')
+        if not telegram_content_matches(r.content_json, item.text,
+                                        json.loads(item.entities_json), telegram_text_limit(r)):
+            raise OutcomeUnknown('telegram_entities_readback_mismatch')
+        if item.provider_media[0].startswith('document:') != (r.assets[0].role == 'video'):
+            raise OutcomeUnknown('media_identity_or_order_mismatch')
+        return Observation('published', (bind_media(r, item, checkpoint['media']),))
 
     async def _observe(self, r, checkpoint, hooks):
         await hooks.emit_progress('reading_back', 'started', 'Reading exact native Telegram identities')
@@ -701,7 +807,8 @@ class TelegramAdapter:
             state = canonical({'source': saved.get('source')})
             return await self.execute(Prepared(request, Capability('supported', 'replay'), state),
                                       hooks, recovery=saved)
-        return await self._observe(request, saved, hooks)
+        observe = self._observe_story if request.surface == 'story' else self._observe
+        return await observe(request, saved, hooks)
 
     async def _downloaded_items(self, groups, namespace: str, target: str):
         items, downloads = [], []
@@ -719,6 +826,9 @@ class TelegramAdapter:
         entity = await self._entity(request.native_target)
         if request.kind not in {'scheduled', 'feed', 'item', 'thread'}:
             raise DomainError('telegram_read_needs_review', next_action='contact_owner')
+        if request.kind == 'item' and request.namespace == 'story':
+            item = await self._story_exact(entity, request.native_item or '')
+            return ReadPage((item,) if item else ())
         if request.kind == 'thread':
             if not request.topic_root_id:
                 raise DomainError('telegram_topic_required')

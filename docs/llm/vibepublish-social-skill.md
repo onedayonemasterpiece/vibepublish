@@ -28,6 +28,7 @@ Normal publication is the default. Do not turn delivery into a manual investigat
 10. Finish with the actual result: **доставлено во все сети**,
     **доставлено в N из M**, or **не доставлено**.
     Partial delivery is a normal finished result: Telegram, VK and MAX are independent.
+    Telegram channel stories use `surface:"story"` like VK stories: one photo/MP4, optional caption, no scheduling.
 11. Never ask the user to inspect a provider manually. Never invoke recovery or
     resubmission commands to complete this recipe.
 

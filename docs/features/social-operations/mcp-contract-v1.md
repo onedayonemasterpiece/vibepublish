@@ -1,5 +1,7 @@
 # MCP contract v1.5 — native queues, incremental receipts and visual choice
 
+Telegram channel Stories W5 (Draft / Not confirmed by user): `vibepublish_publish` uses the same `surface="story"` and single image/MP4 media as VK Stories, allows Telegram caption text, and refuses native scheduling; exact-ID readback and deletion use existing `item_ref`/`publication_update`. See [canonical requirements](telegram-channel-stories.md).
+
 ## Bounded recovery and owner edit administration — 2026-10-11
 
 Requirements: **Fixed** by the owner's request to complete the edited-photo publication and explicitly grant edit access to one channel. Implementation: **Not confirmed by user**; see [incident](../../reports/incidents/INC-2026-10-11-known-vk-effect-and-edit-recovery.md).
