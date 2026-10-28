@@ -396,7 +396,7 @@ class Application:
             for d in page:
                 row = bindings.get(d['alias'])
                 if row:
-                    surfaces = ('post', 'story') if row['provider'] == 'vk' else ('post',)
+                    surfaces = ('post', 'story') if row['provider'] in {'vk', 'telegram'} else ('post',)
                     for surface in surfaces:
                         live_verified = self._recent_verified_capability(db, actor, row, surface)
                         preview_verified = surface == 'post' and self._recent_preview_preflight(db, actor, row)
@@ -558,7 +558,25 @@ class Application:
                 **({'admission_error': admission_error} if admission_error else {})}
 
     def _story_link(self, db, actor, binding, target):
-        """Resolve an exact readable wall identity without creating source access."""
+        """Freeze a Telegram HTTPS URL or resolve VK's already scoped wall post."""
+        if binding['provider'] == 'telegram':
+            if (target.get('surface') != 'story'
+                    or target.get('delivery', {'kind': 'now'})['kind'] != 'now'):
+                raise DomainError('telegram_story_link_requires_immediate_story')
+            from urllib.parse import urlsplit
+            url = target['story_link'].get('url', '')
+            try:
+                parts = urlsplit(url)
+                if (parts.scheme != 'https' or not parts.hostname
+                        or parts.username or parts.password or '\\' in url
+                        or any(ord(ch) <= 32 for ch in url)):
+                    raise ValueError()
+            except (ValueError, TypeError):
+                raise DomainError('telegram_story_link_invalid',
+                                  'Telegram story link needs an absolute HTTPS URL') from None
+            # MediaAreaUrl has no customizable text: the optional input label
+            # remains in the frozen caller intent, not a claimed native sticker.
+            return {'story_link_json': canonical({'url': url})}
         if (binding['provider'] != 'vk' or target.get('surface') != 'story'
                 or target.get('delivery', {'kind': 'now'})['kind'] != 'now'):
             raise DomainError('story_link_requires_immediate_vk_story')

@@ -272,7 +272,10 @@ tool("get_started", "Get the versioned skill, allowed aliases and current capabi
 tool("publish", "Create one publication now or in native provider queues; return accepted progress without waiting for providers. No local scheduler. Preview does not send. An explicit execute publication with a visual defaults to eligible automatic selection: omitted delivery means now; delivery at uses a native queue. Preview and explicit human selection remain gated.",
     obj({"to": array(ALIAS, 1, 20), "content": ref("content"), "media": array(ref("media"), 0, 20),
         "linked_story": obj({"media": array(ref("media"), 1, 1), "text": enum("read", "more")}, ("media", "text")),
-        "story_link": obj({"item_ref": {"oneOf": [ID, URL]}, "text": enum("read", "more")}, ("item_ref", "text")),
+        "story_link": {"oneOf": [
+            obj({"item_ref": {"oneOf": [ID, URL]}, "text": enum("read", "more")}, ("item_ref", "text")),
+            obj({"url": URL, "text": string(120)}, ("url",)),
+        ]},
         "thread_ref": {"oneOf": [ID, TELEGRAM_THREAD_URL]},
         "surface": enum("post", "story", "message", "album", "video", "short_video"),
         "delivery": ref("delivery"), "mode": enum("execute", "preview"),
