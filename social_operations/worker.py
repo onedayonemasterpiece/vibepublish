@@ -23,7 +23,7 @@ TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'ca
 TRANSIENT_ERRORS = frozenset({
     'provider_preflight_failed', 'provider_preflight_timeout',
     'provider_command_failed', 'provider_read_deadline', 'provider_reconcile_pending', 'receipt_lost',
-    'telegram_rpc_failed', 'telegram_cooldown', 'telegram_queue_response_invalid',
+    'telegram_rpc_failed', 'telegram_transport_unhealthy', 'telegram_cooldown', 'telegram_queue_response_invalid',
     'telegram_history_response_invalid', 'telegram_thread_response_invalid',
     'telegram_response_identity_missing',
     'vk_api_failed', 'vk_http_failed', 'vk_transport_failed', 'vk_cooldown',
@@ -393,7 +393,24 @@ class Worker:
                 code = (json.loads(child['result']).get('missing_checks') or [''])[0]
                 if not self.transient(code) or now >= self.deadline(op, child):
                     continue
-                waits.append(min(now + delay, self.deadline(op, child)))
+                wait = delay
+                if code == 'telegram_cooldown':
+                    # The RPC already recorded safe retry_after_s in the existing
+                    # provider_diagnostic event; no second retry ledger or timer.
+                    for event in db.execute(
+                            "SELECT body FROM events WHERE operation_id=? ORDER BY seq DESC LIMIT 80",
+                            (op['id'],)):
+                        message = json.loads(event[0]).get('message', '')
+                        if not message.startswith('provider_diagnostic '):
+                            continue
+                        info = json.loads(message.removeprefix('provider_diagnostic '))
+                        if (info.get('attempt_id') == child['id']
+                                and info.get('provider') == 'telegram'
+                                and info.get('status') == 'failed'
+                                and type(info.get('retry_after_s')) in (int, float)):
+                            wait = max(wait, info['retry_after_s'])
+                            break
+                waits.append(min(now + wait, self.deadline(op, child)))
                 db.execute("UPDATE attempts SET state=?,stage='waiting_connection' WHERE id=?",
                            ('running' if child['dispatched'] else 'accepted', child['id']))
             if not waits:

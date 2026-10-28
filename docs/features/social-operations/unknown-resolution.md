@@ -1,6 +1,6 @@
 # Publication recovery: automatic worker outcome
 
-Status: **W1 source change; offline tests only.** Live provider acceptance and deployment are separate.
+Status: **W1 + W4 source changes; offline tests only.** Live provider acceptance and deployment are separate.
 
 ## Normal publishing path
 
@@ -11,13 +11,24 @@ schedule minus its native submission lead. Waiting for the connection lane and
 preflight consume the same budget; retries never move the deadline.
 
 - Before the dispatch marker: only explicitly classified transient provider/transport
-  codes retry with fixed age-based backoff (5/15/30/60 seconds). Invalid input, expired native lead time, missing authorization
-  and revoked rights produce an explicit failure. A failing provider never blocks
+  codes retry with fixed age-based backoff (5/15/30/60 seconds).
+  A Telegram FloodWait/SlowModeWait is not retried until its recorded
+  `retry_after_s` has elapsed (or the ordinary backoff, whichever is later).
+  This uses the existing sanitized provider-diagnostic event, not a new timer.
+  Invalid input, expired native lead time, missing authorization and revoked
+  rights produce an explicit failure. A failing provider never blocks
   an authorized sibling.
 - After the dispatch marker: the same attempt goes to the adapter's
-  `reconcile`, never to a fresh `execute`. VK's adapter is responsible for
-  searching its original postponed item and, if appropriate, reusing the
-  original `guid`; Telegram and MAX retain their own exact recovery behavior.
+  `reconcile`, never to a fresh independent `execute`. VK's adapter searches
+  its original postponed item and may reuse its original `guid`. For Telegram
+  publish/forward, the checkpoint stores `random_id` values before the send:
+  if a response was lost before native message IDs were saved, reconcile replays
+  the original MTProto request using **those same random IDs**. Telegram
+  deduplicates them across account sessions and returns the original message
+  identity. The adapter then reads the exact native history/queue item by ID,
+  never by text similarity. Already checkpointed IDs are only read, not resent.
+  An unresolved response remains within W1's bounded retry/deadline and ends
+  with a clear refusal if no native ID is recovered.
 - A saved native post ID proves provider acceptance. The worker re-reads that ID
   while time remains; if readback is still unavailable at the deadline, the
   published/scheduled result contains the original ID, a URL only if provided by
