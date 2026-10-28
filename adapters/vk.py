@@ -641,7 +641,8 @@ class VKAdapter:
             asset = r.assets[0]
             await hooks.emit_progress('uploading', 'started', 'Staging VK Story image')
             link = self._story_link(r)
-            upload_params = {'group_id': group}
+            # add_to_news=1 publishes the story; without it VK only saves an invisible story.
+            upload_params = {'group_id': group, 'add_to_news': 1}
             if link:
                 source = await self._exact(link['target'], link['id'], 'published')
                 if source is None:
