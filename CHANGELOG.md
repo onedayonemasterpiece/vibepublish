@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix W5 regression in existing Telegram emoji catalog and destination discovery: requests without `surface` use the pre-existing post rights path, while explicit Story requests keep channel Story permissions. Add actual Telethon wire roundtrips for all four Story RPCs (21 total), restoring 32 emoji/SDK regression cases; focused offline test files pass without Telegram requests or deployment.
+
 - W5 Telegram channel Stories (Done in code / Not confirmed by user): one photo or MP4 with optional caption, optional arbitrary HTTPS clickable URL via Telegram `MediaAreaUrl` (config-gated `stories_area_url_max`), and exact URL readback. Preserve the VK wall-only `story_link.item_ref` contract. Reuse existing channel rights/quota check, `random_id` recovery, Story ID/permalink, exact delete and independent worker outcome. Reject scheduling. Move Telegram requirements into canonical `stories.md`, delete duplicated page. Offline mocks only; no real Telegram send or deployment.
 - VK story photos are sent as the compact JPEG wire copy: phone photos sanitized to PNG exceeded VK's 10 MB story limit and failed with `vk_story_media_invalid`.
 

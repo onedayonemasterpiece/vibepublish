@@ -36,6 +36,9 @@ def cases():
                 document_id=int(e["document_id"])) for e in ENTITY_SPECS]
     media = t.InputMediaPhoto(id=t.InputPhoto(id=3, access_hash=4, file_reference=b"fixture"))
     reply_to = t.InputReplyToMessage(reply_to_msg_id=3, top_msg_id=3)
+    story_area = t.MediaAreaUrl(
+        coordinates=t.MediaAreaCoordinates(x=50.0, y=80.0, w=70.0, h=10.0, rotation=0.0),
+        url='https://example.org/story')
     album = [t.InputSingleMedia(media=media, random_id=11, message=TEXT, entities=entities),
              t.InputSingleMedia(media=media, random_id=12, message="", entities=[])]
     values = {
@@ -56,6 +59,13 @@ def cases():
         "cancel": (f.messages.DeleteScheduledMessagesRequest, dict(peer=peer, id=[7,8])),
         "delete_channel": (f.channels.DeleteMessagesRequest, dict(channel=channel, id=[7,8])),
         "delete_messages": (f.messages.DeleteMessagesRequest, dict(id=[7,8], revoke=True)),
+        "story_can_send": (f.stories.CanSendStoryRequest, dict(peer=peer)),
+        "story_send": (f.stories.SendStoryRequest, dict(
+            peer=peer, media=media, random_id=13,
+            privacy_rules=[t.InputPrivacyValueAllowAll()], period=86400,
+            caption=TEXT, entities=entities, media_areas=[story_area])),
+        "story_by_id": (f.stories.GetStoriesByIDRequest, dict(peer=peer, id=[19])),
+        "story_delete": (f.stories.DeleteStoriesRequest, dict(peer=peer, id=[19])),
     }
     return entities, values
 

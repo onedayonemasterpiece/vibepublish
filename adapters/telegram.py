@@ -227,7 +227,7 @@ class TelegramAdapter:
             raise DomainError('provider_access_denied')
         if (request.scheduled_at or (request.existing and request.existing.namespace == 'scheduled')) and self.account_type != 'mtproto_user':
             raise DomainError('telegram_bot_native_schedule_unsupported')
-        if request.surface == 'story':
+        if getattr(request, 'surface', 'post') == 'story':
             if self.account_type != 'mtproto_user' or not getattr(entity, 'broadcast', False):
                 raise DomainError('telegram_story_not_allowed', 'Stories require a channel and an MTProto user account')
             required = 'delete_stories' if request.action == 'delete' else 'post_stories'
@@ -238,7 +238,7 @@ class TelegramAdapter:
         if getattr(entity, 'broadcast', False):
             permissions = await self.client.get_permissions(entity, me)
             if not (getattr(permissions, 'is_creator', False) or getattr(permissions, required, False)):
-                if request.surface == 'story':
+                if getattr(request, 'surface', 'post') == 'story':
                     raise DomainError('telegram_story_not_allowed', f'Telegram channel requires {required} admin permission')
                 raise DomainError('provider_access_denied')
         elif type(entity).__name__.startswith('Chat') and not getattr(entity, 'megagroup', False):
