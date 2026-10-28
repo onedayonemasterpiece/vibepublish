@@ -230,7 +230,9 @@ class TelegramAdapter:
         if getattr(request, 'surface', 'post') == 'story':
             if self.account_type != 'mtproto_user' or not getattr(entity, 'broadcast', False):
                 raise DomainError('telegram_story_not_allowed', 'Stories require a channel and an MTProto user account')
-            required = 'delete_stories' if request.action == 'delete' else 'post_stories'
+            # Telethon's ParticipantPermissions has no story rights; Telegram itself answers
+            # canSendStory/sendStory/deleteStories and its refusals are mapped in _rpc_error.
+            return entity
         elif request.action in {'edit', 'reschedule', 'cancel', 'delete'}:
             required = 'delete_messages' if request.action in {'cancel', 'delete'} else 'edit_messages'
         else:

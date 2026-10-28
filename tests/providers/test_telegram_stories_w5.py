@@ -23,6 +23,10 @@ class BoostsRequiredError(Exception):
     pass
 
 
+class ChatAdminRequiredError(Exception):
+    pass
+
+
 class StoryClient(TelegramClient):
     """Emulates only the Stories RPC/response contract, including random_id deduplication."""
 
@@ -31,6 +35,7 @@ class StoryClient(TelegramClient):
         self.story_quota = 2
         self.story_link_limit = 3.0  # Telethon JsonNumber.value is a float
         self.boosts_required = False
+        self.admin_required = False
         self.stories = {}
         self.random_stories = {}
         self.next_story = 500
@@ -42,6 +47,8 @@ class StoryClient(TelegramClient):
             self.calls.append((name, req))
             if self.boosts_required:
                 raise BoostsRequiredError('fixture channels need boosts')
+            if self.admin_required:
+                raise ChatAdminRequiredError('fixture account lacks post_stories')
             return NS(count_remains=self.story_quota)
         if name == 'GetAppConfigRequest':
             self.calls.append((name, req))
@@ -296,7 +303,9 @@ async def test_ineligible_story_rejected_before_upload_or_effect(kind):
     if kind == 'quota':
         client.story_quota = 0
     if kind == 'rights':
-        client.permissions = NS(is_creator=False, post_stories=False)
+        # Telegram, not Telethon's ParticipantPermissions, reports story rights.
+        client.permissions = NS(is_creator=False, post_messages=True)
+        client.admin_required = True
     if kind == 'schedule':
         changes['scheduled_at'] = timestamp(NOW + 3600)
     if kind == 'two_media':
@@ -413,3 +422,13 @@ async def test_worker_delivers_telegram_and_vk_stories_independently(tmp_path, t
     assert receipt['state'] == ('verified' if telegram_allowed else 'partial'), receipt
     assert client.story_sends == (1 if telegram_allowed else 0) and vk.effects == 1
     assert sum(d['observed'] == 'published' for d in receipt['deliveries']) == (2 if telegram_allowed else 1)
+
+
+@pytest.mark.asyncio
+async def test_story_admin_without_creator_is_not_rejected_locally():
+    """Telethon permissions lack post_stories; a non-creator admin must reach Telegram's own check."""
+    client, adapter, journal = build()
+    client.permissions = NS(is_creator=False, post_messages=True)
+    prepared = await adapter.prepare(story_request(), journal.hooks)
+    assert any(name == 'CanSendStoryRequest' for name, _ in client.calls)
+    assert prepared.request.surface == 'story'
