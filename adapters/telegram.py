@@ -163,6 +163,10 @@ class TelegramAdapter:
         name = type(exc).__name__
         code = ('telegram_cooldown' if name in {'FloodWaitError', 'SlowModeWaitError'} else
                 'telegram_auth_required' if name in {'AuthKeyUnregisteredError', 'SessionRevokedError'} else
+                # Telegram rejected the file itself: retrying the same bytes cannot help.
+                'telegram_media_invalid' if name in {'PhotoSaveFileInvalidError', 'PhotoInvalidDimensionsError',
+                                                     'PhotoExtInvalidError', 'PhotoInvalidError',
+                                                     'ImageProcessFailedError'} else
                 'telegram_rpc_failed')
         return DomainError(code, next_action='contact_owner')
 
@@ -515,8 +519,13 @@ class TelegramAdapter:
         if r.action == 'publish' or (r.action == 'edit' and r.assets and tuple(a.sha256 for a in r.assets) != tuple(existing.media_hashes)):
             for ordinal, asset in enumerate(r.assets):
                 await hooks.emit_progress('uploading', 'started', f'Staging media {ordinal+1}/{len(r.assets)}')
-                stream = io.BytesIO(asset.data)
-                extension = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'application/pdf':'pdf', 'image/vnd.djvu':'djvu', 'video/mp4':'mp4'}[asset.mime]
+                data, mime = asset.data, asset.mime
+                if asset.role not in {'document', 'video'}:
+                    # Telegram photos are limited to 10 MB; send the same compact JPEG wire copy as VK.
+                    from adapters.vk_photo_wire import photo_wire_bytes
+                    data, mime = await asyncio.to_thread(photo_wire_bytes, data, mime)
+                stream = io.BytesIO(data)
+                extension = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'application/pdf':'pdf', 'image/vnd.djvu':'djvu', 'video/mp4':'mp4'}[mime]
                 stream.name = f'verified-{ordinal+1}.{extension}'
                 if asset.role=='document' and asset.mime in {'application/pdf','image/vnd.djvu'} and asset.alt_text:
                     candidate=asset.alt_text
@@ -524,7 +533,7 @@ class TelegramAdapter:
                         stream.name=candidate
                 from social_operations.provider_diagnostics import provider_call
                 with provider_call('telegram', 'upload_file'):
-                    uploaded = await self.client.upload_file(stream, file_size=asset.size, file_name=stream.name)
+                    uploaded = await self.client.upload_file(stream, file_size=len(data), file_name=stream.name)
                 if asset.role in {'document', 'video'}:
                     attributes=[self.tl.type('DocumentAttributeFilename', file_name=stream.name)]
                     if asset.role == 'video':
