@@ -25,3 +25,5 @@ async def test_large_png_story_photo_is_uploaded_as_jpeg(monkeypatch):
     transport._post = post
     assert await transport.upload_story_photo('https://pu.vk.com/story', png, 'image/png') == 'opaque'
     assert sent['mime'] == 'image/jpeg' and len(sent['data']) <= 10 * 1024 * 1024
+    with Image.open(io.BytesIO(sent['data'])) as image:
+        assert max(image.size) == 1920
