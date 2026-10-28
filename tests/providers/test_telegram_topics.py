@@ -282,6 +282,8 @@ def replace_ns(value, **changes):
 @pytest.mark.asyncio
 async def test_lost_response_reconcile_does_not_duplicate_topic_send():
     adapter, client, journal = setup()
+    from tests.providers.test_telegram_lost_response_w4 import DeduplicatingClient
+    adapter.client = DeduplicatingClient(client)
     r = topic_request()
     prepared = await adapter.prepare(r, journal.hooks)
     client.after_mutation = lambda _: (_ for _ in ()).throw(OSError('lost response'))
@@ -289,11 +291,10 @@ async def test_lost_response_reconcile_does_not_duplicate_topic_send():
         await adapter.execute(prepared, journal.hooks)
     assert client.effects == 1
     client.after_mutation = None
-    # The last durable checkpoint before the response contains stable random IDs but no native IDs,
-    # so core correctly refuses to retry blindly. A provider response checkpoint is needed to reconcile.
-    from social_operations.domain import OutcomeUnknown
-    with pytest.raises(OutcomeUnknown):
-        await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
+    # The original random_id resolves the same message after its RPC response was lost.
+    observation = await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
+    assert observation.observed == 'published'
+    assert observation.items[0].reply_to_native_id == TOPIC
     assert client.effects == 1
 
 

@@ -390,27 +390,12 @@ class Worker:
                     continue
                 if child['state'] != 'blocked':
                     continue
-                code = (json.loads(child['result']).get('missing_checks') or [''])[0]
+                failure = json.loads(child['result'])
+                code = (failure.get('missing_checks') or [''])[0]
                 if not self.transient(code) or now >= self.deadline(op, child):
                     continue
-                wait = delay
-                if code == 'telegram_cooldown':
-                    # The RPC already recorded safe retry_after_s in the existing
-                    # provider_diagnostic event; no second retry ledger or timer.
-                    for event in db.execute(
-                            "SELECT body FROM events WHERE operation_id=? ORDER BY seq DESC LIMIT 80",
-                            (op['id'],)):
-                        message = json.loads(event[0]).get('message', '')
-                        if not message.startswith('provider_diagnostic '):
-                            continue
-                        info = json.loads(message.removeprefix('provider_diagnostic '))
-                        if (info.get('attempt_id') == child['id']
-                                and info.get('provider') == 'telegram'
-                                and info.get('status') == 'failed'
-                                and type(info.get('retry_after_s')) in (int, float)):
-                            wait = max(wait, info['retry_after_s'])
-                            break
-                waits.append(min(now + wait, self.deadline(op, child)))
+                waits.append(min(now + max(delay, failure.get('retry_after_s', 0)),
+                                 self.deadline(op, child)))
                 db.execute("UPDATE attempts SET state=?,stage='waiting_connection' WHERE id=?",
                            ('running' if child['dispatched'] else 'accepted', child['id']))
             if not waits:
@@ -762,9 +747,12 @@ class Worker:
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
             row = db.execute('SELECT dispatched FROM attempts WHERE id=?', (child['id'],)).fetchone()
+            result = {'missing_checks': [final.code], 'reason': final.message}
+            if final.code == 'telegram_cooldown' and type(getattr(error, 'retry_after_s', None)) is int:
+                result['retry_after_s'] = error.retry_after_s
             db.execute("UPDATE attempts SET state='blocked',stage='blocked',observed=?,result=? WHERE id=?",
                        ('unknown' if row['dispatched'] else 'not_attempted',
-                        canonical({'missing_checks': [final.code], 'reason': final.message}), child['id']))
+                        canonical(result), child['id']))
             db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(final.output()), op['id']))
             self.store.event(db, op['id'], 'finished', 'blocked', final.message, child['alias'])
 

@@ -1,6 +1,7 @@
 """W4: Telegram random_id replay after lost RPC response; all providers are scripted."""
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace as NS
 
 import pytest
@@ -9,7 +10,7 @@ from adapters.fake import FakeProvider
 from adapters.telegram import TelegramAdapter
 from adapters.telegram_resilient import ResilientTelegramAdapter
 from social_operations.domain import DomainError, timestamp
-from social_operations.provider_diagnostics import diagnostic_scope, provider_call
+from social_operations.provider_diagnostics import diagnostic_scope
 from social_operations.service import Application
 from social_operations.storage import Store
 from social_operations.worker import Worker
@@ -17,11 +18,20 @@ from tests.providers.scripted import ScriptedTL, TelegramClient, obj
 from tests.providers.test_native_adapters import NOW, Journal, asset, request
 
 
-class DeduplicatingClient(TelegramClient):
-    """Emulate Telegram's permanent per-peer random_id deduplication."""
-    def __init__(self):
-        super().__init__()
-        self.sent_ids = {}
+class DeduplicatingClient:
+    """Wrap a scripted Telegram client with Telegram's random_id deduplication."""
+    def __init__(self, inner=None):
+        object.__setattr__(self, '_inner', inner or TelegramClient())
+        object.__setattr__(self, 'sent_ids', {})
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    def __setattr__(self, name, value):
+        if name in {'_inner', 'sent_ids'}:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._inner, name, value)
 
     async def __call__(self, req):
         name = type(req).__name__
@@ -34,12 +44,12 @@ class DeduplicatingClient(TelegramClient):
                                    for i in random_ids])
             previous = self.next_id
             try:
-                return await super().__call__(req)
+                return await self._inner(req)
             finally:
                 for offset, random_id in enumerate(random_ids, start=1):
                     if self.next_id >= previous + offset:
                         self.sent_ids[random_id] = previous + offset
-        return await super().__call__(req)
+        return await self._inner(req)
 
 
 @pytest.mark.asyncio
@@ -136,6 +146,7 @@ async def test_resilient_uses_shared_provider_call_to_keep_floodwait_retry_after
         with pytest.raises(DomainError) as exc:
             await adapter._call('scheduled', peer=object(), hash=0)
         assert exc.value.code == 'telegram_cooldown'
+        assert exc.value.retry_after_s == FloodWaitError.seconds
         assert client.calls == 1
         assert events[-1]['provider_code'] == 420
         assert events[-1]['retry_after_s'] == FloodWaitError.seconds
@@ -155,9 +166,9 @@ class FloodOnceProvider(FakeProvider):
     async def prepare(self, request, hooks):
         if not self.flooded:
             self.flooded = True
-            with provider_call('telegram', 'scheduled') as diagnostic:
-                diagnostic.update(provider_code=420, retry_after_s=17)
-                raise DomainError('telegram_cooldown')
+            error = DomainError('telegram_cooldown')
+            error.retry_after_s = 17
+            raise error
         return await super().prepare(request, hooks)
 
 
@@ -177,6 +188,9 @@ async def test_worker_respects_floodwait_before_retrying(tmp_path):
     with store.connection() as db:
         scheduled_at = db.execute('SELECT lease_until FROM operations WHERE id=?',
                                   (receipt['operation_id'],)).fetchone()[0]
+        attempt = db.execute('SELECT result FROM attempts WHERE operation_id=?',
+                             (receipt['operation_id'],)).fetchone()[0]
+    assert json.loads(attempt)['retry_after_s'] == 17
     assert scheduled_at >= now[0] + 17
     assert provider.count('execute') == 0
 

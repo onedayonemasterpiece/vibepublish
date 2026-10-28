@@ -178,7 +178,12 @@ class TelegramAdapter:
                 diagnostic.update(error_type=type(exc).__name__,
                                   provider_code=getattr(exc, 'code', None),
                                   retry_after_s=getattr(exc, 'seconds', None))
-                raise self._rpc_error(kind, exc) from None
+                failure = self._rpc_error(kind, exc)
+                if failure.code == 'telegram_cooldown':
+                    seconds = getattr(exc, 'seconds', None)
+                    if type(seconds) is int and 0 <= seconds <= 86400:
+                        failure.retry_after_s = seconds
+                raise failure from None
 
     async def _entity(self, target: str):
         if not re.fullmatch(r'-?[1-9][0-9]*', target):

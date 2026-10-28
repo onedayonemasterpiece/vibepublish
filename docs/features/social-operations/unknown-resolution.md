@@ -14,7 +14,9 @@ preflight consume the same budget; retries never move the deadline.
   codes retry with fixed age-based backoff (5/15/30/60 seconds).
   A Telegram FloodWait/SlowModeWait is not retried until its recorded
   `retry_after_s` has elapsed (or the ordinary backoff, whichever is later).
-  This uses the existing sanitized provider-diagnostic event, not a new timer.
+  The adapter attaches the cooldown to its `DomainError`; worker.fail
+  persists it in the same attempt result as `missing_checks`, and the existing
+  retry scheduler reads that result directly. No event-log parsing or new timer.
   Invalid input, expired native lead time, missing authorization and revoked
   rights produce an explicit failure. A failing provider never blocks
   an authorized sibling.
