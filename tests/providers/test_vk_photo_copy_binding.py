@@ -140,7 +140,7 @@ async def test_known_post_id_without_readback_returns_success_and_frozen_hashes(
     assert result.items[0].native_id
     assert result.items[0].media_hashes == tuple(asset.sha256 for asset in r.assets)
     assert t.effects == 1
-    assert any('warning' in str(event) for event in j.events)
+    assert any(event[1] == 'completed' and 'trusting returned ID' in event[2] for event in j.events)
 
 
 
@@ -161,7 +161,7 @@ async def test_known_id_transient_readback_has_one_warning_and_no_second_post(sc
     assert item.native_id
     assert item.url == (None if scheduled else f'https://vk.com/wall-101_{item.native_id}')
     assert item.media_hashes == tuple(asset.sha256 for asset in r.assets)
-    assert len([event for event in j.events if event[1] == 'warning']) == 1
+    assert len([event for event in j.events if 'trusting returned ID' in event[2]]) == 1
     assert t.effects == 1
     assert len([call for call in t.calls if call[0] == 'wall.post']) == 1
 

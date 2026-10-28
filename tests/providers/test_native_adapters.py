@@ -47,6 +47,8 @@ class Journal:
         self.hooks = Hooks(self.emit, self.checkpoint, self.before)
 
     async def emit(self, *args):
+        # Same status contract as Store.event; an invalid status fails in production.
+        assert args[1] in {'started', 'completed', 'failed', 'blocked', 'unknown'}, args
         self.events.append(args)
 
     async def checkpoint(self, transition, state):

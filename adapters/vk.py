@@ -744,7 +744,7 @@ class VKAdapter:
         source = checkpoint.get('source')
         if item is None:
             await hooks.emit_progress(
-                'reading_back', 'warning',
+                'reading_back', 'completed',
                 f'VK readback unavailable for post {checkpoint["id"]}; trusting returned ID')
             # Build fallback item from frozen checkpoint/request data
             fallback = RemoteItem(
@@ -781,7 +781,7 @@ class VKAdapter:
             raise DomainError('vk_readback_identity_mismatch')
         if item.text != plain_text(r, limit=16000) or item.scheduled_at != r.scheduled_at:
             await hooks.emit_progress(
-                'reading_back', 'warning', 'Exact VK post differs in text or schedule; trusting its ID')
+                'reading_back', 'completed', 'Exact VK post differs in text or schedule; trusting its ID')
         item = (bind_media(r, item, checkpoint['media'])
                 if tuple(checkpoint['media']) == item.provider_media
                 else await self._bind_copied_media(r, item, checkpoint, hooks))
