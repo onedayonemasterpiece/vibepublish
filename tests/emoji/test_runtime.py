@@ -204,6 +204,9 @@ async def test_E10_restart_reconciles_without_second_send(runtime,failure):
     c=await register(runtime); await select(runtime,c)
     r=await call(runtime,'publish',{'to':['telegram'],'content':rich()})
     adapter=runtime[3].adapters['telegram']
+    # Scripted MTProto must deduplicate replay by the original random_id.
+    from tests.providers.test_telegram_lost_response_w4 import DeduplicatingClient
+    adapter.client=DeduplicatingClient(runtime[4])
     op=runtime[0].claim('fixture-worker')
     with runtime[0].connection() as db:
         child=dict(db.execute('SELECT * FROM attempts WHERE operation_id=?',(r['operation_id'],)).fetchone())
@@ -222,9 +225,8 @@ async def test_E10_restart_reconciles_without_second_send(runtime,failure):
     with runtime[0].tx() as db:
         db.execute('UPDATE operations SET lease_until=? WHERE id=?',(NOW-1,op['id']))
     await Worker(runtime[0],{'telegram':adapter}).run_once()
-    # A missing response without a native ID stays in automatic reconciliation
-    # until the fixed horizon; a checkpointed native ID completes normally.
-    assert done(runtime,r)['state']==('running' if failure=='no_response' else 'verified'),done(runtime,r)
+    # Either missing RPC response or failed readback recovers the accepted post.
+    assert done(runtime,r)['state']=='verified',done(runtime,r)
     assert runtime[4].effects==1
 
 

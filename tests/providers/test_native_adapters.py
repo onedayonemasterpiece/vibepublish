@@ -129,23 +129,6 @@ async def test_exact_native_publish_and_ordered_uploads(provider, scheduled, ima
 
 
 @pytest.mark.asyncio
-async def test_telegram_lost_response_is_readonly_reconcile_never_blind_retry():
-    adapter, transport, journal = setup('telegram')
-    r = request('telegram')
-    prepared = await adapter.prepare(r, journal.hooks)
-    def dropped(_):
-        raise OSError('Lost mutation response (fixture)')
-    transport.after_mutation = dropped
-    with pytest.raises((DomainError, OSError)):
-        await adapter.execute(prepared, journal.hooks)
-    assert transport.effects == 1
-    for _ in range(2):
-        with pytest.raises(OutcomeUnknown, match='requires observation'):
-            await adapter.reconcile(r, journal.checkpoint_json, journal.hooks)
-    assert transport.effects == 1
-
-
-@pytest.mark.asyncio
 async def test_vk_same_guid_recovers_lost_wall_post_response_without_duplicate_effect():
     adapter, transport, journal = setup('vk')
     r = request('vk', scheduled_at=timestamp(NOW+3600))

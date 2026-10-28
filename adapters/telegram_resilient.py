@@ -189,24 +189,22 @@ class ResilientTelegramAdapter(TelegramAdapter):
             "refresh",
         )
 
-    async def _call(self, kind: str, **values):
-        # Health/reconnect happens before each RPC. The RPC itself is still
-        # exactly-once: a transport exception after submission is never retried.
+    async def _rpc(self, kind: str, **values):
+        # Reconnect only before dispatch; shared base _call records provider_code
+        # and FloodWait retry_after_s without repeating a started RPC.
         await self._ensure_connected("telegram_rpc:" + kind)
-        try:
-            return await self.client(self.tl.request(kind, **values))
-        except DomainError:
-            raise
-        except Exception as exc:
-            name = type(exc).__name__
-            code = (
-                "telegram_cooldown" if name in _COOLDOWN_EXCEPTIONS else
-                "telegram_auth_required" if name in _AUTH_EXCEPTIONS else
-                "telegram_transport_unhealthy" if name in _CONNECTION_EXCEPTIONS else
-                "telegram_rpc_failed"
-            )
-            action = "reauthorize" if code == "telegram_auth_required" else "contact_owner"
-            raise _diagnostic(code, exc, "telegram_rpc:" + kind, next_action=action) from None
+        return await super()._rpc(kind, **values)
+
+    def _rpc_error(self, kind: str, exc: Exception) -> DomainError:
+        name = type(exc).__name__
+        code = (
+            "telegram_cooldown" if name in _COOLDOWN_EXCEPTIONS else
+            "telegram_auth_required" if name in _AUTH_EXCEPTIONS else
+            "telegram_transport_unhealthy" if name in _CONNECTION_EXCEPTIONS else
+            "telegram_rpc_failed"
+        )
+        action = "reauthorize" if code == "telegram_auth_required" else "contact_owner"
+        return _diagnostic(code, exc, "telegram_rpc:" + kind, next_action=action)
 
     async def inspect(self, request) -> Capability:
         try:
@@ -242,10 +240,10 @@ class ResilientTelegramAdapter(TelegramAdapter):
         except Exception as exc:
             raise _diagnostic("telegram_transport_unhealthy", exc, "prepare") from None
 
-    async def execute(self, prepared, hooks):
+    async def execute(self, prepared, hooks, *, recovery=None):
         await self._ensure_connected("execute")
         try:
-            return await super().execute(prepared, hooks)
+            return await super().execute(prepared, hooks, recovery=recovery)
         except DomainError:
             raise
         except Exception as exc:

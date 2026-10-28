@@ -23,7 +23,7 @@ TERMINAL = {'verified', 'scheduled', 'blocked', 'failed', 'outcome_unknown', 'ca
 TRANSIENT_ERRORS = frozenset({
     'provider_preflight_failed', 'provider_preflight_timeout',
     'provider_command_failed', 'provider_read_deadline', 'provider_reconcile_pending', 'receipt_lost',
-    'telegram_rpc_failed', 'telegram_cooldown', 'telegram_queue_response_invalid',
+    'telegram_rpc_failed', 'telegram_transport_unhealthy', 'telegram_cooldown', 'telegram_queue_response_invalid',
     'telegram_history_response_invalid', 'telegram_thread_response_invalid',
     'telegram_response_identity_missing',
     'vk_api_failed', 'vk_http_failed', 'vk_transport_failed', 'vk_cooldown',
@@ -390,10 +390,12 @@ class Worker:
                     continue
                 if child['state'] != 'blocked':
                     continue
-                code = (json.loads(child['result']).get('missing_checks') or [''])[0]
+                failure = json.loads(child['result'])
+                code = (failure.get('missing_checks') or [''])[0]
                 if not self.transient(code) or now >= self.deadline(op, child):
                     continue
-                waits.append(min(now + delay, self.deadline(op, child)))
+                waits.append(min(now + max(delay, failure.get('retry_after_s', 0)),
+                                 self.deadline(op, child)))
                 db.execute("UPDATE attempts SET state=?,stage='waiting_connection' WHERE id=?",
                            ('running' if child['dispatched'] else 'accepted', child['id']))
             if not waits:
@@ -745,9 +747,12 @@ class Worker:
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
             row = db.execute('SELECT dispatched FROM attempts WHERE id=?', (child['id'],)).fetchone()
+            result = {'missing_checks': [final.code], 'reason': final.message}
+            if final.code == 'telegram_cooldown' and type(getattr(error, 'retry_after_s', None)) is int:
+                result['retry_after_s'] = error.retry_after_s
             db.execute("UPDATE attempts SET state='blocked',stage='blocked',observed=?,result=? WHERE id=?",
                        ('unknown' if row['dispatched'] else 'not_attempted',
-                        canonical({'missing_checks': [final.code], 'reason': final.message}), child['id']))
+                        canonical(result), child['id']))
             db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(final.output()), op['id']))
             self.store.event(db, op['id'], 'finished', 'blocked', final.message, child['alias'])
 

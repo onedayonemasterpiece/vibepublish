@@ -233,9 +233,11 @@ The common ancestor with the acceptance checkout is
   `vibepublish://assets/{asset_id}` MCP template. Provider-byte evidence hashes
   need not equal the sanitized PNG derivative hash returned by the resource.
 - Durable native-response checkpoints support observation-only recovery after
-  worker restart. Lost responses without native IDs remain outcome-unknown;
-  they are not guessed from text/time or resent. Offline restart regressions
-  cover text, photo and document with one provider effect and keyed replay.
+  worker restart when message IDs were saved. For lost Telegram publish/forward
+  responses without native IDs, W4 reuses checkpointed `random_id` values in
+  the same MTProto request: Telegram deduplicates and returns the original
+  message IDs; no text/time matching or new publication identity. Offline
+  restart regressions cover text, photo and document with one provider effect.
 - Acceptance OAuth/HTTPS/server/worker glue, MAX integration and prompt-first
   visual semantics are preserved. No historical Imagegen repair is included.
 

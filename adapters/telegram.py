@@ -156,22 +156,34 @@ class TelegramAdapter:
         if hasattr(request, 'account_type') and request.account_type != self.account_type:
             raise DomainError('telegram_account_type_mismatch')
 
+    async def _rpc(self, kind: str, **values):
+        return await self.client(self.tl.request(kind, **values))
+
+    def _rpc_error(self, kind: str, exc: Exception) -> DomainError:
+        name = type(exc).__name__
+        code = ('telegram_cooldown' if name in {'FloodWaitError', 'SlowModeWaitError'} else
+                'telegram_auth_required' if name in {'AuthKeyUnregisteredError', 'SessionRevokedError'} else
+                'telegram_rpc_failed')
+        return DomainError(code, next_action='contact_owner')
+
     async def _call(self, kind: str, **values):
-        # Exactly one RPC. RPC retry/flood sleeps are disabled in trusted wiring.
+        # Shared single-RPC instrumentation; subclasses may prepare transport, not retry.
         from social_operations.provider_diagnostics import provider_call
         with provider_call('telegram', kind) as diagnostic:
             try:
-                return await self.client(self.tl.request(kind, **values))
+                return await self._rpc(kind, **values)
             except DomainError:
                 raise
             except Exception as exc:
-                name = type(exc).__name__
-                diagnostic.update(error_type=name, provider_code=getattr(exc, 'code', None),
+                diagnostic.update(error_type=type(exc).__name__,
+                                  provider_code=getattr(exc, 'code', None),
                                   retry_after_s=getattr(exc, 'seconds', None))
-                code = ('telegram_cooldown' if name in {'FloodWaitError', 'SlowModeWaitError'} else
-                        'telegram_auth_required' if name in {'AuthKeyUnregisteredError', 'SessionRevokedError'} else
-                        'telegram_rpc_failed')
-                raise DomainError(code, next_action='contact_owner') from None
+                failure = self._rpc_error(kind, exc)
+                if failure.code == 'telegram_cooldown':
+                    seconds = getattr(exc, 'seconds', None)
+                    if type(seconds) is int and 0 <= seconds <= 86400:
+                        failure.retry_after_s = seconds
+                raise failure from None
 
     async def _entity(self, target: str):
         if not re.fullmatch(r'-?[1-9][0-9]*', target):
@@ -480,7 +492,7 @@ class TelegramAdapter:
             _, state['source'] = await self._source(request)
         return Prepared(request, capability, canonical(state))
 
-    async def execute(self, prepared: Prepared, hooks: Hooks) -> Observation:
+    async def execute(self, prepared: Prepared, hooks: Hooks, *, recovery=None) -> Observation:
         r = prepared.request
         entity = await self._rights(r)
         state = json.loads(prepared.state_json)
@@ -549,12 +561,14 @@ class TelegramAdapter:
             if current is None:
                 raise DomainError('remote_item_missing', next_action='refresh')
             self._same_existing(existing, current)
-        random_ids = [int.from_bytes(hashlib.sha256(f'{r.attempt_id}:{n}'.encode()).digest()[:8], 'big') & ((1 << 63)-1) or 1
-                      for n in range(len(state['source']['ids']) if r.source else max(1, len(r.assets)))]
+        random_ids = (recovery['random_ids'] if recovery else [
+            int.from_bytes(hashlib.sha256(f'{r.attempt_id}:{n}'.encode()).digest()[:8], 'big') & ((1 << 63)-1) or 1
+            for n in range(len(state['source']['ids']) if r.source else max(1, len(r.assets)))])
         ids = list(existing.member_ids or (existing.native_id,)) if existing else []
         checkpoint = {'ids': ids, 'media': native_media, 'source': state.get('source'), 'random_ids': random_ids,
                       'topic_root_id': r.topic_root_id}
-        await hooks.checkpoint('telegram_prepared', saved_checkpoint(r, **checkpoint))
+        if not recovery:
+            await hooks.checkpoint('telegram_prepared', saved_checkpoint(r, **checkpoint))
         schedule_guard(r, self.clock())
         schedule = datetime.fromtimestamp(parse_time(r.scheduled_at), timezone.utc) if r.scheduled_at else None
         reply_to = None
@@ -590,7 +604,10 @@ class TelegramAdapter:
                 schedule_date=schedule, no_webpage=True, entities=native_entities, reply_to=reply_to)
         await check_custom(self, r)
         schedule_guard(r, self.clock())
-        await hooks.before_effect(r.attempt_id, r.plan_digest)
+        if not recovery:
+            await hooks.before_effect(r.attempt_id, r.plan_digest)
+        # Recovery replays the same MTProto random_ids, which Telegram deduplicates
+        # across sessions. Never allocate a new send identity after dispatch.
         response = await self._call(kind, **values)
         if not ids:
             mapping = {getattr(u, 'random_id', None): getattr(u, 'id', None) for u in getattr(response, 'updates', [])
@@ -615,8 +632,20 @@ class TelegramAdapter:
                 raise OutcomeUnknown('telegram_cancellation_ack_missing')
             checkpoint['cancel_confirmed'] = True
         checkpoint['ids'] = ids
+        staged_media = checkpoint['media']
+        if recovery:
+            checkpoint['media'] = recovery['media']
         await hooks.checkpoint('telegram_response', saved_checkpoint(r, **checkpoint))
-        return await self._observe(r, checkpoint, hooks)
+        try:
+            return await self._observe(r, checkpoint, hooks)
+        except OutcomeUnknown as exc:
+            # If the crash preceded the original send, this replay sent the
+            # post with freshly staged media. Only that exact binding may differ.
+            if not recovery or exc.code != 'media_identity_or_order_mismatch' or staged_media == checkpoint['media']:
+                raise
+            checkpoint['media'] = staged_media
+            await hooks.checkpoint('telegram_response', saved_checkpoint(r, **checkpoint))
+            return await self._observe(r, checkpoint, hooks)
 
     async def _observe(self, r, checkpoint, hooks):
         await hooks.emit_progress('reading_back', 'started', 'Reading exact native Telegram identities')
@@ -664,7 +693,15 @@ class TelegramAdapter:
 
     async def reconcile(self, request: ProviderRequest, checkpoint: str, hooks: Hooks) -> Observation:
         self._connection(request)
-        return await self._observe(request, load_checkpoint(request, checkpoint), hooks)
+        saved = load_checkpoint(request, checkpoint)
+        if not saved.get('ids') and request.action in {'publish', 'forward'} and saved.get('random_ids'):
+            # Ordinary Telegram history/scheduled messages do not expose random_id.
+            # Replaying the original RPC with the saved IDs returns its original
+            # updateMessageID mapping without creating another message.
+            state = canonical({'source': saved.get('source')})
+            return await self.execute(Prepared(request, Capability('supported', 'replay'), state),
+                                      hooks, recovery=saved)
+        return await self._observe(request, saved, hooks)
 
     async def _downloaded_items(self, groups, namespace: str, target: str):
         items, downloads = [], []
