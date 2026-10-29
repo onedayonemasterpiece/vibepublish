@@ -54,7 +54,16 @@ def selected_attempts(store, db, actor, args, heads):
     if not selected <= by_binding.keys():
         raise DomainError('publication_target_not_found', next_action='refresh')
     children = [row for row in heads if row['binding_id'] in selected]
-    for child in children:
+    for i, child in enumerate(children):
+        if not child['dispatched'] and child['state'] not in {'verified', 'scheduled'} and child['applied_revision'] is not None:
+            # A refusal that sent nothing left the remote item as the last applied revision.
+            row = db.execute(
+                'SELECT a.* FROM attempts a JOIN operations o ON o.id=a.operation_id '
+                "WHERE o.publication_id=(SELECT publication_id FROM operations WHERE id=?) AND o.revision=? AND a.binding_id=? AND a.dispatched=1 AND a.state IN ('verified','scheduled') "
+                'ORDER BY a.rowid DESC LIMIT 1',
+                (child['operation_id'], child['applied_revision'], child['binding_id'])).fetchone()
+            if row:
+                child = children[i] = dict(row)
         if child['state'] not in {'verified', 'scheduled'} or child['observed'] == 'unknown':
             raise DomainError('selected_target_not_verified', next_action='review_outcome')
         old = json.loads(child['plan'])

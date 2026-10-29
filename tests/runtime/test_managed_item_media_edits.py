@@ -582,3 +582,32 @@ async def test_all_target_edit_after_scoped_edit_uses_latest_heads_and_converges
     assert all(d["sync_status"] == "current" and d["applied_revision"] == 3
                and d["desired_revision"] == 3 for d in done["deliveries"])
     assert len(env.tg.effects) == 3 and len(env.vk.effects) == 2
+
+
+@pytest.mark.asyncio
+async def test_scoped_edit_after_refusal_without_send_edits_last_applied_item(env):
+    env.vk.unknown = False
+    original, _, _, _ = await published(env)
+    prepare = env.tg.prepare
+
+    async def refuse(request, hooks):
+        raise DomainError("telegram_album_edit_needs_review")
+
+    env.tg.prepare = refuse
+    refused = await call(env, "publication_update", {
+        "publication_id": original["resource_id"], "expected_revision": 1,
+        "change": {"kind": "edit", "destinations": ["telegram"], "content": {"text": "Tickets"}},
+        "request_key": "refused-first"})
+    assert "error" not in refused, refused
+    await env.worker.run_once()
+    assert len(env.tg.effects) == 1  # The refusal sent nothing.
+    env.tg.prepare = prepare
+    again = await call(env, "publication_update", {
+        "publication_id": original["resource_id"], "expected_revision": 2,
+        "change": {"kind": "edit", "destinations": ["telegram"], "content": {"text": "Tickets"}},
+        "request_key": "after-fix"})
+    assert "error" not in again, again
+    await env.worker.run_once()
+    assert [request.action for request in env.tg.effects] == ["publish", "edit"]
+    assert env.tg.effects[-1].existing.native_id == NATIVE
+    assert env.tg.remote.text == "Tickets" and len(env.vk.effects) == 1
