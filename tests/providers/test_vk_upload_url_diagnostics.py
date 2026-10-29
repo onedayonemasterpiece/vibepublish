@@ -53,7 +53,7 @@ class UploadURLDiagnosticsTests(unittest.TestCase):
     def test_existing_allowlist_and_signed_upload_queries_are_unchanged(self):
         accepted = ["https://" + host + "/private?key=PRIVATE" for host in
                     ("vk.com", "pu.vk.com", "userapi.com", "pu.userapi.com",
-                     "vkuser.net", "pu.vkuser.net", "vk.me", "pu.vk.me")]
+                     "vkuser.net", "pu.vkuser.net", "vk.me", "pu.vk.me", "ovu.mycdn.me")]
         accepted.append("https://PU.VK.COM:443/private?key=PRIVATE")
         events = []
         with diagnostic_scope(events.append):

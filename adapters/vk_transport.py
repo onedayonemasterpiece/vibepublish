@@ -93,7 +93,7 @@ def validated_url(url: str, *, api=False) -> str:
             reject('api_path_not_allowed')
         if parts.query:
             reject('api_query_present')
-    elif not any(host == root or host.endswith('.' + root) for root in ('vk.com', 'userapi.com', 'vkuser.net', 'vk.me')):
+    elif not any(host == root or host.endswith('.' + root) for root in ('vk.com', 'userapi.com', 'vkuser.net', 'vk.me', 'mycdn.me')):  # mycdn.me: VK video upload
         reject('host_not_allowed')
     return host
 

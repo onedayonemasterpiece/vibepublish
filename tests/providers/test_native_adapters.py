@@ -447,7 +447,7 @@ async def test_live_queue_includes_foreign_items_and_rejects_stale_snapshot_curs
     assert transport.effects == 0
 
 
-@pytest.mark.parametrize('url', ['http://pu.vk.com/upload', 'https://vk.com.attacker.invalid/u', 'https://127.0.0.1/u',
+@pytest.mark.parametrize('url', ['http://pu.vk.com/upload', 'https://vk.com.attacker.invalid/u', 'https://mycdn.me.attacker.invalid/u', 'https://127.0.0.1/u',
                                 'https://pu.vk.com:8443/u', 'https://u:p@pu.vk.com/u', 'https://pu.vk.com/u#fragment',
                                 'https://pu.vk.com\\@localhost/u'])
 def test_vk_upload_url_is_closed(url):
