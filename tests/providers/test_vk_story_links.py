@@ -175,6 +175,9 @@ async def test_core_freezes_photo_and_link_idempotently(tmp_path):
     assert await worker.run_once()
     receipt = store.receipt(actor, accepted['operation_id'])
     assert receipt['state'] == 'verified', receipt
+    assert receipt['deliveries'][0]['url'].startswith('https://vk.com/story-101_')
+    brief = store.receipt(actor, accepted['operation_id'], brief=True)
+    assert brief['summary']['networks'][0]['url'] == receipt['deliveries'][0]['url']
     assert transport.effects == 1
     args['story_link']['text'] = 'more'
     changed = await app.call(actor, 'vibepublish_publish', args)

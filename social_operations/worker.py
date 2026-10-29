@@ -700,6 +700,8 @@ class Worker:
             item = self.app.project_item(db, actor, b, asdict(remote), publication=op['publication_id'])
             self.save_fact(db, plan['destination_id'], remote, actor.principal_id, op['publication_id'])
             result = {'item_ref': item['ref'], 'observed_at': remote.observed_at, 'media_check': remote.media_check}
+            if isinstance(remote.url, str) and remote.url.startswith('https://'):
+                result['url'] = remote.url  # Provider-built permalink (post or story).
             if remote.scheduled_at:
                 result['effective_at'] = remote.scheduled_at
             if observation.observed == 'provider_scheduled' and remote.scheduled_at:
