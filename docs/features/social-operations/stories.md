@@ -9,7 +9,7 @@ Owner wording (2026-10-28): «В сторис может быть выставл
 | # | Requirement | Status |
 | --- | --- | --- |
 | S1 | VK story with **one image** or **one video** to a bound VK community. | `Done` for image and video (adapter `vk.py` `_execute_story`); live re-check `Not confirmed by user` after the 2026-10-28 reliability release. |
-| S2 | VK story with a **link sticker to a VK wall post** of a bound community (e.g. `https://vk.ru/wall-241261191_193`, `vk.com` or `vk.ru`), button text `read`/`more`. The agent passes `story_link.item_ref` = post URL or item ref. | `Done` in code (`service._story_link`, `vk.py` `_story_link`); real owner scenario (dot → VK story linking post 193) `Not confirmed by user`. |
+| S2 | VK story with a **link sticker to a VK wall post** of a bound community (e.g. `https://vk.ru/wall-241261191_193`, `vk.com` or `vk.ru`), button text = VK selector (`read`, `more`, `watch` → «Смотреть», … — `VK_STORY_LINK_TEXTS`; free text is not supported by VK). The agent passes `story_link.item_ref` = post URL or item ref. | `Done` in code (`service._story_link`, `vk.py` `_story_link`); real owner scenario (dot → VK story linking post 193) `Not confirmed by user`. |
 | S3 | VK story link to an **external website**. | `Not done`. Only own-community wall links are accepted today (`vk_story_wall_link_required`). Check VK API rules for community story links before implementing. |
 | S4 | Telegram channel story with **one image** or **one video** (MP4), optional caption. | **Done in code / Not confirmed by user** (W5, `adapters/telegram.py`, offline mock tests; no live send). |
 | S5 | Telegram story with a **clickable link**: to a website, to a VK post, or any other HTTPS URL (Telegram URL media area / link sticker). | **Done in code / Not confirmed by user** (W5 `MediaAreaUrl` send/readback and provider capability check; no live confirmation). |
@@ -20,7 +20,7 @@ Owner wording (2026-10-28): «В сторис может быть выставл
 
 Send `vibepublish_publish` with `surface:"story"`, one `media` item (image or MP4), `delivery` now, and an optional `content.text` caption.
 
-- **VK**: `story_link: {"item_ref":"<bound VK wall-post URL or item ref>","text":"read"|"more"}`. VK external web links remain unsupported (S3).
+- **VK**: `story_link: {"item_ref":"<bound VK wall-post URL or item ref>","text":"read"|"more"|"watch"|…}` (VK selectors, `VK_STORY_LINK_TEXTS`). VK external web links remain unsupported (S3).
 - **Telegram**: `story_link: {"url":"https://example.org/page","text":"Подробнее"}`, or `{"url":"https://vk.com/wall-1_2"}`. Any absolute HTTPS URL is allowed; no separate binding to that external destination is required because it is only opened when the viewer clicks the sticker. `text` is optional editorial input. The MTProto `MediaAreaUrl` constructor carries **URL and coordinates only**; it has no customizable label field. VibePublish does not claim the label will render natively. `content.text` is the actual caption.
 
 Do not schedule a story or retry `publish` after an accepted response; use the original operation ID with `vibepublish_status`. A mixed VK/Telegram story without a link can use one publication; a linked story uses its provider-specific `story_link` form.

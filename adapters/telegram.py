@@ -306,7 +306,7 @@ class TelegramAdapter:
                     raise DomainError('telegram_story_target_mismatch')
                 if request.surface == 'post' and request.existing.namespace not in {'scheduled', 'published'}:
                     raise DomainError('telegram_namespace_unsupported')
-                if request.action in {'edit', 'reschedule'} and len(request.existing.member_ids) > 1:
+                if request.action == 'reschedule' and len(request.existing.member_ids) > 1:
                     raise DomainError('telegram_album_edit_needs_review')
                 if request.action == 'cancel' and request.existing.namespace != 'scheduled':
                     raise DomainError('cancel_requires_native_queue')

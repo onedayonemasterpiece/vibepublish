@@ -4,7 +4,7 @@ Status: `Not confirmed by user`. The owner approved implementation of the server
 
 This is a narrow, explicit exception to the native-only scheduling contract. The wall post remains in VK's native postponed queue. A story is **not** placed in a VK story queue: one approved child is dispatched by the service only after exact readback proves that its own parent wall post is published. There is no general local publication calendar and no automatic stories for other editors' posts.
 
-`publish.linked_story` binds one image asset and link label (`read` or `more`) to exactly one VK wall target within that publication. The service freezes the image hash and destination grant at admission. Generated or changed images require a new explicit approval. The ordinary story receipt and unknown-outcome protections apply to the child.
+`publish.linked_story` binds one image asset and link label (a VK `link_text` selector, `VK_STORY_LINK_TEXTS`) to exactly one VK wall target within that publication. The service freezes the image hash and destination grant at admission. Generated or changed images require a new explicit approval. The ordinary story receipt and unknown-outcome protections apply to the child.
 
 The durable dependency, sanitized event receipt, server cursor and child operation are stored in the existing SQLite database. A repeated event, concurrent worker or process restart cannot create a second child. Native event payloads only wake observation; they do not authorize publication and their text/media are never accepted as approved content. The service does exact identity/text/media readback before child creation and exact source readback again in the ordinary story adapter before effect.
 

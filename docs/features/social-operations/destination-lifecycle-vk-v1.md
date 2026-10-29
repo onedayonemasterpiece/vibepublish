@@ -126,7 +126,7 @@ not inherit the 2026-10-01 unlinked Story live acceptance.
 Immediate VK photo Stories may include `story_link: {item_ref, text}`. The reference
 is a scoped published VK item or an exact VK wall URL in an existing active
 publishing binding on the same VK connection. `text` is the provider selector
-`read` or `more`. Native posts created outside VibePublish are allowed when that
+one of VK's `link_text` selectors (`VK_STORY_LINK_TEXTS`, e.g. `read`, `more`, `watch`). Native posts created outside VibePublish are allowed when that
 binding authorizes their read. Arbitrary sites, unbound walls, scheduled source
 references, cross-provider targets and scheduled Stories fail closed.
 

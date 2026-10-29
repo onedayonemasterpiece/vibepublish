@@ -21,6 +21,11 @@ def string(max_length=20000, **kwargs):
     return {"type": "string", "minLength": 1, "maxLength": max_length, **kwargs}
 
 
+# VK stories link_text selectors (stories.getPhotoUploadServer / getVideoUploadServer); VK renders its own localized label.
+VK_STORY_LINK_TEXTS = ("read", "more", "watch", "view", "open", "go_to", "learn_more", "ticket", "buy", "book", "order",
+                       "enroll", "signup", "fill", "write", "contact", "vote", "play", "install", "to_store", "calendar")
+
+
 def enum(*values):
     return {"type": "string", "enum": list(values)}
 
@@ -271,9 +276,9 @@ tool("get_started", "Get the versioned skill, allowed aliases and current capabi
 
 tool("publish", "Create one publication now or in native provider queues; return accepted progress without waiting for providers. No local scheduler. Preview does not send. An explicit execute publication with a visual defaults to eligible automatic selection: omitted delivery means now; delivery at uses a native queue. Preview and explicit human selection remain gated.",
     obj({"to": array(ALIAS, 1, 20), "content": ref("content"), "media": array(ref("media"), 0, 20),
-        "linked_story": obj({"media": array(ref("media"), 1, 1), "text": enum("read", "more")}, ("media", "text")),
+        "linked_story": obj({"media": array(ref("media"), 1, 1), "text": enum(*VK_STORY_LINK_TEXTS)}, ("media", "text")),
         "story_link": {"oneOf": [
-            obj({"item_ref": {"oneOf": [ID, URL]}, "text": enum("read", "more")}, ("item_ref", "text")),
+            obj({"item_ref": {"oneOf": [ID, URL]}, "text": enum(*VK_STORY_LINK_TEXTS)}, ("item_ref", "text")),
             obj({"url": URL, "text": string(120)}, ("url",)),
         ]},
         "thread_ref": {"oneOf": [ID, TELEGRAM_THREAD_URL]},
