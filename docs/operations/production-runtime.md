@@ -35,7 +35,7 @@ fallback is performed. This capability is not evidence of VK connectivity:
 [VK recovery acceptance](../reports/incidents/INC-2026-09-19-vk-recovery.md)
 records the completed provider-backed read acceptance separately from publication
 acceptance. The current owner-selected production mapping uses
-`/home/dev/.env:VK_USER_TOKEN2`. This key name is part of the deployed
+`/home/dev/.env:VK_USER_TOKEN3`. This key name is part of the deployed
 configuration contract: recovery/install tooling must preserve it and must not
 silently fall back to `VK_USER_TOKEN1` or another credential. Changing the
 selected credential requires an explicit owner decision and fresh provider
@@ -52,7 +52,7 @@ with the following arguments (paths and variable names only, never secrets):
 --telegram-api-hash-key TELEGRAM_API_HASH
 --providers telegram vk
 --vk-env-file /home/dev/.env
---vk-token-key VK_USER_TOKEN2
+--vk-token-key VK_USER_TOKEN3
 --codex-task-artifacts /home/dev/.local/state/vibepublish/imagegen
 ```
 
@@ -85,6 +85,17 @@ Trusted browser artifacts are imported only from the configured root `/var/lib/m
 MAX Web passive queue/history decoding in `adapters/max/wire.py` is a production runtime path and therefore requires the direct pinned dependencies `msgpack==1.2.2` and `lz4==4.4.5`. They belong in both the canonical direct dependency graph and `requirements.lock`; an acceptance virtualenv must not be relied on to supply them.
 
 After changing the permanent runtime, acceptance is read-only unless a write is explicitly required: verify the known Telegram topic, the bound VK destination and the bound MAX destination. MAX sanity checks must reuse the existing authorized profile and must not create a new authorization or rotate tokens.
+
+## VK credential rotation — 2026-10-29
+
+The owner selected `VK_USER_TOKEN3` after the newly supplied token 2 returned
+`access_token was given to another ip address` on DevCoveer and RunCoveer.
+The selected token grants photo/video/wall/group access. The existing worker was
+restarted with only its `--vk-token-key` changed; source release
+`c1053811c2c46c2e56633b8b4fec040f03cfdb78`, interpreter, provider flags and other
+provider credentials were preserved. Provider-backed feed read for the bound
+Afisha destination completed as verified operation
+`op_2c17be263e0d45b5a510c0f8233789c4`. This is read acceptance, not a test publication.
 
 ## Dedicated Knowledge Base session — 2026-10-04
 
