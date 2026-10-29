@@ -132,6 +132,15 @@ async def test_adapter_rejects_invalid_link(link):
     assert not transport.uploads and transport.effects == 0
 
 
+@pytest.mark.asyncio
+async def test_watch_label_reaches_vk_upload():
+    adapter, transport, journal = adapter_setup()
+    r = replace(linked_request(), story_link_json=canonical({**LINK, 'text': 'watch'}))
+    await adapter.execute(await adapter.prepare(r, journal.hooks), journal.hooks)
+    upload = next(params for method, _, params in transport.calls if method == 'stories.getPhotoUploadServer')
+    assert upload['link_text'] == 'watch'
+
+
 def runtime(tmp_path):
     store = Store(tmp_path / 'ledger.sqlite')
     actor = store.authenticate(store.create_principal('tenant', 'owner', owner=True))

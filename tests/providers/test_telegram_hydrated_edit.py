@@ -84,3 +84,22 @@ async def test_production_direct_target_adapter_preserves_photo_on_hydrated_capt
     assert result.items[0].provider_media == posted.provider_media
     assert result.items[0].text == 'Named link caption'
     assert len(client.uploads) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scheduled', [False, True])
+async def test_album_caption_edit_keeps_every_photo(scheduled):
+    adapter, client, journal = setup('telegram')
+    photos = (asset(1), asset(2))
+    when = {'scheduled_at': '2030-01-01T10:00:00Z'} if scheduled else {}
+    posted = (await adapter.execute(
+        await adapter.prepare(request('telegram', assets=photos, **when), journal.hooks),
+        journal.hooks)).items[0]
+    journal.markers.clear()
+    edit = request('telegram', action='edit', existing=posted, assets=photos, **when,
+                   content_json=canonical({'text': 'Билеты'}))
+    result = await adapter.execute(await adapter.prepare(edit, journal.hooks), journal.hooks)
+    item = result.items[0]
+    assert item.text == 'Билеты'
+    assert item.member_ids == posted.member_ids and item.provider_media == posted.provider_media
+    assert len(client.uploads) == 2  # Only the original album; no re-upload or re-post.

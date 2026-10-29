@@ -12,6 +12,7 @@ import logging
 import re
 
 from adapters.port import Hooks, ReadRequest
+from contracts.social_mcp_v1 import VK_STORY_LINK_TEXTS
 from .domain import DomainError, canonical, digest, new_id, parse_time
 
 LOG = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ def register(app, db, actor, intent, operation_id, plans):
     candidates = [p for p in plans if p['provider'] == 'vk']
     if (len(candidates) != 1 or intent.get('surface', 'post') != 'post'
             or intent.get('mode', 'execute') != 'execute' or intent.get('visual')
-            or set(spec) != {'media', 'text'} or spec['text'] not in {'read', 'more'}
+            or set(spec) != {'media', 'text'} or spec['text'] not in VK_STORY_LINK_TEXTS
             or intent.get('story_link')
             or not isinstance(spec['media'], list) or len(spec['media']) != 1):
         raise DomainError('linked_story_requires_one_vk_wall_and_image')

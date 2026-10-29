@@ -15,6 +15,7 @@ from .native import (bind_media, identity, load_checkpoint, plain_text, same_exi
                      saved_checkpoint, schedule_guard, verify_assets)
 from .port import Capability, Hooks, Observation, Prepared, ProviderRequest, ReadPage, ReadRequest, RemoteItem
 from .vk_transport import POLICIES, validated_url
+from contracts.social_mcp_v1 import VK_STORY_LINK_TEXTS
 from social_operations.domain import DomainError, OutcomeUnknown, canonical, digest, parse_time, timestamp
 
 
@@ -118,7 +119,7 @@ class VKAdapter:
                 return {}
             if (request.surface != 'story' or request.action != 'publish'
                     or set(link) != {'url', 'text', 'target', 'id'}
-                    or link['text'] not in {'read', 'more'}
+                    or link['text'] not in VK_STORY_LINK_TEXTS
                     or not re.fullmatch(r'-[1-9][0-9]*', link['target'])
                     or not re.fullmatch(r'[1-9][0-9]*', link['id'])
                     or link['url'] != f"https://vk.com/wall{link['target']}_{link['id']}"):
