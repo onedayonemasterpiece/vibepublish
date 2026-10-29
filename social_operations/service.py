@@ -875,6 +875,9 @@ class Application:
                 raise DomainError('already_published', 'Cancel applies only to a native queued item; deletion needs an explicit command')
             if kind in ('edit', 'reschedule') and old['action'] == 'forward':
                 raise DomainError('forward_lifecycle_not_enabled', next_action='contact_owner')
+            if kind in ('edit', 'reschedule') and old['scheduled_at'] and parse_time(old['scheduled_at']) < self.store.clock()+60:
+                # Telegram assigns new message ids on publication; the queued identity is gone.
+                raise DomainError('native_item_published', 'The scheduled item is already published: read it and change it by item_ref', 'refresh')
             b = self.store.binding(db, actor, binding_id=child['binding_id'])
             target = {'content': json.loads(old['content_json']), 'media': [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']],
                       'surface': old['surface'], 'delivery': {'kind': 'at', 'at': old['scheduled_at']} if old['scheduled_at'] else {'kind': 'now'}, 'mode': 'execute'}
