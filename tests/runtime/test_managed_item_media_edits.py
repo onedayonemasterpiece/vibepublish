@@ -611,3 +611,32 @@ async def test_scoped_edit_after_refusal_without_send_edits_last_applied_item(en
     assert [request.action for request in env.tg.effects] == ["publish", "edit"]
     assert env.tg.effects[-1].existing.native_id == NATIVE
     assert env.tg.remote.text == "Tickets" and len(env.vk.effects) == 1
+
+
+@pytest.mark.asyncio
+async def test_publication_edit_after_scheduled_item_went_out_points_to_item_ref(env):
+    execute = env.tg.execute
+
+    async def queued(prepared, hooks):
+        observation = await execute(prepared, hooks)
+        env.tg.remote = replace(env.tg.remote, namespace="scheduled",
+                                scheduled_at=prepared.request.scheduled_at)
+        return Observation("provider_scheduled", (env.tg.remote,))
+
+    env.tg.execute = queued
+    at = timestamp(env.now[0] + 3600)
+    original = await call(env, "publish", {
+        "to": ["telegram"], "content": {"text": "Original caption"},
+        "media": [media(env.assets[0])], "delivery": {"kind": "at", "at": at},
+        "request_key": "scheduled"})
+    assert "error" not in original, original
+    assert await env.worker.run_once()
+    env.now[0] += 7200  # The native queue has published the post.
+    before = ledger(env)
+    result = await call(env, "publication_update", {
+        "publication_id": original["resource_id"], "expected_revision": 1,
+        "change": {"kind": "edit", "destinations": ["telegram"], "content": {"text": "Tickets"}},
+        "request_key": "after-publication"})
+    assert result["error"]["code"] == "native_item_published", result
+    assert result["next_action"] == "refresh"
+    assert ledger(env) == before and len(env.tg.effects) == 1
