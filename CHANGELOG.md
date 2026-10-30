@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Telegram media captions with the automatic navigation footer: stop rejecting a Premium-eligible MTProto user post at admission's universal 1024 limit. Keep 1024 for bots/non-Premium, use live sender `get_me().premium` plus Telegram `help.getAppConfig` to validate a user-specific higher bound before media upload/send, refuse unknown capability, recheck before execute, and preserve readback after subscription changes. Add full-footer, image, boundary, preview and native queue regressions. Code only; no deployment, live Premium proof or original scheduled post.
+- MAX zero-effect recovery: reject malformed/false `NoEffectProof` as a terminal nontransient refusal without clearing the durable dispatch marker, releasing quarantine or fabricating a publication. Align the existing MAX browser regressions with the fixed-horizon automatic retry contract while preserving no-duplicate-write, revoked-binding and verified-TG/VK invariants. Source and CI only; no provider writes.
 
 - Select the owner-approved `VK_USER_TOKEN3` for the production VK worker and recovery installer after the replacement token 2 failed with a provider IP-binding error. Preserve the running server/worker code releases and other provider identities.
 
