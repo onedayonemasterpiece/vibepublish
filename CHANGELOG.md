@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Telegram media captions with the automatic navigation footer: stop rejecting a Premium-eligible MTProto user post at admission's universal 1024 limit. Keep 1024 for bots/non-Premium, use live sender `get_me().premium` plus Telegram `help.getAppConfig` to validate a user-specific higher bound before media upload/send, refuse unknown capability, recheck before execute, and preserve readback after subscription changes. Add full-footer, image, boundary, preview and native queue regressions. Code only; no deployment, live Premium proof or original scheduled post.
+
 - Select the owner-approved `VK_USER_TOKEN3` for the production VK worker and recovery installer after the replacement token 2 failed with a provider IP-binding error. Preserve the running server/worker code releases and other provider identities.
 
 - Fix W5 regression in existing Telegram emoji catalog and destination discovery: requests without `surface` use the pre-existing post rights path, while explicit Story requests keep channel Story permissions. Add actual Telethon wire roundtrips for all four Story RPCs (21 total), restoring 32 emoji/SDK regression cases; focused offline test files pass without Telegram requests or deployment.

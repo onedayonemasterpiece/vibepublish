@@ -538,6 +538,7 @@ class Application:
                 binding['alias'], binding['provider'], content,
                 lambda alias: self.store.binding(db, actor, alias=alias),
                 has_media=bool(assets) or pending_visual,
+                telegram_user=binding['provider'] == 'telegram' and binding['account_type'] == 'mtproto_user',
             )
         if action not in ('forward', 'cancel', 'delete', 'react') and not assets and not content.get('text', '').strip() and not pending_visual and not admission_error:
             raise DomainError('empty_publication')

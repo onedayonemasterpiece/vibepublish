@@ -146,11 +146,14 @@ def to_native(text, entities, tl):
     return result
 
 
-def telegram_text_limit(request):
-    # An edit/reschedule may preserve externally observed native media without
-    # staging any source assets. That is still a caption, not a text message.
+def telegram_text_limit(request, *, premium_caption=False):
+    # Existing native media without staged assets is still a caption. Higher
+    # limits are only candidates for a user MTProto account, never Bot API.
     existing = getattr(request, 'existing', None)
-    return 1024 if request.assets or (existing and existing.provider_media) else 4096
+    if request.assets or (existing and existing.provider_media):
+        return (4096 if premium_caption and getattr(request, 'account_type', None) == 'mtproto_user'
+                and getattr(request, 'surface', 'post') == 'post' else 1024)
+    return 4096
 
 
 def provider_content(content_json, limit):
