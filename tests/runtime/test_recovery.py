@@ -298,6 +298,7 @@ class NoInputProvider(RecoveringProvider):
         if self.invalid_proof=='checkpoint':proof=replace(proof,checkpoint_sha256='0'*64)
         if self.invalid_proof=='absence':proof=replace(proof,evidence_json=canonical(dict(trusted_clicks=0,input_unreachable=True,absence_only=True)))
         if self.invalid_proof=='click':proof=replace(proof,evidence_json=canonical(dict(trusted_clicks=1,input_unreachable=True,absence_only=False)))
+        if self.invalid_proof=='malformed':proof=replace(proof,evidence_json='{bad-json')
         return Observation('not_attempted',no_effect=proof)
 
     async def finalize(self,request,checkpoint,hooks):
@@ -339,15 +340,32 @@ class NoInputRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_new_no_input_failure_refuses_without_manual_review(self):
-        for kind in ('checkpoint','absence','click'):
+        for kind in ('checkpoint','absence','click','malformed'):
             with self.subTest(kind=kind):
                 self.provider.invalid_proof=kind
                 receipt=await self.call('publish',{'to':['max'],'content':{'text':'Guard '+kind}})
+                await self.worker.run_once()
+                # First lost-response result is legitimately still within the
+                # bounded reconciliation window; only the next pass reads the
+                # invalid no-effect proof and may refuse it conclusively.
+                self.assertEqual(self.store.receipt(self.actor,receipt['operation_id'])['state'],'running')
+                self.now+=5.001
                 await self.worker.run_once()
                 result=self.store.receipt(self.actor,receipt['operation_id'])
                 self.assertEqual(result['state'],'blocked')
                 self.assertNotEqual(result['next_action'],'review_outcome')
                 self.assertEqual(self.provider.count('effect'),0)
+                with self.store.connection() as db:
+                    child=db.execute('SELECT dispatched,observed,state FROM attempts WHERE operation_id=?',
+                                     (receipt['operation_id'],)).fetchone()
+                    self.assertEqual((child['dispatched'],child['observed'],child['state']),
+                                     (1,'unknown','blocked'))
+                    recovery=db.execute('SELECT observation,finalize_state FROM attempt_recovery '
+                                        'WHERE attempt_id IN (SELECT id FROM attempts WHERE operation_id=?)',
+                                        (receipt['operation_id'],)).fetchone()
+                    self.assertIsNotNone(recovery)
+                    self.assertIsNone(recovery['observation'])
+                    self.assertEqual(recovery['finalize_state'],'unresolved')
                 self.provider.invalid_proof=None
 
     async def test_no_effect_release_is_durable_across_worker_restart(self):

@@ -566,13 +566,16 @@ class Worker:
         if (not isinstance(proof,NoEffectProof) or observation.observed!='not_attempted'
                 or observation.items or observation.missing_checks
                 or proof.reason!='trusted_preinput_guard' or not needs_finalize):
-            raise OutcomeUnknown('no_effect_proof_invalid')
-        evidence=json.loads(proof.evidence_json)
+            raise DomainError('no_effect_proof_invalid')
+        try:
+            evidence=json.loads(proof.evidence_json)
+        except (TypeError, ValueError):
+            raise DomainError('no_effect_proof_invalid') from None
         if (not isinstance(evidence,dict) or evidence.get('trusted_clicks')!=0
                 or type(evidence.get('trusted_clicks')) is not int
                 or evidence.get('input_unreachable') is not True
                 or evidence.get('absence_only') is not False):
-            raise OutcomeUnknown('no_effect_proof_invalid')
+            raise DomainError('no_effect_proof_invalid')
         with self.store.tx() as db:
             self.store.fence(db,op['id'],self.id,op['fence'])
             self.recovery_authority(db,op,child,actor)
@@ -580,7 +583,7 @@ class Worker:
             recovery=db.execute('SELECT * FROM attempt_recovery WHERE attempt_id=?',(child['id'],)).fetchone()
             original=recovery['original_checkpoint'] if recovery else current['checkpoint']
             if not current['dispatched'] or digest(json.loads(original))!=proof.checkpoint_sha256:
-                raise OutcomeUnknown('no_effect_checkpoint_mismatch')
+                raise DomainError('no_effect_checkpoint_mismatch')
             hint=dict(operation_id=op['id'],attempt_id=child['id'],plan_digest=child['plan_digest'])
             db.execute('INSERT OR IGNORE INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,hint,created) VALUES(?,?,?,?,?)',
                 (child['id'],child['plan_digest'],original,canonical(hint),self.store.clock()))

@@ -226,16 +226,26 @@ async def test_core_refusal_and_uncertain_marker_never_resubmit(tmp_path,server,
         with store.connection() as db:
             child=dict(db.execute("SELECT * FROM attempts WHERE provider='max'").fetchone())
             assert child['dispatched']==(1 if mode=='marker_crash' else 0)
-            assert child['state']==('outcome_unknown' if mode=='marker_crash' else 'blocked')
+            # One pass is not the end of the fixed retry horizon. Before the
+            # provider-effect marker, retries may remain queued; after it,
+            # reconciliation must remain observation-only (never resend).
+            assert child['state']==('running' if mode=='marker_crash' else 'accepted')
+            assert child['observed']==('unknown' if mode=='marker_crash' else 'not_attempted')
+            assert child['stage']=='waiting_connection'
         assert (tmp_path/'before-effect-entered').exists()
         assert state['effects']==0 and not checks
         if mode=='marker_crash':
             done=await status(session,accepted)
-            assert done['state']=='outcome_unknown'
+            assert done['state']=='running' and not done['operation_complete']
             # New explicit intent cannot bypass the profile quarantine/core lane.
             newer=await tool(session,'publish',{**args,'content':{'text':'Different operation'},'request_key':'new-key'})
             await worker_done(worker('recover'))
-            assert (await status(session,newer))['state']=='blocked'
+            # MAX's persisted uncertainty must not be interpreted as absence.
+            # Whether the new preflight is retryable cannot authorize dispatch.
+            with store.connection() as db:
+                new_child=db.execute('SELECT dispatched,observed FROM attempts WHERE operation_id=?',
+                                     (newer['operation_id'],)).fetchone()
+                assert (new_child['dispatched'],new_child['observed'])==(0,'not_attempted')
             assert state['effects']==0
 
 
@@ -246,8 +256,11 @@ async def test_core_unknown_max_preserves_verified_telegram_vk(tmp_path,server):
         accepted=await tool(session,'publish',args)
         await worker_done(worker('normal'))
         done=await status(session,accepted)
-        assert done['state']=='outcome_unknown'
-        assert states(done)=={'telegram':'verified','vk':'verified','max':'outcome_unknown'}
+        assert done['state']=='running' and not done['operation_complete']
+        assert states(done)=={'telegram':'verified','vk':'verified','max':'running'}
+        with store.connection() as db:
+            child=db.execute("SELECT dispatched,observed FROM attempts WHERE provider='max'").fetchone()
+            assert (child['dispatched'],child['observed'])==(1,'unknown')
         assert state['effects']==1 and fake_effects(tmp_path)=={'telegram':1,'vk':1}
         assert (await tool(session,'publish',args))['operation_id']==accepted['operation_id']
         await worker_done(worker('normal'))
