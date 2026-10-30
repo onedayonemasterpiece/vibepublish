@@ -207,6 +207,8 @@ neutralized. Malformed spans still fail before projection.
 
 ### Unreachable-input compensation, not fabricated publication
 
+Status: **Not confirmed by user** (30.10.2026): after the first inconclusive effect attempt the existing bounded retry leaves the command running; on the next observation, a malformed/false zero-effect proof now produces a terminal blocked outcome, never an effect retry or fake cancellation. Focused offline test passed; CI and deployment are separate.
+
 The additive trusted `NoEffectProof` port value is an adapter control-flow proof,
 not a conclusion from an empty feed or a model answer. Core verifies its binding
 to the immutable original checkpoint, current actor/binding/plan/fence and a
@@ -218,8 +220,14 @@ idempotency keys; a new, different intent is not an automatic effect retry.
 The existing durable finalization outbox releases only the matching quarantine
 **after** that outcome commits; a failed release is retried across worker restart.
 Public delivery results may expose the additive compensation enum
-`intent_cancelled_without_effect` and its reason. Absence-only, nonzero-click and
-wrong-checkpoint proofs remain unresolved and cannot release the connection.
+`intent_cancelled_without_effect` and its reason. Absence-only, nonzero-click, malformed and
+wrong-checkpoint proofs fail closed with a terminal refusal (dispatched stays 1,
+observed stays unknown, original recovery journal stays unresolved); they cannot
+release the connection. Earlier broad `OutcomeUnknown` mapping caused the worker
+to turn even a definitively invalid proof into a transient `provider_reconcile_pending`
+and re-open the wait loop. Other transient provider reads keep the original bounded
+retry policy. Browser integration checks the same safety invariants across the
+intermediate retry state without expecting the former immediate `outcome_unknown`.
 Read-only reconciliation has a bounded 90-second observation window (separate
 from the expired original effect deadline), to allow repeated native UI checks.
 

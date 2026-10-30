@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX zero-effect recovery: reject malformed/false `NoEffectProof` as a terminal nontransient refusal without clearing the durable dispatch marker, releasing quarantine or fabricating a publication. Align the existing MAX browser regressions with the fixed-horizon automatic retry contract while preserving no-duplicate-write, revoked-binding and verified-TG/VK invariants. Source and CI only; no provider writes.
+
 - Select the owner-approved `VK_USER_TOKEN3` for the production VK worker and recovery installer after the replacement token 2 failed with a provider IP-binding error. Preserve the running server/worker code releases and other provider identities.
 
 - Fix W5 regression in existing Telegram emoji catalog and destination discovery: requests without `surface` use the pre-existing post rights path, while explicit Story requests keep channel Story permissions. Add actual Telethon wire roundtrips for all four Story RPCs (21 total), restoring 32 emoji/SDK regression cases; focused offline test files pass without Telegram requests or deployment.
