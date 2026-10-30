@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import io
 import json
+import math
 import re
 import time
 from dataclasses import replace
@@ -47,8 +48,8 @@ _REQUESTS = {
     'story_delete': ('stories', 'DeleteStoriesRequest'),
 }
 from social_operations.rich_text import (ENTITY_TYPES, from_native, to_native,
-    provider_content, telegram_content_matches, telegram_text_limit)
-from .telegram_emoji import check_custom, load_set
+    provider_content, telegram_content_matches, telegram_text_limit, utf16)
+from .telegram_emoji import check_custom, config_value, load_set
 _TYPES = {'InputMediaUploadedPhoto', 'InputPhoto', 'InputMediaPhoto', 'InputSingleMedia', 'InputStickerSetShortName',
           'InputReplyToMessage', 'InputMediaUploadedDocument', 'DocumentAttributeFilename',
           'InputDocument', 'InputMediaDocument', 'DocumentAttributeVideo',
@@ -261,6 +262,36 @@ class TelegramAdapter:
             raise DomainError('telegram_direct_messages_needs_review', next_action='contact_owner')
         return entity
 
+    async def _checked_content(self, request):
+        """Verify expanded captions against this sender's live MTProto capability."""
+        ordinary = telegram_text_limit(request)
+        candidate = telegram_text_limit(request, premium_caption=True)
+        text, entities = provider_content(request.content_json, candidate)
+        if utf16(text) <= ordinary:
+            return text, entities, ordinary
+        if candidate == ordinary:
+            raise DomainError('provider_text_limit')
+        self._connection(request)
+        me = await self.client.get_me()
+        if me is None or getattr(me, 'bot', False) or not hasattr(me, 'premium'):
+            raise DomainError('telegram_caption_capability_unknown', next_action='contact_owner')
+        if me.premium is not True:
+            if me.premium is None or me.premium is False:
+                raise DomainError('provider_text_limit')
+            raise DomainError('telegram_caption_capability_unknown', next_action='contact_owner')
+        config = await self._call('app_config', hash=0)
+        try:
+            values = config_value(config.config)
+            maximum = values.get('caption_length_limit_premium')
+        except (DomainError, AttributeError, TypeError):
+            raise DomainError('telegram_caption_capability_unknown', next_action='contact_owner') from None
+        if (type(maximum) not in (int, float) or not math.isfinite(maximum)
+                or not 1024 < maximum <= 4096 or maximum != int(maximum)):
+            raise DomainError('telegram_caption_capability_unknown', next_action='contact_owner')
+        if utf16(text) > maximum:
+            raise DomainError('provider_text_limit')
+        return text, entities, int(maximum)
+
     async def inspect(self, request: ProviderRequest) -> Capability:
         try:
             if request.surface not in {'post', 'story'}:
@@ -287,7 +318,7 @@ class TelegramAdapter:
                     raise DomainError('telegram_story_media_invalid', 'A Story requires one image or one MP4 video')
             elif request.action not in {'publish', 'forward', 'edit', 'reschedule', 'cancel', 'delete'}:
                 raise DomainError('telegram_action_unsupported')
-            provider_content(request.content_json, telegram_text_limit(request))
+            _, _, content_limit = await self._checked_content(request)
             verify_assets(request, allow_video=True, allow_document=request.surface == 'post')
             roles = {'document' if asset.role == 'document' else 'photo' for asset in request.assets}
             if request.surface == 'post' and len(request.assets) > 1 and len(roles) > 1:
@@ -298,7 +329,7 @@ class TelegramAdapter:
                 if request.action != 'publish':
                     raise DomainError('telegram_topic_action_needs_review')
                 await self._topic(entity, request.topic_root_id)
-            await check_custom(self, request)
+            await check_custom(self, request, limit=content_limit)
             if request.existing:
                 if request.existing.native_target != request.native_target:
                     raise DomainError('remote_target_mismatch')
@@ -630,7 +661,7 @@ class TelegramAdapter:
             source_entity, checked = await self._source(r)
             if checked != state.get('source'):
                 raise DomainError('source_changed', next_action='refresh')
-        text, semantic_entities = provider_content(r.content_json, telegram_text_limit(r))
+        text, semantic_entities, content_limit = await self._checked_content(r)
         native_entities = to_native(text, semantic_entities, self.tl)
         native_media, compiled_media = [], []
         if r.action == 'publish' or (r.action == 'edit' and r.assets and tuple(a.sha256 for a in r.assets) != tuple(existing.media_hashes)):
@@ -742,7 +773,7 @@ class TelegramAdapter:
         else:
             kind, values = 'send_text', dict(peer=entity, message=text, random_id=random_ids[0],
                 schedule_date=schedule, no_webpage=True, entities=native_entities, reply_to=reply_to)
-        await check_custom(self, r)
+        await check_custom(self, r, limit=content_limit)
         schedule_guard(r, self.clock())
         if not recovery:
             await hooks.before_effect(r.attempt_id, r.plan_digest)
@@ -803,7 +834,7 @@ class TelegramAdapter:
         if r.story_link_json != '{}' and item.story_link_json != r.story_link_json:
             raise OutcomeUnknown('telegram_story_link_readback_mismatch')
         if not telegram_content_matches(r.content_json, item.text,
-                                        json.loads(item.entities_json), telegram_text_limit(r)):
+                                        json.loads(item.entities_json), telegram_text_limit(r, premium_caption=True)):
             raise OutcomeUnknown('telegram_entities_readback_mismatch')
         if item.provider_media[0].startswith('document:') != (r.assets[0].role == 'video'):
             raise OutcomeUnknown('media_identity_or_order_mismatch')
@@ -843,7 +874,7 @@ class TelegramAdapter:
                 r.content_json,
                 item.text,
                 json.loads(item.entities_json),
-                telegram_text_limit(r),
+                telegram_text_limit(r, premium_caption=True),
             ):
                 raise OutcomeUnknown('telegram_entities_readback_mismatch')
         item = bind_media(r, item, checkpoint['media'])

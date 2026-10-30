@@ -216,6 +216,45 @@ class NetworkFooterPlanTests(unittest.IsolatedAsyncioTestCase):
         other = await self._plan("other_tg")
         self.assertEqual(json.loads(other["content_json"]), {"text": "Анонс"})
 
+    async def test_user_mtproto_image_preview_plan_accepts_candidate_without_claiming_premium(self):
+        import hashlib
+        import io
+        from PIL import Image
+
+        image = io.BytesIO()
+        Image.new("RGB", (2, 2), "blue").save(image, format="PNG")
+        data = image.getvalue()
+        sha = hashlib.sha256(data).hexdigest()
+        with self.store.tx() as db:
+            db.execute("UPDATE connections SET account_type='mtproto_user' WHERE id='conn_telegram'")
+            db.execute("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)", (
+                "asset_photo_fixture", self.actor.tenant_id, self.actor.principal_id,
+                sha, "image/png", 2, 2, data, sha, self.store.clock(),
+            ))
+        args = {
+            "to": ["tg_5060f37d74cf460135ee"], "content": {"text": "А" * 1258},
+            "media": [{"source": {"kind": "asset", "id": "asset_photo_fixture"}}],
+            "mode": "preview",
+        }
+        result = await self.app.call(self.actor, "vibepublish_publish", args)
+        self.assertEqual(result["state"], "accepted", result)
+        with self.store.connection() as db:
+            row = db.execute("SELECT plan FROM attempts WHERE operation_id=?", (result["operation_id"],)).fetchone()
+        plan = json.loads(row["plan"])
+        self.assertEqual(plan["mode"], "preview")
+        self.assertEqual(plan["account_type"], "mtproto_user")
+        self.assertEqual(len(plan["assets"]), 1)
+        full = json.loads(plan["content_json"])
+        self.assertGreater(utf16(full["text"]), 1024)
+        self.assertTrue(full["text"].endswith("Подписаться  ·  ВКонтакте  ·  MAX"))
+        # Admission is NOT Premium proof: non-Premium/bot still cannot bypass 1024.
+        with self.store.tx() as db:
+            db.execute("UPDATE connections SET account_type='mtproto_bot' WHERE id='conn_telegram'")
+        failed = await self.app.call(self.actor, "vibepublish_publish", {
+            **args, "content": {"text": "Б" * 1258},
+        })
+        self.assertEqual(failed["error"]["code"], "network_footer_limit")
+
     async def test_empty_original_remains_invalid(self):
         r = await self.app.call(self.actor, "vibepublish_publish",
                                 {"to": ["lovekenig_tg"], "content": {"text": ""}})

@@ -37,8 +37,8 @@ def config_value(value):
     raise DomainError('telegram_config_needs_review')
 
 
-async def check_custom(adapter, request):
-    text, entities = provider_content(request.content_json, telegram_text_limit(request))
+async def check_custom(adapter, request, *, limit=None):
+    text, entities = provider_content(request.content_json, telegram_text_limit(request) if limit is None else limit)
     selected = [e for e in entities if e['type'] == 'custom_emoji']
     if not selected:
         return

@@ -116,7 +116,7 @@ def _tail_destinations(text, entities):
     return {_identity(url) for _, _, url in spans if _identity(url)}
 
 
-def append_network_footer(source_alias, provider, content, lookup, *, has_media=False):
+def append_network_footer(source_alias, provider, content, lookup, *, has_media=False, telegram_user=False):
     """Return a new provider-ready semantic document, or the untouched input.
 
     Native forwards, edits, provider overrides and scope checks belong to the
@@ -172,7 +172,9 @@ def append_network_footer(source_alias, provider, content, lookup, *, has_media=
     gap = ("\n\n" if not text.endswith("\n") else "\n" if not text.endswith("\n\n") else "") if text else ""
     footer = "  ·  ".join(caption for caption, _ in missing)
     full = text + gap + footer
-    limit = 1024 if provider == "telegram" and has_media else 4096 if provider == "telegram" else 32768
+    # Admission only: the worker must prove Premium on this MTProto user
+    # before treating a caption longer than 1024 as actually supported.
+    limit = (4096 if telegram_user else 1024) if provider == "telegram" and has_media else 4096 if provider == "telegram" else 32768
     if utf16(full) > limit:
         raise DomainError(
             "network_footer_limit",
