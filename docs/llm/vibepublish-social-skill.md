@@ -90,7 +90,11 @@ recreate posts to evade provider errors.
   «Автоколоризация», «Полюбить Калининград», источник и «Оригинал →».
   **Не использовать и не предлагать `vibepublish_visual generate`** для
   этого сценария. **(4)** Импортируй результат в VibePublish как **JPEG ≈90%**
-  через workspace import (не PNG). **(5)** После успешного импорта заново
+  через workspace import (не PNG). Сохраняй `upload_id` сразу после
+  `import_begin`. Если загрузка прервалась, `upload_id` потерян или картинка
+  изменилась — начни новую загрузку с новым `request_key`: begin/chunk ничего
+  не публикуют, брошенная сессия истекает сама через час; сверять её не нужно.
+  **(5)** После успешного импорта заново
   выполни exact item-read и **сразу** `vibepublish_publication_update`
   по свежему `item_ref` (окно **300 секунд**):
   `change.media:[{"source":{"kind":"asset","id":"asset_NEW"}},{"source":{"kind":"existing","position":0}}]`.
