@@ -936,7 +936,10 @@ class Worker:
                         verified=SimpleNamespace(width=0,height=0)
                     else:
                         verified = verify_image(media.data, media.mime)
-                    if args.get('_media_store_get'):
+                    # VK exact-item photos are short-lived source reads, not
+                    # retained uploads. Reuse the existing single-byte cache
+                    # path, rather than insert_verified_image's two asset rows.
+                    if args.get('_media_store_get') or (b['provider'] == 'vk' and request.kind == 'item'):
                         asset_ref = new_id('asset')
                         db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
                                    (asset_ref, actor.tenant_id, actor.principal_id, evidence.sha256,

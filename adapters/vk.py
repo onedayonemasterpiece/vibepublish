@@ -6,6 +6,7 @@ postponed wall.post is implemented. Scheduled wall.repost is deliberately absent
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -13,7 +14,8 @@ from dataclasses import replace
 
 from .native import (bind_media, identity, load_checkpoint, plain_text, same_existing,
                      saved_checkpoint, schedule_guard, verify_assets)
-from .port import Capability, Hooks, Observation, Prepared, ProviderRequest, ReadPage, ReadRequest, RemoteItem
+from .port import (Capability, DownloadedMedia, Hooks, MediaDownload, Observation,
+                   Prepared, ProviderRequest, ReadPage, ReadRequest, RemoteItem)
 from .vk_transport import POLICIES, validated_url
 from contracts.social_mcp_v1 import VK_STORY_LINK_TEXTS
 from social_operations.domain import DomainError, OutcomeUnknown, canonical, digest, parse_time, timestamp
@@ -329,18 +331,18 @@ class VKAdapter:
                         raise
                 else:
                     if item.native_id == exact_id:
-                        return [item]
+                        return [raw]
                     values.append(item)
             if len(seen) == count:
-                return values
+                return [] if exact_id is not None else values
             if len(rows) < 100:
                 raise DomainError('vk_queue_read_incomplete')
         raise DomainError('vk_queue_read_incomplete')
 
     async def _exact(self, target, ident, namespace):
         if namespace == 'scheduled':
-            return next((item for item in await self._queue(target, exact_id=ident)
-                         if item.native_id == ident), None)
+            raw = await self._exact_raw(target, ident, namespace)
+            return self._item(raw, namespace, target) if raw else None
         response = await self._call('wall.getById', posts=f'{target}_{ident}', extended=0)
         rows = _items(response)
         if not rows:
@@ -390,6 +392,9 @@ class VKAdapter:
         return await self._exact(target, next(iter(candidates)), 'published')
 
     async def _exact_raw(self, target, ident, namespace):
+        if namespace == 'scheduled':
+            rows = await self._queue(target, exact_id=ident)
+            return rows[0] if rows else None
         rows = _items(await self._call('wall.getById', posts=f'{target}_{ident}', extended=0))
         if not rows:
             return None
@@ -884,11 +889,71 @@ class VKAdapter:
             return await self._recover_missing_scheduled_publish(request, state, hooks)
         return await self._observe(request, state, hooks)
 
+    @staticmethod
+    def _best_photo_url(photo):
+        original = photo.get('orig_photo')
+        if isinstance(original, dict) and isinstance(original.get('url'), str) and original['url']:
+            return original['url']
+        sizes = photo.get('sizes')
+        if not isinstance(sizes, list):
+            return None
+        sizes = [s for s in sizes if isinstance(s, dict) and isinstance(s.get('url'), str) and s['url']]
+        def area(size):
+            width, height = size.get('width'), size.get('height')
+            return width * height if type(width) is int and type(height) is int else 0
+        return max(sizes, key=area)['url'] if sizes else None
+
+    @staticmethod
+    def _photo_mime(data):
+        if data.startswith(b'\xff\xd8\xff'):
+            return 'image/jpeg'
+        if data.startswith(b'\x89PNG\r\n\x1a\n'):
+            return 'image/png'
+        if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+            return 'image/webp'
+        raise DomainError('vk_photo_format_invalid')
+
+    async def _exact_photo_page(self, raw, item):
+        source = raw.get('copy_history') or []
+        attachments = (source[0] if source else raw).get('attachments') or []
+        downloads, evidence = [], []
+        try:
+            # A slow CDN must not exhaust the read worker's 30-second budget.
+            async with asyncio.timeout(12):
+                for attachment in attachments:
+                    if not isinstance(attachment, dict) or attachment.get('type') != 'photo':
+                        continue
+                    photo = attachment.get('photo')
+                    if not isinstance(photo, dict):
+                        raise DomainError('vk_photo_data_invalid')
+                    url = self._best_photo_url(photo)
+                    if not url:
+                        raise DomainError('vk_photo_url_missing')
+                    data = await self.transport.download_photo(url)
+                    mime = self._photo_mime(data)
+                    provider_ref = f'photo{photo["owner_id"]}_{photo["id"]}'
+                    if provider_ref not in item.provider_media:
+                        raise DomainError('vk_photo_binding_invalid')
+                    slot = len(downloads)
+                    downloads.append(MediaDownload(item.native_id, slot, provider_ref, 'photo', mime, data))
+                    evidence.append(DownloadedMedia(slot, hashlib.sha256(data).hexdigest(), mime, len(data)))
+        except Exception as exc:
+            # Provider photo URLs and exceptions are private; only a code leaves the adapter.
+            reason = (exc.code if isinstance(exc, DomainError) else
+                      'vk_photo_timeout' if isinstance(exc, TimeoutError) else
+                      'vk_photo_transport_failed')
+            return ReadPage((replace(item, media_check='media_download_unavailable:' + reason),))
+        return ReadPage((replace(item, observed_media=tuple(evidence)) if evidence else item,),
+                        downloads=tuple(downloads))
+
     async def read(self, request: ReadRequest, hooks: Hooks) -> ReadPage:
         self._connection(request)
         if request.kind == 'item':
-            item = await self._exact(request.native_target, request.native_item, request.namespace)
-            return ReadPage((item,) if item else ())
+            if request.namespace not in {'published', 'scheduled'}:
+                item = await self._exact(request.native_target, request.native_item, request.namespace)
+                return ReadPage((item,) if item else ())
+            raw = await self._exact_raw(request.native_target, request.native_item, request.namespace)
+            return await self._exact_photo_page(raw, self._item(raw, request.namespace, request.native_target)) if raw else ReadPage(())
         if request.kind == 'scheduled':
             items = await self._queue(request.native_target)
         elif request.kind in {'feed', 'search'}:
