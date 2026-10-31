@@ -67,7 +67,6 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
 
         from PIL import Image
         from adapters.vk import VKAdapter
-        from social_operations.assets import verify_image
         from social_operations.service import Application
         from social_operations.worker import Worker
         from tests.providers.scripted import VKTransport
@@ -87,7 +86,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         }
         binary = io.BytesIO()
         Image.new('RGB', (1200, 800), 'orange').save(binary, format='JPEG')
-        expected = verify_image(binary.getvalue(), 'image/jpeg').data
+        expected = binary.getvalue()
 
         async def download_photo(requested):
             assert requested == url
@@ -107,6 +106,13 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         asset = item['media'][0]['source']['id']
         assert item['media_evidence'][0]['resource_uri'] == 'vibepublish://assets/' + asset
         assert url not in str(read)
+        with self.store.connection() as db:
+            cache = db.execute('SELECT purpose,publication_id,expires FROM media_store_assets WHERE asset_id=?',
+                               (asset,)).fetchone()
+            self.assertEqual(cache['purpose'], 'download_cache')
+            self.assertIsNone(cache['publication_id'])
+            self.assertAlmostEqual(cache['expires'], time.time() + 3600, delta=15)
+            self.assertEqual(db.execute('SELECT count(*) FROM assets').fetchone()[0], 1)
         headers = {'Authorization': 'Bearer ' + self.token}
         async with httpx.AsyncClient(headers=headers, trust_env=False) as http:
             response = await http.get(self.base + '/v1/assets/' + asset)
@@ -122,6 +128,16 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     await session.initialize()
                     resource = await session.read_resource('vibepublish://assets/' + asset)
                     assert base64.b64decode(resource.contents[0].blob) == expected
+                    with self.store.tx() as db:
+                        db.execute('UPDATE media_store_assets SET expires=? WHERE asset_id=?',
+                                   (time.time() - 1, asset))
+                    expired = await http.get(self.base + '/v1/assets/' + asset)
+                    self.assertEqual(expired.status_code, 404)
+                    with self.assertRaises(Exception):
+                        await session.read_resource('vibepublish://assets/' + asset)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM assets').fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT count(*) FROM media_store_assets').fetchone()[0], 0)
 
     async def test_actual_sdk_eight_tools_skill_resource_prompt_and_reconnect(self):
         progress = []

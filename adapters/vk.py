@@ -334,7 +334,7 @@ class VKAdapter:
                         return [raw]
                     values.append(item)
             if len(seen) == count:
-                return values
+                return [] if exact_id is not None else values
             if len(rows) < 100:
                 raise DomainError('vk_queue_read_incomplete')
         raise DomainError('vk_queue_read_incomplete')

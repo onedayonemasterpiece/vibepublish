@@ -8,11 +8,11 @@ import pytest
 from PIL import Image
 
 from adapters.vk import VKAdapter
-from social_operations.assets import import_image, retired_asset_rows, verify_image
+from social_operations.assets import import_image, retired_asset_rows
 from social_operations.service import Application
 from social_operations.storage import Store
 from social_operations.worker import Worker
-from social_operations.domain import timestamp
+from social_operations.domain import DomainError, timestamp
 from tests.providers.scripted import VKTransport
 
 
@@ -103,6 +103,8 @@ async def test_exact_vk_photo_read_downloads_bytes_and_keeps_native_edit_cas(tmp
     listed = env.store.receipt(env.actor, listing['operation_id'])
     assert listed['items'] and not called
     ref = listed['items'][0]['ref']
+    with env.store.connection() as db:
+        before_assets = db.execute('SELECT count(*) FROM assets').fetchone()[0]
     read = await env.app.call(env.actor, "vibepublish_read", {
         "query": {"kind": "item", "item_ref": ref}})
     assert await env.worker.run_once()
@@ -118,7 +120,14 @@ async def test_exact_vk_photo_read_downloads_bytes_and_keeps_native_edit_cas(tmp
     assert item['media_evidence'][0]['resource_uri'] == 'vibepublish://assets/' + asset_id
     assert item['media_evidence'][0]['sha256'] == hashlib.sha256(wire).hexdigest()
     full, mime, _ = env.app.read_asset(env.actor, asset_id)
-    assert full == verify_image(wire, 'image/png').data and mime == 'image/png'
+    assert full == wire and mime == 'image/png'
+    with env.store.connection() as db:
+        cache = db.execute('SELECT purpose,publication_id,expires FROM media_store_assets WHERE asset_id=?',
+                           (asset_id,)).fetchone()
+        assert cache['purpose'] == 'download_cache' and cache['publication_id'] is None
+        assert cache['expires'] == NOW + 3600
+        # VK source reads create one expiring copy, not a raw+sanitized pair.
+        assert db.execute('SELECT count(*) FROM assets').fetchone()[0] == before_assets + 1
     with Image.open(io.BytesIO(full)) as decoded:
         assert decoded.size == (1200, 800)  # Full-size asset, not the 768 px preview.
     assert 'never-persist' not in json.dumps(done)
@@ -132,6 +141,45 @@ async def test_exact_vk_photo_read_downloads_bytes_and_keeps_native_edit_cas(tmp
     edited = env.store.receipt(env.actor, accepted['operation_id'])
     assert edited['state'] == ('scheduled' if scheduled else 'verified'), edited
     assert any(name == 'wall.edit' for name, _, _ in env.transport.calls)
+    env.current[0] = NOW + 3601
+    with pytest.raises(DomainError) as expired:
+        env.app.read_asset(env.actor, asset_id)
+    assert expired.value.code == 'asset_not_available'
+    with env.store.connection() as db:
+        assert db.execute('SELECT count(*) FROM assets WHERE id=?', (asset_id,)).fetchone()[0] == 0
+        assert db.execute('SELECT count(*) FROM media_store_assets WHERE asset_id=?', (asset_id,)).fetchone()[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_vk_photo_cache_is_held_only_for_an_unfinished_edit(tmp_path):
+    env = setup(tmp_path)
+    photo = env.transport.posts[(OWNER, 223)]['attachments'][0]['photo']
+    photo['sizes'] = [{'url': 'https://sun9.userapi.com/source.jpg',
+                       'width': 30, 'height': 40}]
+    image = io.BytesIO()
+    Image.new('RGB', (30, 40), 'blue').save(image, format='PNG')
+    wire = image.getvalue()
+
+    async def download(_url):
+        return wire
+
+    env.transport.download_photo = download
+    ref = await fresh_item(env)
+    with env.store.connection() as db:
+        result = json.loads(db.execute(
+            "SELECT result FROM operations WHERE action='read' ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()[0])
+    cached = result['items'][0]['media'][0]['source']['id']
+    queued = await env.app.call(env.actor, 'vibepublish_publication_update',
+                                edit(ref, cached))
+    assert 'error' not in queued, queued
+    env.current[0] += 3601
+    assert env.app.read_asset(env.actor, cached)[0] == wire
+    with env.store.connection() as db:
+        assert db.execute('SELECT count(*) FROM media_store_assets WHERE asset_id=?',
+                          (cached,)).fetchone()[0] == 1
+    # The existing purge guards a plan's asset while the operation is unfinished.
+    assert env.store.receipt(env.actor, queued['operation_id'])['state'] == 'accepted'
 
 
 @pytest.mark.asyncio
@@ -162,6 +210,37 @@ async def test_vk_photo_download_failure_preserves_exact_item(tmp_path, schedule
     accepted = await env.app.call(env.actor, 'vibepublish_publication_update',
                                   edit(ref, env.new_asset))
     assert 'error' not in accepted, accepted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gone", ["published", "deleted"])
+async def test_scheduled_exact_item_gone_does_not_adopt_neighbor_or_write(tmp_path, gone):
+    env = setup(tmp_path, scheduled=True)
+    fresh = await fresh_item(env, scheduled=True)
+    # Keep a different postponed item in the same queue; missing item must
+    # never resolve to this neighbor, even when its ID is the only one left.
+    env.transport.posts[(OWNER, 224)] = {
+        **env.transport.posts[(OWNER, 223)], "id": 224, "text": "Another queued post",
+    }
+    if gone == "published":
+        env.transport.posts[(OWNER, 223)]["post_type"] = "post"
+    else:
+        del env.transport.posts[(OWNER, 223)]
+    lookup = await env.app.call(env.actor, "vibepublish_read", {
+        "query": {"kind": "item", "item_ref": fresh}})
+    assert "error" not in lookup, lookup
+    assert await env.worker.run_once()
+    empty = env.store.receipt(env.actor, lookup["operation_id"])
+    assert empty["state"] == "verified" and empty["items"] == [], empty
+    accepted = await env.app.call(env.actor, "vibepublish_publication_update",
+                                  edit(fresh, env.new_asset))
+    assert "error" not in accepted, accepted
+    before = len(env.transport.uploads)
+    assert await env.worker.run_once()
+    result = env.store.receipt(env.actor, accepted["operation_id"])
+    assert result["error"]["code"] == "remote_item_missing", result
+    assert len(env.transport.uploads) == before
+    assert not any(name == "wall.edit" for name, _, _ in env.transport.calls)
 
 
 @pytest.mark.asyncio
