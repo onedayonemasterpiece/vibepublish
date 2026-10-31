@@ -35,7 +35,12 @@ def verify_assets(request: ProviderRequest, *, allow_video: bool = False, allow_
                     and not any(c in '/\\' or ord(c) < 32 for c in asset.alt_text)))
         if ((not video and not image and not document) or asset.caption or (asset.alt_text and not filename)):
             raise DomainError('media_rendering_needs_review', next_action='contact_owner')
-        if (not 0 < asset.size <= (128 if document else 20) * 1024 * 1024 or len(asset.data) != asset.size
+        if asset.provider_ref:
+            if (request.action != "edit" or not request.existing or not image
+                    or asset.provider_ref not in request.existing.provider_media
+                    or asset.data or asset.size or asset.sha256):
+                raise DomainError("native_attachment_invalid")
+        elif (not 0 < asset.size <= (128 if document else 20) * 1024 * 1024 or len(asset.data) != asset.size
                 or hashlib.sha256(asset.data).hexdigest() != asset.sha256):
             raise DomainError('asset_integrity')
 

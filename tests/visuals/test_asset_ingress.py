@@ -24,6 +24,41 @@ def env(tmp_path):
         yield store, token, client
 
 
+
+@pytest.mark.asyncio
+async def test_wonderful_lections_download_cache_keeps_preview_and_http_get_until_ttl(env):
+    from social_operations.worker import Worker
+    from social_operations.assets import retired_asset_rows
+
+    store, token, client = env
+    now = [1_800_000_000.0]
+    store.clock = lambda: now[0]
+    uploaded = upload(client, key="wl-download-cache").json()
+    ident = uploaded["asset_id"]
+    actor = store.authenticate(token)
+    now[0] += 15 * 86400  # Simulate an old transfer while its new cache TTL is active.
+    with store.tx() as db:
+        db.execute("INSERT INTO publications VALUES(?,?,?,?,?,?)",
+                   ("pub_wl_cache", actor.tenant_id, actor.principal_id, 1,
+                    "media_store", now[0]))
+        db.execute("INSERT INTO media_store_assets VALUES(?,?,?,?)",
+                   (ident, "pub_wl_cache", "download_cache", now[0] + 3600))
+    worker = Worker(store)
+    assert not await worker.run_once()  # periodic local cleanup only; no provider calls
+    with store.connection() as db:
+        remaining = {row["id"]: row["reason"] for row in retired_asset_rows(db, now[0])}
+    assert remaining[ident] == "media_transfer"
+    preview = await Application(store).call(actor, "vibepublish_asset_preview",
+                      {"resource_uri": "vibepublish://assets/" + ident})
+    assert hasattr(preview, "metadata")
+    assert client.get("/v1/assets/" + ident).status_code == 200
+
+    now[0] += 3599
+    assert client.get("/v1/assets/" + ident).status_code == 200
+    now[0] += 2
+    assert client.get("/v1/assets/" + ident).status_code == 404
+
+
 def upload(client, data=None, key='image-1', mime='image/png'):
     return client.post('/v1/assets', content=png() if data is None else data,
                        headers={'idempotency-key': key, 'content-type': mime})

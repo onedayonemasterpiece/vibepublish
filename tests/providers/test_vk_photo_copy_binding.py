@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from adapters.port import ReadRequest
 from adapters.vk import VKAdapter
 from adapters.vk_transport import VKHTTPTransport
 from social_operations.domain import DomainError, OutcomeUnknown, timestamp
@@ -167,16 +168,41 @@ async def test_known_id_transient_readback_has_one_warning_and_no_second_post(sc
 
 
 @pytest.mark.asyncio
-async def test_exact_scheduled_target_with_unknown_attachment_still_fails():
+async def test_exact_scheduled_target_with_unknown_attachment_is_readable():
     a, t, _, _ = setup_copy()
     t.posts[(-101, 998)] = {
         'id': 998, 'owner_id': -101, 'text': 'Target',
         'date': NOW + 3600, 'post_type': 'postpone',
         'attachments': [{'type': 'poll', 'poll': {'id': 4}}],
     }
-    with pytest.raises(DomainError) as failure:
-        await a._exact('-101', '998', 'scheduled')
-    assert failure.value.code == 'vk_attachment_needs_review'
+    item = await a._exact('-101', '998', 'scheduled')
+    assert item.native_id == '998'
+    assert item.provider_media == ('unsupported:poll:0_4',)
+
+
+@pytest.mark.asyncio
+async def test_vk_scheduled_queue_and_feed_keep_mixed_unsupported_attachments():
+    a, t, j, _ = setup_copy()
+    for ident, namespace in [(221, 'postpone'), (222, 'post')]:
+        t.posts[(-101, ident)] = {
+            'id': ident, 'owner_id': -101, 'text': 'Mixed native attachments',
+            'date': NOW + 3600, 'post_type': namespace,
+            'attachments': [
+                {'type': 'photo', 'photo': {'owner_id': -101, 'id': 1000 + ident}},
+                {'type': 'market', 'market': {'owner_id': -101, 'id': ident}},
+                {'type': 'link', 'link': {'url': 'https://example.com/photo'}},
+            ],
+        }
+    for kind, expected in [
+        ('scheduled', '221'), ('feed', '222'),
+    ]:
+        page = await a.read(ReadRequest('connection', '-101', kind), j.hooks)
+        item = next(item for item in page.items if item.native_id == expected)
+        assert item.provider_media == (
+            f'photo-101_{1000+int(expected)}',
+            f'unsupported:market:-101_{expected}',
+            'unsupported:link:0_0',
+        )
 
 
 @pytest.mark.asyncio

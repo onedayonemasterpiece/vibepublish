@@ -104,7 +104,7 @@ class VKAdapter:
             methods = {'publish': ['wall.post'], 'forward': ['wall.repost'], 'edit': ['wall.edit'],
                        'reschedule': ['wall.edit'], 'cancel': ['wall.delete'], 'delete': ['wall.delete']}[request.action]
             methods += ['wall.get' if request.scheduled_at or (request.existing and request.existing.namespace == 'scheduled') else 'wall.getById']
-            if request.assets:
+            if any(not a.provider_ref for a in request.assets):
                 methods += (['video.save', 'video.get'] if any(a.role == 'video' for a in request.assets) else ['photos.getWallUploadServer', 'photos.saveWallPhoto'])
         for method in methods:
             if not self.transport.permits(POLICIES[method][0], method, group_id=group, scheduled=bool(request.scheduled_at)):
@@ -174,6 +174,11 @@ class VKAdapter:
                     existing = request.existing
                     if existing.native_target != request.native_target:
                         raise DomainError('remote_target_mismatch')
+                    if (request.action in {'edit', 'reschedule'}
+                            and any(ref.startswith('unsupported:') for ref in existing.provider_media)):
+                        raise DomainError('vk_attachment_edit_unsupported',
+                                          'This VK post contains attachments wall.edit cannot preserve',
+                                          'fix_input')
                     if existing.namespace not in {'published', 'scheduled'}:
                         raise DomainError('vk_namespace_unsupported')
                     if request.action in {'reschedule', 'cancel'} and existing.namespace != 'scheduled':
@@ -189,12 +194,18 @@ class VKAdapter:
     @staticmethod
     def _media(raw):
         result = []
-        for attachment in raw.get('attachments', []):
-            kind = attachment.get('type')
-            value = attachment.get(kind, {})
-            if kind not in {'photo', 'video', 'doc', 'audio'} or not isinstance(value, dict):
-                raise DomainError('vk_attachment_needs_review')
-            result.append(f'{kind}{_int(value.get("owner_id"))}_{_int(value.get("id"))}')
+        for attachment in raw.get('attachments') or []:
+            kind = attachment.get('type', 'unknown') if isinstance(attachment, dict) else 'unknown'
+            value = attachment.get(kind, {}) if isinstance(attachment, dict) else {}
+            if (kind not in {'photo', 'video', 'doc', 'audio'} or not isinstance(value, dict)
+                    or type(value.get('owner_id')) is not int or type(value.get('id')) is not int):
+                # Read every item, including polls/links/markets; do not treat opaque
+                # VK media as a wall.edit-safe attachment reference.
+                owner = value.get('owner_id', 0) if isinstance(value, dict) else 0
+                ident = value.get('id', 0) if isinstance(value, dict) else 0
+                result.append(f'unsupported:{kind}:{owner}_{ident}')
+                continue
+            result.append(f'{kind}{value["owner_id"]}_{value["id"]}')
         return tuple(result)
 
     @staticmethod
@@ -471,6 +482,10 @@ class VKAdapter:
         attachments, native_media = (
             await self._reuse_staged_images(request, staging, hooks) if staging else ([], []))
         for n, asset in enumerate(request.assets[len(native_media):], start=len(native_media)):
+            if asset.provider_ref:
+                attachments.append(asset.provider_ref)
+                native_media.append(asset.provider_ref)
+                continue
             await hooks.emit_progress('uploading', 'started', f'Staging image {n+1}/{len(request.assets)}')
             for upload_attempt in range(5):
                 server = await self._call('photos.getWallUploadServer', group_id=group)
@@ -566,7 +581,9 @@ class VKAdapter:
         if r.source and await self._source(r) != state.get('source'):
             raise DomainError('source_changed', next_action='refresh')
         attachments, native_media = [], []
-        reuse = r.existing and tuple(a.sha256 for a in r.assets) == tuple(r.existing.media_hashes)
+        reuse = (r.existing and (not r.assets or (
+            not any(a.provider_ref for a in r.assets)
+            and tuple(a.sha256 for a in r.assets) == tuple(r.existing.media_hashes))))
         video_effect = bool(r.action == 'publish' and any(a.role == 'video' for a in r.assets))
         if video_effect:
             await hooks.checkpoint('vk_video_prepared', saved_checkpoint(r, id=None, media=[], retryable_wall_post=False))

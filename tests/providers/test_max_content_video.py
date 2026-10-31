@@ -168,7 +168,8 @@ async def test_max_rich_video_plan_lifecycle_roles_and_adoption(tmp_path,video_b
         'change':{'kind':'reschedule','delivery':{'kind':'at','at':timestamp(store.clock()+7200)}},'request_key':'reschedule-video'})
     await worker.run_once();second=store.receipt(actor,second['operation_id'])
     assert second['state']=='scheduled',second
-    assert provider.requests[-1].assets[0].role=='video'
+    assert provider.requests[-1].assets == ()
+    assert provider.requests[-1].existing.provider_media == ('media-0',)
     assert json.loads(provider.requests[-1].content_json)['format']=='max_entities'
     adopted=await call('publication_update',{'item_ref':second['deliveries'][0]['item_ref'],
         'change':{'kind':'reschedule','delivery':{'kind':'at','at':timestamp(store.clock()+10800)}},'request_key':'adopt-video'})

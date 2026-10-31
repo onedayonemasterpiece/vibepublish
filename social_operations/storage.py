@@ -77,6 +77,8 @@ class Store:
                 db.executescript(Path(__file__).with_name("media_service_topic_schema.sql").read_text())
             if version < 11:
                 db.executescript(Path(__file__).with_name("media_entry_grant_schema.sql").read_text())
+            # Cover retention scans without traversing multi-GB BLOB table pages.
+            db.execute("CREATE INDEX IF NOT EXISTS assets_retention_lookup ON assets(created,id)")
 
     @staticmethod
     def _enable_wal(db: sqlite3.Connection) -> None:

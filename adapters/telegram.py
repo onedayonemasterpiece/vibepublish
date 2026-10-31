@@ -711,8 +711,6 @@ class TelegramAdapter:
             native_media = state['source']['media']
         elif existing:
             native_media = list(existing.provider_media)
-            if r.action == 'edit' and len(r.assets) != len(existing.media_hashes):
-                raise DomainError('telegram_media_removal_needs_review')
         if existing and r.action == 'edit' and compiled_media:
             # Uploading can take time; never overwrite a change made while staging.
             current = await self._exact(entity, existing)

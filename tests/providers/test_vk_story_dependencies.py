@@ -9,6 +9,7 @@ import pytest
 from adapters.vk_transport import VKHTTPTransport, VKToken
 from social_operations.domain import DomainError, timestamp
 from social_operations.storage import Store
+from social_operations.assets import retired_asset_rows
 from social_operations.worker import Worker
 from social_operations.vk_story_dependencies import ingest_events, RECOVERY_WINDOW
 from .test_vk_story_links import runtime
@@ -73,6 +74,23 @@ def published(env, ident):
 def event(ident, *, event_id='native-1', group=101):
     return {'type': 'wall_post_new', 'group_id': group, 'event_id': event_id,
             'object': {'id': ident, 'postponed_id': ident, 'owner_id': -group, 'text': 'untrusted event body'}}
+
+
+@pytest.mark.asyncio
+async def test_linked_story_awaiting_native_parent_holds_asset_bytes(tmp_path):
+    env = setup(tmp_path)
+    store, actor, app, worker, transport, now, args = env
+    _, ident = await admit(env)
+    with store.connection() as db:
+        source = db.execute("SELECT json_extract(story_plan,'$.assets[0].ref') FROM vk_story_dependencies").fetchone()[0]
+        reasons = {row['id']: row['reason'] for row in retired_asset_rows(db, now[0])}
+        assert reasons[source] == 'pending_linked_story'
+    assert await worker.run_once()  # clean-up tick must not consume the future child input
+    with store.connection() as db:
+        assert db.execute('SELECT 1 FROM assets WHERE id=?', (source,)).fetchone()
+    published(env, ident)
+    assert await worker.run_once()
+    assert dep(store)['state'] == 'queued'
 
 
 @pytest.mark.asyncio
