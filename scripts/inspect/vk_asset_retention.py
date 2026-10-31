@@ -14,7 +14,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from social_operations.assets import retired_asset_rows
+from social_operations.assets import retired_asset_rows, reclaim_asset_bytes, stale_unsent_attempts
 
 
 def summarize(db, now):
@@ -24,16 +24,24 @@ def summarize(db, now):
         bucket = buckets[row["reason"]]
         bucket["rows"] += 1
         bucket["bytes"] += row["size_bytes"]
-    pending = db.execute(
-        """SELECT o.id AS operation_id, t.alias AS destination, t.state,
-                  o.work_state, json_extract(t.plan,'$.scheduled_at') AS scheduled_at,
-                  COUNT(DISTINCT json_extract(j.value,'$.ref')) AS assets
-           FROM attempts t JOIN operations o ON o.id=t.operation_id
-           JOIN json_each(t.plan,'$.assets') j
-           WHERE o.work_state!='done' OR o.state='outcome_unknown'
-              OR t.state='outcome_unknown'
-           GROUP BY o.id, t.id ORDER BY o.created DESC LIMIT 100"""
-    ).fetchall()
+    stale = stale_unsent_attempts(db, now)
+    reclaim = {row['id'] for row in rows if row['reason'] == 'reclaim'}
+    candidates = [row['id'] for row in db.execute(
+        'SELECT id,asset_ref,art_ref FROM visual_candidates')
+        if row['asset_ref'] in reclaim and row['art_ref'] in reclaim]
+    origins = sum(row['asset_id'] in reclaim for row in db.execute(
+        'SELECT asset_id FROM visual_asset_origins'))
+    feedback = sum(row['candidate_id'] in candidates for row in db.execute(
+        'SELECT candidate_id FROM visual_feedback'))
+    unknown = []
+    for row in db.execute(
+        """SELECT o.id,a.provider,o.created,o.worker_seen
+           FROM attempts a JOIN operations o ON o.id=a.operation_id
+           WHERE a.state='outcome_unknown'"""):
+        age = (now - max(row['created'], row['worker_seen'] or row['created'])) / 86400
+        if age >= 3:
+            unknown.append({'operation_id': row['id'], 'provider': row['provider'],
+                            'age_days': round(age, 2)})
     return rows, {
         "total": {"rows": len(rows), "bytes": sum(row["size_bytes"] for row in rows)},
         "by_reason": dict(sorted(buckets.items())),
@@ -41,10 +49,11 @@ def summarize(db, now):
             "rows": sum(bucket["rows"] for key, bucket in buckets.items() if key != "reclaim"),
             "bytes": sum(bucket["bytes"] for key, bucket in buckets.items() if key != "reclaim"),
         },
-        "operations_requiring_bytes": [dict(row) for row in pending],
-        "visual_lineage_over_14_days": {
-            "rows": sum(row["reason"] == "visual_lineage" and row["created"] < now - 14 * 86400 for row in rows),
-            "bytes": sum(row["size_bytes"] for row in rows if row["reason"] == "visual_lineage" and row["created"] < now - 14 * 86400),
+        "would_close_operations": len({row["operation_id"] for row in stale}),
+        "would_close_attempts": [{**row, "age_days": round(row["age_days"], 2)} for row in stale],
+        "old_unknown_effects_releasing_bytes": unknown,
+        "expired_visual_metadata": {
+            "candidates": len(candidates), "origins": origins, "feedback": feedback,
         },
     }
 
@@ -59,21 +68,24 @@ def main():
     db = (sqlite3.connect(str(path)) if args.apply else
           sqlite3.connect("file:" + str(path) + "?mode=ro", uri=True))
     db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys=ON")
     try:
-        if not args.apply:
+        now = time.time()
+        if args.apply:
+            from social_operations.storage import Store
+            from social_operations.worker import Worker
+            worker = Worker(Store(path, clock=lambda: now))
+            db.execute("BEGIN IMMEDIATE")
+        else:
             db.execute("PRAGMA query_only=ON")
             db.execute("BEGIN")  # One read snapshot across operations and asset references.
         before_bytes = path.stat().st_size
-        now = time.time()
-        if args.apply:
-            db.execute("BEGIN IMMEDIATE")
         rows, report = summarize(db, now)
         report["mode"] = "apply" if args.apply else "dry_run"
         report["sqlite_file_bytes_before"] = before_bytes
         if args.apply:
-            db.executemany("DELETE FROM assets WHERE id=?", [
-                (row["id"],) for row in rows if row["reason"] == "reclaim"
-            ])
+            worker.expire_stale_unsent(db, now)
+            reclaim_asset_bytes(db, rows)
             db.commit()
             db.execute("VACUUM")
             report["sqlite_file_bytes_after"] = path.stat().st_size

@@ -532,6 +532,8 @@ class Application:
         if target.get('visual') and not pending_visual:
             raise DomainError('visual_requires_visual_service')
         content = target.get('renderings', {}).get(binding['provider'], target.get('content', {'text': ''}))
+        if action == 'edit' and 'media' in target and not target['media']:
+            raise DomainError('media_removal_needs_review')
         assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] in {'telegram', 'vk'} or (binding['provider'] == 'max' and binding['account_type'] == 'max_web'), allow_document=binding['provider'] == 'telegram', existing=existing, provider=binding['provider'], action=action)
         if binding['account_type'] != 'fake':
             for asset in assets:
@@ -809,7 +811,7 @@ class Application:
                             for ingress in ingress_keys:
                                 receipt=_response(db,actor,media['source']['id'],ingress['key'])
                                 db.execute("UPDATE operations SET result=json_set(result,'$.document_receipt',json(?)) WHERE id=?",(canonical(receipt),ingress['id']))
-                            db.execute("INSERT INTO media_store_assets VALUES(?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET publication_id=excluded.publication_id,expires=excluded.expires",(media['source']['id'],publication,'staging',staging_expires))
+                            db.execute("INSERT INTO media_store_assets VALUES(?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET publication_id=excluded.publication_id,expires=excluded.expires WHERE media_store_assets.purpose='staging'",(media['source']['id'],publication,'staging',staging_expires))
                 if args.get('request_key'):
                     self._key(db, actor, args['request_key'], digest([action, intent]), op)
         return self.store.receipt(actor, op)
@@ -842,7 +844,7 @@ class Application:
             raise DomainError('delete_requires_published')
         if remote.get('origin') and kind in {'edit', 'reschedule'}:
             raise DomainError('forward_lifecycle_not_enabled', next_action='contact_owner')
-        target = {'content': {'text': remote['text']}, 'media': [],
+        target = {'content': {'text': remote['text']},
                   'surface': 'story' if remote['namespace'] == 'story' else 'post',
                   'delivery': {'kind': 'at', 'at': remote['scheduled_at']} if remote.get('scheduled_at') else {'kind': 'now'}}
         if (b['provider'] == 'telegram' or (b['provider'] == 'max' and b['account_type'] == 'max_web')) and remote.get('entities_json', '[]') != '[]':
@@ -897,8 +899,10 @@ class Application:
                 # Telegram assigns new message ids on publication; the queued identity is gone.
                 raise DomainError('native_item_published', 'The scheduled item is already published: read it and change it by item_ref', 'refresh')
             b = self.store.binding(db, actor, binding_id=child['binding_id'])
-            target = {'content': json.loads(old['content_json']), 'media': ([] if b['provider'] == 'vk' and kind != 'approve' else [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']]),
+            target = {'content': json.loads(old['content_json']),
                       'surface': old['surface'], 'delivery': {'kind': 'at', 'at': old['scheduled_at']} if old['scheduled_at'] else {'kind': 'now'}, 'mode': 'execute'}
+            if kind == 'approve':
+                target['media'] = [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']]
             if kind == 'edit':
                 target.update({k: v for k, v in change.items() if k not in {'kind', 'destinations'}})
             elif kind == 'reschedule':

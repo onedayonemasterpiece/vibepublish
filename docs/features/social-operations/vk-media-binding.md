@@ -34,15 +34,19 @@ and changed by that new `item_ref`; the Telegram-oriented
 retain the existing 60-second native lead/CAS guards. Telegram's managed
 single-media edit and MAX limitations do not change.
 
-Local `assets` bytes are transient: the worker's existing periodic cleanup
-removes assets once no unfinished native operation needs them; uncertain effects
-retain their recovery bytes. Truly unlinked uploads/imagegen assets expire after
-14 days. **Known limitation pending Opus decision:** visual candidate/origin
-provenance has non-cascading foreign keys to `assets`. These legacy candidates
-cannot be removed by this safe cleanup; they are classified as `visual_lineage`
-and retained until a separate metadata-retention decision. The same guard protects
-emoji catalog lineage. `media_store`'s staging cleanup and `download_cache` TTL (one hour)
-remain unchanged, including asset preview and `GET /v1/assets/{id}` access.
+Local `assets` bytes are transient for all three providers: text-only edits and
+reschedules use exact observed native attachments instead of old image bytes.
+An explicit `edit.media: []` is refused rather than silently removing media.
+Unsent work older than three days after `max(created,scheduled_at)` is closed
+without provider dispatch (`stale_not_dispatched`). Failed and uncertain effects
+retain their immutable receipts, but only keep asset bytes for three days after
+the last worker observation; an already unknown effect is never replayed.
+Unlinked uploads and visual candidate/derivative media expire after 14 days;
+expired visual candidates, their origin and feedback references are removed
+alongside the binary while the visual job and its text remain. Waiting VK-linked
+Stories remain protected. Emoji catalog metadata and assets are unchanged.
+`media_store` staging and one-hour `download_cache` retention, list/get,
+asset preview and `GET /v1/assets/{id}` are unchanged.
 The source tree provides a read-only-by-default SQLite dry-run command,
 `python scripts/inspect/vk_asset_retention.py --db PATH`. The `--apply`
 deletion + VACUUM is reserved for explicitly approved coordinated rollout.

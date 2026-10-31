@@ -36,7 +36,12 @@ rights, approval, scheduling and unknown-outcome policy.
   provider media bytes. Results include caption, hashes, destination alias,
   topic link, exact message link and entry identity for duplicate detection.
 - `get` downloads the exact file from Telegram by its stored chat/topic/message
-  identity. Any local download copy is short-lived cache, never the durable store.
+  identity. Any local download copy is a one-hour cache, never the durable store.
+  Reusing a cached PDF/DjVu for a new `put` cannot extend its one-hour TTL or
+  change its `download_cache` purpose: `put` stages a separate copy. A legacy
+  cache asset in the 2026-10-31 database showed 30 days + one hour because an
+  older `put` UPSERT extended `expires` without changing `purpose`; fixed at
+  admission, without modifying the existing cache row or Wonderful Lections.
 - Put bytes remain in durable local staging only until exact Telegram document
   verification. Verified staging is purged; failed/queued staging is retained so
   a provider outage cannot lose an admitted file. Unresolved staging expires one

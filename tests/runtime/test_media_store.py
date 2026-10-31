@@ -232,6 +232,42 @@ async def test_get_downloads_exact_telegram_bytes_into_expiring_cache(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_media_store_put_never_extends_an_existing_download_cache_ttl(tmp_path):
+    """Reusing a downloaded document for a put must not convert 1h cache to 30d."""
+    store, actor, _, provider, app, worker = runtime(tmp_path)
+    now = store.clock()
+    import hashlib
+    data = b'%PDF-1.4\n%fixture document'
+    sha = hashlib.sha256(data).hexdigest()
+    ident = 'asset_downloaded_document'
+    with store.tx() as db:
+        db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)',
+                   ('pub_download_source', actor.tenant_id, actor.principal_id,
+                    1, 'media_store', now))
+        db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
+                   (ident, actor.tenant_id, actor.principal_id, sha,
+                    'application/pdf', 0, 0, data, sha, now))
+        db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
+                   (ident, 'pub_download_source', 'download_cache', now + 3600))
+    accepted = await app.call(actor, 'vibepublish_media_store', {
+        'command': {'kind': 'put', 'to': 'vault',
+                    'thread_ref': 'https://t.me/c/4379835477/5',
+                    'content': {'text': 'Historical document'},
+                    'media': [{'source': {'kind': 'asset', 'id': ident},
+                               'role': 'document'}]},
+        'request_key': 'reused-document'})
+    assert 'error' not in accepted, accepted
+    with store.connection() as db:
+        cache = db.execute('SELECT purpose,publication_id,expires FROM media_store_assets WHERE asset_id=?',
+                           (ident,)).fetchone()
+        assert cache['purpose'] == 'download_cache'
+        assert cache['publication_id'] == 'pub_download_source'
+        assert cache['expires'] == now + 3600
+        staging = db.execute("SELECT COUNT(*) FROM media_store_assets WHERE purpose='staging'").fetchone()[0]
+        assert staging == 1  # The put has a distinct durable staging clone.
+
+
+@pytest.mark.asyncio
 async def test_media_store_transient_failure_retries_without_connection_quarantine(tmp_path):
     store,actor,asset,provider,app,worker=runtime(tmp_path);provider.fail_once='telegram_rpc_failed'
     first=await app.call(actor,'vibepublish_media_store',args(asset)); assert 'operation_id' in first, first

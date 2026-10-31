@@ -201,7 +201,7 @@ async def test_retention_keeps_visual_candidate_lineage_until_proven_safe(visual
         assert candidate
         asset_id = candidate['asset_ref']
         reasons = {row['id']: row['reason'] for row in retired_asset_rows(db, clock[0])}
-        assert reasons[asset_id] == 'visual_lineage'
+        assert reasons[asset_id] == 'recent_visual'
     clock[0] += 61
     assert not await worker.run_once()
     with store.connection() as db:

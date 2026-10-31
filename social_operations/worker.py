@@ -217,15 +217,49 @@ class Worker:
                 self.store.fence(db, op['id'], self.id, op['fence'])
                 db.execute('UPDATE operations SET lease_until=?,worker_seen=? WHERE id=?', (self.store.clock()+30, self.store.clock(), op['id']))
 
+    def expire_stale_unsent(self, db, now):
+        """Close never-dispatched native work on the existing worker cleanup tick."""
+        from .assets import stale_unsent_attempts
+        expired = stale_unsent_attempts(db, now)
+        if not expired:
+            return
+        error = DomainError('stale_not_dispatched',
+                            'Не отправлено: прошло три дня после создания или запланированного выхода',
+                            'none')
+        for row in expired:
+            db.execute(
+                """UPDATE attempts SET state='cancelled',stage='finished',
+                          observed='not_attempted',result=?
+                   WHERE id=? AND dispatched=0""",
+                (canonical({'missing_checks': [error.code], 'reason': error.message}),
+                 row['attempt_id']),
+            )
+            self.store.event(db, row['operation_id'], 'finished', 'blocked',
+                             error.code + ': ' + error.message, row['alias'])
+        for operation_id in {row['operation_id'] for row in expired}:
+            states = [row['state'] for row in db.execute(
+                'SELECT state FROM attempts WHERE operation_id=?', (operation_id,))]
+            if states and all(state in TERMINAL for state in states):
+                state = ('cancelled' if all(s == 'cancelled' for s in states) else
+                         'partial' if any(s in {'verified','scheduled'} for s in states) else
+                         'outcome_unknown' if 'outcome_unknown' in states else 'blocked')
+                db.execute(
+                    """UPDATE operations SET state=?,complete=1,work_state='done',
+                              lease_owner=NULL,lease_until=0,error=? WHERE id=?""",
+                    (state, canonical(error.output()), operation_id),
+                )
+                self.store.event(db, operation_id, 'finished', 'completed',
+                                 'Stale never-dispatched operation ended without provider effect')
+
     async def run_once(self, *, operation_id=None):
         try:
             if operation_id is None and self.store.clock() >= self.next_media_store_purge:
                 with self.store.tx() as db:
+                    now = self.store.clock()
+                    self.expire_stale_unsent(db, now)
                     self.app._purge_media_store_assets(db)
-                    from .assets import retired_asset_rows
-                    db.executemany('DELETE FROM assets WHERE id=?',
-                                   [(row['id'],) for row in retired_asset_rows(db, self.store.clock(), include_sizes=False)
-                                    if row['reason'] == 'reclaim'])
+                    from .assets import reclaim_asset_bytes, retired_asset_rows
+                    reclaim_asset_bytes(db, retired_asset_rows(db, now, include_sizes=False))
                 self.next_media_store_purge = self.store.clock() + 60
             op = self.store.claim(
                 self.id,
