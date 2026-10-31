@@ -545,6 +545,14 @@ maximum 768 px on either edge and 384 KiB, intended only for fast model inspecti
 before selection or transfer. The returned metadata binds the preview SHA-256 to
 the authorized source SHA-256.
 
+For dot-owned VK colourization, the **optional** `size:"full"` uses the same
+authorized tool to return an MCP `ImageContent` from `read_asset`: byte-exact
+source up to 8 MiB and 2560 px on the longest side, otherwise metadata-free
+JPEG quality 92 with bounded dimensions/bytes and `reencoded:true`. Its
+`structuredContent` reports `source_sha256`, actual MIME/dimensions/byte size,
+`size:"full"` and `reencoded`, **not** full base64. Default and explicit
+`size:"preview"` retain the previous WebP and `preview_data_url` unchanged.
+
 For clients which drop MCP `ImageContent` while retaining `structuredContent`,
 the same sanitized bounded WebP is also returned as `preview_data_url`
 (`data:image/webp;base64,...`). It contains preview pixels, not the original
