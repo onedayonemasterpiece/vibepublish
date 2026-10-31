@@ -262,8 +262,15 @@ TOOLS = []
 def tool(name, description, inputs, outputs, scope, read_only=False):
     TOOLS.append({"name": "vibepublish_" + name, "description": description,
         "inputSchema": inputs, "outputSchema": outputs, "required_scope": scope,
-        "annotations": {"readOnlyHint": read_only, "destructiveHint": not read_only,
-                        "openWorldHint": name not in ("get_started", "status", "asset_preview")}})
+        "annotations": {"readOnlyHint": read_only, "destructiveHint": name in DESTRUCTIVE,
+                        "openWorldHint": name in OPEN_WORLD}})
+
+
+# Hints describe real effects; ChatGPT asks for explicit approval on destructiveHint.
+# Only lifecycle changes can delete or overwrite published posts.
+DESTRUCTIVE = {"publication_update"}
+# Tools that write to or read from social networks; private asset work is not open-world.
+OPEN_WORLD = {"publish", "media_store", "publication_update", "read", "engage", "destinations"}
 
 
 tool("get_started", "Get the versioned skill, allowed aliases and current capabilities. Never grants access.",
