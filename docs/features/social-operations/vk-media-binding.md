@@ -36,8 +36,12 @@ single-media edit and MAX limitations do not change.
 
 Local `assets` bytes are transient: the worker's existing periodic cleanup
 removes assets once no unfinished native operation needs them; uncertain effects
-retain their recovery bytes. Unlinked uploads/imagegen candidates expire after
-14 days. `media_store`'s staging cleanup and `download_cache` TTL (one hour)
+retain their recovery bytes. Truly unlinked uploads/imagegen assets expire after
+14 days. **Known limitation pending Opus decision:** visual candidate/origin
+provenance has non-cascading foreign keys to `assets`. These legacy candidates
+cannot be removed by this safe cleanup; they are classified as `visual_lineage`
+and retained until a separate metadata-retention decision. The same guard protects
+emoji catalog lineage. `media_store`'s staging cleanup and `download_cache` TTL (one hour)
 remain unchanged, including asset preview and `GET /v1/assets/{id}` access.
 The source tree provides a read-only-by-default SQLite dry-run command,
 `python scripts/inspect/vk_asset_retention.py --db PATH`. The `--apply`

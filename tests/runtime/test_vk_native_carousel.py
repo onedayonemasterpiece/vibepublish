@@ -185,6 +185,29 @@ async def test_vk_publication_edit_keeps_original_native_attachment_after_byte_p
     assert call["message"] == "Updated without stored original"
 
 
+from tests.visuals.test_visual_service import runtime as visual_runtime
+
+
+@pytest.mark.asyncio
+async def test_retention_keeps_visual_candidate_lineage_until_proven_safe(visual_runtime):
+    store, actor, app, worker, _, _, clock, *_ = visual_runtime
+    queued = await app.call(actor, 'vibepublish_visual', {
+        'command': {'kind': 'generate', 'brief': 'Protected lineage example', 'candidates': 1},
+        'request_key': 'candidate-lineage'})
+    assert 'error' not in queued, queued
+    assert await worker.run_once()
+    with store.connection() as db:
+        candidate = db.execute('SELECT asset_ref FROM visual_candidates LIMIT 1').fetchone()
+        assert candidate
+        asset_id = candidate['asset_ref']
+        reasons = {row['id']: row['reason'] for row in retired_asset_rows(db, clock[0])}
+        assert reasons[asset_id] == 'visual_lineage'
+    clock[0] += 61
+    assert not await worker.run_once()
+    with store.connection() as db:
+        assert db.execute('SELECT 1 FROM assets WHERE id=?', (asset_id,)).fetchone()
+
+
 @pytest.mark.asyncio
 async def test_worker_retention_removes_verified_and_14_day_orphans(tmp_path):
     env = setup(tmp_path)

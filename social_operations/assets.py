@@ -134,32 +134,57 @@ def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> 
 
 
 def retired_asset_rows(db, now):
-    """Classify local bytes by remaining native work, without reading the BLOBs.
+    """Classify expirable bytes without reading BLOBs or deleting referenced assets.
 
-    Native VK/Telegram/MAX attachments are the durable media after verified send.
-    The independent media-store transfer cache keeps its existing one-hour TTL.
+    The caller holds one SQLite transaction for a consistent cleanup snapshot.
     """
-    return db.execute(
-        """WITH referenced AS (
-             SELECT json_extract(j.value,'$.ref') AS asset_id,
-                    MAX(o.work_state!='done') AS pending,
-                    MAX(o.state='outcome_unknown' OR t.state='outcome_unknown') AS uncertain
-             FROM attempts t JOIN operations o ON o.id=t.operation_id
-             JOIN json_each(t.plan,'$.assets') j
-             GROUP BY json_extract(j.value,'$.ref')
-           )
-           SELECT a.id, length(a.bytes) AS size_bytes,
-             CASE
-               WHEN EXISTS (SELECT 1 FROM media_store_assets m
-                            WHERE m.asset_id=a.id AND m.expires>?) THEN 'media_transfer'
-               WHEN COALESCE(r.pending,0) THEN 'pending_action'
-               WHEN COALESCE(r.uncertain,0) THEN 'unresolved_effect'
-               WHEN r.asset_id IS NULL AND a.created>=? THEN 'recent_unlinked'
-               ELSE 'reclaim'
-             END AS reason
-           FROM assets a LEFT JOIN referenced r ON r.asset_id=a.id""",
-        (now, now - 14 * 86400),
-    ).fetchall()
+    refs, pending, uncertain = set(), set(), set()
+    for ref, work, operation_state, attempt_state in db.execute(
+        """SELECT json_extract(j.value,'$.ref'), o.work_state, o.state, t.state
+           FROM attempts t JOIN operations o ON o.id=t.operation_id
+           JOIN json_each(t.plan,'$.assets') j"""
+    ):
+        if not ref:
+            continue
+        refs.add(ref)
+        if work != 'done':
+            pending.add(ref)
+        if operation_state == 'outcome_unknown' or attempt_state == 'outcome_unknown':
+            uncertain.add(ref)
+
+    def refset(sql, params=()):
+        return {row[0] for row in db.execute(sql, params) if row[0]}
+
+    transfer = refset("SELECT asset_id FROM media_store_assets WHERE expires>?", (now,))
+    story = refset("""SELECT json_extract(j.value,'$.ref') FROM vk_story_dependencies d,
+                              json_each(d.story_plan,'$.assets') j
+                       WHERE d.state IN ('waiting','queued')""")
+    # Visual and emoji records have non-cascading FKs to assets. Keep both
+    # referenced bytes and provenance until their own lifecycle is resolved.
+    visual = refset("""SELECT asset_ref FROM visual_candidates
+                       UNION SELECT art_ref FROM visual_candidates
+                       UNION SELECT asset_id FROM visual_asset_origins""")
+    emoji = refset("SELECT asset_id FROM emoji_asset_origins")
+    rows = []
+    for ident, size, created in db.execute("SELECT id,length(bytes),created FROM assets"):
+        if ident in transfer:
+            reason = 'media_transfer'
+        elif ident in pending:
+            reason = 'pending_action'
+        elif ident in story:
+            reason = 'pending_linked_story'
+        elif ident in uncertain:
+            reason = 'unresolved_effect'
+        elif ident in visual:
+            reason = 'visual_lineage'
+        elif ident in emoji:
+            reason = 'emoji_catalog'
+        elif ident not in refs and created >= now - 14 * 86400:
+            reason = 'recent_unlinked'
+        else:
+            reason = 'reclaim'
+        rows.append({'id': ident, 'size_bytes': size, 'reason': reason, 'created': created})
+    return rows
 
 
 def import_image(store, actor, data: bytes, mime: str) -> str:

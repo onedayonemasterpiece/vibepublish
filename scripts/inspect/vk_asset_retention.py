@@ -42,6 +42,10 @@ def summarize(db, now):
             "bytes": sum(bucket["bytes"] for key, bucket in buckets.items() if key != "reclaim"),
         },
         "operations_requiring_bytes": [dict(row) for row in pending],
+        "visual_lineage_over_14_days": {
+            "rows": sum(row["reason"] == "visual_lineage" and row["created"] < now - 14 * 86400 for row in rows),
+            "bytes": sum(row["size_bytes"] for row in rows if row["reason"] == "visual_lineage" and row["created"] < now - 14 * 86400),
+        },
     }
 
 
@@ -58,6 +62,7 @@ def main():
     try:
         if not args.apply:
             db.execute("PRAGMA query_only=ON")
+            db.execute("BEGIN")  # One read snapshot across operations and asset references.
         before_bytes = path.stat().st_size
         now = time.time()
         if args.apply:
