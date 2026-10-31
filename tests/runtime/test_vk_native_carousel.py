@@ -1,5 +1,6 @@
 """VK native carousel edits and retained media; synthetic provider, no live network."""
 import io
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -99,6 +100,54 @@ async def test_unmanaged_vk_post_edits_native_carousel_without_original_bytes(tm
     assert env.transport.posts[(OWNER, 223)]["id"] == 223
     assert done["deliveries"][0]["state"] in {"verified", "scheduled"}
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scheduled', [False, True])
+async def test_exact_vk_id_normalized_text_and_time_are_verified_with_warning(tmp_path, scheduled):
+    env = setup(tmp_path, scheduled=scheduled)
+    fresh = await fresh_item(env, scheduled=scheduled)
+
+    def normalize_after_edit(method):
+        if method == 'wall.edit':
+            post = env.transport.posts[(OWNER, 223)]
+            post['text'] = post['text'].replace('\n', '\r\n') + '  '
+            if scheduled:
+                post['date'] += 60
+
+    env.transport.after_mutation = normalize_after_edit
+    accepted = await env.app.call(env.actor, 'vibepublish_publication_update',
+                                  edit(fresh, env.new_asset))
+    assert 'error' not in accepted, accepted
+    assert await env.worker.run_once()
+    done = env.store.receipt(env.actor, accepted['operation_id'])
+    assert done['state'] == ('scheduled' if scheduled else 'verified'), done
+    assert done['operation_complete']
+    with env.store.connection() as db:
+        events = [json.loads(row[2]) for row in db.execute(
+            'SELECT * FROM events WHERE operation_id=?', (accepted['operation_id'],))]
+    assert any('differs in text or schedule; trusting its ID' in e['message'] for e in events)
+    assert len([name for name, _, _ in env.transport.calls if name == 'wall.edit']) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scheduled', [False, True])
+async def test_vk_unsupported_attachment_is_readable_but_never_edited(tmp_path, scheduled):
+    env = setup(tmp_path, scheduled=scheduled)
+    env.transport.posts[(OWNER, 223)]['attachments'].append(
+        {'type': 'poll', 'poll': {'owner_id': OWNER, 'id': 987}})
+    fresh = await fresh_item(env, scheduled=scheduled)
+    accepted = await env.app.call(env.actor, 'vibepublish_publication_update',
+                                  edit(fresh, env.new_asset))
+    assert 'error' not in accepted, accepted
+    upload_count = len(env.transport.uploads)
+    assert await env.worker.run_once()
+    done = env.store.receipt(env.actor, accepted['operation_id'])
+    assert done['operation_complete'] and done['state'] in {'blocked', 'failed'}, done
+    assert done['error']['code'] == 'vk_attachment_edit_unsupported', done
+    assert len(env.transport.uploads) == upload_count
+    assert not any(name == 'wall.edit' for name, _, _ in env.transport.calls)
+    assert env.transport.posts[(OWNER, 223)]['attachments'][-1]['type'] == 'poll'
 
 
 @pytest.mark.asyncio

@@ -196,7 +196,11 @@ class Worker:
                     assets.append(Asset(**a))
                     continue
                 row = db.execute('SELECT bytes,sha256 FROM assets WHERE id=? AND tenant_id=? AND principal_id=?', (a['ref'], actor.tenant_id, actor.principal_id)).fetchone()
-                if not row or hashlib.sha256(row['bytes']).hexdigest() != a['sha256']:
+                if not row:
+                    raise DomainError('asset_expired',
+                                      'Local media bytes are no longer available; upload the asset again',
+                                      'fix_input')
+                if hashlib.sha256(row['bytes']).hexdigest() != a['sha256']:
                     raise DomainError('asset_integrity')
                 assets.append(Asset(**a, data=row['bytes']))
         return ProviderRequest(op['id'], child['id'], child['plan_digest'], plan['connection_id'], plan['account_type'], plan['secret_ref'],
@@ -693,7 +697,9 @@ class Worker:
         elif observation.replacement is not None:
             raise OutcomeUnknown('unexpected_native_replacement')
         if plan['action'] in ('publish', 'edit', 'reschedule', 'reply') and (action != 'publish' or plan.get('workload') == 'media_store'):
-            if remote.text != json.loads(plan['content_json'])['text']:
+            # VKAdapter already checked the exact wall ID and reported any
+            # provider text normalization as a progress warning (D8).
+            if plan['provider'] != 'vk' and remote.text != json.loads(plan['content_json'])['text']:
                 raise OutcomeUnknown('content_readback_mismatch')
             if plan['provider'] == 'max' and plan['account_type'] == 'max_web':
                 from .rich_text import max_entities
@@ -713,7 +719,9 @@ class Worker:
                     raise OutcomeUnknown('download_media_binding_missing')
             if tuple(remote.media_hashes) != tuple(a['sha256'] for a in plan['assets']):
                 raise OutcomeUnknown('media_readback_mismatch')
-        if observation.observed == 'provider_scheduled' and (remote.namespace != 'scheduled' or remote.scheduled_at != plan['scheduled_at']):
+        if (observation.observed == 'provider_scheduled'
+                and (remote.namespace != 'scheduled'
+                     or (plan['provider'] != 'vk' and remote.scheduled_at != plan['scheduled_at']))):
             raise OutcomeUnknown('native_time_mismatch')
         if plan['action'] == 'forward' and (not observation.forward_origin_matched or remote.origin != plan['source']['canonical_url']):
             raise OutcomeUnknown('forward_attribution_incomplete')

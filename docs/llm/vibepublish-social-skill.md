@@ -57,12 +57,18 @@ recreate posts to evade provider errors.
 - **Правка отложенного поста** (ещё в очереди): `vibepublish_publication_update` по `publication_id`,
   `change.kind:"edit"`, `destinations:[alias]`, либо по свежему `item_ref` самого VK-поста.
   Пост и вложения правятся на месте, без пересоздания.
-- **Колоризация VK**: сделай `vibepublish_read` исходного поста (для опубликованного
-  доступен `https://vk.com/wall-OWNER_ID` в уже подключённом назначении; для отложенного —
-  native queue → exact item read). Затем `vibepublish_publication_update` по свежему `item_ref`:
+- **Колоризация VK — порядок строго такой**: **(1)** сначала подготовь и импортируй
+  колоризованное фото как **JPEG ≈90%**, а не PNG (обычно 2–3 чанка вместо 13;
+  VK всё равно пережимает фото через `photo_wire_bytes`). **(2)** только после
+  успешной загрузки выполни `vibepublish_read` исходного поста: опубликованный —
+  `https://vk.com/wall-OWNER_ID` внутри подключённого назначения, отложенный —
+  native queue → exact item read. **(3)** сразу вызови `vibepublish_publication_update`
+  по этому свежему `item_ref` (срок действия чтения — **300 секунд**):
   `change.media:[{"source":{"kind":"asset","id":"asset_NEW"}},{"source":{"kind":"existing","position":0}}]`.
-  В `change.content.text` передай полный текст с припиской. Оригинал остаётся родным фото VK:
-  не скачивай, не хэшируй, не загружай повторно. После `verified` перечитай тот же ID.
+  Передай полный `change.content.text` с припиской. При `managed_media_reference_stale`
+  перечитай точный пост и повтори update **с тем же request_key** и тем же загруженным
+  ассетом. Оригинал сохраняется как родное фото VK: не скачивай, не хэшируй,
+  не загружай повторно. После `verified` перечитай тот же ID.
 - **Правка уже вышедшего поста**: сначала `vibepublish_read` этого поста, затем
   `vibepublish_publication_update` по его `item_ref` (`native_item_published` означает именно это).
 - **Конечный исход каждого поручения**: `operation_id` + свежее чтение из сети, подтверждающее результат,

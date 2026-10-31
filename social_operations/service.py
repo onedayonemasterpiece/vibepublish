@@ -249,8 +249,12 @@ class Application:
 
     def _purge_media_store_assets(self, db):
         expired = [row['asset_id'] for row in db.execute(
-            "SELECT asset_id FROM media_store_assets WHERE expires<?",
-            (self.store.clock(),))]
+            """SELECT m.asset_id FROM media_store_assets m WHERE m.expires<?
+               AND NOT EXISTS (
+                   SELECT 1 FROM attempts a JOIN operations o ON o.id=a.operation_id,
+                                json_each(a.plan,'$.assets') j
+                   WHERE o.work_state!='done' AND json_extract(j.value,'$.ref')=m.asset_id
+               )""", (self.store.clock(),))]
         db.executemany('DELETE FROM assets WHERE id=?', [(ident,) for ident in expired])
 
     def _media_store_items(self, db, actor, *, publication_id=None, binding=None, topic=None, text=''):

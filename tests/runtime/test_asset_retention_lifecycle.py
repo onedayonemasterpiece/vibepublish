@@ -7,7 +7,7 @@ from PIL import Image
 
 from adapters.port import RemoteItem
 from social_operations.assets import import_image, retired_asset_rows, stale_unsent_attempts
-from social_operations.domain import new_id, timestamp
+from social_operations.domain import DomainError, new_id, timestamp
 from social_operations.service import Application
 from social_operations.storage import Store
 from social_operations.worker import Worker
@@ -24,6 +24,34 @@ def pending(tmp_path):
     Image.new("RGB", (8, 10), "red").save(stream, "PNG")
     asset = import_image(store, actor, stream.getvalue(), "image/png")
     return store, actor, Application(store), Worker(store), clock, asset
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reason', ['missing', 'corrupt'])
+async def test_worker_distinguishes_expired_asset_from_corrupted_bytes(tmp_path, reason):
+    store, actor, app, worker, clock, asset = pending(tmp_path)
+    accepted = await app.call(actor, 'vibepublish_publish', {
+        'to': ['max'], 'content': {'text': 'Preserve inputs'},
+        'media': [{'source': {'kind': 'asset', 'id': asset}}],
+        'request_key': 'missing-vs-corrupt'})
+    assert 'error' not in accepted, accepted
+    with store.tx() as db:
+        if reason == 'missing':
+            db.execute('DELETE FROM assets WHERE id=?', (asset,))
+        else:
+            # Simulate an on-disk corrupt byte sequence in this disposable
+            # fixture; production assets are immutable by trigger.
+            db.execute('DROP TRIGGER asset_bytes_immutable')
+            db.execute('UPDATE assets SET bytes=? WHERE id=?', (b'corrupted', asset))
+    with store.connection() as db:
+        op = db.execute('SELECT * FROM operations WHERE id=?', (accepted['operation_id'],)).fetchone()
+        child = db.execute('SELECT * FROM attempts WHERE operation_id=?', (accepted['operation_id'],)).fetchone()
+        with pytest.raises(DomainError) as error:
+            worker.request(op, child, actor)
+    assert error.value.code == ('asset_expired' if reason == 'missing' else 'asset_integrity')
+    if reason == 'missing':
+        assert error.value.next_action == 'fix_input'
+        assert 'upload' in error.value.message
 
 
 @pytest.mark.asyncio

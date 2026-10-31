@@ -220,8 +220,13 @@ async def test_get_downloads_exact_telegram_bytes_into_expiring_cache(tmp_path):
     assert done['state']=='verified' and provider.reads==1
     downloaded=done['items'][0]['media'][0]['source']['id']
     payload,mime,sha=app.read_asset(actor,downloaded)
-    assert hashlib.sha256(payload).hexdigest()==sha and mime=='image/png'
+    evidence=done['items'][0]['media_evidence'][0]
+    assert hashlib.sha256(payload).hexdigest()==sha==evidence['sha256']
+    assert mime==evidence['mime']=='image/png' and len(payload)==evidence['size']
+    assert payload==provider.items['101'][1][0]  # WL must receive raw Telegram bytes.
     with store.connection() as db:
+        cached=db.execute('SELECT bytes,sha256 FROM assets WHERE id=?',(downloaded,)).fetchone()
+        assert cached['bytes']==payload and cached['sha256']==evidence['sha256']
         expiry=db.execute("select expires from media_store_assets where asset_id=? and purpose='download_cache'",
                           (downloaded,)).fetchone()['expires']
         assert db.execute('select count(*) from assets').fetchone()[0]==baseline+1
@@ -297,7 +302,7 @@ async def test_known_native_id_recovers_after_worker_restart_without_second_effe
 
 
 @pytest.mark.asyncio
-async def test_abandoned_staging_expires_and_worker_purges_bytes(tmp_path):
+async def test_abandoned_staging_is_purged_only_after_operation_is_terminal(tmp_path):
     store,actor,asset,provider,app,worker=runtime(tmp_path)
     with store.connection() as db: baseline=db.execute('select count(*) from assets').fetchone()[0]
     accepted=await app.call(actor,'vibepublish_media_store',args(asset,'abandoned'))
@@ -305,11 +310,18 @@ async def test_abandoned_staging_expires_and_worker_purges_bytes(tmp_path):
         staging=db.execute("select asset_id,expires from media_store_assets where purpose='staging'").fetchone()
         assert db.execute('select count(*) from assets').fetchone()[0]==baseline+1
     store.clock=lambda: staging['expires']+1
+    with store.tx() as db:
+        app._purge_media_store_assets(db)
+        assert db.execute('select 1 from assets where id=?',(staging['asset_id'],)).fetchone()
+    await worker.run_once()
+    assert store.receipt(actor,accepted['operation_id'])['state']=='blocked'
+    # Worker first protects an unfinished intent, then terminates the expired
+    # 30-day window. The next cleanup tick may reclaim its staging bytes.
+    store.clock=lambda: staging['expires']+62
     await worker.run_once()
     with store.connection() as db:
         assert db.execute('select 1 from assets where id=?',(staging['asset_id'],)).fetchone() is None
         assert db.execute("select 1 from media_store_assets where purpose='staging'").fetchone() is None
-    assert store.receipt(actor,accepted['operation_id'])['state']=='blocked'
 
 
 @pytest.mark.asyncio

@@ -44,9 +44,10 @@ rights, approval, scheduling and unknown-outcome policy.
   admission, without modifying the existing cache row or Wonderful Lections.
 - Put bytes remain in durable local staging only until exact Telegram document
   verification. Verified staging is purged; failed/queued staging is retained so
-  a provider outage cannot lose an admitted file. Unresolved staging expires one
-  hour after the bounded 30-day delivery window and is purged by the worker even
-  when no MCP request arrives.
+  a provider outage cannot lose an admitted file. The 30-day delivery window
+  plus one-hour staging expiry does not delete bytes **during** an unfinished
+  operation; expired local staging is reclaimed after the attempt terminates,
+  including when no MCP request arrives.
 - One failed/unknown media-store write never quarantines the Telegram connection,
   another media-store write, or public publication work. Public unknown attempts
   likewise do not stop the private store.

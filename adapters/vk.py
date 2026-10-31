@@ -174,6 +174,11 @@ class VKAdapter:
                     existing = request.existing
                     if existing.native_target != request.native_target:
                         raise DomainError('remote_target_mismatch')
+                    if (request.action in {'edit', 'reschedule'}
+                            and any(ref.startswith('unsupported:') for ref in existing.provider_media)):
+                        raise DomainError('vk_attachment_edit_unsupported',
+                                          'This VK post contains attachments wall.edit cannot preserve',
+                                          'fix_input')
                     if existing.namespace not in {'published', 'scheduled'}:
                         raise DomainError('vk_namespace_unsupported')
                     if request.action in {'reschedule', 'cancel'} and existing.namespace != 'scheduled':
@@ -189,12 +194,18 @@ class VKAdapter:
     @staticmethod
     def _media(raw):
         result = []
-        for attachment in raw.get('attachments', []):
-            kind = attachment.get('type')
-            value = attachment.get(kind, {})
-            if kind not in {'photo', 'video', 'doc', 'audio'} or not isinstance(value, dict):
-                raise DomainError('vk_attachment_needs_review')
-            result.append(f'{kind}{_int(value.get("owner_id"))}_{_int(value.get("id"))}')
+        for attachment in raw.get('attachments') or []:
+            kind = attachment.get('type', 'unknown') if isinstance(attachment, dict) else 'unknown'
+            value = attachment.get(kind, {}) if isinstance(attachment, dict) else {}
+            if (kind not in {'photo', 'video', 'doc', 'audio'} or not isinstance(value, dict)
+                    or type(value.get('owner_id')) is not int or type(value.get('id')) is not int):
+                # Read every item, including polls/links/markets; do not treat opaque
+                # VK media as a wall.edit-safe attachment reference.
+                owner = value.get('owner_id', 0) if isinstance(value, dict) else 0
+                ident = value.get('id', 0) if isinstance(value, dict) else 0
+                result.append(f'unsupported:{kind}:{owner}_{ident}')
+                continue
+            result.append(f'{kind}{value["owner_id"]}_{value["id"]}')
         return tuple(result)
 
     @staticmethod

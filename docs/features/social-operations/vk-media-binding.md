@@ -51,7 +51,17 @@ expired visual candidates, their origin and feedback references are removed
 alongside the binary while the visual job and its text remain. Waiting VK-linked
 Stories remain protected. Emoji catalog metadata and assets are unchanged.
 `media_store` staging and one-hour `download_cache` retention, list/get,
-asset preview and `GET /v1/assets/{id}` are unchanged.
+asset preview and `GET /v1/assets/{id}` are unchanged. Pending operations
+retain their input bytes until a terminal outcome; an absent required copy is
+reported as `asset_expired` with an instruction to reupload, separately from
+`asset_integrity` for corrupted bytes.
+
+VK feed and queue reads preserve unsupported attachments (poll/link/market and
+unrecognized payloads) as opaque `unsupported:kind:owner_id` identities instead
+of blocking the read. Because `wall.edit` would erase such attachments, edits and
+reschedules are refused **before native effects** with
+`vk_attachment_edit_unsupported`. Their existing post identity and other reads
+remain available.
 The source tree provides a read-only-by-default SQLite dry-run command,
 `python scripts/inspect/vk_asset_retention.py --db PATH`. The `--apply`
 deletion + VACUUM is reserved for explicitly approved coordinated rollout.
