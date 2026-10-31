@@ -833,6 +833,10 @@ class Application:
                 raise DomainError('external_media_replace_needs_review', next_action='contact_owner')
             from .managed_item_edits import _fresh_read
             _fresh_read(db, actor, source, b, remote, self.store.clock())
+        # VK byte evidence is transient read metadata, not a wall.edit CAS field.
+        # Keep native IDs/text/time as the exact provider revision authority.
+        if b['provider'] == 'vk':
+            remote['observed_media'] = []
         # Preserve native object IDs, not another principal's private asset hashes.
         remote['media_hashes'] = []
         change, kind = args['change'], args['change']['kind']
@@ -1154,6 +1158,9 @@ class Application:
                     item['media'].append({'source': {'kind': 'asset', 'id': asset['asset_ref']},
                                           'role': 'document' if asset['media_kind'] == 'document' else 'image'})
             item['media_evidence'] = evidence
+        elif remote.get('media_check', '').startswith('media_download_unavailable:'):
+            item['error'] = {'code': 'media_download_unavailable',
+                             'message': 'VK photo bytes unavailable: ' + remote['media_check'].split(':', 1)[1]}
         elif remote.get('media_hashes'):
             item['error'] = {'code': 'media_projection_not_enabled', 'message': 'This checkpoint returns text and timing; provider media downloads are not exposed'}
         if remote.get('own_reactions_observed'):

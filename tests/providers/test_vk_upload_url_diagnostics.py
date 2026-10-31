@@ -4,7 +4,7 @@ import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from adapters.vk_transport import validated_url
+from adapters.vk_transport import VKHTTPTransport, validated_url
 from social_operations.domain import DomainError
 from social_operations.provider_diagnostics import (
     budget_diagnostic, diagnostic_scope, provider_error_metadata, safe_diagnostic,
@@ -75,6 +75,28 @@ class UploadURLDiagnosticsTests(unittest.TestCase):
                                  "upload_host": "user:PRIVATE@pu.vk.com/private?key=PRIVATE",
                                  "upload_url": "PRIVATE", "port": "PRIVATE"})
         self.assertEqual(clean, {"url_rejection_reason": "host_not_allowed"})
+
+
+class PhotoSourceSecurityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_vk_photo_source_rejects_nonphoto_hosts_and_insecure_urls(self):
+        transport = VKHTTPTransport(tokens={})
+        cases = (
+            ('http://sun9.userapi.com/a.jpg?access_key=PRIVATE', 'vk_upload_url_invalid'),
+            ('https://sun9.userapi.com.evil.example/a.jpg?access_key=PRIVATE', 'vk_upload_url_invalid'),
+            ('https://vk.me/a.jpg?access_key=PRIVATE', 'vk_photo_host_invalid'),
+            ('https://vkuser.net/a.jpg?access_key=PRIVATE', 'vk_photo_host_invalid'),
+            ('https://127.0.0.1/a.jpg?access_key=PRIVATE', 'vk_upload_url_invalid'),
+        )
+        events = []
+        with diagnostic_scope(events.append), patch(
+                'adapters.vk_transport.public_addresses', new_callable=AsyncMock) as lookup:
+            for url, code in cases:
+                with self.subTest(code=code), self.assertRaises(DomainError) as failure:
+                    await transport.download_photo(url)
+                self.assertEqual(failure.exception.code, code)
+            lookup.assert_not_called()
+        for secret in ('PRIVATE', 'access_key', '/a.jpg'):
+            self.assertNotIn(secret, json.dumps(events))
 
 
 class ProviderErrorRedactionTests(unittest.TestCase):

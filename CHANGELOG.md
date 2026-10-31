@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Exact VK item reads (published/postponed) hydrate photo bytes through the existing private download-to-asset pipeline, with safe bounded VK HTTPS retrieval and nonfatal media warnings. Native queue/feed reads remain metadata-only; preserved original attachments and CAS remain independent of downloaded pixels. Document dot-owned colourization using full-resolution MCP/HTTP assets, not VibePublish visual generation. Code/tests only; no deploy or live VK writes.
+
 - VK hashtag editorial guidance: use the existing MCP skill/get_started for optional 0–3 contextual VK tags and dot's native-queue review; emit one nonblocking note in the existing VK publish/preview/edit receipt message when no `#` occurs. Record owner policy and resolved VK carousel rollout evidence; no tag schema, scheduler or classifier.
 
 - PR #115 fragility: exact-ID VK readback text/schedule normalization now warns without leaving a permanent unknown effect; missing source bytes report `asset_expired` distinctly from corruption, while unfinished media-store transfers are protected from TTL cleanup. VK feeds retain opaque unsupported attachments and reject unsafe `wall.edit` before upload; dot uploads compact JPEG before the 300-second fresh read. Preserve WL exact download-cache byte/evidence SHA equality with a regression test; rollout runbook requires offline VACUUM. No live provider writes.

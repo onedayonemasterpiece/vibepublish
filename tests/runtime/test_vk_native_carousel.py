@@ -1,4 +1,5 @@
 """VK native carousel edits and retained media; synthetic provider, no live network."""
+import hashlib
 import io
 import json
 from types import SimpleNamespace
@@ -7,7 +8,7 @@ import pytest
 from PIL import Image
 
 from adapters.vk import VKAdapter
-from social_operations.assets import import_image, retired_asset_rows
+from social_operations.assets import import_image, retired_asset_rows, verify_image
 from social_operations.service import Application
 from social_operations.storage import Store
 from social_operations.worker import Worker
@@ -71,6 +72,96 @@ def edit(fresh, asset):
                        "content": {"text": "Исходный текст\n\n" + NOTE},
                        "media": [{"source": {"kind": "asset", "id": asset}},
                                  {"source": {"kind": "existing", "position": 0}}]}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True])
+async def test_exact_vk_photo_read_downloads_bytes_and_keeps_native_edit_cas(tmp_path, scheduled):
+    env = setup(tmp_path, scheduled=scheduled)
+    photo = env.transport.posts[(OWNER, 223)]['attachments'][0]['photo']
+    image = io.BytesIO()
+    Image.new("RGB", (1200, 800), "green").save(image, format="PNG")
+    wire = image.getvalue()
+    signed = "https://sun9-12.userapi.com/source.jpg?access_key=never-persist"
+    largest = "https://sun9-12.userapi.com/largest.jpg?access_key=never-persist"
+    photo['sizes'] = [
+        {'url': signed, 'width': 100, 'height': 100},
+        {'url': largest, 'width': 1200, 'height': 800},
+    ]
+    if scheduled:
+        photo['orig_photo'] = {'url': signed, 'width': 1600, 'height': 900}
+    called = []
+
+    async def download(url):
+        called.append(url)
+        return wire
+
+    env.transport.download_photo = download
+    listing = await env.app.call(env.actor, "vibepublish_read", {
+        "query": {"kind": "scheduled" if scheduled else "feed", "destination": "lovekenig_vk"}})
+    assert await env.worker.run_once()
+    listed = env.store.receipt(env.actor, listing['operation_id'])
+    assert listed['items'] and not called
+    ref = listed['items'][0]['ref']
+    read = await env.app.call(env.actor, "vibepublish_read", {
+        "query": {"kind": "item", "item_ref": ref}})
+    assert await env.worker.run_once()
+    done = env.store.receipt(env.actor, read['operation_id'])
+    assert done['state'] == 'verified'
+    item, = done['items']
+    assert called == [signed if scheduled else largest]
+    assert item['text'] == 'Исходный текст'
+    if scheduled:
+        assert item['scheduled_at'] == timestamp(NOW + 3600)
+    assert item['media'][0]['source']['kind'] == 'asset'
+    asset_id = item['media'][0]['source']['id']
+    assert item['media_evidence'][0]['resource_uri'] == 'vibepublish://assets/' + asset_id
+    assert item['media_evidence'][0]['sha256'] == hashlib.sha256(wire).hexdigest()
+    full, mime, _ = env.app.read_asset(env.actor, asset_id)
+    assert full == verify_image(wire, 'image/png').data and mime == 'image/png'
+    with Image.open(io.BytesIO(full)) as decoded:
+        assert decoded.size == (1200, 800)  # Full-size asset, not the 768 px preview.
+    assert 'never-persist' not in json.dumps(done)
+    with env.store.connection() as db:
+        assert 'never-persist' not in str(db.execute(
+            'SELECT snapshot FROM item_refs ORDER BY rowid DESC LIMIT 1').fetchone()[0])
+    accepted = await env.app.call(env.actor, "vibepublish_publication_update",
+                                  edit(item['ref'], env.new_asset))
+    assert 'error' not in accepted, accepted
+    assert await env.worker.run_once()
+    edited = env.store.receipt(env.actor, accepted['operation_id'])
+    assert edited['state'] == ('scheduled' if scheduled else 'verified'), edited
+    assert any(name == 'wall.edit' for name, _, _ in env.transport.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True])
+async def test_vk_photo_download_failure_preserves_exact_item(tmp_path, scheduled, caplog):
+    env = setup(tmp_path, scheduled=scheduled)
+    photo = env.transport.posts[(OWNER, 223)]['attachments'][0]['photo']
+    photo['sizes'] = [{'url': 'https://sun9-12.userapi.com/image?access_key=private-123',
+                       'width': 800, 'height': 600}]
+
+    async def fail_download(url):
+        raise OSError("private-123 / " + url)
+
+    env.transport.download_photo = fail_download
+    ref = await fresh_item(env, scheduled=scheduled)
+    # fresh_item confirms verified exact read even when photo bytes are unavailable.
+    with env.store.connection() as db:
+        item = json.loads(db.execute(
+            'SELECT result FROM operations WHERE action=\'read\' ORDER BY rowid DESC LIMIT 1').fetchone()[0])['items'][0]
+        snapshots = [row[0] for row in db.execute('SELECT snapshot FROM item_refs')]
+    assert item['ref'] == ref and item['text'] == 'Исходный текст'
+    assert item['error']['code'] == 'media_download_unavailable'
+    assert 'vk_photo_transport_failed' in item['error']['message']
+    assert not item.get('media')
+    if scheduled:
+        assert item['scheduled_at'] == timestamp(NOW + 3600)
+    assert 'private-123' not in json.dumps(item) + ''.join(snapshots) + caplog.text
+    accepted = await env.app.call(env.actor, 'vibepublish_publication_update',
+                                  edit(ref, env.new_asset))
+    assert 'error' not in accepted, accepted
 
 
 @pytest.mark.asyncio

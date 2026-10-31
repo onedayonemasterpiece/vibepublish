@@ -71,11 +71,13 @@ class MediaDownload:
     data: bytes = field(repr=False)
 
     def __post_init__(self):
+        import re
         if (not isinstance(self.item_native_id, str) or not self.item_native_id
                 or type(self.slot) is not int or not 0 <= self.slot < 10
                 or self.media_kind not in {'photo', 'document'}
                 or not isinstance(self.provider_ref, str)
-                or not self.provider_ref.startswith(self.media_kind + ':')
+                or not (self.provider_ref.startswith(self.media_kind + ':') or (
+                    self.media_kind == 'photo' and re.fullmatch(r'photo-?[1-9][0-9]*_[1-9][0-9]*', self.provider_ref)))
                 or self.mime not in {'image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'image/vnd.djvu'}
                 or not isinstance(self.data, bytes) or not 0 < len(self.data) <= (128*1024*1024 if self.mime in {'application/pdf','image/vnd.djvu'} else 20*1024*1024)):
             raise DomainError('download_media_payload_invalid')
