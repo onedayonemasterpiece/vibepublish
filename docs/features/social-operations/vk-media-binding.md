@@ -41,6 +41,9 @@ Unsent work older than three days after `max(created,scheduled_at)` is closed
 without provider dispatch (`stale_not_dispatched`). Failed and uncertain effects
 retain their immutable receipts, but only keep asset bytes for three days after
 the last worker observation; an already unknown effect is never replayed.
+The existing explicit `retry_failed` and `supersede_failed` paths also refuse
+expired never-dispatched public intents, even with no retained asset bytes.
+The private Telegram media-store recovery horizon is unchanged.
 Unlinked uploads and visual candidate/derivative media expire after 14 days;
 expired visual candidates, their origin and feedback references are removed
 alongside the binary while the visual job and its text remain. Waiting VK-linked

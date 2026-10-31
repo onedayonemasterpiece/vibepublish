@@ -140,6 +140,25 @@ async def test_old_intent_cannot_retry_or_supersede_twice_and_replay_never_resen
 
 
 @pytest.mark.asyncio
+async def test_expired_zero_dispatch_text_intent_never_retries_or_supersedes(env):
+    store, _, actor, app, worker, vk, tg, now = env
+    original = await blocked(env)  # Scheduled text-only publication; no asset to expire.
+    now[0] += 4 * 86400
+    retry = {'publication_id': original['resource_id'], 'expected_revision': 1,
+             'request_key': 'stale-retry',
+             'change': {'kind': 'retry_failed', 'destinations': ['vk']}}
+    with pytest.raises(DomainError) as exc:
+        retry_failed(app, actor, retry)
+    assert exc.value.code == 'stale_not_dispatched'
+    with pytest.raises(DomainError) as exc:
+        supersede_failed(app, actor, {**args(original), 'request_key': 'stale-supersede'})
+    assert exc.value.code == 'stale_not_dispatched'
+    with store.connection() as db:
+        assert db.execute('SELECT count(*) FROM publications').fetchone()[0] == 1
+    assert vk.count('effect') == 0 and tg.count('effect') == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('state,dispatched', [('outcome_unknown', 1), ('blocked', 1), ('failed', 1),
                                              ('verified', 1), ('scheduled', 1), ('accepted', 0)])
 async def test_unsafe_originals_rejected_without_new_operation(env, state, dispatched):

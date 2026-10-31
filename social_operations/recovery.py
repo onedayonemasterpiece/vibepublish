@@ -113,6 +113,12 @@ def retry_failed(app, actor, args):
         # A matching key authorizes one admission only. Even another terminal
         # zero-dispatch failure is observation-only on replay, never a new send.
         if not replay:
+            from .assets import expired_native_intent
+            if pub['kind'] != 'media_store' and any(
+                expired_native_intent(op['created'], json.loads(c['plan']).get('scheduled_at'), store.clock())
+                for c in selected
+            ):
+                raise DomainError('stale_not_dispatched', next_action='none')
             if pub['revision'] != op['revision']:
                 raise DomainError('revision_conflict', next_action='refresh')
             if op['work_state'] != 'done':
@@ -218,6 +224,9 @@ def supersede_failed(app, actor, args):
             if (any(child['state'] == 'outcome_unknown' for child in children)
                     or any(child['dispatched'] or child['state'] not in ('blocked', 'failed') for child in selected)):
                 raise DomainError('supersede_not_proven_safe', next_action='review_outcome')
+            from .assets import expired_native_intent
+            if any(expired_native_intent(original['created'], json.loads(child['plan']).get('scheduled_at'), store.clock()) for child in selected):
+                raise DomainError('stale_not_dispatched', next_action='none')
             pending = db.execute(
                 "SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id "
                 "WHERE a.operation_id=? AND r.finalize_state='pending'", (original['id'],)).fetchone()

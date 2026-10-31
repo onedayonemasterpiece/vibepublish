@@ -133,6 +133,11 @@ def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> 
 
 
 
+def expired_native_intent(created, scheduled_at, now):
+    from .domain import parse_time
+    return now - max(created, parse_time(scheduled_at) if scheduled_at else created) >= 3 * 86400
+
+
 def stale_unsent_attempts(db, now):
     """Expired never-dispatched public commands; no provider/browser required."""
     from .domain import parse_time
@@ -149,16 +154,14 @@ def stale_unsent_attempts(db, now):
     )
     found = []
     for row in rows:
-        start = max(row['created'], parse_time(row['scheduled_at']) if row['scheduled_at'] else row['created'])
-        if now - start >= 3 * 86400:
+        if expired_native_intent(row['created'], row['scheduled_at'], now):
+            start = max(row['created'], parse_time(row['scheduled_at']) if row['scheduled_at'] else row['created'])
             found.append({**dict(row), 'age_days': (now - start) / 86400})
     return found
 
 
 def retired_asset_rows(db, now, *, include_sizes=True):
     """One transaction's local-byte retention decision; native media is canonical."""
-    from .domain import parse_time
-
     stale = {row['attempt_id'] for row in stale_unsent_attempts(db, now)}
     refs, pending, uncertain, failed = set(), set(), set(), set()
     for ref, attempt_id, work, operation_state, attempt_state, created, seen, scheduled in db.execute(
