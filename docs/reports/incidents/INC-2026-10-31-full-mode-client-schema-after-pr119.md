@@ -195,3 +195,30 @@ Full source → встроенный imagegen dot → compact JPEG import → **
 Браузер не использован. Preview не увеличен и не отправлен как original в imagegen. Imagegen, import результата и VK edit не выполнялись. Пост/время неизменны; uncertain publication нет. Runtime не перезапускался, код не менялся.
 
 Ожидаемый результат кодового расследования: назвать точную границу расхождения, минимально исправить её и предъявить successful full consumption **тем же текущим клиентом**, а не только новый green server test.
+
+## 10. Follow-up — 2026-10-31 17:52 UTC: ручной Refresh tools не изменил текущий каталог
+
+По сообщению владельца, **17:51 UTC** выполнен ручной Refresh tools. После этого root и исполнитель независимо перечитали `ALL_TOOLS` около **17:52 UTC**.
+
+Оба увидели прежнюю декларацию:
+- input `args: { resource_uri: string; }`;
+- описание `small metadata-free WebP`;
+- output MIME `image/webp`, `preview_data_url`;
+- параметр `size` и full-result поля отсутствуют.
+
+**Наблюдение:** ручное обновление не отразилось в каталоге, доступном этим текущим сессиям на указанное время. **Не установленная причина:** cache, scope refresh, registration propagation, wrapper или иной слой. Без trace нельзя объявлять, что refresh вообще не выполнился или что connector удаляет аргумент.
+
+Новый asset call после Refresh **не повторяли**. Генерация, импорт результата и VK mutation не выполнялись; прежний пост/время остаются без изменений.
+
+### Уточнённый журнал предшествующей попытки 17:43
+
+Исполнитель дополнительно предоставил metadata без binary:
+- 17:42:34: scheduled read `op_cb3b485d67504fafbba8992c15722497`, verified; item `item_6c26ac1a996e404c9483e500c09e8719`.
+- 17:42:57.656: exact read `op_73fe391127864c539e8e50ff00dd9f73`, verified; observed 17:42:59.340, fresh item `item_8ca5708c8d544f0ca0259f08f89fce1a`.
+- Source SHA-256: `5a96db2654b177862704f788509c08da67a35b1cf59124e2ea42239be3c58794`.
+- 17:43:06–17:43:12: JavaScript call передавал `{resource_uri:"vibepublish://assets/asset_5efd2932305c44b09f69797fdc031032",size:"full"}`; это аргументы на стороне вызывающего кода, **не wire trace сервера**.
+- Ответ `isError:false`; source SHA совпадает, preview SHA `bb3fcfd21d37130a8671c5dff34ca63921e86ce2aaeae30cda719e0c6ea24a7f`.
+- Preview WebP 768×563 / 71626 bytes, исходные dimensions 1024×750; присутствует `preview_data_url`, затем ImageContent `image/webp`.
+- Текстовый hint предлагает запросить `size:"full"`. Поля `full_data_url`, `size`, `reencoded`, `bytes` отсутствуют.
+
+Таким образом, конкретный вызывающий код включал full-параметр, но серверные входные аргументы всё ещё не наблюдались. Гипотеза потери аргумента остаётся гипотезой.
