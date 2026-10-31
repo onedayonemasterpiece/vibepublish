@@ -109,19 +109,18 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'),
         if isinstance(result, AssetPreview):
             metadata = result.metadata
             encoded = base64.b64encode(result.data).decode('ascii')
-            # A standard MCP image block is still the primary transport.
-            # Some tool clients project only structuredContent, silently
-            # dropping image blocks. Include the same bounded, sanitized
-            # preview there so those clients can actually inspect it.
-            structured = (metadata if metadata.get('size') == 'full' else
-                          {**metadata, 'preview_data_url': 'data:' + metadata['mime_type'] + ';base64,' + encoded})
+            # Some clients drop ImageContent; the bounded data URL also
+            # delivers pixels through structuredContent for both sizes.
+            data_key = 'full_data_url' if metadata.get('size') == 'full' else 'preview_data_url'
+            structured = {**metadata, data_key: 'data:' + metadata['mime_type'] + ';base64,' + encoded}
             hint = '' if metadata.get('size') == 'full' else (
-                f'\nпревью {metadata["width"]}×{metadata["height"]} из исходника '
+                f'превью {metadata["width"]}×{metadata["height"]} из исходника '
                 f'{metadata["source_width"]}×{metadata["source_height"]}; '
                 'для колоризации и правки изображения запроси size:"full"')
             return types.CallToolResult(
                 content=[
-                    types.TextContent(type='text', text=canonical(metadata) + hint),
+                    types.TextContent(type='text', text=canonical(metadata)),
+                    *([types.TextContent(type='text', text=hint)] if hint else []),
                     types.ImageContent(type='image', data=encoded, mimeType=metadata['mime_type']),
                 ],
                 structuredContent=structured,

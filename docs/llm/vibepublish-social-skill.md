@@ -80,11 +80,13 @@ recreate posts to evade provider errors.
   Размеры исходника указаны в `item.media[i].width/height`; не путай их с WebP-превью.
   **(2)** Вызови `vibepublish_asset_preview` с
   `{"resource_uri":"vibepublish://assets/asset_…","size":"full"}`;
-  исходное изображение для своего imagegen бери из возвращённого **ImageContent**,
-  а не из текстовых метаданных. В `structuredContent` есть `source_sha256`,
-  фактические `width`, `height`, `mime_type`, `bytes` и `reencoded`.
-  Если исходник больше **8 МиБ** или длинная сторона больше **2560 px**,
-  инструмент отдаёт ограниченный JPEG (≈92%) с `reencoded:true`,
+  исходное изображение для своего imagegen бери из возвращённого **ImageContent**.
+  Если клиент теряет ImageContent, те же байты доступны в
+  `structuredContent.full_data_url` (не используй `preview_data_url` для колоризации).
+  Там же есть `source_sha256`, фактические `width`, `height`, `mime_type`,
+  `bytes` и `reencoded`. Если исходник больше **2 МиБ** или длинная
+  сторона больше **2560 px**, инструмент отдаёт ограниченный JPEG (≈92%) с
+  `reencoded:true`,
   не выдавая его за байт-в-байт оригинал. Обычный вызов **без `size`**
   по-прежнему возвращает только WebP ≤768 px для миниатюр и Live.
   MCP-ресурс — альтернатива **только для клиентов с поддержкой MCP resources**.

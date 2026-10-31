@@ -143,17 +143,23 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         import base64
         import hashlib
         import io
+        from random import Random
         from PIL import Image
         from social_operations.domain import new_id
         from social_operations.service import Application
         from social_operations.assets import render_asset_preview
 
         small = io.BytesIO()
-        Image.new('RGB', (1024, 750), 'navy').save(small, format='JPEG', quality=89)
+        Image.effect_noise((1024, 750), 100).convert('RGB').save(small, format='JPEG', quality=45)
         original = small.getvalue()
+        self.assertTrue(200_000 < len(original) < 500_000)  # Representative ~328 KB photo.
         big = io.BytesIO()
         Image.new('RGB', (3200, 2200), 'navy').save(big, format='PNG')
-        images = ((original, 'image/jpeg', 1024, 750), (big.getvalue(), 'image/png', 3200, 2200))
+        heavy = io.BytesIO()
+        Image.frombytes('RGB', (1300, 1000), Random(7).randbytes(1300 * 1000 * 3)).save(heavy, format='PNG')
+        self.assertGreater(len(heavy.getvalue()), 2 * 1024 * 1024)
+        images = ((original, 'image/jpeg', 1024, 750), (big.getvalue(), 'image/png', 3200, 2200),
+                  (heavy.getvalue(), 'image/png', 1300, 1000))
         ids = []
         with self.store.tx() as db:
             for data, mime, width, height in images:
@@ -182,9 +188,12 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     implicit_image = next(p for p in implicit.content if p.type == 'image')
                     self.assertEqual(base64.b64decode(implicit_image.data),
                                      render_asset_preview(original, hashlib.sha256(original).hexdigest(), uri).data)
-                    hint = next(p.text for p in implicit.content if p.type == 'text')
-                    self.assertIn('из исходника 1024×750', hint)
-                    self.assertIn('size:"full"', hint)
+                    preview_texts = [p.text for p in implicit.content if p.type == 'text']
+                    self.assertEqual(len(preview_texts), 2)
+                    self.assertEqual(json.loads(preview_texts[0]), {
+                        k: v for k, v in implicit.structuredContent.items() if k != 'preview_data_url'})
+                    self.assertIn('из исходника 1024×750', preview_texts[1])
+                    self.assertIn('size:"full"', preview_texts[1])
 
                     full = await session.call_tool('vibepublish_asset_preview',
                                                    {'resource_uri': uri, 'size': 'full'})
@@ -193,9 +202,12 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                         'resource_uri': uri, 'source_sha256': hashlib.sha256(original).hexdigest(),
                         'mime_type': 'image/jpeg', 'width': 1024, 'height': 750,
                         'bytes': len(original), 'size': 'full', 'reencoded': False,
+                        'full_data_url': 'data:image/jpeg;base64,' + base64.b64encode(original).decode('ascii'),
                     })
                     self.assertEqual(base64.b64decode(next(p.data for p in full.content
                                                             if p.type == 'image')), original)
+                    self.assertEqual([json.loads(p.text) for p in full.content if p.type == 'text'],
+                                     [{k: v for k, v in full.structuredContent.items() if k != 'full_data_url'}])
                     self.assertNotIn('preview_data_url', full.structuredContent)
 
                     oversized = await session.call_tool('vibepublish_asset_preview', {
@@ -208,11 +220,25 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(metadata['source_sha256'], hashlib.sha256(big.getvalue()).hexdigest())
                     self.assertEqual(metadata['mime_type'], 'image/jpeg')
                     self.assertEqual(metadata['bytes'], len(binary))
-                    self.assertLessEqual(len(binary), 8 * 1024 * 1024)
+                    self.assertLessEqual(len(binary), 2 * 1024 * 1024)
                     self.assertLessEqual(max(metadata['width'], metadata['height']), 2560)
+                    self.assertEqual(metadata['full_data_url'],
+                                     'data:image/jpeg;base64,' + base64.b64encode(binary).decode('ascii'))
                     self.assertNotIn('preview_data_url', metadata)
                     with Image.open(io.BytesIO(binary)) as result:
                         self.assertEqual(result.size, (metadata['width'], metadata['height']))
+
+                    byte_heavy = await session.call_tool('vibepublish_asset_preview', {
+                        'resource_uri': 'vibepublish://assets/' + ids[2], 'size': 'full'})
+                    self.assertFalse(byte_heavy.isError, byte_heavy)
+                    byte_metadata = byte_heavy.structuredContent
+                    self.assertEqual(byte_metadata['source_sha256'], hashlib.sha256(heavy.getvalue()).hexdigest())
+                    self.assertEqual(byte_metadata['size'], 'full')
+                    self.assertTrue(byte_metadata['reencoded'])  # 1300 px fits; byte budget forces conversion.
+                    self.assertLessEqual(byte_metadata['bytes'], 2 * 1024 * 1024)
+                    self.assertEqual(byte_metadata['mime_type'], 'image/jpeg')
+                    self.assertEqual(base64.b64decode(byte_metadata['full_data_url'].split(',', 1)[1]),
+                                     base64.b64decode(next(p.data for p in byte_heavy.content if p.type == 'image')))
 
         intruder_token = self.store.create_principal('tenant', 'intruder', scopes={'visual'})
         intruder = self.store.authenticate(intruder_token)

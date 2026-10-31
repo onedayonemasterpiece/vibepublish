@@ -230,6 +230,6 @@ Preview пригоден для визуального осмотра и выб�
 
 ## Resolution (заготовка для ревьюера — ещё не закрыто)
 
-- **Кодовый путь, предлагаемый в PR:** `vibepublish_asset_preview(size="full")` возвращает `ImageContent` из прежнего авторизованного `read_asset`; при размере >8 МиБ или длинной стороне >2560 px JPEG перекодируется с `reencoded:true`. Стандартный WebP-preview не меняется.
+- **Кодовый путь, предлагаемый в PR:** `vibepublish_asset_preview(size="full")` возвращает `ImageContent` из прежнего авторизованного `read_asset` и те же байты в `structuredContent.full_data_url`; при размере >2 МиБ или длинной стороне >2560 px JPEG перекодируется с `reencoded:true`. Стандартные байты WebP-preview не меняются; первая текстовая часть ответа — чистый JSON для fallback Wonderful Lections, подсказка — отдельный TextContent.
 - **После merge/deploy ревьюер фиксирует:** PR и SHA в `main`, фактический SHA запущенных API/worker, обновление схемы ChatGPT-плагина, живое получение источника dot через инструмент (а не MCP resource) и передачу именно этого ImageContent во встроенный imagegen.
 - **Сквозная приёмка:** по свежему exact-read проверены исходник, корректная колоризация и native edit того же VK-поста с двумя фото по порядку, прежним временем и полным caption; приложены точные readback receipts. До этого инцидент остаётся `Open`, сквозная приёмка — `Not done`.

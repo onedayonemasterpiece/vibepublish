@@ -136,7 +136,7 @@ def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> 
 
 
 FULL_MAX_EDGE = 2560
-FULL_MAX_BYTES = 8 * 1024 * 1024
+FULL_MAX_BYTES = 2 * 1024 * 1024
 
 
 def render_asset_full(data: bytes, mime_type: str, source_sha256: str, resource_uri: str) -> AssetPreview:
