@@ -113,7 +113,8 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'),
             # Some tool clients project only structuredContent, silently
             # dropping image blocks. Include the same bounded, sanitized
             # preview there so those clients can actually inspect it.
-            structured = {**metadata, 'preview_data_url': 'data:' + metadata['mime_type'] + ';base64,' + encoded}
+            structured = (metadata if metadata.get('size') == 'full' else
+                          {**metadata, 'preview_data_url': 'data:' + metadata['mime_type'] + ';base64,' + encoded})
             return types.CallToolResult(
                 content=[
                     types.TextContent(type='text', text=canonical(metadata)),
