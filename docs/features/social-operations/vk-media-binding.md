@@ -44,6 +44,8 @@ the last worker observation; an already unknown effect is never replayed.
 The existing explicit `retry_failed` and `supersede_failed` paths also refuse
 expired never-dispatched public intents, even with no retained asset bytes.
 The private Telegram media-store recovery horizon is unchanged.
+Preview operations awaiting approval retain their photo bytes for up to three
+days; no preview may lose its input immediately after preflight.
 Unlinked uploads and visual candidate/derivative media expire after 14 days;
 expired visual candidates, their origin and feedback references are removed
 alongside the binary while the visual job and its text remain. Waiting VK-linked

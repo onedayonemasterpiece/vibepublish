@@ -104,6 +104,32 @@ async def test_failed_and_unknown_retain_three_days_but_not_forever(tmp_path, st
         assert db.execute("SELECT state FROM operations WHERE id=?", (accepted["operation_id"],)).fetchone()[0] == status
 
 
+
+@pytest.mark.asyncio
+async def test_preview_media_survives_until_approval_or_three_day_orphan(tmp_path):
+    """A preview did not send a photo; worker must not delete the future approval input."""
+    from adapters.fake import FakeProvider
+    store, actor, app, _, clock, asset = pending(tmp_path)
+    worker = Worker(store, {"max": FakeProvider(tmp_path / "fake-provider.sqlite", "max", clock=store.clock)})
+    preview = await app.call(actor, 'vibepublish_publish', {
+        'to': ['max'], 'mode': 'preview',
+        'content': {'text': 'Review this image'},
+        'media': [{'source': {'kind': 'asset', 'id': asset}}]})
+    assert 'error' not in preview, preview
+    assert await worker.run_once()
+    assert store.receipt(actor, preview['operation_id'])['state'] == 'needs_approval'
+    clock[0] += 61
+    assert not await worker.run_once()
+    with store.connection() as db:
+        assert db.execute('SELECT 1 FROM assets WHERE id=?', (asset,)).fetchone()
+    clock[0] += 3 * 86400
+    assert not await worker.run_once()
+    with store.connection() as db:
+        assert db.execute('SELECT 1 FROM assets WHERE id=?', (asset,)).fetchone() is None
+        assert db.execute('SELECT state FROM operations WHERE id=?',
+                          (preview['operation_id'],)).fetchone()[0] == 'needs_approval'
+
+
 @pytest.mark.asyncio
 async def test_maintenance_script_dry_run_then_apply_only_on_synthetic_db(tmp_path):
     """The operator script uses the same classifier as worker, without live writes."""

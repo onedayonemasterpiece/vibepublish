@@ -176,7 +176,8 @@ def retired_asset_rows(db, now, *, include_sizes=True):
         # Terminal failures/unknown effects age from their last worker observation,
         # never from a future provider schedule; no retry is allowed for unknown.
         last = max(created, seen or created)
-        if work != 'done' and attempt_id not in stale:
+        if ((work != 'done' and attempt_id not in stale)
+                or (operation_state == 'needs_approval' and now - created < 3 * 86400)):
             pending.add(ref)
         elif now - last < 3 * 86400:
             if operation_state == 'outcome_unknown' or attempt_state == 'outcome_unknown':
