@@ -1,7 +1,7 @@
 # INC-2026-10-31 — VK carousel handoff and Telegram Premium rollout diagnostics
 
-Status: `Resolved` for the VK carousel; Telegram Premium live verification remains `Not confirmed by user`.  
-Product acceptance: VK wall edit confirmed; the earlier Telegram scheduling gap and Premium live acceptance are not asserted as fixed.  
+Status: `Resolved` for the VK carousel; Telegram Premium live verification remains `Not confirmed by user`.
+Product acceptance: VK wall edit confirmed; the earlier Telegram scheduling gap and Premium live acceptance are not asserted as fixed.
 Evidence cutoff for the historical diagnostic below: **2026-10-31 07:27 UTC**. All times below are UTC unless explicitly stated.
 
 ## Resolution — 31 October 2026 (after the diagnostic cutoff)
