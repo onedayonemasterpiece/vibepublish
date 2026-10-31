@@ -403,18 +403,35 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
        "then": {"required": ["request_key"]}}
 ]
 
-tool("asset_preview", "Return a small metadata-free WebP preview of one authorized VibePublish image so the model can inspect it before deciding whether to reuse it. The existing vibepublish://assets/{asset_id} URI remains the immutable source reference.",
-    obj({"resource_uri": string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$")},
+_asset_preview_uri = string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$")
+_asset_preview_fields = {
+    "resource_uri": _asset_preview_uri,
+    "source_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+    "preview_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+    "mime_type": {"const": "image/webp"},
+    "width": {"type": "integer", "minimum": 1, "maximum": 768},
+    "height": {"type": "integer", "minimum": 1, "maximum": 768},
+    "size_bytes": {"type": "integer", "minimum": 1, "maximum": 393216},
+    "preview_data_url": string(524320, pattern=r"^data:image/webp;base64,[A-Za-z0-9+/=]+$"),
+}
+_asset_full_fields = {
+    "resource_uri": _asset_preview_uri,
+    "source_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
+    "mime_type": enum("image/png", "image/jpeg", "image/webp"),
+    "width": {"type": "integer", "minimum": 1, "maximum": 2560},
+    "height": {"type": "integer", "minimum": 1, "maximum": 2560},
+    "bytes": {"type": "integer", "minimum": 1, "maximum": 8 * 1024 * 1024},
+    "size": {"const": "full"},
+    "reencoded": {"type": "boolean"},
+}
+tool("asset_preview", "Return an authorized image as a small metadata-free WebP preview (default) or, with size=full, as bounded full-resolution ImageContent (original bytes if <=8 MiB and <=2560 px; otherwise reencoded JPEG).",
+    obj({"resource_uri": _asset_preview_uri, "size": enum("preview", "full")},
         ("resource_uri",)),
-    obj({"resource_uri": string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$"),
-         "source_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
-         "preview_sha256": string(64, pattern=r"^[a-f0-9]{64}$"),
-         "mime_type": {"const": "image/webp"},
-         "width": {"type": "integer", "minimum": 1, "maximum": 768},
-         "height": {"type": "integer", "minimum": 1, "maximum": 768},
-         "size_bytes": {"type": "integer", "minimum": 1, "maximum": 393216},
-         "preview_data_url": string(524320, pattern=r"^data:image/webp;base64,[A-Za-z0-9+/=]+$")},
-        ("resource_uri", "source_sha256", "preview_sha256", "mime_type", "width", "height", "size_bytes")),
+    {"type": "object", "properties": {key: {} for key in (*_asset_preview_fields, *_asset_full_fields)},
+     "additionalProperties": False, "oneOf": [
+         obj(_asset_preview_fields, ("resource_uri", "source_sha256", "preview_sha256", "mime_type", "width", "height", "size_bytes")),
+         obj(_asset_full_fields, ("resource_uri", "source_sha256", "mime_type", "width", "height", "bytes", "size", "reencoded")),
+     ]},
     "visual", True)
 
 DEFS["status_network"] = obj({"destination": ALIAS, "provider": PROVIDER,
