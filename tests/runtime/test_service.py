@@ -67,6 +67,39 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('native_id', destinations['all'])
         self.assertNotIn('provider', destinations['all'])
 
+    async def test_vk_hashtag_hint_is_nonblocking_and_scoped_to_post_text(self):
+        skill = await self.call('get_started', {})
+        self.assertIn('## Хештеги VK', skill['skill'])
+        hint = 'Хештегов нет — по правилам можно добавить 0–3 или оставить так'
+        preview = await self.call('publish', {
+            'to': ['vk'], 'content': {'text': 'История Советска'}, 'mode': 'preview'})
+        self.assertEqual(preview['message'].count(hint), 1)
+        await self.worker.run_once()
+        self.assertEqual(self.result(preview)['message'].count(hint), 1)
+        self.assertEqual(self.result(preview)['state'], 'needs_approval')
+
+        posted = await self.call('publish', {
+            'to': ['vk'], 'content': {'text': 'История Советска'}})
+        await self.worker.run_once()
+        edit = await self.call('publication_update', {
+            'publication_id': posted['resource_id'], 'expected_revision': 1,
+            'change': {'kind': 'edit', 'content': {'text': 'История Советска — уточнение'}}})
+        self.assertEqual(edit['message'].count(hint), 1)
+        await self.worker.run_once()
+        tagged_edit = await self.call('publication_update', {
+            'publication_id': posted['resource_id'], 'expected_revision': 2,
+            'change': {'kind': 'edit', 'content': {'text': 'История Советска\n\n#Советск'}}})
+        self.assertNotIn(hint, tagged_edit['message'])
+
+        tagged = await self.call('publish', {
+            'to': ['vk'], 'content': {'text': 'История Советска #Советск'}})
+        self.assertNotIn(hint, tagged['message'])
+        telegram = await self.publish(content={'text': 'История Советска'})
+        self.assertNotIn(hint, telegram['message'])
+        mixed = await self.call('publish', {
+            'to': ['telegram', 'vk'], 'content': {'text': 'История Советска'}})
+        self.assertEqual(mixed['message'].count(hint), 1)
+
     async def test_profile_key_replay_is_atomic_and_does_not_increment_revision(self):
         args = {'command': {'kind': 'profile_update', 'alias': 'telegram',
                 'expected_revision': 0, 'profile': {'notes': 'Fixture'}}, 'request_key': 'profile-once'}

@@ -1,8 +1,16 @@
 # INC-2026-10-31 — VK carousel handoff and Telegram Premium rollout diagnostics
 
-Status: `Open`  
-Product acceptance: `Not done` for the requested VK edit and full-caption Telegram scheduling.  
-Evidence cutoff: **2026-10-31 07:27 UTC**. All times below are UTC unless explicitly stated.
+Status: `Resolved` for the VK carousel; Telegram Premium live verification remains `Not confirmed by user`.  
+Product acceptance: VK wall edit confirmed; the earlier Telegram scheduling gap and Premium live acceptance are not asserted as fixed.  
+Evidence cutoff for the historical diagnostic below: **2026-10-31 07:27 UTC**. All times below are UTC unless explicitly stated.
+
+## Resolution — 31 October 2026 (after the diagnostic cutoff)
+
+- **PR #115 merged** as `d3d53a8`; the release was deployed to **both API and worker**.
+- Existing VK post [wall-241261191_223](https://vk.com/wall-241261191_223) was edited in place by operation `op_3928b97c779243e2854d436c665ae723`. Ordered attachments: **`photo-241261191_457239213`** (colorization), then **`photo-241261191_457239112`** (original). The requested colorization-accuracy paragraph was added.
+- Approved SQLite GC reduced the file from **4,905 ГБ to 1,514 ГБ**. **Nine** stale MAX operations were closed.
+- The **Telegram Premium** code was deployed in the same release; **no live Premium verification was performed**. Deployment must not be presented as live capability acceptance.
+- VK carousel component status: **Resolved**. The evidence/timeline sections below describe the *earlier* incident state and are intentionally retained as a historical record.
 
 ## Summary and scope
 
