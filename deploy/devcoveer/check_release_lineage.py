@@ -57,7 +57,11 @@ def main() -> int:
     if git(args.repo, 'merge-base', '--is-ancestor', candidate, 'origin/main').returncode != 0:
         print(f'lineage: candidate {candidate[:7]} is not in origin/main; merge it first', file=sys.stderr)
         failed = True
-    for unit, sha in running_releases().items():
+    releases = running_releases()
+    if not releases:
+        print('lineage: no running VibePublish release found', file=sys.stderr)
+        return 2
+    for unit, sha in releases.items():
         if git(args.repo, 'merge-base', '--is-ancestor', sha, candidate).returncode != 0:
             lost = git(args.repo, 'log', '--oneline', f'{candidate}..{sha}').stdout.strip() or '(running commit unknown here)'
             print(f'lineage: {unit} runs {sha[:7]}, not contained in {candidate[:7]}; would drop:\n{lost}',

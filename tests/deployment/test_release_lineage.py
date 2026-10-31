@@ -56,3 +56,10 @@ def test_a_branch_candidate_is_refused_and_a_main_superset_is_accepted(tmp_path,
     subprocess.run(['git', '-C', str(work), 'push', '-q', 'origin', 'main'], check=True)
     merged = subprocess.run(['git', '-C', str(work), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
     assert run(guard, monkeypatch, work, merged, {'vibepublish.service': feature, 'vibepublish-worker.service': later}) == 0
+
+
+def test_no_running_releases_is_refused(tmp_path, monkeypatch, capsys):
+    guard = load()
+    work, _, _, later = repo_with_branch_release(tmp_path)
+    assert run(guard, monkeypatch, work, later, {}) == 2
+    assert 'no running VibePublish release found' in capsys.readouterr().err
