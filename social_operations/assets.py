@@ -132,6 +132,47 @@ def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> 
     raise DomainError('asset_preview_size_limit')
 
 
+FULL_MAX_EDGE = 2560
+FULL_MAX_BYTES = 8 * 1024 * 1024
+
+
+def render_asset_full(data: bytes, mime_type: str, source_sha256: str, resource_uri: str) -> AssetPreview:
+    """Return exact source bytes when bounded; otherwise a metadata-free JPEG."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data)) as source:
+                source.load()
+                if len(data) <= FULL_MAX_BYTES and max(source.size) <= FULL_MAX_EDGE:
+                    return AssetPreview({
+                        'resource_uri': resource_uri, 'source_sha256': source_sha256,
+                        'mime_type': mime_type, 'width': source.width, 'height': source.height,
+                        'bytes': len(data), 'size': 'full', 'reencoded': False,
+                    }, data)
+                oriented = ImageOps.exif_transpose(source)
+                oriented.thumbnail((FULL_MAX_EDGE, FULL_MAX_EDGE), Image.Resampling.LANCZOS)
+                clean = Image.new('RGB', oriented.size, 'white')
+                if 'A' in oriented.getbands() or 'transparency' in oriented.info:
+                    rgba = oriented.convert('RGBA')
+                    clean.paste(rgba, mask=rgba.getchannel('A'))
+                else:
+                    clean.paste(oriented.convert('RGB'))
+        for edge in (FULL_MAX_EDGE, 2048, 1536, 1024):
+            reduced = clean.copy()
+            reduced.thumbnail((edge, edge), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            reduced.save(output, format='JPEG', quality=92)
+            encoded = output.getvalue()
+            if len(encoded) <= FULL_MAX_BYTES:
+                return AssetPreview({
+                    'resource_uri': resource_uri, 'source_sha256': source_sha256,
+                    'mime_type': 'image/jpeg', 'width': reduced.width, 'height': reduced.height,
+                    'bytes': len(encoded), 'size': 'full', 'reencoded': True,
+                }, encoded)
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise DomainError('invalid_image') from exc
+    raise DomainError('asset_size_limit')
+
 
 def expired_native_intent(created, scheduled_at, now):
     from .domain import parse_time
