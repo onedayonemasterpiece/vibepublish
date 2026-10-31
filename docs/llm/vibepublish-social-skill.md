@@ -55,7 +55,14 @@ recreate posts to evade provider errors.
 - **Кнопка VK-сторис**: `story_link.text` — один из вариантов VK (`watch` = «Смотреть», `read`, `more`, `ticket`, …).
   Свой текст VK не поддерживает.
 - **Правка отложенного поста** (ещё в очереди): `vibepublish_publication_update` по `publication_id`,
-  `change.kind:"edit"`, `destinations:[alias]`. Текст альбома правится на месте, без пересоздания.
+  `change.kind:"edit"`, `destinations:[alias]`, либо по свежему `item_ref` самого VK-поста.
+  Пост и вложения правятся на месте, без пересоздания.
+- **Колоризация VK**: сделай `vibepublish_read` исходного поста (для опубликованного
+  доступен `https://vk.com/wall-OWNER_ID` в уже подключённом назначении; для отложенного —
+  native queue → exact item read). Затем `vibepublish_publication_update` по свежему `item_ref`:
+  `change.media:[{"source":{"kind":"asset","id":"asset_NEW"}},{"source":{"kind":"existing","position":0}}]`.
+  В `change.content.text` передай полный текст с припиской. Оригинал остаётся родным фото VK:
+  не скачивай, не хэшируй, не загружай повторно. После `verified` перечитай тот же ID.
 - **Правка уже вышедшего поста**: сначала `vibepublish_read` этого поста, затем
   `vibepublish_publication_update` по его `item_ref` (`native_item_published` означает именно это).
 - **Конечный исход каждого поручения**: `operation_id` + свежее чтение из сети, подтверждающее результат,

@@ -93,7 +93,7 @@ def _fresh_read(db, actor, source, binding, remote, now):
             and request.get('_binding_id') == binding['id']
             and request.get('_binding_epoch') == binding['epoch']
             and request.get('_native_item') == remote['native_id']
-            and request.get('_namespace') == 'published'):
+            and request.get('_namespace') == remote['namespace']):
         raise DomainError('managed_media_reference_unverified', next_action='refresh')
 
 

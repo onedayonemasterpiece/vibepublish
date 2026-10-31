@@ -104,7 +104,7 @@ class VKAdapter:
             methods = {'publish': ['wall.post'], 'forward': ['wall.repost'], 'edit': ['wall.edit'],
                        'reschedule': ['wall.edit'], 'cancel': ['wall.delete'], 'delete': ['wall.delete']}[request.action]
             methods += ['wall.get' if request.scheduled_at or (request.existing and request.existing.namespace == 'scheduled') else 'wall.getById']
-            if request.assets:
+            if any(not a.provider_ref for a in request.assets):
                 methods += (['video.save', 'video.get'] if any(a.role == 'video' for a in request.assets) else ['photos.getWallUploadServer', 'photos.saveWallPhoto'])
         for method in methods:
             if not self.transport.permits(POLICIES[method][0], method, group_id=group, scheduled=bool(request.scheduled_at)):
@@ -471,6 +471,10 @@ class VKAdapter:
         attachments, native_media = (
             await self._reuse_staged_images(request, staging, hooks) if staging else ([], []))
         for n, asset in enumerate(request.assets[len(native_media):], start=len(native_media)):
+            if asset.provider_ref:
+                attachments.append(asset.provider_ref)
+                native_media.append(asset.provider_ref)
+                continue
             await hooks.emit_progress('uploading', 'started', f'Staging image {n+1}/{len(request.assets)}')
             for upload_attempt in range(5):
                 server = await self._call('photos.getWallUploadServer', group_id=group)
@@ -566,7 +570,9 @@ class VKAdapter:
         if r.source and await self._source(r) != state.get('source'):
             raise DomainError('source_changed', next_action='refresh')
         attachments, native_media = [], []
-        reuse = r.existing and tuple(a.sha256 for a in r.assets) == tuple(r.existing.media_hashes)
+        reuse = (r.existing and (not r.assets or (
+            not any(a.provider_ref for a in r.assets)
+            and tuple(a.sha256 for a in r.assets) == tuple(r.existing.media_hashes))))
         video_effect = bool(r.action == 'publish' and any(a.role == 'video' for a in r.assets))
         if video_effect:
             await hooks.checkpoint('vk_video_prepared', saved_checkpoint(r, id=None, media=[], retryable_wall_post=False))

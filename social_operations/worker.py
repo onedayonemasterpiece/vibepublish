@@ -192,6 +192,9 @@ class Worker:
                         or 'publish' not in json.loads(source_binding['rights'])):
                     raise DomainError('source_access_revoked', next_action='reauthorize')
             for a in plan['assets']:
+                if a.get('provider_ref'):
+                    assets.append(Asset(**a))
+                    continue
                 row = db.execute('SELECT bytes,sha256 FROM assets WHERE id=? AND tenant_id=? AND principal_id=?', (a['ref'], actor.tenant_id, actor.principal_id)).fetchone()
                 if not row or hashlib.sha256(row['bytes']).hexdigest() != a['sha256']:
                     raise DomainError('asset_integrity')
@@ -219,6 +222,10 @@ class Worker:
             if operation_id is None and self.store.clock() >= self.next_media_store_purge:
                 with self.store.tx() as db:
                     self.app._purge_media_store_assets(db)
+                    from .assets import retired_asset_rows
+                    db.executemany('DELETE FROM assets WHERE id=?',
+                                   [(row['id'],) for row in retired_asset_rows(db, self.store.clock())
+                                    if row['reason'] == 'reclaim'])
                 self.next_media_store_purge = self.store.clock() + 60
             op = self.store.claim(
                 self.id,

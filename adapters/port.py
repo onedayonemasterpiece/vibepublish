@@ -28,6 +28,7 @@ class Asset:
     role: str = "image"
     caption: str = ""
     alt_text: str = ""
+    provider_ref: str = ""  # Existing VK attachment; no local bytes.
     data: bytes = field(default=b"", repr=False)
 
 

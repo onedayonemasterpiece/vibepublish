@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- VK colourization in-place: permit fresh-read published/postponed wall edits with ordered new photos plus exact original native attachments, without downloading or reuploading the originals. Text-only managed edits no longer depend on retained old asset bytes; support bound VK wall permalinks, preserve native CAS and 60-second scheduling guard. Reuse the worker's cleanup cycle for completed media and 14-day orphan retention, retaining media-store download cache for its one-hour TTL; add read-only SQLite retention dry-run and approval-only VACUUM command. Offline checks only, pending Opus review, rollout and live acceptance.
+
 - Telegram media captions with the automatic navigation footer: stop rejecting a Premium-eligible MTProto user post at admission's universal 1024 limit. Keep 1024 for bots/non-Premium, use live sender `get_me().premium` plus Telegram `help.getAppConfig` to validate a user-specific higher bound before media upload/send, refuse unknown capability, recheck before execute, and preserve readback after subscription changes. Add full-footer, image, boundary, preview and native queue regressions. Code only; no deployment, live Premium proof or original scheduled post.
 - MAX zero-effect recovery: reject malformed/false `NoEffectProof` as a terminal nontransient refusal without clearing the durable dispatch marker, releasing quarantine or fabricating a publication. Align the existing MAX browser regressions with the fixed-horizon automatic retry contract while preserving no-duplicate-write, revoked-binding and verified-TG/VK invariants. Source and CI only; no provider writes.
 

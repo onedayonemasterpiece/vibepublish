@@ -481,9 +481,23 @@ class Application:
             raise DomainError('too_many_destinations')
         return list(result.values())
 
-    def _media(self, db, actor, items, *, allow_video=False, allow_document=False):
+    def _media(self, db, actor, items, *, allow_video=False, allow_document=False, existing=None, provider=None, action=None):
         output = []
         for entry in items:
+            if entry['source']['kind'] == 'existing':
+                if provider != 'vk' or action != 'edit' or not existing:
+                    raise DomainError('native_attachment_not_enabled')
+                media = existing.get('provider_media') or []
+                position = entry['source']['position']
+                if (position >= len(media) or not media[position].startswith('photo')
+                        or entry.get('role', 'image') not in {'image', 'auto'}
+                        or entry.get('caption') or entry.get('alt_text')):
+                    raise DomainError('native_attachment_invalid', next_action='refresh')
+                reference = media[position]
+                output.append({'ref': reference, 'provider_ref': reference, 'sha256': '',
+                               'mime': 'image/jpeg', 'size': 0, 'role': 'image',
+                               'caption': '', 'alt_text': ''})
+                continue
             if entry['source']['kind'] != 'asset':
                 raise DomainError('media_ingress_not_enabled', 'Import a verified image with the owner CLI; URL/upload-ticket ingress is not enabled', 'contact_owner')
             row = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?', (entry['source']['id'], actor.tenant_id, actor.principal_id)).fetchone()
@@ -518,7 +532,7 @@ class Application:
         if target.get('visual') and not pending_visual:
             raise DomainError('visual_requires_visual_service')
         content = target.get('renderings', {}).get(binding['provider'], target.get('content', {'text': ''}))
-        assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] in {'telegram', 'vk'} or (binding['provider'] == 'max' and binding['account_type'] == 'max_web'), allow_document=binding['provider'] == 'telegram')
+        assets = self._media(db, actor, target.get('media', []), allow_video=binding['provider'] in {'telegram', 'vk'} or (binding['provider'] == 'max' and binding['account_type'] == 'max_web'), allow_document=binding['provider'] == 'telegram', existing=existing, provider=binding['provider'], action=action)
         if binding['account_type'] != 'fake':
             for asset in assets:
                 fixture = db.execute('SELECT fixture FROM visual_asset_origins WHERE asset_id=?', (asset['ref'],)).fetchone()
@@ -806,8 +820,13 @@ class Application:
         b = self.store.binding(db, actor, binding_id=source['binding_id'])
         remote = json.loads(source['snapshot'])
         if 'media' in args['change']:
-            from .managed_item_edits import adopt
-            return adopt(self, db, actor, args, source, b, remote)
+            if b['provider'] == 'telegram':
+                from .managed_item_edits import adopt
+                return adopt(self, db, actor, args, source, b, remote)
+            if b['provider'] != 'vk':
+                raise DomainError('external_media_replace_needs_review', next_action='contact_owner')
+            from .managed_item_edits import _fresh_read
+            _fresh_read(db, actor, source, b, remote, self.store.clock())
         # Preserve native object IDs, not another principal's private asset hashes.
         remote['media_hashes'] = []
         change, kind = args['change'], args['change']['kind']
@@ -823,8 +842,6 @@ class Application:
             raise DomainError('delete_requires_published')
         if remote.get('origin') and kind in {'edit', 'reschedule'}:
             raise DomainError('forward_lifecycle_not_enabled', next_action='contact_owner')
-        if 'media' in change:
-            raise DomainError('external_media_replace_needs_review', next_action='contact_owner')
         target = {'content': {'text': remote['text']}, 'media': [],
                   'surface': 'story' if remote['namespace'] == 'story' else 'post',
                   'delivery': {'kind': 'at', 'at': remote['scheduled_at']} if remote.get('scheduled_at') else {'kind': 'now'}}
@@ -880,7 +897,7 @@ class Application:
                 # Telegram assigns new message ids on publication; the queued identity is gone.
                 raise DomainError('native_item_published', 'The scheduled item is already published: read it and change it by item_ref', 'refresh')
             b = self.store.binding(db, actor, binding_id=child['binding_id'])
-            target = {'content': json.loads(old['content_json']), 'media': [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']],
+            target = {'content': json.loads(old['content_json']), 'media': ([] if b['provider'] == 'vk' and kind != 'approve' else [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']]),
                       'surface': old['surface'], 'delivery': {'kind': 'at', 'at': old['scheduled_at']} if old['scheduled_at'] else {'kind': 'now'}, 'mode': 'execute'}
             if kind == 'edit':
                 target.update({k: v for k, v in change.items() if k not in {'kind', 'destinations'}})
@@ -1048,17 +1065,21 @@ class Application:
                         # produces a fresh native snapshot ref for safe in-place edits.
                         # A URL alone never creates a destination or authorization.
                         source = parse_source(query['item_ref'])
-                        if source.provider != 'telegram':
+                        if source.provider == 'vk':
+                            matches = [dict(row) for row in self.store.bindings(db, actor)
+                                       if row['provider'] == 'vk' and row['native_id'] == source.channel]
+                        elif source.provider == 'telegram':
+                            matches = [dict(row) for row in self.store.bindings(db, actor)
+                                       if row['provider'] == 'telegram' and (
+                                           row['native_id'] == source.channel or
+                                           str(row['handle'] or '').lstrip('@').casefold() == source.channel)]
+                            if len(matches) > 1:
+                                ordinary = [row for row in matches
+                                            if row['secret_ref'] != 'VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE']
+                                if len(ordinary) == 1:
+                                    matches = ordinary
+                        else:
                             raise DomainError('item_link_provider_not_enabled')
-                        matches = [dict(row) for row in self.store.bindings(db, actor)
-                                   if row['provider'] == 'telegram' and (
-                                       row['native_id'] == source.channel or
-                                       str(row['handle'] or '').lstrip('@').casefold() == source.channel)]
-                        if len(matches) > 1:
-                            ordinary = [row for row in matches
-                                        if row['secret_ref'] != 'VIBEPUBLISH_KNOWLEDGE_BASE_AUTH_BUNDLE']
-                            if len(ordinary) == 1:
-                                matches = ordinary
                         if len(matches) != 1:
                             raise DomainError('item_link_not_bound', next_action='contact_owner')
                         b = matches[0]

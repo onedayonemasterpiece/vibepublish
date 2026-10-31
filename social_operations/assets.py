@@ -133,6 +133,35 @@ def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> 
 
 
 
+def retired_asset_rows(db, now):
+    """Classify local bytes by remaining native work, without reading the BLOBs.
+
+    Native VK/Telegram/MAX attachments are the durable media after verified send.
+    The independent media-store transfer cache keeps its existing one-hour TTL.
+    """
+    return db.execute(
+        """WITH referenced AS (
+             SELECT json_extract(j.value,'$.ref') AS asset_id,
+                    MAX(o.work_state!='done') AS pending,
+                    MAX(o.state='outcome_unknown' OR t.state='outcome_unknown') AS uncertain
+             FROM attempts t JOIN operations o ON o.id=t.operation_id
+             JOIN json_each(t.plan,'$.assets') j
+             GROUP BY json_extract(j.value,'$.ref')
+           )
+           SELECT a.id, length(a.bytes) AS size_bytes,
+             CASE
+               WHEN EXISTS (SELECT 1 FROM media_store_assets m
+                            WHERE m.asset_id=a.id AND m.expires>?) THEN 'media_transfer'
+               WHEN COALESCE(r.pending,0) THEN 'pending_action'
+               WHEN COALESCE(r.uncertain,0) THEN 'unresolved_effect'
+               WHEN r.asset_id IS NULL AND a.created>=? THEN 'recent_unlinked'
+               ELSE 'reclaim'
+             END AS reason
+           FROM assets a LEFT JOIN referenced r ON r.asset_id=a.id""",
+        (now, now - 14 * 86400),
+    ).fetchall()
+
+
 def import_image(store, actor, data: bytes, mime: str) -> str:
     image = verify_image(data, mime)
     with store.tx() as db:
