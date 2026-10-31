@@ -1158,8 +1158,11 @@ class Application:
                 for row, asset in zip(evidence, ordered):
                     row.update(asset_ref=asset['asset_ref'], resource_uri='vibepublish://assets/' + asset['asset_ref'],
                                media_kind=asset['media_kind'])
-                    item['media'].append({'source': {'kind': 'asset', 'id': asset['asset_ref']},
-                                          'role': 'document' if asset['media_kind'] == 'document' else 'image'})
+                    media_item = {'source': {'kind': 'asset', 'id': asset['asset_ref']},
+                                  'role': 'document' if asset['media_kind'] == 'document' else 'image'}
+                    if binding['provider'] == 'vk' and 'width' in asset:
+                        media_item.update(width=asset['width'], height=asset['height'])
+                    item['media'].append(media_item)
             item['media_evidence'] = evidence
         elif remote.get('media_check', '').startswith('media_download_unavailable:'):
             item['error'] = {'code': 'media_download_unavailable',

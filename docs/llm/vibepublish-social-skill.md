@@ -77,6 +77,7 @@ recreate posts to evade provider errors.
   Списковые `scheduled`/`feed` чтения фото не скачивают. Из exact-read возьми
   `item.media[i].source.id` (`kind:"asset"`) и
   `item.media_evidence[i].resource_uri` (`vibepublish://assets/{asset_id}`).
+  Размеры исходника указаны в `item.media[i].width/height`; не путай их с WebP-превью.
   **(2)** Вызови `vibepublish_asset_preview` с
   `{"resource_uri":"vibepublish://assets/asset_…","size":"full"}`;
   исходное изображение для своего imagegen бери из возвращённого **ImageContent**,

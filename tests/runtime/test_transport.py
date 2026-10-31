@@ -146,6 +146,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         from PIL import Image
         from social_operations.domain import new_id
         from social_operations.service import Application
+        from social_operations.assets import render_asset_preview
 
         small = io.BytesIO()
         Image.new('RGB', (1024, 750), 'navy').save(small, format='JPEG', quality=89)
@@ -176,6 +177,14 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(implicit.content, explicit.content)
                     self.assertEqual(implicit.structuredContent['mime_type'], 'image/webp')
                     self.assertLessEqual(implicit.structuredContent['width'], 768)
+                    self.assertEqual((implicit.structuredContent['source_width'],
+                                      implicit.structuredContent['source_height']), (1024, 750))
+                    implicit_image = next(p for p in implicit.content if p.type == 'image')
+                    self.assertEqual(base64.b64decode(implicit_image.data),
+                                     render_asset_preview(original, hashlib.sha256(original).hexdigest(), uri).data)
+                    hint = next(p.text for p in implicit.content if p.type == 'text')
+                    self.assertIn('из исходника 1024×750', hint)
+                    self.assertIn('size:"full"', hint)
 
                     full = await session.call_tool('vibepublish_asset_preview',
                                                    {'resource_uri': uri, 'size': 'full'})

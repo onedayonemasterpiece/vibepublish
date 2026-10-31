@@ -105,6 +105,7 @@ def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> 
             warnings.simplefilter('error', Image.DecompressionBombWarning)
             with Image.open(io.BytesIO(data)) as source:
                 source.load()
+                source_width, source_height = source.size
                 clean = Image.new('RGB', source.size, 'white')
                 if 'A' in source.getbands():
                     clean.paste(source.convert('RGBA'), mask=source.getchannel('A'))
@@ -126,6 +127,8 @@ def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> 
                 'mime_type': 'image/webp',
                 'width': preview.width,
                 'height': preview.height,
+                'source_width': source_width,
+                'source_height': source_height,
                 'size_bytes': len(encoded),
             }
             return AssetPreview(metadata, encoded)

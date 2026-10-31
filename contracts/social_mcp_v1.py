@@ -163,7 +163,10 @@ DEFS["downloaded_media"] = obj({
     "asset_ref": ID, "resource_uri": string(300, pattern=r"^vibepublish://assets/[a-z][a-z0-9_:-]*$"),
     "media_kind": enum("photo", "document")},
     ("kind", "slot", "sha256", "mime", "size"))
-DEFS["read_media"] = {"oneOf": [ref("media"), obj({
+DEFS["read_media"] = {"oneOf": [obj({
+    **DEFS["media"]["properties"],
+    "width": {"type": "integer", "minimum": 1},
+    "height": {"type": "integer", "minimum": 1}}, ("source",)), obj({
     "role": enum("auto", "image", "video", "audio", "document", "animation")}, ("role",))]}
 DEFS["read_item"] = obj({"ref": ID, "kind": string(80), "text": string(), "url": URL,
     "publication_id": ID, "revision": REV, "destination": ALIAS, "own_reactions": array(string(100),0,100),
@@ -411,6 +414,8 @@ _asset_preview_fields = {
     "mime_type": {"const": "image/webp"},
     "width": {"type": "integer", "minimum": 1, "maximum": 768},
     "height": {"type": "integer", "minimum": 1, "maximum": 768},
+    "source_width": {"type": "integer", "minimum": 1},
+    "source_height": {"type": "integer", "minimum": 1},
     "size_bytes": {"type": "integer", "minimum": 1, "maximum": 393216},
     "preview_data_url": string(524320, pattern=r"^data:image/webp;base64,[A-Za-z0-9+/=]+$"),
 }
@@ -424,12 +429,12 @@ _asset_full_fields = {
     "size": {"const": "full"},
     "reencoded": {"type": "boolean"},
 }
-tool("asset_preview", "Return an authorized image as a small metadata-free WebP preview (default) or, with size=full, as bounded full-resolution ImageContent (original bytes if <=8 MiB and <=2560 px; otherwise reencoded JPEG).",
+tool("asset_preview", "Preview (default) is for inspection and selection; request size='full' for generation, colourization or image editing. Authorized full ImageContent contains original bytes if <=8 MiB and <=2560 px, otherwise a bounded reencoded JPEG.",
     obj({"resource_uri": _asset_preview_uri, "size": enum("preview", "full")},
         ("resource_uri",)),
     {"type": "object", "properties": {key: {} for key in (*_asset_preview_fields, *_asset_full_fields)},
      "additionalProperties": False, "oneOf": [
-         obj(_asset_preview_fields, ("resource_uri", "source_sha256", "preview_sha256", "mime_type", "width", "height", "size_bytes")),
+         obj(_asset_preview_fields, ("resource_uri", "source_sha256", "preview_sha256", "mime_type", "width", "height", "source_width", "source_height", "size_bytes")),
          obj(_asset_full_fields, ("resource_uri", "source_sha256", "mime_type", "width", "height", "bytes", "size", "reencoded")),
      ]},
     "visual", True)

@@ -115,9 +115,13 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'),
             # preview there so those clients can actually inspect it.
             structured = (metadata if metadata.get('size') == 'full' else
                           {**metadata, 'preview_data_url': 'data:' + metadata['mime_type'] + ';base64,' + encoded})
+            hint = '' if metadata.get('size') == 'full' else (
+                f'\nпревью {metadata["width"]}×{metadata["height"]} из исходника '
+                f'{metadata["source_width"]}×{metadata["source_height"]}; '
+                'для колоризации и правки изображения запроси size:"full"')
             return types.CallToolResult(
                 content=[
-                    types.TextContent(type='text', text=canonical(metadata)),
+                    types.TextContent(type='text', text=canonical(metadata) + hint),
                     types.ImageContent(type='image', data=encoded, mimeType=metadata['mime_type']),
                 ],
                 structuredContent=structured,

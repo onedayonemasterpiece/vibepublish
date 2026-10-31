@@ -551,7 +551,11 @@ source up to 8 MiB and 2560 px on the longest side, otherwise metadata-free
 JPEG quality 92 with bounded dimensions/bytes and `reencoded:true`. Its
 `structuredContent` reports `source_sha256`, actual MIME/dimensions/byte size,
 `size:"full"` and `reencoded`, **not** full base64. Default and explicit
-`size:"preview"` retain the previous WebP and `preview_data_url` unchanged.
+`size:"preview"` retain the previous WebP bytes and `preview_data_url`.
+Preview metadata now also reports `source_width/source_height` beside
+`width/height`; its text advises `size:"full"` for colourization/editing.
+An exact VK item read shows the original downloaded pixel dimensions on
+`item.media[].width/height` (not on scheduled/feed list entries).
 
 For clients which drop MCP `ImageContent` while retaining `structuredContent`,
 the same sanitized bounded WebP is also returned as `preview_data_url`

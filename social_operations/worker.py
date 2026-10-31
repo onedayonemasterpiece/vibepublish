@@ -957,8 +957,10 @@ class Worker:
                             (actor.tenant_id, actor.principal_id, sanitized_sha, evidence.sha256)).fetchone()
                         asset_ref = existing_asset['id'] if existing_asset else insert_verified_image(
                             self.store, db, actor, verified)
-                    downloads.setdefault(media.item_native_id, []).append(
-                        {'slot': media.slot, 'asset_ref': asset_ref, 'media_kind': media.media_kind})
+                    media_entry = {'slot': media.slot, 'asset_ref': asset_ref, 'media_kind': media.media_kind}
+                    if b['provider'] == 'vk' and request.kind == 'item' and media.media_kind == 'photo':
+                        media_entry.update(width=verified.width, height=verified.height)
+                    downloads.setdefault(media.item_native_id, []).append(media_entry)
             items = []
             for remote in page.items:
                 if remote.native_target != b['native_id']:

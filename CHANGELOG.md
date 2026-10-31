@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Add optional `size:"full"` to the existing authenticated `vibepublish_asset_preview` MCP tool for dot-owned colourization: return original ImageContent up to 8 MiB/2560 px, otherwise a metadata-free quality-92 JPEG with explicit `reencoded` metadata. Preserve default ≤768 px WebP preview and structured preview URL for Wonderful Lections; no new download route, storage or publisher mutation. Pending reviewer rollout and live acceptance.
+- Add optional `size:"full"` to the existing authenticated `vibepublish_asset_preview` MCP tool for dot-owned colourization: return original ImageContent up to 8 MiB/2560 px, otherwise a metadata-free quality-92 JPEG with explicit `reencoded` metadata. Preserve byte-identical default ≤768 px WebP and structured preview URL for Wonderful Lections; include original dimensions and a size:"full" hint in preview metadata/text and exact VK item media dimensions; no new download route, storage or publisher mutation. Pending reviewer rollout and live acceptance.
 
 - Exact VK item reads (published/postponed) hydrate photo bytes through the existing private download-to-asset pipeline, with safe bounded VK HTTPS retrieval and nonfatal media warnings. Native queue/feed reads remain metadata-only; missing postponed IDs return no item (not a neighbor) and edits refuse with `remote_item_missing`. Exact-read photos use the existing one-hour single-copy `download_cache` instead of 14-day orphan retention; preserved original attachments and CAS remain independent of downloaded pixels. Document dot-owned colourization using full-resolution MCP/HTTP assets, not VibePublish visual generation. Code/tests only; no deploy or live VK writes.
 

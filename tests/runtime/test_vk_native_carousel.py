@@ -116,6 +116,7 @@ async def test_exact_vk_photo_read_downloads_bytes_and_keeps_native_edit_cas(tmp
     if scheduled:
         assert item['scheduled_at'] == timestamp(NOW + 3600)
     assert item['media'][0]['source']['kind'] == 'asset'
+    assert (item['media'][0]['width'], item['media'][0]['height']) == (1200, 800)
     asset_id = item['media'][0]['source']['id']
     assert item['media_evidence'][0]['resource_uri'] == 'vibepublish://assets/' + asset_id
     assert item['media_evidence'][0]['sha256'] == hashlib.sha256(wire).hexdigest()
