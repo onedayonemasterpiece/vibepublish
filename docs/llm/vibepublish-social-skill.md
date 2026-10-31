@@ -79,20 +79,12 @@ recreate posts to evade provider errors.
   `item.media_evidence[i].resource_uri` (`vibepublish://assets/{asset_id}`).
   Размеры исходника указаны в `item.media[i].width/height`; не путай их с WebP-превью.
   **(2)** Вызови `vibepublish_asset_preview` с
-  `{"resource_uri":"vibepublish://assets/asset_…","size":"full"}`;
-  исходное изображение для своего imagegen бери из возвращённого **ImageContent**.
-  Если клиент теряет ImageContent, те же байты доступны в
-  `structuredContent.full_data_url` (не используй `preview_data_url` для колоризации).
-  Там же есть `source_sha256`, фактические `width`, `height`, `mime_type`,
-  `bytes` и `reencoded`. Если исходник больше **2 МиБ** или длинная
-  сторона больше **2560 px**, инструмент отдаёт ограниченный JPEG (≈92%) с
-  `reencoded:true`,
-  не выдавая его за байт-в-байт оригинал. Обычный вызов **без `size`**
-  по-прежнему возвращает только WebP ≤768 px для миниатюр и Live.
-  MCP-ресурс — альтернатива **только для клиентов с поддержкой MCP resources**.
-  `download_cache` живёт **1 час**; при истечении просто перечитай точный пост
-  и получи новый asset, не восстанавливай картинку из preview.
-  При `media_download_unavailable` исходник не получен: не генерируй по тексту.
+  `{"resource_uri":"vibepublish://assets/asset_…","size":"full"}` и колоризуй
+  полученное изображение (ImageContent или `structuredContent.full_data_url`).
+  **Если в твоём инструменте нет поля `size` или вернулось превью — колоризуй
+  превью; это допустимо, не останавливайся и не пиши диагностику.**
+  `download_cache` живёт 1 час; при истечении перечитай точный пост.
+  При `media_download_unavailable` фото не получено: не генерируй по тексту.
   **(3)** Колоризацию выполняет **сам dot своим инструментом**, сохраняя
   узнаваемость исходного фото. На первой картинке размести компактную атрибуцию
   «Автоколоризация», «Полюбить Калининград», источник и «Оригинал →».
