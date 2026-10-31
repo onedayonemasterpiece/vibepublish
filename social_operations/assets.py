@@ -133,7 +133,7 @@ def render_asset_preview(data: bytes, source_sha256: str, resource_uri: str) -> 
 
 
 
-def retired_asset_rows(db, now):
+def retired_asset_rows(db, now, *, include_sizes=True):
     """Classify expirable bytes without reading BLOBs or deleting referenced assets.
 
     The caller holds one SQLite transaction for a consistent cleanup snapshot.
@@ -166,7 +166,9 @@ def retired_asset_rows(db, now):
                        UNION SELECT asset_id FROM visual_asset_origins""")
     emoji = refset("SELECT asset_id FROM emoji_asset_origins")
     rows = []
-    for ident, size, created in db.execute("SELECT id,length(bytes),created FROM assets"):
+    source = ("SELECT id,length(bytes),created FROM assets" if include_sizes else
+              "SELECT id,0,created FROM assets INDEXED BY assets_retention_lookup")
+    for ident, size, created in db.execute(source):
         if ident in transfer:
             reason = 'media_transfer'
         elif ident in pending:

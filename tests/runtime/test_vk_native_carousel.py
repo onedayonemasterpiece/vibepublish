@@ -219,6 +219,12 @@ async def test_worker_retention_removes_verified_and_14_day_orphans(tmp_path):
     with env.store.connection() as db:
         categories = {r["id"]: r["reason"] for r in retired_asset_rows(db, env.current[0])}
     assert categories[env.new_asset] == "pending_action"
+    with env.store.connection() as db:
+        quick = {r["id"]: r["reason"] for r in retired_asset_rows(db, env.current[0], include_sizes=False)}
+        assert quick == categories  # Covering index avoids loading large local BLOB pages.
+        plan = db.execute("EXPLAIN QUERY PLAN SELECT id,0,created FROM assets "
+                          "INDEXED BY assets_retention_lookup").fetchall()
+        assert any("COVERING INDEX" in row["detail"] for row in plan)
     assert await env.worker.run_once()
     env.current[0] += 61
     assert not await env.worker.run_once()

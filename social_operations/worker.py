@@ -224,7 +224,7 @@ class Worker:
                     self.app._purge_media_store_assets(db)
                     from .assets import retired_asset_rows
                     db.executemany('DELETE FROM assets WHERE id=?',
-                                   [(row['id'],) for row in retired_asset_rows(db, self.store.clock())
+                                   [(row['id'],) for row in retired_asset_rows(db, self.store.clock(), include_sizes=False)
                                     if row['reason'] == 'reclaim'])
                 self.next_media_store_purge = self.store.clock() + 60
             op = self.store.claim(
