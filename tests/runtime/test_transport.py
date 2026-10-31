@@ -139,6 +139,114 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM assets').fetchone()[0], 0)
             self.assertEqual(db.execute('SELECT count(*) FROM media_store_assets').fetchone()[0], 0)
 
+    async def test_asset_preview_full_returns_original_or_bounded_jpeg_without_changing_default(self):
+        import base64
+        import hashlib
+        import io
+        from random import Random
+        from PIL import Image
+        from social_operations.domain import new_id
+        from social_operations.service import Application
+        from social_operations.assets import render_asset_preview
+
+        small = io.BytesIO()
+        Image.effect_noise((1024, 750), 100).convert('RGB').save(small, format='JPEG', quality=45)
+        original = small.getvalue()
+        self.assertTrue(200_000 < len(original) < 500_000)  # Representative ~328 KB photo.
+        big = io.BytesIO()
+        Image.new('RGB', (3200, 2200), 'navy').save(big, format='PNG')
+        heavy = io.BytesIO()
+        Image.frombytes('RGB', (1300, 1000), Random(7).randbytes(1300 * 1000 * 3)).save(heavy, format='PNG')
+        self.assertGreater(len(heavy.getvalue()), 2 * 1024 * 1024)
+        images = ((original, 'image/jpeg', 1024, 750), (big.getvalue(), 'image/png', 3200, 2200),
+                  (heavy.getvalue(), 'image/png', 1300, 1000))
+        ids = []
+        with self.store.tx() as db:
+            for data, mime, width, height in images:
+                ident = new_id('asset')
+                sha = hashlib.sha256(data).hexdigest()
+                db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
+                           (ident, self.actor.tenant_id, self.actor.principal_id, sha,
+                            mime, width, height, data, sha, self.store.clock()))
+                ids.append(ident)
+        uri = 'vibepublish://assets/' + ids[0]
+        headers = {'Authorization': 'Bearer ' + self.token}
+        async with httpx.AsyncClient(headers=headers, trust_env=False) as http:
+            async with streamable_http_client(self.base + '/mcp/', http_client=http) as (read, write, _):
+                async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=15)) as session:
+                    await session.initialize()
+                    implicit = await session.call_tool('vibepublish_asset_preview', {'resource_uri': uri})
+                    explicit = await session.call_tool('vibepublish_asset_preview',
+                                                       {'resource_uri': uri, 'size': 'preview'})
+                    self.assertFalse(implicit.isError)
+                    self.assertEqual(implicit.structuredContent, explicit.structuredContent)
+                    self.assertEqual(implicit.content, explicit.content)
+                    self.assertEqual(implicit.structuredContent['mime_type'], 'image/webp')
+                    self.assertLessEqual(implicit.structuredContent['width'], 768)
+                    self.assertEqual((implicit.structuredContent['source_width'],
+                                      implicit.structuredContent['source_height']), (1024, 750))
+                    implicit_image = next(p for p in implicit.content if p.type == 'image')
+                    self.assertEqual(base64.b64decode(implicit_image.data),
+                                     render_asset_preview(original, hashlib.sha256(original).hexdigest(), uri).data)
+                    preview_texts = [p.text for p in implicit.content if p.type == 'text']
+                    self.assertEqual(len(preview_texts), 2)
+                    self.assertEqual(json.loads(preview_texts[0]), {
+                        k: v for k, v in implicit.structuredContent.items() if k != 'preview_data_url'})
+                    self.assertIn('из исходника 1024×750', preview_texts[1])
+                    self.assertIn('size:"full"', preview_texts[1])
+
+                    full = await session.call_tool('vibepublish_asset_preview',
+                                                   {'resource_uri': uri, 'size': 'full'})
+                    self.assertFalse(full.isError, full)
+                    self.assertEqual(full.structuredContent, {
+                        'resource_uri': uri, 'source_sha256': hashlib.sha256(original).hexdigest(),
+                        'mime_type': 'image/jpeg', 'width': 1024, 'height': 750,
+                        'bytes': len(original), 'size': 'full', 'reencoded': False,
+                        'full_data_url': 'data:image/jpeg;base64,' + base64.b64encode(original).decode('ascii'),
+                    })
+                    self.assertEqual(base64.b64decode(next(p.data for p in full.content
+                                                            if p.type == 'image')), original)
+                    self.assertEqual([json.loads(p.text) for p in full.content if p.type == 'text'],
+                                     [{k: v for k, v in full.structuredContent.items() if k != 'full_data_url'}])
+                    self.assertNotIn('preview_data_url', full.structuredContent)
+
+                    oversized = await session.call_tool('vibepublish_asset_preview', {
+                        'resource_uri': 'vibepublish://assets/' + ids[1], 'size': 'full'})
+                    self.assertFalse(oversized.isError, oversized)
+                    metadata = oversized.structuredContent
+                    binary = base64.b64decode(next(p.data for p in oversized.content if p.type == 'image'))
+                    self.assertEqual(metadata['size'], 'full')
+                    self.assertTrue(metadata['reencoded'])
+                    self.assertEqual(metadata['source_sha256'], hashlib.sha256(big.getvalue()).hexdigest())
+                    self.assertEqual(metadata['mime_type'], 'image/jpeg')
+                    self.assertEqual(metadata['bytes'], len(binary))
+                    self.assertLessEqual(len(binary), 2 * 1024 * 1024)
+                    self.assertLessEqual(max(metadata['width'], metadata['height']), 2560)
+                    self.assertEqual(metadata['full_data_url'],
+                                     'data:image/jpeg;base64,' + base64.b64encode(binary).decode('ascii'))
+                    self.assertNotIn('preview_data_url', metadata)
+                    with Image.open(io.BytesIO(binary)) as result:
+                        self.assertEqual(result.size, (metadata['width'], metadata['height']))
+
+                    byte_heavy = await session.call_tool('vibepublish_asset_preview', {
+                        'resource_uri': 'vibepublish://assets/' + ids[2], 'size': 'full'})
+                    self.assertFalse(byte_heavy.isError, byte_heavy)
+                    byte_metadata = byte_heavy.structuredContent
+                    self.assertEqual(byte_metadata['source_sha256'], hashlib.sha256(heavy.getvalue()).hexdigest())
+                    self.assertEqual(byte_metadata['size'], 'full')
+                    self.assertTrue(byte_metadata['reencoded'])  # 1300 px fits; byte budget forces conversion.
+                    self.assertLessEqual(byte_metadata['bytes'], 2 * 1024 * 1024)
+                    self.assertEqual(byte_metadata['mime_type'], 'image/jpeg')
+                    self.assertEqual(base64.b64decode(byte_metadata['full_data_url'].split(',', 1)[1]),
+                                     base64.b64decode(next(p.data for p in byte_heavy.content if p.type == 'image')))
+
+        intruder_token = self.store.create_principal('tenant', 'intruder', scopes={'visual'})
+        intruder = self.store.authenticate(intruder_token)
+        app = Application(self.store)
+        for args in ({'resource_uri': uri}, {'resource_uri': uri, 'size': 'full'}):
+            denied = await app.call(intruder, 'vibepublish_asset_preview', args)
+            self.assertEqual(denied['error']['code'], 'asset_not_available')
+
     async def test_actual_sdk_eight_tools_skill_resource_prompt_and_reconnect(self):
         progress = []
         async def on_progress(value,total,message):

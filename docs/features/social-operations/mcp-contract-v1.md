@@ -545,10 +545,26 @@ maximum 768 px on either edge and 384 KiB, intended only for fast model inspecti
 before selection or transfer. The returned metadata binds the preview SHA-256 to
 the authorized source SHA-256.
 
+For dot-owned VK colourization, the **optional** `size:"full"` uses the same
+authorized tool to return an MCP `ImageContent` from `read_asset`: byte-exact
+source up to 2 MiB and 2560 px on the longest side, otherwise metadata-free
+JPEG quality 92 with bounded dimensions/bytes and `reencoded:true`. Its
+`structuredContent` reports `source_sha256`, actual MIME/dimensions/byte size,
+`size:"full"`, `reencoded`, and `full_data_url` with the same bounded image bytes
+as `ImageContent`. Default and explicit `size:"preview"` retain the previous
+WebP bytes and `preview_data_url`.
+Preview metadata also reports `source_width/source_height` beside
+`width/height`. The **first text block is JSON-only** (so Wonderful Lections can
+parse it if `structuredContent` is unavailable); a **second TextContent** advises
+`size:"full"` for colourization/editing.
+An exact VK item read shows the original downloaded pixel dimensions on
+`item.media[].width/height` (not on scheduled/feed list entries).
+
 For clients which drop MCP `ImageContent` while retaining `structuredContent`,
-the same sanitized bounded WebP is also returned as `preview_data_url`
-(`data:image/webp;base64,...`). It contains preview pixels, not the original
-asset or an externally fetchable URL. The existing principal/scope check and
+both modes carry a bounded data URL: `preview_data_url` for WebP thumbnails
+(`data:image/webp;base64,...`) or `full_data_url` for full-mode bytes
+(`data:<mime>;base64,...`, up to 2 MiB decoded). Neither is an externally
+fetchable URL; the preview contains only thumbnail pixels. The existing principal/scope check and
 content hashes apply unchanged. End-user visual acceptance still requires a
 live connector read and decoding of the returned image.
 
