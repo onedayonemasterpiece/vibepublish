@@ -445,8 +445,14 @@ class Store:
                                   (op["id"], seq, event_limit + 1)).fetchall()
                 page = rows[:event_limit]
             deliveries = []
+            vk_without_hashtags = False
             from .managed_item_edits import latest_attempts
             for child in latest_attempts(db, op):
+                if op["action"] in ("publish", "publication_update") and child["provider"] == "vk":
+                    plan = json.loads(child["plan"])
+                    if (plan["action"] in ("publish", "edit") and plan.get("surface") == "post"
+                            and "#" not in json.loads(plan["content_json"]).get("text", "")):
+                        vk_without_hashtags = True
                 result = {"destination": child["alias"], "provider": child["provider"], "attempt_id": child["id"], "state": child["state"],
                           "stage": child["stage"], "observed": child["observed"], "revision": child["target_revision"],
                           "media_check": "not_applicable", "retry_safe": False}
@@ -555,6 +561,8 @@ class Store:
                 error = json.loads(op["error"])
                 result["error"] = error["error"]
                 result["next_action"] = "review_outcome" if state == "outcome_unknown" else error["next_action"]
+            if vk_without_hashtags:
+                result["message"] += ". Хештегов нет — по правилам можно добавить 0–3 или оставить так"
             return result
 
     def backup(self, path: str | Path):
