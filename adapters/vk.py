@@ -890,18 +890,17 @@ class VKAdapter:
         return await self._observe(request, state, hooks)
 
     @staticmethod
-    def _best_photo_url(photo):
-        original = photo.get('orig_photo')
-        if isinstance(original, dict) and isinstance(original.get('url'), str) and original['url']:
-            return original['url']
-        sizes = photo.get('sizes')
-        if not isinstance(sizes, list):
-            return None
-        sizes = [s for s in sizes if isinstance(s, dict) and isinstance(s.get('url'), str) and s['url']]
+    def _photo_urls(photo):
+        """Original first, then sizes largest first: VK CDN may lose single renditions."""
+        sizes = [s for s in (photo.get('sizes') if isinstance(photo.get('sizes'), list) else [])
+                 if isinstance(s, dict) and isinstance(s.get('url'), str) and s['url']]
         def area(size):
             width, height = size.get('width'), size.get('height')
             return width * height if type(width) is int and type(height) is int else 0
-        return max(sizes, key=area)['url'] if sizes else None
+        original = photo.get('orig_photo')
+        urls = [original['url']] if isinstance(original, dict) and isinstance(original.get('url'), str) and original['url'] else []
+        urls += [s['url'] for s in sorted(sizes, key=area, reverse=True)]
+        return list(dict.fromkeys(urls))
 
     @staticmethod
     def _photo_mime(data):
@@ -926,10 +925,16 @@ class VKAdapter:
                     photo = attachment.get('photo')
                     if not isinstance(photo, dict):
                         raise DomainError('vk_photo_data_invalid')
-                    url = self._best_photo_url(photo)
-                    if not url:
+                    urls = self._photo_urls(photo)
+                    if not urls:
                         raise DomainError('vk_photo_url_missing')
-                    data = await self.transport.download_photo(url)
+                    for n, url in enumerate(urls):
+                        try:
+                            data = await self.transport.download_photo(url)
+                            break
+                        except DomainError as exc:
+                            if exc.code != 'vk_photo_http_failed' or n == len(urls) - 1:
+                                raise
                     mime = self._photo_mime(data)
                     provider_ref = f'photo{photo["owner_id"]}_{photo["id"]}'
                     if provider_ref not in item.provider_media:

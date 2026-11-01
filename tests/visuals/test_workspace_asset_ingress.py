@@ -189,10 +189,10 @@ async def test_scope_principal_tenant_epoch_and_revocation(env, monkeypatch):
 @pytest.mark.asyncio
 async def test_bounded_sessions_and_global_reservations(env, monkeypatch):
     store, actor, app, _ = env
-    await begin(app, actor, 'one')
-    await begin(app, actor, 'two')
+    for n in range(ingress.MAX_ACTIVE_UPLOADS):
+        await begin(app, actor, f'session-{n}')
     with pytest.raises(DomainError, match='workspace upload quota exceeded'):
-        await begin(app, actor, 'three')
+        await begin(app, actor, 'one-too-many')
     other = store.authenticate(store.create_principal('tenant', 'other', scopes={'visual'}))
     monkeypatch.setattr(ingress, 'GLOBAL_STAGED_BYTES', len(png()) * 2)
     with pytest.raises(DomainError, match='workspace upload quota exceeded'):
