@@ -5,6 +5,19 @@
 
 # Social visuals
 
+### Ordered multi-photo tune — 2026-11-01
+
+Owner requirement: **Fixed**. Implementation and offline checks: **Not confirmed by user**. Live art quality / 3-card timing: **Not done**.
+
+The existing standalone `tune` command accepts either legacy `source` (one image with 1–4 alternative candidates), or `sources` (2–8 ordered, independent source photos). In the ordered form `candidates=N`, `formats` is an N-element positional list (repeated and mixed `original`/`post_4_5` are allowed), `selection="human"`, and `copy={}`. Each numbered brief section is assigned to the corresponding input. The executor uses one Codex thread/turn with **sequential image_gen calls**, one per photo; there is no separate scheduler or background worker per card.
+
+```json
+{"command":{"kind":"tune","sources":[{"source":{"kind":"asset","id":"asset_1"}},{"source":{"kind":"asset","id":"asset_2"}}],"brief":"[CARD 1/2] ...\n[CARD 2/2] ...","candidates":2,"formats":["original","post_4_5"],"selection":"human","copy":{}},"request_key":"story-revision-card-series"}
+```
+
+A completed batch returns `needs_selection` with exactly N candidates in **native imageGeneration item order**, not competing variants. Each candidate includes `source_index`, `source_sha256`, `source_asset_ref`, `format`, `asset_ref`, `sha256`, dimensions and an immutable choice token; the frozen sources and output bytes are hashed. Story consumers validate every index/hash/format/dimension and present the complete comic to its existing human-review step. **Single-candidate `select` still selects only one candidate**; do not misreport it as selecting all N or fabricate a batch `selected_asset_ref`. Native order is an ordering contract reinforced by strictly sequential tool-call instructions; the native protocol does not cryptographically attest that the model depicted the intended source. Review actual cards before publishing. Unknown imagegen outcomes remain recoverable only by readback of the original durable job/thread, not a second generation.
+
+
 ### Immutable source frame — 2026-10-14
 
 Requirement: `Fixed` for preserving an explicitly selected original photo;

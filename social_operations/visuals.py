@@ -59,7 +59,17 @@ class VisualService:
         spec.setdefault('formats', ['story_9_16' if surface == 'story' else 'post_4_5'])
         if spec['preset'] != PRESET:
             raise DomainError('visual_preset_not_available')
-        if not 1 <= spec['candidates'] <= 4 or len(spec['formats']) > spec['candidates']:
+        # A multi-source tune is one ordered card per source, not N variations
+        # of the same art. Existing single-source candidate semantics are unchanged.
+        batch = spec['kind'] == 'tune' and 'sources' in spec
+        if batch:
+            if (plans or 'source' in spec or not 2 <= len(spec['sources']) <= 8
+                    or spec['candidates'] != len(spec['sources'])
+                    or len(spec['formats']) != len(spec['sources'])
+                    or spec['copy'] or spec['selection'] != 'human'):
+                raise DomainError('visual_batch_cardinality_invalid')
+        elif (not 1 <= spec['candidates'] <= 4 or len(spec['formats']) > spec['candidates']
+              or len(set(spec['formats'])) != len(spec['formats'])):
             raise DomainError('visual_budget_too_small_for_formats')
         if plans:
             required = 'story_9_16' if surface == 'story' else 'post_4_5'
@@ -74,7 +84,7 @@ class VisualService:
         if 'visual' not in actor.scopes:
             raise DomainError('visual_scope_required', next_action='contact_owner')
         spec = self._spec(spec, plans)
-        descriptors = ([spec['source']] if spec['kind'] in {'tune', 'frame_source'} else spec.get('sources', []))
+        descriptors = ([spec['source']] if spec['kind'] in {'tune', 'frame_source'} and 'sources' not in spec else spec.get('sources', []))
         sources = []
         for descriptor in self.app._media(db, actor, descriptors):
             row = db.execute('SELECT * FROM assets WHERE id=?', (descriptor['ref'],)).fetchone()
@@ -551,7 +561,8 @@ class VisualService:
                     raise DomainError('asset_integrity')
                 sources.append(ImagegenSource(source['ref'], source['sha256'], source['mime'], source['width'], source['height'], source['size'], row['bytes']))
         spec = json.loads(job['spec'])
-        budget = (spec['candidates']+len(spec['formats'])-1)//len(spec['formats'])
+        budget = (len(sources) if spec['kind'] == 'tune' and len(sources) > 1
+                  else (spec['candidates']+len(spec['formats'])-1)//len(spec['formats']))
         brief = spec['brief']
         if spec['copy']:
             brief = ('Create only the art layer, without lettering or editorial text. '
@@ -641,11 +652,17 @@ class VisualService:
             if not 1 <= len(observation.artifacts) <= request.candidate_budget:
                 raise DomainError('imagegen_artifact_budget_mismatch')
             spec = json.loads(job['spec'])
+            source_order = json.loads(job['sources'])
+            batch = spec['kind'] == 'tune' and len(source_order) > 1
+            if batch and len(observation.artifacts) != len(source_order):
+                raise DomainError('imagegen_batch_cardinality_mismatch')
             prepared = []
             await worker.hooks(op).emit_progress('rendering', 'started', 'Verifying image artifacts and composing explicit editorial text')
-            for manifest in observation.artifacts:
+            for source_index, manifest in enumerate(observation.artifacts):
                 art = verified_artifact(executor.artifact_root/job['id'], manifest)
-                for format in spec['formats']:
+                # Batch source index is the native imageGeneration item ordinal.
+                # Never apply every requested format to every returned image.
+                for format in ([spec['formats'][source_index]] if batch else spec['formats']):
                     if len(prepared) == spec['candidates']:
                         break
                     composite = render(art.data, spec['copy'], format, spec['preset'])
@@ -685,12 +702,19 @@ class VisualService:
                     candidate_provenance = {**provenance, 'executor_artifact_sha256': manifest.sha256,
                                              'choice_binding': digest([job['input_digest'], candidate_id, sha, format, row['revision']]),
                                              'typography_evidence': 'explicit_copy_compositor_only' if spec['copy'] else 'prompt_text_unverified'}
+                    if batch:
+                        candidate_provenance.update(source_index=ordinal,
+                            source_sha256=source_order[ordinal]['sha256'],
+                            source_asset_ref=source_order[ordinal]['ref'])
                     db.execute('INSERT INTO visual_candidates VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                                (candidate_id, job['id'], ordinal, asset_ref, sha, art_ref, hashlib.sha256(art.data).hexdigest(),
                                 final.width, final.height, format, composite.recipe_json, canonical(candidate_provenance),
                                 self.store.token_hash(token), int(observation.fixture), int(requires_review)))
                     candidate = {'id': candidate_id, 'asset_ref': asset_ref, 'sha256': sha, 'width': final.width, 'height': final.height,
                                  'format': format, 'selection_token': token, 'requires_review': requires_review}
+                    if batch:
+                        candidate.update(source_index=ordinal, source_sha256=source_order[ordinal]['sha256'],
+                                         source_asset_ref=source_order[ordinal]['ref'])
                     candidates.append(candidate)
                     if automatic is None and (not job['parent_publication'] or format == ('story_9_16' if json.loads(job['plans'])[0]['surface']=='story' else 'post_4_5')):
                         automatic = {'kind': 'select', 'job_id': job['id'], 'candidate_id': candidate_id,
