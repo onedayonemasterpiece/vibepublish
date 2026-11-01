@@ -412,13 +412,17 @@ class CodexTaskImagegen:
             raise DomainError('imagegen_input_digest_invalid')
         if request.requested_route != MODEL:
             raise DomainError('imagegen_route_not_verified')
-        if type(request.candidate_budget) is not int or not 1 <= request.candidate_budget <= 4:
+        batch = request.mode == 'tune' and len(request.sources) > 1
+        maximum = 8 if batch else 4
+        if type(request.candidate_budget) is not int or not 1 <= request.candidate_budget <= maximum:
             raise DomainError('imagegen_budget_invalid')
+        if batch and request.candidate_budget != len(request.sources):
+            raise DomainError('imagegen_batch_cardinality_mismatch')
         if type(request.deadline) not in (int, float) or not math.isfinite(request.deadline) or request.deadline <= time.time():
             raise DomainError('imagegen_deadline_expired')
         if (request.mode not in ('generate', 'tune', 'compose') or not isinstance(request.brief, str)
                 or not 1 <= len(request.brief) <= 32000 or len(request.sources) > 8
-                or (request.mode == 'tune' and len(request.sources) != 1)
+                or (request.mode == 'tune' and not 1 <= len(request.sources) <= 8)
                 or (request.mode == 'compose' and len(request.sources) < 2)):
             raise DomainError('imagegen_request_invalid')
         for source in request.sources:
@@ -473,7 +477,9 @@ class CodexTaskImagegen:
                 'skill_snapshot': skill_snapshot,
                 'deadline': min(request.deadline, time.time() + self.timeout),
                 'phase': 'thread_start_pending', 'thread_id': None, 'turn_id': None,
-                'task_model': None, 'actual_model': None, 'artifacts': []}
+                'task_model': None, 'actual_model': None, 'artifacts': [],
+                'ordered_source_hashes': [source.sha256 for source in request.sources]
+                if request.mode == 'tune' and len(request.sources) > 1 else []}
             self._record(directory, record)  # durable before any uncertain remote write
             method, stage = 'thread/start', 'request'
             try:
@@ -501,15 +507,30 @@ class CodexTaskImagegen:
                     raise ValueError('deadline expired before turn start')
                 record['phase'] = 'turn_start_pending'
                 self._record(directory, record)
+                batch = request.mode == 'tune' and len(request.sources) > 1
+                instruction = (
+                    f'This is ONE ordered {len(request.sources)}-card image series, NOT alternatives. '
+                    'The attached localImage sources are ordered source-0, source-1, etc. '
+                    'Use the corresponding numbered card section of the brief for EACH source. '
+                    'Invoke image_gen SEQUENTIALLY exactly once for source-0, await the native '
+                    'image result, then once for source-1, and so on through the last source. '
+                    'Each call must use ONLY its indexed source image (plus shared style context); '
+                    'never swap sources, parallelize calls, create a collage, or combine outputs. '
+                    'Produce one independently saved PNG per source, in the same order as input. '
+                    'Do not generate any other images, retries, extra variants or placeholders. '
+                    if batch else
+                    f'Make exactly one image call per candidate, and {request.candidate_budget} '
+                    'candidates total. No retries or extra variants. '
+                )
                 prompt = ('Ordinary Codex image task. Use the built-in image_gen tool on the existing '
                     'Codex login/quota; no API fallback, external image provider, placeholder or '
-                    'programmatically drawn replacement. Make exactly one image call per candidate, '
-                    f'and {request.candidate_budget} candidates total. No retries or extra variants. '
+                    'programmatically drawn replacement. ' + instruction +
                     'Use attached source images for the requested mode. Do not publish or access '
                     'social accounts. Follow the brief including quoted lettering; do not extract or '
                     'rewrite it. Stop after the requested images. Task data follows as JSON:\n' +
                     canonical({'mode': request.mode, 'brief': request.brief,
-                        'preset_version': request.preset_version, 'candidate_budget': request.candidate_budget}))
+                        'preset_version': request.preset_version, 'candidate_budget': request.candidate_budget,
+                        'source_sha256_order': [source.sha256 for source in request.sources] if batch else []}))
                 method, stage = 'turn/start', 'request'
                 turn = await self.transport.request('turn/start', {'threadId': record['thread_id'],
                     'input': [{'type': 'text', 'text': prompt}, *source_inputs],
@@ -544,6 +565,10 @@ class CodexTaskImagegen:
         items = [x for x in turn.get('items', []) if x.get('type') == 'imageGeneration']
         if len(items) != record['candidate_budget']:
             raise ValueError('native candidate count mismatch')
+        if record.get('ordered_source_hashes') and len(items) != len(record['ordered_source_hashes']):
+            raise ValueError('native ordered-source count mismatch')
+        if len({item.get('id') for item in items}) != len(items):
+            raise ValueError('duplicate native image item')
         output = self.artifact_root / record['job_key']; _private(output)
         artifacts, receipts = [], []
         for index, item in enumerate(items):
