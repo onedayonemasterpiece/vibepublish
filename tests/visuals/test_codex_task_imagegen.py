@@ -79,6 +79,62 @@ class CodexTaskTests(unittest.IsolatedAsyncioTestCase):
         self.request = ImagegenRequest('visual_' + 'a' * 32, 'b' * 64, 'generate',
             'Афиша с надписью "Кто я?"', (), 'art-v1', MODEL, 1, time.time() + 600)
 
+
+    async def test_ordered_three_card_tune_uses_one_native_turn(self):
+        sources = []
+        for index in range(3):
+            data = png() + bytes([index])
+            sources.append(ImagegenSource(f'photo-{index}', hashlib.sha256(data).hexdigest(),
+                                          'image/png', 64, 80, len(data), data))
+        request = replace(self.request, mode='tune', brief='[CARD 1] First\\n[CARD 2] Second\\n[CARD 3] Last',
+                          sources=tuple(sources), candidate_budget=3)
+        key = await self.adapter.submit(request)
+        calls = [method for method, _ in self.native.calls]
+        self.assertEqual(1, calls.count('thread/start'))
+        self.assertEqual(1, calls.count('turn/start'))
+        native_input = next(params['input'] for method, params in self.native.calls if method == 'turn/start')
+        self.assertEqual(4, len(native_input))
+        for i, source in enumerate(sources):
+            self.assertEqual(source.data, Path(native_input[i + 1]['path']).read_bytes())
+        self.assertIn('SEQUENTIALLY', native_input[0]['text'])
+        self.assertIn('source-0', native_input[0]['text'])
+        import_bytes = []
+        saved = self.home / 'generated_images' / THREAD
+        for i in range(3):
+            out = io.BytesIO()
+            Image.new('RGB', (64, 80), (i * 70, 10, 50)).save(out, format='PNG')
+            data = out.getvalue()
+            path = saved / f'card-{i}.png'
+            path.write_bytes(data)
+            import_bytes.append(data)
+        self.native.items = [
+            {'type': 'imageGeneration', 'id': f'card-{i}', 'status': 'completed',
+             'savedPath': str(saved / f'card-{i}.png'),
+             'result': base64.b64encode(data).decode(), 'failure': None}
+            for i, data in enumerate(import_bytes)]
+        observed = await self.adapter.inspect(key)
+        self.assertEqual('succeeded', observed.state)
+        self.assertEqual([hashlib.sha256(data).hexdigest() for data in import_bytes],
+                         [artifact.sha256 for artifact in observed.artifacts])
+        self.assertEqual([source.sha256 for source in sources],
+                         self.adapter._load(self.adapter._directory(key))['ordered_source_hashes'])
+        self.assertEqual(3, json.loads(observed.usage_json)['native_images_completed'])
+        await self.adapter.submit(request)
+        self.assertEqual(1, sum(method == 'turn/start' for method, _ in self.native.calls))
+
+    async def test_batch_missing_or_duplicate_native_items_fail_closed(self):
+        sources = tuple(ImagegenSource(f'photo-{i}', hashlib.sha256(png()).hexdigest(),
+                            'image/png', 64, 80, len(png()), png()) for i in range(3))
+        request = replace(self.request, mode='tune', sources=sources, candidate_budget=3)
+        with self.assertRaises(DomainError):
+            await self.adapter.submit(replace(request, candidate_budget=2))
+        self.assertEqual([], self.native.calls)
+        key = await self.adapter.submit(request)
+        self.assertEqual('unknown', (await self.adapter.inspect(key)).state)
+        self.native.items *= 3
+        self.assertEqual('unknown', (await self.adapter.inspect(key)).state)
+        self.assertEqual(1, sum(method == 'turn/start' for method, _ in self.native.calls))
+
     async def asyncTearDown(self):
         await self.adapter.close()
         self.tmp.cleanup()
