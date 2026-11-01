@@ -30,7 +30,7 @@ is safe; conflicting bytes or offsets fail closed.
 
 Uploads are bound to the current principal, tenant and authorization epoch.
 Publish-only principals may use workspace import without generation authority.
-A one-hour upload deadline, two active sessions / 40 MiB per principal and a
+A one-hour upload deadline, eight active sessions / 40 MiB per principal and a
 128 MiB global reservation limit bound staging. Expired and terminal bytes are
 cleared and old session metadata is reaped on upload activity. Final admission
 uses the existing image decoder, MIME/dimension checks, EXIF-free derivative,

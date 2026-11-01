@@ -455,3 +455,34 @@ async def test_worker_retention_removes_verified_and_14_day_orphans(tmp_path):
     assert not await env.worker.run_once()
     with env.store.connection() as db:
         assert db.execute("SELECT count(*) FROM assets").fetchone()[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_vk_photo_read_falls_back_when_cdn_lost_a_rendition(tmp_path):
+    # Live 01.11: orig/base/x/r returned 404 for one photo, only `y` was served.
+    env = setup(tmp_path, scheduled=True)
+    photo = env.transport.posts[(OWNER, 223)]['attachments'][0]['photo']
+    orig = 'https://sun9-12.userapi.com/orig.jpg'
+    base = 'https://sun9-12.userapi.com/base.jpg'
+    y = 'https://sun9-12.userapi.com/y.jpg'
+    photo['orig_photo'] = {'url': orig, 'width': 1024, 'height': 691}
+    photo['sizes'] = [{'url': base, 'width': 1024, 'height': 691, 'type': 'base'},
+                      {'url': y, 'width': 1023, 'height': 691, 'type': 'y'}]
+    image = io.BytesIO()
+    Image.new('RGB', (1024, 691), 'red').save(image, format='PNG')
+    wire = image.getvalue()
+    called = []
+
+    async def download(url):
+        called.append(url)
+        if url != y:
+            raise DomainError('vk_photo_http_failed')
+        return wire
+
+    env.transport.download_photo = download
+    await fresh_item(env, scheduled=True)
+    with env.store.connection() as db:
+        item = json.loads(db.execute(
+            "SELECT result FROM operations WHERE action='read' ORDER BY rowid DESC LIMIT 1").fetchone()[0])['items'][0]
+    assert called == [orig, base, y]
+    assert 'error' not in item and item['media'][0]['source']['kind'] == 'asset'
