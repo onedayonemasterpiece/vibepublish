@@ -108,6 +108,12 @@ or interruption is unavailable the outcome remains unknown, not fabricated as
 cancelled. Process shutdown may interrupt owned running tasks; saved identities
 remain available for readback, not automatic resubmission.
 
+## One-turn ordered multi-card generation — 2026-11-01
+
+For multi-source standalone `tune` (2–8 inputs), `candidate_budget=N` is the number of **card images**, not variations. The same `thread/start` and sole `turn/start` attach N indexed `localImage` inputs; the prompt requires N sequential `image_gen` calls in source order, sharing a consistent visual style. No extra thread, queue, worker, file download path, or retry is added. The native `turn.items` sequence is the sole ordering evidence: N completed `imageGeneration` items with distinct IDs and valid saved PNG paths/base64 receipts are required; missing/duplicate/failed items produce an unknown outcome, not guessed cards. The private receipt additionally records the frozen ordered source SHA-256 values. The public VisualService candidate provenance binds ordinal, frozen source SHA-256 and output hash. The model's *semantic* fidelity to a specific photo cannot be independently proven by the image tool and requires visual review.
+
+Legacy one-source tune still accepts 1–4 alternative candidates, and legacy `select` remains one candidate per visual job. A multi-card job remains `needs_selection`; its immutable N candidates are available to a caller for explicit per-card validation and subsequent whole-story human review, without pretending the legacy `select` command selected them all.
+
 ## Native artifact evidence
 
 Only `imageGeneration` items from the exact saved turn can produce accepted
