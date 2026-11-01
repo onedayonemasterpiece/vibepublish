@@ -113,7 +113,8 @@ class FakeImagegen:
             if old.input_digest != request.input_digest:
                 raise DomainError('imagegen_idempotency_conflict')
             return old.execution_ref
-        if not 1 <= request.candidate_budget <= 4:
+        budget_limit = 8 if request.mode == 'tune' and len(request.sources) > 1 else 4
+        if not 1 <= request.candidate_budget <= budget_limit:
             raise DomainError('imagegen_budget_invalid')
         for source in request.sources:
             if len(source.data) != source.size or hashlib.sha256(source.data).hexdigest() != source.sha256:
