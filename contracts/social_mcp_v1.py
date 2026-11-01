@@ -147,6 +147,15 @@ for visual_arm in DEFS["visual_spec"]["oneOf"]:
     visual_arm["properties"]["copy"] = ref("visual_copy")
     visual_arm["properties"]["formats"] = {**array(enum("post_4_5", "story_9_16", "original"), 1, 2),
                                            "uniqueItems": True}
+    if visual_arm["properties"]["kind"]["const"] == "tune":
+        # Keep legacy single-source tune; batch sources are ordered cards.
+        visual_arm["properties"]["sources"] = array(ref("media"), 2, 8)
+        visual_arm["required"].remove("source")
+        visual_arm["oneOf"] = [{"required": ["source"]}, {"required": ["sources"]}]
+        visual_arm["properties"]["brief"] = string(32000)
+        visual_arm["properties"]["prompt"] = string(32000)
+        # Mixed aspect ratios and repeated formats are meaningful per-card.
+        visual_arm["properties"]["formats"] = array(enum("post_4_5", "story_9_16", "original"), 1, 8)
 # Events commit with the corresponding state change; they are not transient logs.
 DEFS["event"] = obj({"seq": REV, "operation_id": ID, "destination": ALIAS,
     "at": DATE, "stage": STAGE, "status": enum("started", "completed", "failed", "blocked", "unknown"),
