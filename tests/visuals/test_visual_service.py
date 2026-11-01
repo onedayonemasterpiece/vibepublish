@@ -49,6 +49,65 @@ def select_command(result, index=0):
             'expected_revision':result['visual_revision'], 'token':candidate['selection_token']}
 
 
+
+@pytest.mark.asyncio
+async def test_one_batch_tune_three_sources_three_ordered_candidate_receipts(runtime):
+    store, actor, app, worker, executor, provider, *_ = runtime
+    sources = [import_image(store, actor, asset(i).data, 'image/png') for i in (1, 2, 3)]
+    spec = {'kind': 'tune', 'sources': [{'source': {'kind': 'asset', 'id': ident}} for ident in sources],
+            'brief': '[CARD 1] photo 1\\n[CARD 2] photo 2\\n[CARD 3] photo 3',
+            'candidates': 3, 'formats': ['original', 'post_4_5', 'original'],
+            'selection': 'human', 'copy': {}}
+    intent = {'command': spec, 'request_key': 'three-photographs'}
+    first = await call(app, actor, 'visual', intent)
+    assert (await call(app, actor, 'visual', intent))['operation_id'] == first['operation_id']
+    await worker.run_once()
+    assert len(executor.calls) == 1
+    request = executor.calls[0]
+    assert request.mode == 'tune' and request.candidate_budget == 3
+    assert [item.asset_ref for item in request.sources] == sources
+    ready = store.receipt(actor, first['operation_id'])
+    assert ready['state'] == 'needs_selection' and len(ready['candidates']) == 3
+    assert [c['source_index'] for c in ready['candidates']] == [0, 1, 2]
+    assert [c['source_asset_ref'] for c in ready['candidates']] == sources
+    assert [c['source_sha256'] for c in ready['candidates']] == [s.sha256 for s in request.sources]
+    assert [c['format'] for c in ready['candidates']] == spec['formats']
+    assert [(c['width'], c['height']) for c in ready['candidates']] == [
+        (128, 160), (1080, 1350), (128, 160)]
+    for card in ready['candidates']:
+        data, mime, sha = app.read_asset(actor, card['asset_ref'])
+        assert mime == 'image/png' and hashlib.sha256(data).hexdigest() == sha == card['sha256']
+    assert provider.count('effect') == 0
+    assert not await worker.run_once()
+
+
+@pytest.mark.asyncio
+async def test_batch_wrong_contract_and_missing_artifact_fail_closed(runtime):
+    store, actor, app, worker, executor, provider, *_ = runtime
+    sources = [import_image(store, actor, asset(i).data, 'image/png') for i in (1, 2, 3)]
+    spec = {'kind': 'tune', 'sources': [{'source': {'kind': 'asset', 'id': ident}} for ident in sources],
+            'brief': 'three ordered card sections', 'candidates': 3,
+            'formats': ['original', 'original', 'original'], 'selection': 'human', 'copy': {}}
+    for invalid in ({**spec, 'candidates': 2}, {**spec, 'formats': ['original']},
+                    {**spec, 'copy': {'title': 'not supported'}},
+                    {**spec, 'source': spec['sources'][0]}):
+        result = await app.call(actor, 'vibepublish_visual', {'command': invalid,
+            'request_key': 'invalid-' + hashlib.sha256(canonical(invalid).encode()).hexdigest()[:16]})
+        assert 'error' in result
+    assert executor.calls == []
+    first = await call(app, actor, 'visual', {'command': spec, 'request_key': 'ordered-missing'})
+    old_inspect = executor.inspect
+    async def truncated(ref):
+        observation = await old_inspect(ref)
+        return replace(observation, artifacts=observation.artifacts[:-1])
+    executor.inspect = truncated
+    await worker.run_once()
+    receipt = store.receipt(actor, first['operation_id'])
+    assert receipt['state'] == 'blocked'
+    assert not receipt.get('candidates')
+    assert provider.count('effect') == 0
+    assert len(executor.calls) == 1
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', ['generate','tune','compose'])
 async def test_shared_standalone_service_budget_lineage_and_private_selection(runtime, mode):
