@@ -252,3 +252,16 @@ key registry after byte deletion, so a lost-response replay still resolves the
 original asset/put identity and creates no additional provider file. Unsubmitted
 or failed source assets expire after the bounded 30-day delivery window plus one
 hour; admitted outage staging remains recoverable until then.
+
+### Large PDF/DjVu Telegram upload budget — 2026-11-02
+
+Status: `Not confirmed by user` pending live owner acceptance. The original
+63,904,669-byte PDF timed out twice inside the former 90-second worker execution
+window *before* any Telegram native message ID was dispatched. For a private
+Telegram `media_store` command containing PDF/DjVu DOCUMENTs, the existing
+worker now derives a bounded execution window from the already verified plan
+sizes: between 90 and 600 seconds, at 250,000 source bytes per second.
+Ordinary publishing, images, videos and the 30-day media-store acceptance
+horizon are unchanged. The original operation/request key retries without
+creating another Telegram post; only a verified native DOCUMENT with exact
+readback establishes success.

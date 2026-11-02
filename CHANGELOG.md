@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix private Telegram RKB PDF/DjVu archive uploads over 40 MB: derive the existing worker execution timeout from verified DOCUMENT byte sizes (90–600 seconds) instead of applying 90 seconds to a 63.9-MB source PDF, which repeatedly cancelled before dispatch. Preserve the same accepted operation/key, native verification, public publication limits and existing retry path. Distinguishing RED/GREEN test and live acceptance tracked separately.
+
 - Street Story ordered comic batch: one existing VibePublish `tune` command with 2–8 source assets and per-position formats yields 2–8 bound candidate receipts in one Luna Codex thread/turn. Preserve singleton tune selection, native PNG/SHA receipts, dispatch idempotency and unknown-outcome reconciliation; no new queue, service, social publication effect or batch-selection claim. Code and offline tests; live quality and deployment pending Opus review.
 
 - Add optional `size:"full"` to the existing authenticated `vibepublish_asset_preview` MCP tool for dot-owned colourization: return original ImageContent up to 2 MiB/2560 px, otherwise a metadata-free quality-92 JPEG with explicit `reencoded` metadata. Return the same bounded full bytes in `structuredContent.full_data_url` for clients missing image blocks; keep the first text block parseable JSON and put the preview size:"full" hint into a second TextContent. Preserve byte-identical default ≤768 px WebP and structured preview URL for Wonderful Lections; include original dimensions in preview metadata and exact VK item media; no new download route, storage or publisher mutation. Pending reviewer rollout and live acceptance.
