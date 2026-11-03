@@ -164,3 +164,14 @@ no disabled zero timeout, combined before/after account budget, immutable operat
 deadline, cancellation and bounded subphase diagnostics. Existing immediate-channel
 named-link/photo send and original-attempt recovery remain covered by synthetic
 replay. These checks do not establish live authentication or native send readiness.
+
+## MAX native media receipt contract, 2026-11-03
+
+Status: **Not confirmed by user**. A live scheduled-photo receipt on release
+5468176 reported provider_identity_only, but the public delivery schema omitted
+that existing evidence value and rejected the whole status result. The delivery
+schema accepts provider_identity_only for native identity and attachment
+references without downloaded-byte verification. This does not assert source-byte
+equality, change delivery state, or add downloads. Scheduled remains scheduled,
+not published. The existing contract regression now validates this MAX receipt
+through the normal status output schema. Live status replay follows deployment.
