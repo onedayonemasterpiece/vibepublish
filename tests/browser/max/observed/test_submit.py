@@ -126,7 +126,7 @@ async def test_submit_once_durable_reference_fresh_read_all_orders(writer, order
     assert result['transition']==dict(clicks=1,changed=True,blocked=False)
     assert [c[0] for c in state['checkpoints']]==['MAX_PREPARED','MAX_NATIVE_REFERENCE','MAX_CANDIDATE_OBSERVED']
     assert len(effects(state))==1 and effects(state)[0]['target']=='-101'
-    assert len([e for e in state['events'] if e['kind']=='copy'])==3
+    assert len([e for e in state['events'] if e['kind']=='copy'])==2
     assert len([e for e in state['events'] if e['kind']=='visit'])==2
     with pytest.raises(MaxBlocked,match='preexisting_content_candidate'): await submit(writer)
     assert len(effects(state))==1
@@ -490,6 +490,7 @@ async def test_exact_image_read_waits_for_lazy_tile_image(writer):
     result=await d.read('-101',native_item='owned')
     assert result[0]['id']=='owned' and len(result[0]['media'])==1 and result[0]['observed_media']==[]
     assert page.url.endswith('/-101') and not effects(state)
+    assert len([event for event in state['events'] if event['kind'] == 'copy']) == 2
 
 
 async def test_read_skips_unsupported_candidate_without_leaving_chat(writer):
@@ -500,3 +501,23 @@ async def test_read_skips_unsupported_candidate_without_leaving_chat(writer):
     result=await d.read('-101',native_item='owned')
     assert result[0]['id']=='owned' and page.url.endswith('/-101')
     assert not effects(state)
+
+
+async def test_single_closing_identity_check_then_fresh_native_receipt(writer):
+    d, page, state, h = writer
+    d.timeout = 30
+    identity = d.account_check
+    verified_after_effect = []
+    async def bounded_identity():
+        if effects(state):
+            if verified_after_effect:
+                raise MaxBlocked('identity_budget_exhausted_after_verified_readback')
+            verified_after_effect.append(True)
+        return await identity()
+    d.account_check = bounded_identity
+    result = await d.submit_plain_candidate(
+        target='-101', text=TEXT, media=(),
+        attempt_id='attempt', plan_digest='plan', hooks=h)
+    assert result['item']['id'] == 'provider-item'
+    assert len(effects(state)) == 1 and verified_after_effect
+    assert state['checkpoints'][-1][0] == 'MAX_CANDIDATE_OBSERVED'

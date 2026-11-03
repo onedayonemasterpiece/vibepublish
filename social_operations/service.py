@@ -668,7 +668,7 @@ class Application:
             with self.store.connection() as db:
                 actor = self.store.current(db, actor)
             if 'publication.manage' not in actor.scopes and (
-                    'publish' not in actor.scopes or args['change']['kind'] not in {'retry_failed', 'supersede_failed'}):
+                    'publish' not in actor.scopes or args['change']['kind'] not in {'retry_failed', 'supersede_failed', 'reconcile'}):
                 raise DomainError('access_denied', next_action='contact_owner')
         if action == 'publication_update' and args['change']['kind'] == 'reconcile_removed':
             from .unknown_resolution import accept_resolution

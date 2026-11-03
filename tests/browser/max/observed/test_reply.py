@@ -85,16 +85,19 @@ async def test_detached_readonly_delete_preparation_rebinds_before_single_effect
     assert len([e for e in state['events'] if e['kind']=='effect'])==1
 
 
-async def test_exact_read_never_downloads_or_projects_an_unrelated_candidate(writer,monkeypatch):
+@pytest.mark.parametrize('native',['wanted','absent'])
+async def test_exact_read_returns_only_requested_native_object_without_download(writer,native):
     d,page,state,h=writer
     state['messages']=[dict(id='wanted',target='-101',text='Exact wanted',outgoing=True),
-                       dict(id='unrelated',target='-101',text='Unrelated candidate',outgoing=True)]
-    original=d._plain_candidate;projected=[]
-    async def candidate(target,text,row,**kwargs):
-        projected.append(text)
-        assert text=='Exact wanted'
-        return await original(target,text,row,**kwargs)
-    monkeypatch.setattr(d,'_plain_candidate',candidate)
-    assert (await d.read('-101',native_item='wanted'))[0]['id']=='wanted'
-    assert projected==['Exact wanted','Exact wanted']
-    assert not [e for e in state['events'] if e['kind']=='effect']
+                       dict(id='unrelated',target='-101',text='Unrelated candidate',outgoing=True,
+                            media=['https://i.oneme.ru/replay/unrelated.png'])]
+    downloads=[]
+    page.on('download',lambda download: downloads.append(download))
+    if native=='absent':
+        with pytest.raises(MaxBlocked,match='^exact_read_not_observed$'):
+            await d.read('-101',native_item=native)
+    else:
+        result=await d.read('-101',native_item=native)
+        assert len(result)==1 and result[0]['id']=='wanted' and result[0]['text']=='Exact wanted'
+        assert result[0]['media']==[] and result[0]['observed_media']==[]
+    assert not downloads and not [e for e in state['events'] if e['kind']=='effect']
