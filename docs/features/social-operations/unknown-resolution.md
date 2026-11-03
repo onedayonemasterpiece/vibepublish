@@ -31,7 +31,8 @@ preflight consume the same budget; retries never move the deadline.
   never by text similarity. Already checkpointed IDs are only read, not resent.
   An unresolved response remains within W1's bounded retry/deadline and ends
   with a clear refusal if no native ID is recovered.
-- A saved native post ID proves provider acceptance. The worker re-reads that ID
+- For MAX Web, a saved native ID is only a locator. The existing worker automatically observes the same dispatched attempt while the original budget remains; a fresh verified native receipt is required for success. If the budget expires, the concrete terminal error is publication_unconfirmed, with no manual action or second Send/Save. A historic profile marker does not block another command.
+- For other providers, a saved native post ID proves provider acceptance. The worker re-reads that ID
   while time remains; if readback is still unavailable at the deadline, the
   published/scheduled result contains the original ID, a URL only if provided by
   the adapter, a private item/queue reference and a short event warning.
@@ -42,8 +43,7 @@ preflight consume the same budget; retries never move the deadline.
 
 There is no cross-publication connection quarantine: another valid post on the
 same VK, Telegram or MAX connection can proceed. Worker lease fencing, durable
-dispatch, provider lane and any existing provider finalization/quarantine on the
-*same attempt* remain.
+dispatch and provider lane remain. MAX has no second profile-wide quarantine ledger; old marker files are retained as historical evidence and are not consulted or manually removed.
 
 ## Legacy uncertain attempts and explicit APIs
 

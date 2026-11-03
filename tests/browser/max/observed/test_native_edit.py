@@ -54,4 +54,3 @@ async def test_scheduled_edit_retains_time_and_blocks_last_input_drift(writer,mo
         assert result[0]['id']==old['id'] and result[0]['scheduled_at']==at
         assert len([e for e in state['events'] if e['kind']=='effect'])==1
         assert state['checkpoints'][-1][1]['transition']==dict(clicks=1,blocked=False)
-        assert d.lane.marker.exists()

@@ -49,12 +49,11 @@ async def test_cancel_exact_native_row_guard_and_recovery(writer,monkeypatch,cha
         assert not [e for e in state['events'] if e['kind']=='effect']
         return
     result=await queue.cancel(d,existing=item,attempt_id='attempt',plan_digest='plan',hooks=h)
-    assert result[0]['id']==item['id'] and len(checks)==1 and d.lane.marker.exists()
+    assert result[0]['id']==item['id'] and len(checks)==1
     raw=state['checkpoints'][-1][1]
     recovered=await queue.reconcile(d,raw)
     assert recovered['item']['id']==item['id']
     assert len([e for e in state['events'] if e['kind']=='effect'])==1
-    assert d.lane.marker.exists() # Only core post-commit finalization releases it.
 
 
 @pytest.mark.parametrize('policy,label',[('test_group','Отправить позже'),('scheduled_only','Запланировать пост')])

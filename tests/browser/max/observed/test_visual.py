@@ -40,13 +40,11 @@ async def test_visual_corroboration_then_fresh_native_verification(replay, monke
             raise MaxBlocked('native_copy_menu_unavailable')
         return await original(*args)
     monkeypatch.setattr(d, '_copy_native_reference', transient)
-    before = d.lane.marker.read_bytes()
     result = await d.reconcile(recovery_state())
     assert calls == 5  # One failed copy, then the full four-copy native verification.
     assert result['item']['id'] == 'new-item'
     assert result['visual_evidence']['exact_text_match']
     assert result['quarantine_released'] is False
-    assert d.lane.marker.read_bytes() == before
     generate.assert_awaited_once(); assert record.await_count == 2
     request = generate.call_args.kwargs
     assert request['model'] == MODEL
@@ -88,7 +86,6 @@ async def test_evidence_record_failure_prevents_retry(replay, monkeypatch):
     with pytest.raises(MaxBlocked, match='visual_observation_unavailable'):
         await d.reconcile(recovery_state())
     assert copy.await_count == 1
-    assert d.lane.marker.exists()
 
 
 async def test_model_does_not_allow_infinite_dom_retries(replay, monkeypatch):
@@ -147,4 +144,3 @@ async def test_quota_refusal_keeps_capture_without_retry_or_provider_bypass(repl
     assert copy.await_count == 1
     generate.assert_awaited_once(); record.assert_awaited_once()
     assert record.call_args.args[1]['phase'] == 'captured'
-    assert d.lane.marker.exists()

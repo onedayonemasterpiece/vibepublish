@@ -345,3 +345,7 @@ no target reads/sends, grants or binding changes were attempted. Topic 3 live
 acceptance remains blocked by missing pre-existing binding and deployment access.
 Runtime databases were not checkpointed/mutated: service stop was not established.
 No unrelated cleanup, Imagegen work, Fly action or new runtime was performed.
+
+## MAX owner lifecycle correction, November 3
+
+Status: **Not confirmed by user**. The owner replaced MAX profile-wide quarantine/manual release with existing core at-most-once dispatch and bounded original-attempt observation. Historical marker files are retained, not consulted or manually removed. A stale ID cannot fabricate a receipt or end available native observation early. Independent commands proceed through their own DB fence and the shared profile flock. New local lifecycle regression passes for both fresh receipt and terminal publication_unconfirmed, with no duplicate effect. Current source and live release are separate until deployment/readback evidence is recorded.

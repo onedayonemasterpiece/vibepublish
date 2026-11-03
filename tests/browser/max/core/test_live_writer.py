@@ -29,11 +29,9 @@ async def test_plain_production_bridge_retains_native_checkpoint_and_releases_af
     assert latest['driver']['recovery_reference']==observed.items[0].url
     assert latest['driver']['transition']=={'clicks':1,'changed':True,'blocked':False}
     assert adapter._existing(observed.items[0])['url']==observed.items[0].url
-    assert d.lane.marker.exists()
     final=json.dumps(dict(remote=asdict(observed.items[0]), original_checkpoint=latest,
         core_recovery=dict(operation_id='op',attempt_id='attempt',plan_digest='plan')))
     await adapter.finalize(request,final,h)
-    assert not d.lane.marker.exists()
     await adapter.finalize(request,final,h)
     assert len(effects(state))==1
 
@@ -56,7 +54,7 @@ async def test_plain_delete_bridge_recovers_confirmed_removal_without_second_eff
     final=json.dumps(dict(remote=asdict(recovered.items[0]),original_checkpoint=latest,
         core_recovery=dict(operation_id='op',attempt_id='attempt',plan_digest='plan')))
     await adapter.finalize(request,final,h)
-    assert not d.lane.marker.exists() and len(effects(state))==1
+    assert len(effects(state))==1
 
 @pytest.mark.parametrize('config',[None,'not-json','{}',json.dumps(dict(profile='relative',executable='/bin/chromium',allowlist='/private/allowlist',live_writes=True)),json.dumps(dict(profile='/private/profile',executable='/bin/chromium',allowlist='/private/allowlist',live_writes=False))])
 async def test_standard_factory_requires_explicit_existing_profile_config(config):
@@ -106,11 +104,10 @@ async def test_image_bridge_binds_native_downloads_and_reconciles_without_resend
     latest=state['checkpoints'][-1][1]
     recovered=await adapter.reconcile(request,json.dumps(latest),h)
     assert recovered.items[0].observed_media==item.observed_media and len(effects(state))==1
-    assert d.lane.marker.exists()
     final=json.dumps(dict(remote=asdict(recovered.items[0]),original_checkpoint=latest,
         core_recovery=dict(operation_id='op',attempt_id='attempt',plan_digest='plan')))
     await adapter.finalize(request,final,h)
-    assert not d.lane.marker.exists() and len(effects(state))==1
+    assert len(effects(state))==1
 
 
 async def test_video_bridge_downloads_exact_native_tile_not_nested_controls(writer):
@@ -142,7 +139,6 @@ async def test_video_bridge_downloads_exact_native_tile_not_nested_controls(writ
         final=json.dumps(dict(remote=asdict(item),original_checkpoint=latest,
             core_recovery=dict(operation_id=current.operation_id,attempt_id=current.attempt_id,plan_digest=current.plan_digest)))
         await adapter.finalize(current,final,h)
-        assert not d.lane.marker.exists()
         state['expected_dispatch']=(f'attempt-{index}',f'plan-{index}')
         current=replace(request,operation_id=f'op-{index}',attempt_id=f'attempt-{index}',plan_digest=f'plan-{index}',
             action=action,content_json=json.dumps({'text':TEXT+' edited'}),assets=(),existing=item)
@@ -155,7 +151,6 @@ async def test_video_bridge_downloads_exact_native_tile_not_nested_controls(writ
     final=json.dumps(dict(remote=asdict(item),original_checkpoint=latest,
         core_recovery=dict(operation_id=current.operation_id,attempt_id=current.attempt_id,plan_digest=current.plan_digest)))
     await adapter.finalize(current,final,h)
-    assert not d.lane.marker.exists()
 
 
 @pytest.mark.parametrize('raster',[False,True])
@@ -231,12 +226,10 @@ async def test_forward_recovery_finalizes_only_committed_native_origin_proof(wri
     envelope=json.dumps(dict(remote=asdict(remote),original_checkpoint=json.loads(saved_checkpoint(request,driver=baseline)),
         core_recovery=dict(operation_id='op',attempt_id='attempt',plan_digest='plan'),
         committed_observation=asdict(Observation('published',(remote,),forward_origin_matched=proven))))
-    d.lane.arm('attempt','plan')
     if proven:
-        await adapter.finalize(request,envelope,h);assert not d.lane.marker.exists()
+        await adapter.finalize(request,envelope,h)
     else:
         with pytest.raises(OutcomeUnknown):await adapter.finalize(request,envelope,h)
-        assert d.lane.marker.exists()
 
 
 async def test_observed_native_forward_edit_limit_is_precise_and_never_dispatches(writer):
@@ -247,7 +240,7 @@ async def test_observed_native_forward_edit_limit_is_precise_and_never_dispatche
         'edit','post','{"text":"Changed"}',(),None,time.time()+300,existing=source)
     capability=await adapter.inspect(request)
     assert capability.status=='unsupported' and 'no Edit control' in capability.reason
-    assert not state['events'] and not d.lane.marker.exists()
+    assert not state['events']
 
 
 async def test_delete_native_forward_uses_existing_visible_body_not_empty_original_send_plan(writer):
@@ -276,4 +269,4 @@ async def test_exact_reactions_read_crosses_actual_port_without_a_write(writer,m
     monkeypatch.setattr(engagement,'observe',observe)
     result=await adapter.read(ReadRequest('max','-101','reactions',native_item='subject',namespace='published'),h)
     assert result.items[0].own_reactions_observed and result.items[0].own_reactions==()
-    assert not state['events'] and not d.lane.marker.exists()
+    assert not state['events']

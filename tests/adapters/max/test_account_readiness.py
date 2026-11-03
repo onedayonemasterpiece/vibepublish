@@ -106,7 +106,6 @@ async def test_account_subphase_is_bounded_in_preflight(tmp_path, phase, error):
         assert PRIVATE not in capability.message
         driver.page.goto.assert_not_awaited()
         driver.mutate.assert_not_awaited()
-        assert not lane.marker.exists()
 
 
 async def test_operation_deadline_caps_account_readiness_and_retains_phase(tmp_path):
