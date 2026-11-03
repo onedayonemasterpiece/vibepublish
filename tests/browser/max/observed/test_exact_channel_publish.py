@@ -50,7 +50,7 @@ async def test_named_link_and_photo_channel_without_isout_has_one_causal_send_an
     assert recovery["item"]["observed_media"] == result["item"]["observed_media"]
     assert recovery["quarantine_released"] is False
     assert len(effects(state)) == 1
-    with pytest.raises(MaxBlocked, match="outcome_unknown"):
+    with pytest.raises(MaxBlocked, match="preexisting_content_candidate"):
         await driver.submit_plain_candidate(target="-202", text=TEXT, entities=ENTITIES,
             media=(), attempt_id="another", plan_digest="another", hooks=hooks)
     assert len(effects(state)) == 1
@@ -76,7 +76,7 @@ async def test_channel_readback_deadline_preserves_native_receipt_and_never_rese
     assert references and references[0]["native_id"] == "provider-item"
     assert references[0]["recovery_reference"] == "https://max.ru/c/-202/provider-item"
     assert len(effects(state)) == 1
-    with pytest.raises(MaxBlocked, match="outcome_unknown"):
+    with pytest.raises(MaxBlocked, match="preexisting_content_candidate"):
         await driver.submit_plain_candidate(target="-202", text=TEXT,
             entities=ENTITIES, attempt_id="attempt-new", plan_digest="plan-new", hooks=hooks)
     assert len(effects(state)) == 1

@@ -128,7 +128,7 @@ async def test_submit_once_durable_reference_fresh_read_all_orders(writer, order
     assert len(effects(state))==1 and effects(state)[0]['target']=='-101'
     assert len([e for e in state['events'] if e['kind']=='copy'])==3
     assert len([e for e in state['events'] if e['kind']=='visit'])==2
-    with pytest.raises(MaxBlocked,match='outcome_unknown'): await submit(writer)
+    with pytest.raises(MaxBlocked,match='preexisting_content_candidate'): await submit(writer)
     assert len(effects(state))==1
 
 
@@ -148,7 +148,7 @@ async def test_submit_checkpoint_failure_never_retries(writer,name):
     expected = 0 if name=='MAX_PREPARED' else 1
     assert len(effects(state))==expected
     if expected:
-        with pytest.raises(MaxBlocked,match='outcome_unknown'): await submit(writer)
+        with pytest.raises(MaxBlocked,match='preexisting_content_candidate'): await submit(writer)
         assert len(effects(state))==1
 
 
@@ -160,7 +160,7 @@ async def test_submit_ambiguous_or_lost_response_stays_unknown(writer,fault):
     with pytest.raises(MaxBlocked,match='outcome_unknown'): await submit(writer)
     assert len(effects(state))==1
     assert not [c for c in state['checkpoints'] if c[0]=='MAX_NATIVE_REFERENCE']
-    with pytest.raises(MaxBlocked,match='outcome_unknown'): await submit(writer)
+    with pytest.raises(MaxBlocked,match='preexisting_content_candidate'): await submit(writer)
     assert len(effects(state))==1
 
 
@@ -296,7 +296,7 @@ async def test_exact_edit_preserves_identity_all_orders(writer,order):
     assert effects(state)[0]['action']=='edit' and effects(state)[0]['existing']==existing['id']
     assert not result['quarantine_released']
     assert [n for n,_ in state['checkpoints']]==['MAX_EDIT_PREPARED','MAX_EDIT_REFERENCE','MAX_EDIT_OBSERVED']
-    with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
+    with pytest.raises(MaxBlocked,match='bounded_native_candidates'): await edit(writer,existing)
     assert len(effects(state))==1
 
 
@@ -324,7 +324,7 @@ async def test_edit_post_effect_uncertainty_never_repeats(writer,fault):
     existing=edit_seed(writer);state['fault']=fault
     with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
     assert len(effects(state))==1 and len(state['messages'])==1
-    with pytest.raises(MaxBlocked,match='outcome_unknown'): await edit(writer,existing)
+    with pytest.raises(MaxBlocked,match='bounded_native_candidates'): await edit(writer,existing)
     assert len(effects(state))==1
 
 
