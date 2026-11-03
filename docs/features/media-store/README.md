@@ -303,6 +303,15 @@ and quota checks run through the unchanged authenticated binary-ingress
 validator. Downloads are bounded to two concurrent requests per process and
 a 90-second total transfer budget.
 
+Prussia Online's IIS returns DjVu originals with the legacy `image/x.djvu` response
+MIME type and enforces `Accept` negotiation. The owner-only downloader advertises
+both `image/vnd.djvu` and `image/x.djvu` (as well as PDF/octet-stream), avoiding
+HTTP 406 on valid DjVu files without widening the origin allowlist, weakening
+container signature validation, redirect/DNS/TLS checks, or changing the saved
+canonical document MIME (`image/vnd.djvu`). This was reproduced against actual
+public header responses for Köster (2014) and Toeppen (1858) on 2026-11-03;
+Telegram acceptance still requires a verified native DOCUMENT and readback.
+
 A second keyed mapping records the original URL command's digest and
 references the ordinary media-store operation. A matching retry returns
 the existing receipt **before** network fetching, even after verified
