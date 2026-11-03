@@ -1,0 +1,154 @@
+"""Private HTTPS DOCUMENT import must not expose service credentials or a second publication path."""
+import hashlib
+
+import pytest
+
+from social_operations.domain import DomainError
+from social_operations.ingress import IngressApplication
+from social_operations.document_url_ingress import PublicDocument, validate_archive_document_url
+from social_operations.storage import Store
+from .test_media_store import runtime
+
+PDF = b"%PDF-1.7\nPrivate original test source.\n"
+URL = "https://prussia.online/Data/Book/test/test-book/Original%20Book.pdf"
+
+
+def command(url=URL, sha=None, filename="Original Book.pdf"):
+    return {"command": {"kind": "put_url", "to": "vault",
+            "thread_ref": "https://t.me/c/4379835477/5", "url": url,
+            "mime": "application/pdf", "filename": filename,
+            "expected_sha256": sha or hashlib.sha256(PDF).hexdigest()},
+            "request_key": "original-book-url-key"}
+
+
+@pytest.mark.parametrize("url", [
+    "http://prussia.online/Data/Book/a/b/a.pdf",
+    "https://prussia.online.evil.test/Data/Book/a/b/a.pdf",
+    "https://evil.prussia.online/Data/Book/a/b/a.pdf",
+    "https://127.0.0.1/Data/Book/a/b/a.pdf",
+    "https://prussia.online:8443/Data/Book/a/b/a.pdf",
+    "https://user:password@prussia.online/Data/Book/a/b/a.pdf",
+    "https://prussia.online/private/a.pdf",
+    "https://prussia.online/Data/Book/a/b/%2e%2e%2fa.pdf",
+    "https://prussia.online/Data/Book/a/b/a.pdf?key=secret",
+    "https://prussia.online/Data/Book/a/b/a.pdf#fragment",
+    "https://prussia.online/Data/Book/a/b/a.png",
+])
+def test_document_ingress_rejects_untrusted_or_unbounded_urls(url):
+    with pytest.raises(DomainError):
+        validate_archive_document_url(url, "application/pdf")
+
+
+@pytest.mark.asyncio
+async def test_owner_original_url_put_is_single_verified_document_and_safe_replay(tmp_path):
+    store,owner,_asset,provider,_app,worker=runtime(tmp_path)
+    calls=[]
+    async def fetch(url,mime):
+        calls.append(url)
+        return PublicDocument(PDF,"application/pdf",url)
+    app=IngressApplication(store,document_fetcher=fetch)
+    assert "vibepublish_media_store" in {t["name"] for t in app.tools(owner)}
+    first=await app.call(owner,"vibepublish_media_store",command())
+    assert first.get("operation_id"),first
+    repeated=await app.call(owner,"vibepublish_media_store",command())
+    assert repeated["operation_id"]==first["operation_id"]
+    assert len(calls)==1
+    await worker.run_once()
+    done=store.receipt(owner,first["operation_id"])
+    assert done["state"]=="verified",done
+    again=await app.call(owner,"vibepublish_media_store",command())
+    assert again["operation_id"]==first["operation_id"]
+    assert len(calls)==1 and provider.effects==1
+    # Alias replay is keyed to the original URL+filename+target, not a loose command key.
+    changed=await app.call(owner,"vibepublish_media_store",command(filename="Different.pdf"))
+    assert changed["error"]["code"]=="idempotency_conflict"
+    assert provider.effects==1
+
+
+@pytest.mark.asyncio
+async def test_url_import_checks_scope_target_and_hash_before_dispatch(tmp_path):
+    store,owner,_asset,provider,_app,worker=runtime(tmp_path)
+    fetched=[]
+    async def fetch(url,mime):
+        fetched.append(url)
+        return PublicDocument(PDF,"application/pdf",url)
+    app=IngressApplication(store,document_fetcher=fetch)
+    denied=await app.call(owner,"vibepublish_media_store",
+        {**command(), "command": {**command()["command"],"to":"unbound"}})
+    assert denied["error"]["code"]=="access_denied"
+    bad=await app.call(owner,"vibepublish_media_store",command(sha="a"*64))
+    assert bad["error"]["code"]=="asset_integrity"
+    assert provider.effects==0
+    assert len(fetched)==1
+    other=store.authenticate(store.create_principal("t","media-service",scopes={"media.store"}))
+    owner_binding=store.bind(owner,other.principal_id,"vault-service","connection","-1004379835477",rights=("publish",))
+    store.set_service_media_topic(owner,other.principal_id,"vault-service","5")
+    service_command=command()
+    service_command["command"]["to"]="vault-service"
+    blocked=await app.call(other,"vibepublish_media_store",service_command)
+    assert blocked["error"]["code"]=="access_denied"
+    assert provider.effects==0
+
+
+@pytest.mark.asyncio
+async def test_plain_put_url_source_remains_denied_and_nonowner_cannot_reach_fetcher(tmp_path):
+    store,owner,asset,provider,_app,worker=runtime(tmp_path)
+    fetched=[]
+    async def fetch(url,mime):
+        fetched.append(url)
+        return PublicDocument(PDF,"application/pdf",url)
+    app=IngressApplication(store,document_fetcher=fetch)
+    legacy={"command":{"kind":"put","to":"vault",
+            "thread_ref":"https://t.me/c/4379835477/5","content":{"text":""},
+            "media":[{"source":{"kind":"url","url":URL},"role":"document"}]},
+            "request_key":"legacy-url-denial"}
+    old=await app.call(owner,"vibepublish_media_store",legacy)
+    assert old["error"]["code"]=="media_ingress_not_enabled"
+    assert fetched==[] and provider.effects==0
+
+@pytest.mark.asyncio
+async def test_document_original_magic_is_checked_without_optional_hash(tmp_path):
+    store,owner,_asset,provider,_app,worker=runtime(tmp_path)
+    async def fetch(url,mime):
+        return PublicDocument(b"not a PDF at all", "application/pdf", url)
+    app=IngressApplication(store,document_fetcher=fetch)
+    supplied=command()
+    supplied["command"].pop("expected_sha256")
+    denied=await app.call(owner,"vibepublish_media_store",supplied)
+    assert denied["error"]["code"]=="asset_container_invalid"
+    assert provider.effects==0
+
+
+@pytest.mark.asyncio
+async def test_owner_djvu_url_import_and_sha_without_pdf_assumption(tmp_path):
+    store,owner,_asset,provider,_app,worker=runtime(tmp_path)
+    djvu=b"AT&TFORM" + b"\x00\x00\x00\x00" + b"DJVU" + b"archived scanned pages"
+    url="https://prussia.online/Data/Book/ve/vergessene-kultur/Original.djvu"
+    async def fetch(incoming,mime):
+        assert incoming==url and mime=="image/vnd.djvu"
+        return PublicDocument(djvu,mime,url)
+    app=IngressApplication(store,document_fetcher=fetch)
+    args=command(url=url,filename="Original.djvu",sha=hashlib.sha256(djvu).hexdigest())
+    args["command"]["mime"]="image/vnd.djvu"
+    result=await app.call(owner,"vibepublish_media_store",args)
+    assert result.get("operation_id"),result
+    await worker.run_once()
+    assert store.receipt(owner,result["operation_id"])["state"]=="verified"
+    assert provider.effects==1
+
+
+@pytest.mark.asyncio
+async def test_repeated_key_with_changed_url_is_conflict_before_refetch(tmp_path):
+    store,owner,_asset,provider,_app,worker=runtime(tmp_path)
+    fetches=[]
+    async def fetch(url,mime):
+        fetches.append(url)
+        return PublicDocument(PDF,mime,url)
+    app=IngressApplication(store,document_fetcher=fetch)
+    first=await app.call(owner,"vibepublish_media_store",command())
+    assert first.get("operation_id"),first
+    changed=command(url="https://prussia.online/Data/Book/test/test-book/Second.pdf")
+    denied=await app.call(owner,"vibepublish_media_store",changed)
+    assert denied["error"]["code"]=="idempotency_conflict"
+    assert fetches==[URL]
+    assert provider.effects==0

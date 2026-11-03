@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add private owner-only VibePublish `media_store.put_url` for exact PDF/DjVu originals from allowlisted public Prussia Online HTTPS paths. It stages through the existing authenticated binary asset validator and original private Telegram DOCUMENT ledger, with host/DNS pinning, 128 MiB byte limits, MIME/header checks, exact binding checks, stable keyed replay and optional SHA-256; no generated server token-reading script, no new worker/queue, no change to existing `put` URL denial. Source tests and production acceptance are separate.
+
+
 - Fix private Telegram RKB PDF/DjVu archive uploads over 40 MB: derive the existing worker execution timeout from verified DOCUMENT byte sizes (90–600 seconds) instead of applying 90 seconds to a 63.9-MB source PDF, which repeatedly cancelled before dispatch. Preserve the same accepted operation/key, native verification, public publication limits and existing retry path. Distinguishing RED/GREEN test and live acceptance tracked separately.
 
 - Street Story ordered comic batch: one existing VibePublish `tune` command with 2–8 source assets and per-position formats yields 2–8 bound candidate receipts in one Luna Codex thread/turn. Preserve singleton tune selection, native PNG/SHA receipts, dispatch idempotency and unknown-outcome reconciliation; no new queue, service, social publication effect or batch-selection claim. Code and offline tests; live quality and deployment pending Opus review.

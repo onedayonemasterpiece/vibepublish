@@ -311,19 +311,24 @@ TOOLS[-1]["inputSchema"]["anyOf"] = [
     {"required": ["content"]}, {"required": ["visual"]},
     {"required": ["media"], "properties": {"media": {"minItems": 1}}}]
 
-tool("media_store", "Single-owner Telegram media database, not social publication. Put verified images or exact PDF/DjVu sources as Telegram DOCUMENTs with optional stable cross-service origin metadata; list one thread or search every indexed thread without provider I/O; get exact bytes from Telegram into short-lived cache.",
+tool("media_store", "Private Telegram DOCUMENT archive. Put verified assets, or import one PDF/DjVu from an allowlisted public source URL through the authenticated owner interface, without exposing service credentials. List/search/get retain existing scoped semantics.",
     obj({"command": {"oneOf": [
         arm("put", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
             "content": ref("content"), "media": array(ref("media"), 1, 20),
             "origin": ref("media_store_origin")},
             ("to", "thread_ref", "content", "media")),
+        arm("put_url", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
+            "url": URL, "mime": enum("application/pdf", "image/vnd.djvu"),
+            "filename": string(160),
+            "expected_sha256": string(64, pattern=r"^[0-9a-f]{64}$")},
+            ("to", "thread_ref", "url", "mime", "filename")),
         arm("list", {"to": ALIAS, "thread_ref": TELEGRAM_THREAD_URL,
             "text": {**string(1000), "minLength": 0}}, ("thread_ref",)),
         arm("search", {"text": string(1000)}, ("text",)),
         arm("get", {"entry_ref": ID}, ("entry_ref",))]},
         "request_key": KEY, "limit": LIMIT}, ("command",)), ref("receipt"), "media.store")
 TOOLS[-1]["inputSchema"]["allOf"] = [{
-    "if": {"properties": {"command": {"properties": {"kind": {"const": "put"}}, "required": ["kind"]}}},
+    "if": {"properties": {"command": {"properties": {"kind": {"enum": ["put", "put_url"]}}, "required": ["kind"]}}},
     "then": {"required": ["request_key"]}
 }]
 

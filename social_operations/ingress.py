@@ -22,7 +22,7 @@ from aiohttp.abc import AbstractResolver
 from jsonschema import Draft202012Validator
 
 from .assets import INGRESS_IMAGE_MAX_BYTES, insert_verified_image, verify_image
-from .domain import DomainError, canonical, new_id, normalize_intent, parse_source
+from .domain import DomainError, canonical, digest, new_id, normalize_intent, parse_source
 from .service import Application, FORMATS
 
 _MAX_SOURCE_BYTES = INGRESS_IMAGE_MAX_BYTES
@@ -289,9 +289,11 @@ def _widen_owner_telegram_links(value):
 class IngressApplication(Application):
     """Application facade for safe public media and owner direct Telegram links."""
 
-    def __init__(self, store, *, fetcher=None, visual_dispatch_proof=None):
+    def __init__(self, store, *, fetcher=None, document_fetcher=None, visual_dispatch_proof=None):
         super().__init__(store, visual_dispatch_proof=visual_dispatch_proof)
         self._fetcher = fetcher or fetch_public_image
+        self._document_fetcher = document_fetcher
+        self._document_import_slots = asyncio.Semaphore(2)
 
     def aliases(self, db, actor):
         return [
@@ -515,6 +517,86 @@ class IngressApplication(Application):
             entry["source"] = {"kind": "asset", "id": asset_ref}
         return result
 
+    async def _import_media_store_document_url(self, actor, args: dict) -> dict:
+        """Owner-authorized original URL to the existing private DOCUMENT ledger."""
+        from starlette.concurrency import run_in_threadpool
+        from .asset_ingress import upload_image
+        from .document_url_ingress import (
+            PublicDocument, fetch_public_document, validate_archive_document_url,
+        )
+
+        command = args["command"]
+        mime = command["mime"]
+        url = validate_archive_document_url(command["url"], mime)
+        filename = command["filename"]
+        allowed = (".pdf",) if mime == "application/pdf" else (".djvu", ".djv")
+        if (not 1 <= len(filename) <= 160 or not filename.lower().endswith(allowed)
+                or any(c in "/\\\\" or ord(c) < 32 for c in filename)
+                or filename in {".", ".."}):
+            raise DomainError("document_filename_invalid")
+        key = args["request_key"]
+        identity = digest(["media_store_put_url", args])
+        with self.store.connection() as db:
+            current = self.store.current(db, actor)
+            if not current.owner:
+                raise DomainError("access_denied")
+            binding, _topic = self._telegram_thread(
+                db, current, command["thread_ref"], alias=command["to"])
+            if (binding["alias"] != command["to"]
+                    or binding["provider"] != "telegram"
+                    or "publish" not in json.loads(binding["rights"])):
+                raise DomainError("access_denied")
+            previous = db.execute(
+                "SELECT digest,operation_id FROM request_keys "
+                "WHERE tenant_id=? AND principal_id=? AND key=?",
+                (current.tenant_id, current.principal_id, key)).fetchone()
+            if previous:
+                if previous["digest"] != identity:
+                    raise DomainError("idempotency_conflict")
+                return self.store.receipt(current, previous["operation_id"])
+
+        # Both private ingress and native put use stable separate keys. Even an
+        # interrupted call between these stages cannot create a second message.
+        internal = hashlib.sha256(
+            (current.tenant_id + ":" + current.principal_id + ":" + key).encode()
+        ).hexdigest()
+        async with self._document_import_slots:
+            fetched = await (self._document_fetcher or fetch_public_document)(url, mime)
+            if (not isinstance(fetched, PublicDocument)
+                    or not isinstance(fetched.data, bytes)
+                    or fetched.mime != mime or fetched.final_url != url):
+                raise DomainError("document_url_fetch_invalid")
+            sha = hashlib.sha256(fetched.data).hexdigest()
+            if command.get("expected_sha256") and sha != command["expected_sha256"]:
+                raise DomainError("asset_integrity")
+            uploaded = await run_in_threadpool(
+                upload_image, self, current, fetched.data, mime, "vp-doc-asset:" + internal)
+        payload = {
+            "command": {
+                "kind": "put", "to": command["to"],
+                "thread_ref": command["thread_ref"], "content": {"text": ""},
+                "media": [{"source": {"kind": "asset", "id": uploaded["asset_id"]},
+                           "role": "document", "caption": "",
+                           "alt_text": filename}],
+            },
+            "request_key": "vp-doc-put:" + internal,
+        }
+        result = await super().call(actor, "vibepublish_media_store", payload)
+        if not result.get("operation_id"):
+            return result
+        with self.store.tx() as db:
+            current = self.store.current(db, actor)
+            row = db.execute(
+                "SELECT digest,operation_id FROM request_keys "
+                "WHERE tenant_id=? AND principal_id=? AND key=?",
+                (current.tenant_id, current.principal_id, key)).fetchone()
+            if row:
+                if row["digest"] != identity or row["operation_id"] != result["operation_id"]:
+                    raise DomainError("idempotency_conflict")
+            else:
+                self._key(db, current, key, identity, result["operation_id"])
+        return self.store.receipt(current, result["operation_id"])
+
     async def call(self, actor, name: str, arguments: dict):
         try:
             tool = next((item for item in self.tools(actor) if item["name"] == name), None)
@@ -527,6 +609,9 @@ class IngressApplication(Application):
             prepared = self._rewrite_direct_thread(actor, name, arguments)
             if list(validator.iter_errors(prepared)):
                 return await super().call(actor, name, prepared)
+            if (name == "vibepublish_media_store"
+                    and prepared.get("command", {}).get("kind") == "put_url"):
+                return await self._import_media_store_document_url(actor, prepared)
             if name == "vibepublish_publish" and prepared.get("request_key") and any(
                 item["source"]["kind"] == "url" for item in prepared.get("media", ())
             ):
