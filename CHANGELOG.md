@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX immediate publishing removes a duplicate intermediate account/candidate confirmation pass while preserving the trusted single Send, durable native reference and final fresh native read after account validation.
+
 - MAX native Copy takes its stable row snapshot after the existing scroll reveals lazy attachments, retaining exact native identity and content checks.
 
 - Preserve original observation-only recovery for dispatched MAX terminal refusals after the lifecycle state change; the same attempt stays fenced against another provider effect.

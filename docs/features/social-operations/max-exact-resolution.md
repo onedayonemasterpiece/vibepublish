@@ -227,3 +227,8 @@ The existing original-operation observation endpoint also accepts MAX terminal r
 ## Native Copy baseline after layout, 2026-11-03
 
 Status: **Not confirmed by user**. Repeated normal photo reads failed context_menu_subject_changed. A content-free live capture showed the same connected row retained its text/entities/time while the existing scroll revealed its photo (media DOM0 to1). The existing scroll now precedes the baseline snapshot. Native reference and the complete post-scroll snapshot remain checked unchanged; no wait, retry, media download or weaker identity comparison is added.
+
+
+## Immediate native confirmation after Send, 2026-11-03
+
+Status: **Not confirmed by user**. The actual issue326 Send passed rich validation and persisted the native reference, then exhausted90seconds after its first candidate read and an18.277second repeated account check, during navigation for another read. The existing immediate path keeps the trusted single Send/new-row transition, early native checkpoint, one page reload and one final native candidate after the closing account/scope check. It removes the additional intermediate account/scope and candidate/copy pass; final native identity/media validation remains unchanged. No budget, retry or state is added. The original dispatched operation must only be observed, never republished.

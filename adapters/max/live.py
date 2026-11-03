@@ -501,8 +501,6 @@ class RealMaxDriver:
                 state.update(recovery_reference=item['url'],native_id=item['id'],transition=transition,media=item['media'],observed_media=item.get('observed_media',[]))
                 await hooks.checkpoint('MAX_NATIVE_REFERENCE', json.dumps(state))
                 # The checkpoint is awaited BEFORE navigation destroys the observer.
-                await self._account()
-                await self._scope(target)
                 await observer.evaluate('(o)=>o.stop()')
                 await observer.dispose()
                 observer = None
@@ -510,9 +508,6 @@ class RealMaxDriver:
                 main = await self._scope(target)
                 rows = self._rows(main,text)
                 await observe('candidate_wait', expect(rows).to_have_count(1, timeout=self.timeout*1000))
-                fresh = await self._plain_candidate(target, text, rows, media_count=len(media))
-                if fresh['url'] != item['url'] or fresh.get('observed_media',[]) != item.get('observed_media',[]):
-                    raise MaxBlocked('native_reference_changed')
                 await self._account()
                 await self._scope(target)
                 # Account callback may rerender the list: do not return old data.
