@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX preflight preserves precise failures and routes temporary UI failures to the existing worker retry horizon; lane errors retain bounded phase/reason diagnostics.
+
 - Add private owner-only VibePublish `media_store.put_url` for exact PDF/DjVu originals from allowlisted public Prussia Online HTTPS paths. It stages through the existing authenticated binary asset validator and original private Telegram DOCUMENT ledger, with host/DNS pinning, 128 MiB byte limits, MIME/header checks, exact binding checks, stable keyed replay and optional SHA-256; no generated server token-reading script, no new worker/queue, no change to existing `put` URL denial. Source tests and production acceptance are separate.
 
 

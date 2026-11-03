@@ -1,5 +1,9 @@
 # VibePublish Social Operations
 
+## MAX reliability repair — 2026-11-03
+
+Status: **Not done**. Owner-reported daily digest and ordinary MAX publishing are not accepted. The existing worker must retry temporary pre-dispatch UI failures within its fixed horizon; permanent failures retain a precise code. Send/Save remains single-dispatch. Native post identity, text and attachment count establish delivery without downloading photos for hash comparison. Test sends are restricted to the owner-confirmed test group. Live deployment, daily issue reconciliation and dot acceptance remain required.
+
 **VK native-photo edits and transient asset retention (2026-10-31):** [native photo binding](vk-media-binding.md), status **Not confirmed by user** until live acceptance.
 
 ## W1 automatic outcomes and status regression — 2026-10-28

@@ -190,9 +190,19 @@ class MaxAdapter:
         except (DomainError, MaxBlocked) as exc:
             if isinstance(exc,DomainError) and exc.code=='max_native_forward_edit_unsupported':
                 return Capability('unsupported','MAX group native forwards have no Edit control',evidence='max_web_dom')
-            return Capability('needs_review', _preflight_reason(stage, exc),
-                              evidence='max_web_dom' if self.live_enabled else 'offline_fixture',
-                              min_lead_seconds=self.driver.min_lead)
+            if self.live_enabled:
+                reason = _preflight_reason(stage, exc)
+                if isinstance(exc, DomainError):
+                    raise
+                if isinstance(exc, OpenBlocked) and exc.category in {'timeout', 'ui_assertion_failed', 'unavailable_ui'}:
+                    code = 'provider_preflight_timeout' if exc.category == 'timeout' else 'provider_preflight_failed'
+                elif str(exc) in {'profile_busy', 'browser_owner_busy', 'unfamiliar_or_unavailable_ui'}:
+                    code = 'provider_preflight_failed'
+                else:
+                    code = 'max_needs_auth' if str(exc) == 'needs_auth_or_wrong_account' else 'max_' + str(exc) if str(exc) in _PREFLIGHT_REASONS else 'max_preflight_failed'
+                raise DomainError(code, reason) from None
+            return Capability('unsupported', _preflight_reason(stage, exc),
+                              evidence='offline_fixture', min_lead_seconds=self.driver.min_lead)
         return Capability('supported', 'Native UI receipt path' if self.live_enabled else 'Explicit loopback fixture only; NOT live MAX evidence',
                           min_lead_seconds=self.driver.min_lead, evidence='max_web_dom' if self.live_enabled else 'offline_fixture')
 
@@ -202,7 +212,7 @@ class MaxAdapter:
         self._validate(request)
         capability = await self.inspect(request)
         if capability.status != 'supported':
-            raise DomainError('max_preflight_needs_review', capability.reason)
+            raise DomainError('max_action_unsupported', capability.reason)
         await hooks.emit_progress('validating', 'completed', 'MAX preflight complete')
         return Prepared(request, capability, saved_checkpoint(request))
 
