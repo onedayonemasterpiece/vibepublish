@@ -249,3 +249,52 @@ async def test_cached_owner_mcp_url_declared_sha_prevents_mismatched_original(tm
     result=await app.call(owner,"vibepublish_media_store",bad)
     assert result["error"]["code"]=="asset_integrity"
     assert provider.effects==0
+
+@pytest.mark.asyncio
+async def test_prussia_iis_legacy_djvu_accept_mime_prevents_406(monkeypatch):
+    """The archive serves DjVu as image/x.djvu and rejects a narrower Accept (HTTP 406)."""
+    from social_operations import document_url_ingress as ingress
+
+    url = "https://prussia.online/Data/Book/test/legacy/Source.djvu"
+    body = b"AT&TFORM" + bytes(4) + b"DJVU" + b"scan data"
+
+    async def resolve(_url):
+        assert _url == url
+        return "prussia.online", ["93.184.216.34"]
+
+    class Response:
+        def __init__(self, accept):
+            # Model the production IIS content negotiation observed on 2026-11-03.
+            self.status = 200 if "image/x.djvu" in accept.split(",") else 406
+            self.headers = {"Content-Length": str(len(body))}
+            self.content = self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        async def iter_chunked(self, _size):
+            yield body
+
+    class Session:
+        def __init__(self, **kwargs):
+            self.accept = kwargs["headers"]["Accept"]
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        def get(self, requested_url, *, allow_redirects):
+            assert requested_url == url and allow_redirects is False
+            return Response(self.accept)
+
+    monkeypatch.setattr(ingress, "resolve_public_https", resolve)
+    monkeypatch.setattr(ingress, "_PinnedResolver", lambda *_: object())
+    monkeypatch.setattr(ingress.aiohttp, "TCPConnector", lambda **_: object())
+    monkeypatch.setattr(ingress.aiohttp, "ClientSession", Session)
+    result = await ingress.fetch_public_document(url, "image/vnd.djvu")
+    assert result == ingress.PublicDocument(body, "image/vnd.djvu", url)
