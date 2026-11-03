@@ -53,13 +53,18 @@ class Worker:
     def adapter(self, provider, connection):
         return self.adapters.get(connection, self.adapters.get(provider, UnavailableAdapter()))
 
+    @staticmethod
+    def observing_max(child):
+        plan = json.loads(child['plan'])
+        return child['dispatched'] and plan['provider'] == 'max' and plan['account_type'] == 'max_web'
+
     def deadline(self, op, child, *, min_lead=60):
-        """Frozen acceptance-to-provider horizon; retries cannot move this time."""
+        """Frozen mutation horizon; dispatched MAX gets only a bounded read cycle."""
         plan = json.loads(child['plan'])
         if op['action'] not in {'publish', 'publication_update'} or plan.get('workload') == 'media_store':
             return op['deadline']
-        if child['dispatched'] and plan['provider'] == 'max' and plan['account_type'] == 'max_web':
-            return op['deadline']
+        if self.observing_max(child):
+            return self.store.clock() + 90
         when = plan.get('scheduled_at')
         return parse_time(when) - min_lead if when else op['created'] + 900
 
@@ -439,7 +444,7 @@ class Worker:
                     if at is not None and now < self.deadline(op, child):
                         waits.append(min(float(at), self.deadline(op, child)))
                     continue
-                if child['state'] != 'blocked':
+                if child['state'] != 'blocked' and not (self.observing_max(child) and child['stage'] == 'verifying'):
                     continue
                 failure = json.loads(child['result'])
                 code = (failure.get('missing_checks') or [''])[0]
@@ -457,7 +462,7 @@ class Worker:
                        "lease_owner=NULL,lease_until=?,error=NULL,result=? WHERE id=?",
                        (retry_at, canonical(result), op['id']))
             self.store.event(db, op['id'], 'waiting_connection', 'started',
-                             'Automatic provider retry within original acceptance horizon')
+                             'Automatic provider retry or same-attempt observation')
 
     async def run_child(self, op, child, actor, prepared):
         with diagnostic_scope(self.diagnostic_observer(op, child)):
@@ -529,13 +534,13 @@ class Worker:
             try:
                 error = exc if isinstance(exc, DomainError) else DomainError('provider_command_failed')
                 recorded = None
-                if isinstance(exc, OutcomeUnknown) or not self.transient(error.code):
+                if child['provider'] == 'max' or isinstance(exc, OutcomeUnknown) or not self.transient(error.code):
                     with self.store.connection() as db:
                         recorded = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
                 known = (recorded and recorded['dispatched'] and self.saved_native_id(recorded)
                          and json.loads(recorded['plan']).get('workload') != 'media_store'
                          and child['provider'] != 'max')
-                if self.store.clock() >= self.deadline(op, child) or known:
+                if self.store.clock() >= self.deadline(op, recorded or child) or known:
                     self.expire_child(op, child, actor)
                 elif isinstance(exc, OutcomeUnknown) and recorded['dispatched']:
                     self.fail(op, child, error if self.transient(error.code) else DomainError('provider_reconcile_pending'))
@@ -793,19 +798,21 @@ class Worker:
                    (new_id('fact'), destination, remote.native_id, remote.namespace, actor, publication, 'forward' if remote.origin else 'original', canonical(snapshot), remote.text, remote.observed_at))
 
     def fail(self, op, child, error):
-        """A failed provider attempt is local; no terminal outcome_unknown or review action."""
+        """Transient dispatched MAX failures remain active observation work."""
         final = DomainError(error.code, error.message, 'none' if error.next_action == 'review_outcome' else error.next_action)
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
-            row = db.execute('SELECT dispatched FROM attempts WHERE id=?', (child['id'],)).fetchone()
+            row = db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone()
+            observing = self.observing_max(row) and self.transient(final.code)
             result = {'missing_checks': [final.code], 'reason': final.message}
             if final.code == 'telegram_cooldown' and type(getattr(error, 'retry_after_s', None)) is int:
                 result['retry_after_s'] = error.retry_after_s
-            db.execute("UPDATE attempts SET state='blocked',stage='blocked',observed=?,result=? WHERE id=?",
-                       ('unknown' if row['dispatched'] else 'not_attempted',
-                        canonical(result), child['id']))
+            db.execute("UPDATE attempts SET state=?,stage=?,observed=?,result=? WHERE id=?",
+                       ('running' if observing else 'blocked', 'verifying' if observing else 'blocked',
+                        'unknown' if row['dispatched'] else 'not_attempted', canonical(result), child['id']))
             db.execute('UPDATE operations SET error=? WHERE id=?', (canonical(final.output()), op['id']))
-            self.store.event(db, op['id'], 'finished', 'blocked', final.message, child['alias'])
+            self.store.event(db, op['id'], 'verifying' if observing else 'finished',
+                             'started' if observing else 'blocked', final.message, child['alias'])
 
     def fail_operation(self, op, error):
         with self.store.connection() as db:

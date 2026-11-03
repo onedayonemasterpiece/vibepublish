@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX keeps dispatched attempts in automatic read-only observation across the original mutation deadline, using existing worker backoff; temporary readback failures no longer require consumer reconciliation or permit another Send.
+
 - MAX exact photo reads wait for attachment readiness through the existing native candidate reader; remove the premature Copy Link that mistook lazy image hydration for a changed row.
 - Publish-scoped services may observe only their own frozen dispatched MAX publish through the existing reconcile command, preserving principal/binding guards and forbidding reference replacement or lifecycle effects.
 
