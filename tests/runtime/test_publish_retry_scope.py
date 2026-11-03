@@ -21,6 +21,11 @@ class PublishRetryContractTests(unittest.TestCase):
                 "change": {"kind": "retry_failed", "destinations": ["max"]},
                 "request_key": "recover-original"}
         validator.validate(args)
+        observation = {**args, "change": {"kind": "reconcile",
+            "operation_id": "op_original", "attempt_id": "attempt_original"}}
+        validator.validate(observation)
+        self.assertFalse(validator.is_valid({**observation, "change": {
+            **observation["change"], "native_reference": "https://max.ru/other"}}))
         for field in ("publication_id", "expected_revision", "request_key"):
             self.assertFalse(validator.is_valid({k: v for k, v in args.items() if k != field}))
         for kind in ("approve", "edit", "reschedule", "cancel", "delete",

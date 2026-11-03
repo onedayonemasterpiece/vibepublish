@@ -490,6 +490,7 @@ async def test_exact_image_read_waits_for_lazy_tile_image(writer):
     result=await d.read('-101',native_item='owned')
     assert result[0]['id']=='owned' and len(result[0]['media'])==1 and result[0]['observed_media']==[]
     assert page.url.endswith('/-101') and not effects(state)
+    assert len([event for event in state['events'] if event['kind'] == 'copy']) == 2
 
 
 async def test_read_skips_unsupported_candidate_without_leaving_chat(writer):

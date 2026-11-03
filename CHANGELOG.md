@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- MAX exact photo reads wait for attachment readiness through the existing native candidate reader; remove the premature Copy Link that mistook lazy image hydration for a changed row.
+- Publish-scoped services may observe only their own frozen dispatched MAX publish through the existing reconcile command, preserving principal/binding guards and forbidding reference replacement or lifecycle effects.
+
 - MAX immediate publishing removes a duplicate intermediate account/candidate confirmation pass while preserving the trusted single Send, durable native reference and final fresh native read after account validation.
 
 - MAX native Copy takes its stable row snapshot after the existing scroll reveals lazy attachments, retaining exact native identity and content checks.

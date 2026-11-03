@@ -723,11 +723,6 @@ class RealMaxDriver:
                         if await row.count()!=1:
                             if not native_item:raise MaxBlocked('ambiguous_read_candidate')
                             row=await self._find_native_row(main,text,native_item)
-                        if native_item:
-                            # Establish exact identity before downloading media from
-                            # any candidate. Unrelated rows are not evidence for this read.
-                            _url,copied=await self._copy_native_reference(row,target)
-                            if copied!=native_item:continue
                         if await row.locator('audio').count():
                             incomplete=True;continue
                         await self.page.bring_to_front()

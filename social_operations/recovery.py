@@ -6,6 +6,12 @@ from .domain import DomainError, canonical, digest, normalize_intent
 def admit(app, actor, args):
     store = app.store
     change = args['change']
+    with store.connection() as db:
+        actor = store.current(db, actor)
+    publish_only = 'publication.manage' not in actor.scopes
+    if publish_only and ('publish' not in actor.scopes or not args.get('request_key')
+            or args.get('item_ref') or change.get('kind') != 'reconcile' or set(change) != {'kind', 'operation_id', 'attempt_id'}):
+        raise DomainError('access_denied', next_action='contact_owner')
     if str(change.get('native_reference', '')).startswith('item_'):
         from .baseline_rebase import rebase
         return rebase(app, actor, args)
@@ -17,9 +23,24 @@ def admit(app, actor, args):
         op = store.private_operation(db, actor, change['operation_id'])
         if op['id'] != change['operation_id'] or op['publication_id'] != args.get('publication_id'):
             raise DomainError('recovery_operation_mismatch')
-        pub = db.execute('SELECT revision FROM publications WHERE id=?', (op['publication_id'],)).fetchone()
+        pub = db.execute('SELECT revision,kind FROM publications WHERE id=?', (op['publication_id'],)).fetchone()
         if op['revision'] != args['expected_revision'] or pub['revision'] != args['expected_revision']:
             raise DomainError('revision_conflict', next_action='refresh')
+        if publish_only:
+            if op['action'] != 'publish' or pub['kind'] != 'publish':
+                raise DomainError('access_denied', next_action='contact_owner')
+            for child in db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],)):
+                binding = store.binding(db, actor, binding_id=child['binding_id'])
+                plan = json.loads(child['plan'])
+                if (child['id'] != change['attempt_id'] or child['provider'] != 'max'
+                        or not child['dispatched'] or plan['action'] != 'publish'
+                        or 'publish' not in json.loads(binding['rights'])):
+                    raise DomainError('access_denied', next_action='contact_owner')
+                if (binding['epoch'] != child['binding_epoch']
+                        or binding['native_id'] != plan['native_target']
+                        or any(binding[k] != plan[k] for k in ('connection_id', 'destination_id', 'account_type', 'secret_ref'))
+                        or digest(plan) != child['plan_digest']):
+                    raise DomainError('access_revoked', next_action='reauthorize')
         key = args.get('request_key')
         replay = db.execute('SELECT * FROM request_keys WHERE tenant_id=? AND principal_id=? AND key=?',
                             (actor.tenant_id, actor.principal_id, key)).fetchone() if key else None

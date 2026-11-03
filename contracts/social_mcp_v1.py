@@ -683,7 +683,7 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
         effective.add("media.store")
     # Narrow task scopes expose only their own command variants.
     if publish_destinations and ("publish" in effective or "media.store" in effective):
-        effective.add("publication.manage")  # Retry-only projection; no lifecycle grant.
+        effective.add("publication.manage")  # Original-publish recovery projection; no lifecycle grant.
         if "forward" in effective:
             effective.add("engage")
         if "destination.profile" in effective:
@@ -703,7 +703,9 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
             schema["properties"]["change"] = {"oneOf": [
                 arm("retry_failed", {"destinations": scoped_destinations}, ("destinations",)),
                 arm("supersede_failed", {"destinations": scoped_destinations, "content": ref("content")},
-                    ("destinations", "content"))]}
+                    ("destinations", "content")),
+                arm("reconcile", {"operation_id": ID, "attempt_id": ID},
+                    ("operation_id", "attempt_id"))]}
             if "media.store" in scopes and "publish" not in scopes:
                 # Service identity may only retry its own proven zero-dispatch
                 # media_store effect, never supersede/change/delete messages.
@@ -712,7 +714,7 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
                     if item["properties"]["kind"]["const"] == "retry_failed"]
             schema["required"] = ["publication_id", "expected_revision", "change", "request_key"]
             schema.pop("oneOf", None)
-            item["description"] = ("Recover only this principal's original proven zero-dispatch publish failure. "
+            item["description"] = ("Recover only this principal's original publish. reconcile observes its frozen dispatched MAX attempt without another effect; "
                 "retry_failed re-admits the same revision; supersede_failed cancels selected failed children "
                 "and creates a linked new publication with corrected content and the same verified media. "
                 "Current publish bindings and request keys are required; successful siblings stay unchanged.")
