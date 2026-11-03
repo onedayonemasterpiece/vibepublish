@@ -105,7 +105,7 @@ DEFS = {
         "sync_status": enum("current", "outdated", "pending", "unknown"),
         "stage": STAGE, "scheduling_owner": {"const": "provider"}, "item_ref": ID, "url": URL,
         "queue_ref": ID, "preview_ref": ID, "navigate_hint": string(500),
-        "evidence_ref": ID, "media_check": enum("not_applicable", "source_bytes", "provider_binding", "download_binding", "visual_correspondence", "incomplete"),
+        "evidence_ref": ID, "media_check": enum("not_applicable", "source_bytes", "provider_binding", "provider_identity_only", "download_binding", "visual_correspondence", "incomplete"),
         "missing_checks": array(string(100), 0, 20), "retry_safe": {"type": "boolean"},
         "compensation": enum("intent_cancelled_without_effect"), "reason": string(100),
         "reply_to_ref": ID, "reaction": string(100), "reaction_mode": enum("add", "remove")},

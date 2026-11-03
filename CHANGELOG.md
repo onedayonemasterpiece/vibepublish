@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX: accept existing native-only media evidence in the public receipt schema so successful photo publication/scheduling status remains readable without media downloads.
+
 - MAX: remove profile-wide uncertain-marker blocking; preserve browser ownership and durable at-most-once dispatch. Lost receipts use existing bounded observation instead of ending early from a stale ID; independent commands keep moving without manual unlock.
 
 - MAX: accept signed CDN URL rotation across native queue readbacks while retaining native intent and attachment-count checks.

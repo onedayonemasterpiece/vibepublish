@@ -162,6 +162,9 @@ class ContractDesignTests(unittest.TestCase):
                 "scheduling_owner": "provider", "queue_ref": "queue_1", "media_check": "provider_binding",
                 "retry_safe": False}]}
         validator("vibepublish_publish", "outputSchema").validate(receipt)
+        # Live MAX media receipts retain native identity without downloading bytes.
+        receipt["deliveries"][0].update(provider="max", media_check="provider_identity_only")
+        validator("vibepublish_status", "outputSchema").validate({"receipts": [receipt]})
 
     def test_history_metrics_and_remote_queue_examples(self):
         for args in [
