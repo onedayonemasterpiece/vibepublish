@@ -256,7 +256,7 @@ async def test_prussia_iis_legacy_djvu_accept_mime_prevents_406(monkeypatch):
     from social_operations import document_url_ingress as ingress
 
     url = "https://prussia.online/Data/Book/test/legacy/Source.djvu"
-    body = b"AT&TFORM" + b"\\x00\\x00\\x00\\x00" + b"DJVU" + b"scan data"
+    body = b"AT&TFORM" + bytes(4) + b"DJVU" + b"scan data"
 
     async def resolve(_url):
         assert _url == url
