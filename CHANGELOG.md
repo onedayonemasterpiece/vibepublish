@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix Prussia Online DjVu source ingestion returning HTTP 406: IIS serves `image/x.djvu` and rejects an Accept header limited to `image/vnd.djvu`. Advertise both MIME variants while retaining exact owner/topic permissions, pinned HTTPS, original SHA integrity and existing private Telegram DOCUMENT delivery. Live provider readback remains required.
+
 - MAX reads expose observed attachment count/order through existing scoped item media positions, without downloads, public CDN URLs or fabricated byte evidence.
 
 - MAX test-group native cancellation: match the observed confirmation heading with its question mark; retain the single guarded deletion and native removal receipt.
