@@ -46,16 +46,12 @@ def hooks():
 async def test_policy_blocker_is_precise_and_does_not_open_or_dispatch(driver):
     driver.lane.arm('older-attempt', 'older-plan')
     adapter = MaxAdapter(driver, connection_id='max')
-    capability = await adapter.inspect(request())
-    assert capability.status == 'needs_review'
-    assert capability.evidence == 'max_web_dom'
-    assert capability.reason == (
-        'MAX preflight not verified: stage=mutation_preflight; reason=outcome_unknown')
     h = hooks()
     with pytest.raises(DomainError) as caught:
         await adapter.prepare(request(), h)
-    assert caught.value.code == 'max_preflight_needs_review'
-    assert caught.value.message == capability.reason
+    assert caught.value.code == 'max_outcome_unknown'
+    assert caught.value.message == (
+        'MAX preflight not verified: stage=mutation_preflight; reason=outcome_unknown')
     assert caught.value.output()['retry_safe'] is False
     driver.page.goto.assert_not_awaited()
     driver.mutate.assert_not_awaited()
@@ -72,9 +68,9 @@ async def test_policy_blocker_is_precise_and_does_not_open_or_dispatch(driver):
 ])
 async def test_validate_reason_stays_bounded(driver, changes, reason):
     adapter = MaxAdapter(driver, connection_id='max')
-    capability = await adapter.inspect(request(**changes))
-    assert capability.reason == f'MAX preflight not verified: stage=validate; reason={reason}'
-    assert capability.evidence == 'max_web_dom'
+    with pytest.raises(DomainError) as inspected:
+        await adapter.inspect(request(**changes))
+    assert inspected.value.code == reason
     # Existing initial validation still raises its original typed error.
     with pytest.raises(DomainError) as caught:
         await adapter.prepare(request(**changes), hooks())
@@ -105,7 +101,7 @@ async def test_open_phase_and_category_never_export_exception_payload(driver, ph
     h = hooks()
     with pytest.raises(DomainError) as caught:
         await adapter.prepare(request(), h)
-    assert caught.value.code == 'max_preflight_needs_review'
+    assert caught.value.code == ('provider_preflight_timeout' if category == 'timeout' else 'provider_preflight_failed')
     assert caught.value.message == (
         f'MAX preflight not verified: stage=open_{phase}; reason={category}')
     assert SENTINEL not in json.dumps(caught.value.output())
@@ -141,8 +137,10 @@ async def test_unknown_diagnostic_fields_are_not_exported(error):
 
 async def test_account_denial_has_fixed_reason_and_no_navigation(driver):
     driver.account_check.return_value = False
-    capability = await MaxAdapter(driver, connection_id='max').inspect(request())
-    assert capability.reason.endswith(
+    with pytest.raises(DomainError) as caught:
+        await MaxAdapter(driver, connection_id='max').inspect(request())
+    assert caught.value.code == 'max_needs_auth'
+    assert caught.value.message.endswith(
         'stage=open_account_before; reason=needs_auth_or_wrong_account')
     driver.page.goto.assert_not_awaited()
 
@@ -183,3 +181,15 @@ async def test_supported_preflight_keeps_original_request_and_no_effect(driver):
     driver.mutate.assert_not_awaited()
     h.before_effect.assert_not_awaited()
     assert not driver.lane.marker.exists()
+
+async def test_temporary_open_failure_uses_existing_worker_retry_without_dispatch(driver):
+    from social_operations.worker import Worker
+    driver._account = AsyncMock(side_effect=TimeoutError(SENTINEL))
+    h = hooks()
+    with pytest.raises(DomainError) as caught:
+        await MaxAdapter(driver, connection_id='max').prepare(request(), h)
+    assert caught.value.code == 'provider_preflight_timeout'
+    assert Worker.transient(caught.value.code)
+    assert SENTINEL not in json.dumps(caught.value.output())
+    driver.mutate.assert_not_awaited()
+    h.before_effect.assert_not_awaited()

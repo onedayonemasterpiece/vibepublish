@@ -14,6 +14,7 @@ from adapters.max.bridge import MaxAdapter
 from adapters.max.live import RealMaxDriver, Target
 from adapters.max.profile import MaxBlocked, ProfileLane
 from adapters.port import ProviderRequest
+from social_operations.domain import DomainError
 
 pytestmark = pytest.mark.asyncio
 PRIVATE = 'SYNTHETIC_PRIVATE_ACCOUNT_SENTINEL'
@@ -96,11 +97,13 @@ async def test_account_subphase_is_bounded_in_preflight(tmp_path, phase, error):
     check = VisibleAccountCheck(page, PRIVATE, timeout=90)
     with ProfileLane(tmp_path / 'profile') as lane:
         driver = make_driver(tmp_path, check, lane)
-        capability = await MaxAdapter(driver, connection_id='max').inspect(request(time.time()+300))
+        with pytest.raises(DomainError) as caught:
+            await MaxAdapter(driver, connection_id='max').inspect(request(time.time()+300))
+        capability = caught.value
         category = 'timeout' if error is PlaywrightTimeoutError else 'unavailable_ui'
-        assert capability.reason == (
+        assert capability.message == (
             f'MAX preflight not verified: stage=open_account_before_{phase}; reason={category}')
-        assert PRIVATE not in capability.reason
+        assert PRIVATE not in capability.message
         driver.page.goto.assert_not_awaited()
         driver.mutate.assert_not_awaited()
         assert not lane.marker.exists()
@@ -117,10 +120,12 @@ async def test_operation_deadline_caps_account_readiness_and_retains_phase(tmp_p
     with ProfileLane(tmp_path / 'profile') as lane:
         driver = make_driver(tmp_path, check, lane)
         start = time.monotonic()
-        capability = await MaxAdapter(driver, connection_id='max').inspect(request(time.time()+0.1))
+        with pytest.raises(DomainError) as caught:
+            await MaxAdapter(driver, connection_id='max').inspect(request(time.time()+0.1))
+        capability = caught.value
         assert started.is_set()
         assert time.monotonic()-start < 1
-        assert capability.reason.endswith('stage=open_account_before_settings; reason=timeout')
+        assert capability.message.endswith('stage=open_account_before_settings; reason=timeout')
         settings.click.assert_not_awaited()
         driver.page.goto.assert_not_awaited()
         driver.mutate.assert_not_awaited()
@@ -135,8 +140,10 @@ async def test_outer_budget_covers_both_account_checks_without_reset(tmp_path):
     check = VisibleAccountCheck(page, PRIVATE, timeout=90)
     with ProfileLane(tmp_path / 'profile') as lane:
         driver = make_driver(tmp_path, check, lane, timeout=0.06)
-        capability = await MaxAdapter(driver, connection_id='max').inspect(request(time.time()+300))
-        assert capability.reason.endswith('stage=open_account_after_settings; reason=timeout')
+        with pytest.raises(DomainError) as caught:
+            await MaxAdapter(driver, connection_id='max').inspect(request(time.time()+300))
+        capability = caught.value
+        assert capability.message.endswith('stage=open_account_after_settings; reason=timeout')
         assert page.goto.await_count == 2
         assert settings.click.await_count == 1
         driver.page.goto.assert_awaited_once()
@@ -163,10 +170,12 @@ async def test_wrong_or_normalized_account_never_passes_exact_gate(tmp_path, obs
     check = VisibleAccountCheck(page, PRIVATE, timeout=90)
     with ProfileLane(tmp_path / 'profile') as lane:
         driver = make_driver(tmp_path, check, lane)
-        capability = await MaxAdapter(driver, connection_id='max').inspect(request(time.time()+300))
-        assert capability.reason.endswith(
+        with pytest.raises(DomainError) as caught:
+            await MaxAdapter(driver, connection_id='max').inspect(request(time.time()+300))
+        capability = caught.value
+        assert capability.message.endswith(
             'stage=open_account_before_phone; reason=needs_auth_or_wrong_account')
-        assert observed not in capability.reason
+        assert observed not in capability.message
         driver.page.goto.assert_not_awaited()
         driver.mutate.assert_not_awaited()
 

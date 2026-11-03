@@ -39,12 +39,12 @@ async def item(driver,target,native,main):
     if shown!=expected:raise MaxBlocked('native_queue_time_changed')
     count=native['media_count']
     await expect(row.locator('[aria-label="Прикрепленные фото"] > button')).to_have_count(count,timeout=driver.timeout*1000)
-    downloaded=await driver._download_media(row,target,count,namespace='scheduled') if count else []
+    media=await row.locator('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source').evaluate_all('(es)=>es.map(e=>e.currentSrc||e.src)')
     await driver._scope(target,'scheduled')
     if (await rich.capture(row.locator('.bubbleContent > .text')))!=styled:
         raise MaxBlocked('native_queue_content_changed')
     return dict(id=native['id'],url=None,target=target,namespace='scheduled',
-        text=native['text'],entities=styled['entities'],media=[],observed_media=downloaded,correlation_id=native.get('correlation_id'),
+        text=native['text'],entities=styled['entities'],media=media,observed_media=[],correlation_id=native.get('correlation_id'),
         scheduled_at=instant(native['time_ms']),observed_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
 
 
@@ -235,8 +235,6 @@ async def reconcile(driver,state):
             else:result=(await read(driver,target,native))[0]
             if result['text']!=state['text'] or result['scheduled_at']!=state['scheduled_at'] or not rich.same_entities(result['entities'],state.get('entities',[])):
                 raise MaxBlocked('native_schedule_intent_changed')
-            if state.get('observed_media') and result['observed_media']!=state['observed_media']:
-                raise MaxBlocked('native_schedule_media_changed')
             state=dict(state,native_id=native,media=result['media'],observed_media=result['observed_media'])
             driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
             return dict(item=result,state=state)
@@ -332,11 +330,11 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
             }''',dict(row=await row.element_handle(),route=driver.origin+'/'+target,text=original['text'],
                 media=await row.locator('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source').evaluate_all('(es)=>JSON.stringify(es.map(e=>e.currentSrc||e.src))'),
                 snapshot=await row.locator('.bubbleContent > .text').evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),
-                media_count=len(original['observed_media']),old_time=datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).astimezone(MOSCOW).strftime('%H:%M'),date=date))
+                media_count=(len(original['observed_media']) or len(original['media'])),old_time=datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).astimezone(MOSCOW).strftime('%H:%M'),date=date))
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_reschedule_form_changed')
             state=dict(recipe='max-native-schedule-v1',target=target,text=original['text'],entities=original['entities'],
                 kind='scheduled',action='reschedule',scheduled_at=scheduled_at,old_scheduled_at=original['scheduled_at'],
-                media=original['media'],observed_media=original['observed_media'],media_slots=len(original['observed_media']),
+                media=original['media'],observed_media=original['observed_media'],media_slots=(len(original['observed_media']) or len(original['media'])),
                 existing_id=existing['id'],native_id=existing['id'],old_correlation_id=original.get('correlation_id'),attempt_id=attempt_id,plan_digest=plan_digest)
             await hooks.checkpoint('MAX_RESCHEDULE_PREPARED',json.dumps(state))
             await driver._account();await driver._scope(target,'scheduled')
@@ -469,11 +467,11 @@ async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
                 media=await row.locator('[aria-label="Прикрепленные фото"] img,[aria-label="Прикрепленные фото"] video source').evaluate_all('(es)=>JSON.stringify(es.map(e=>e.currentSrc||e.src))'),
                 snapshot=await row.locator('.bubbleContent > .text').evaluate('(e)=>{'+rich.SNAPSHOT_JS+'return JSON.stringify(semanticSnapshot(e));}'),
                 time=datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).astimezone(MOSCOW).strftime('%H:%M'),
-                at=int(datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).timestamp()*1000),media_count=len(original['observed_media'])))
+                at=int(datetime.fromisoformat(original['scheduled_at'].replace('Z','+00:00')).timestamp()*1000),media_count=(len(original['observed_media']) or len(original['media']))))
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_cancel_guard_changed')
             state=dict(recipe='max-native-schedule-v1',target=target,text=original['text'],entities=original['entities'],
                 kind='scheduled',action='cancel',scheduled_at=None,old_scheduled_at=original['scheduled_at'],
-                media=original['media'],observed_media=original['observed_media'],media_slots=len(original['observed_media']),
+                media=original['media'],observed_media=original['observed_media'],media_slots=(len(original['observed_media']) or len(original['media'])),
                 existing_id=original['id'],native_id=original['id'],item=original,attempt_id=attempt_id,plan_digest=plan_digest)
             await hooks.checkpoint('MAX_CANCEL_PREPARED',json.dumps(state))
             await driver._account();await driver._scope(target,'scheduled')
@@ -524,8 +522,8 @@ async def edit(driver,*,existing,text,entities,attempt_id,plan_digest,hooks):
             composer=main.locator(COMPOSER)
             if await composer.evaluate(rich.TEXT_JS)!=original['text']:raise MaxBlocked('native_edit_draft_changed')
             attached=main.locator('.attaches .attach img')
-            await expect(main.locator('.attaches .attach')).to_have_count(len(original['observed_media']))
-            await expect(attached).to_have_count(len(original['observed_media']))
+            await expect(main.locator('.attaches .attach')).to_have_count((len(original['observed_media']) or len(original['media'])))
+            await expect(attached).to_have_count((len(original['observed_media']) or len(original['media'])))
             for image in await attached.element_handles():
                 await driver.page.wait_for_function('(e)=>e.isConnected&&e.complete&&e.naturalWidth>0',arg=image,timeout=driver.timeout*1000)
             previews=await attached.evaluate_all('(es)=>es.map(e=>({src:e.src,name:e.alt}))')
@@ -559,7 +557,7 @@ async def edit(driver,*,existing,text,entities,attempt_id,plan_digest,hooks):
                 raise MaxBlocked('native_edit_guard_changed')
             state=dict(recipe='max-native-schedule-v1',target=target,text=text,entities=list(entities),kind='scheduled',action='edit',
                 scheduled_at=original['scheduled_at'],media=original['media'],observed_media=original['observed_media'],
-                media_slots=len(original['observed_media']),existing_id=original['id'],native_id=original['id'],attempt_id=attempt_id,plan_digest=plan_digest)
+                media_slots=(len(original['observed_media']) or len(original['media'])),existing_id=original['id'],native_id=original['id'],attempt_id=attempt_id,plan_digest=plan_digest)
             await hooks.checkpoint('MAX_NATIVE_EDIT_PREPARED',json.dumps(state))
             await driver._account();await driver._scope(target,'scheduled')
             driver.lane.arm(attempt_id,plan_digest);armed=True

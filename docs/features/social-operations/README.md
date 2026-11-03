@@ -1,5 +1,13 @@
 # VibePublish Social Operations
 
+## MAX reliability repair — 2026-11-03
+
+The November 3 original recovery reproduced an expired-input failure followed by a local saved-ID success shortcut. For MAX Web, an old checkpoint ID is not a new native observation and cannot finish recovery or bypass finalize. The existing reconcile admission gives the same dispatched attempt its bounded 90-second observation window; the immutable plan supplies media metadata after input bytes expire. This permits observation only and never prepare/Send. Live correctness and quarantine release remain **Not done**.
+
+Normal MAX feed, publish, edit and schedule readback observes native text, attachment count and provider references without downloading provider media or comparing transcoded hashes. Existing stored original checkpoints remain immutable. Status: **Not confirmed by user** until live acceptance.
+
+Status: **Not done**. Owner-reported daily digest and ordinary MAX publishing are not accepted. The existing worker must retry temporary pre-dispatch UI failures within its fixed horizon; permanent failures retain a precise code. Send/Save remains single-dispatch. Native post identity, text and attachment count establish delivery without downloading photos for hash comparison. Test sends are restricted to the owner-confirmed test group. Live deployment, daily issue reconciliation and dot acceptance remain required.
+
 **VK native-photo edits and transient asset retention (2026-10-31):** [native photo binding](vk-media-binding.md), status **Not confirmed by user** until live acceptance.
 
 ## W1 automatic outcomes and status regression — 2026-10-28
@@ -10,7 +18,7 @@ Status: **Not confirmed by user** until live acceptance. Temporary provider fail
 
 ## MAX native scheduling preparation (2026-10-10)
 
-Status: **Not confirmed by user**. The reported scheduled-publish/reschedule failures occurred before durable dispatch; live final native write/readback acceptance is still required. Preparation must observe the actual menu after a right click. One additional right click is allowed only while the same connected control, route, text and media remain unchanged and no menu exists; menu selection and final Save/Send are never retried. Named links, photo hashes, native identity and calendar guards remain mandatory. Record safe action/phase/exception-class diagnostics and preserve a primary browser failure if cleanup also fails. Bind authored caption/composer semantics and the native scheduled clock, excluding unrelated row UI metadata. Qualify a pinned browser/Playwright 1.63 pair separately; version alignment alone did not eliminate the reproduced native browser crash. Do not claim that a successful preparation proves a provider mutation. [Incident and evidence](../../reports/incidents/INC-2026-10-10-max-native-preparation.md).
+Status: **Not confirmed by user**. The reported scheduled-publish/reschedule failures occurred before durable dispatch; live final native write/readback acceptance is still required. Preparation must observe the actual menu after a right click. One additional right click is allowed only while the same connected control, route, text and media remain unchanged and no menu exists; menu selection and final Save/Send are never retried. Named links, native identity, attachment count and calendar guards remain mandatory. The November 3 owner correction supersedes downloaded-photo hash comparison. Record safe action/phase/exception-class diagnostics and preserve a primary browser failure if cleanup also fails. Bind authored caption/composer semantics and the native scheduled clock, excluding unrelated row UI metadata. Qualify a pinned browser/Playwright 1.63 pair separately; version alignment alone did not eliminate the reproduced native browser crash. Do not claim that a successful preparation proves a provider mutation. [Incident and evidence](../../reports/incidents/INC-2026-10-10-max-native-preparation.md).
 
 ## Exact existing Telegram post edits and MAX startup isolation (2026-10-09)
 

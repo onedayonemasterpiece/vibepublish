@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- MAX normal feed and publication readback retain native identity and attachment references without post-dispatch downloads or transcoded-photo hash comparison.
+
+- MAX original-attempt observation uses frozen media metadata after input expiry and the existing 90-second recovery budget; an old checkpoint ID cannot synthesize fresh native success or skip finalization.
+
+- MAX preflight preserves precise failures and routes temporary UI failures to the existing worker retry horizon; lane errors retain bounded phase/reason diagnostics.
+
 - Add private owner-only VibePublish `media_store.put_url` for exact PDF/DjVu originals from allowlisted public Prussia Online HTTPS paths. It stages through the existing authenticated binary asset validator and original private Telegram DOCUMENT ledger, with host/DNS pinning, 128 MiB byte limits, MIME/header checks, exact binding checks, stable keyed replay and optional SHA-256; no generated server token-reading script, no new worker/queue, no change to existing `put` URL denial. Source tests and production acceptance are separate.
 
 

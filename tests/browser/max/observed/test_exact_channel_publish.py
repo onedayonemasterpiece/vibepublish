@@ -37,7 +37,8 @@ async def test_named_link_and_photo_channel_without_isout_has_one_causal_send_an
                               "cause_type": type(error.__context__).__name__}) from error.__context__
     assert result["item"]["target"] == "-202"
     assert result["item"]["entities"] == ENTITIES
-    assert result["item"]["observed_media"][0]["sha256"] == hashlib.sha256(IMAGE).hexdigest()
+    assert result["item"]["observed_media"] == []
+    assert len(result["item"]["media"]) == 1
     assert len(effects(state)) == 1
     assert state["messages"][0]["outgoing"] is False
     names = [name for name, _ in state["checkpoints"]]

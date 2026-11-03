@@ -235,7 +235,9 @@ async def run(
                     except DomainError as exc:
                         logging.getLogger(__name__).warning('MAX provider lane unavailable: %s',exc.code)
                     except Exception as exc:
-                        logging.getLogger(__name__).error('MAX provider lane exception: %s',type(exc).__name__)
+                        from adapters.max.bridge import _preflight_reason
+                        logging.getLogger(__name__).error('MAX provider lane exception: type=%s %s',
+                            type(exc).__name__, _preflight_reason('open', exc))
                     await asyncio.sleep(30)
 
             try:
