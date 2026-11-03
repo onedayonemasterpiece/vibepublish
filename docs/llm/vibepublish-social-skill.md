@@ -45,6 +45,19 @@ For provider queues, histories, analytics and exact publication edits see the
 For visual generation and Telegram topic specifics see
 [social operations](../features/social-operations/README.md).
 For the private Telegram archive see [media store](../features/media-store/README.md).
+To put a PDF/DjVu original directly from Prussia Online into an authorized
+private Telegram topic, use the **existing authenticated**
+`vibepublish_media_store` with
+`{"command":{"kind":"put_url","to":"AUTHORIZED_ALIAS","thread_ref":"https://t.me/c/CHAT/TOPIC","url":"https://prussia.online/Data/Book/.../source.pdf","mime":"application/pdf","filename":"Source Book.pdf"},"request_key":"STABLE_KEY"}`.
+Use `image/vnd.djvu` for DjVu; optional `expected_sha256` checks exact
+original bytes. The command fetches and stages securely on VibePublish under
+the owner identity; never generate a script to read a private service token,
+never fabricate local asset IDs, and do not call ordinary `publish`.
+Keep the returned operation ID; wait for `verified` and then confirm
+the exact document/hash in scoped `media_store.list`. Reuse the same
+request key and input after an uncertain response, never create a duplicate.
+The URL route is restricted to Prussia Online originals; existing binary
+`put` still requires a previously verified asset.
 Do not use provider credentials/cookies as tool arguments or delete and
 recreate posts to evade provider errors.
 

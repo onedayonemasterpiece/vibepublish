@@ -253,6 +253,65 @@ original asset/put identity and creates no additional provider file. Unsubmitted
 or failed source assets expire after the bounded 30-day delivery window plus one
 hour; admitted outage staging remains recoverable until then.
 
+### Authenticated owner URL import for source documents — 2026-11-03
+
+Status: **Not confirmed by user** until the updated MCP tool is deployed and
+an owner tests the full publish/readback flow. A previous ChatGPT workflow
+needed a one-off server-side script to read the RKB service grant and call
+`POST /v1/assets`. That administrative workflow is **not** the product interface;
+its generated-script authorization path is not to be retried or circumvented.
+
+The additive `vibepublish_media_store` command `put_url` accepts one **public**
+Prussia Online PDF/DjVu by URL, sends it as a document to one already
+authorized private Telegram forum topic, and gives back the same durable
+`media_store` operation/receipt as binary `put`. It uses the caller's
+authenticated VibePublish owner identity, not the RKB service principal or any
+local grant file, and never takes a credential, local path or raw bytes from
+a generated script. Example:
+
+```json
+{
+  "command": {
+    "kind": "put_url",
+    "to": "regional_knowledge_archive",
+    "thread_ref": "https://t.me/c/4368830579/2",
+    "url": "https://prussia.online/Data/Book/example/book/source.pdf",
+    "mime": "application/pdf",
+    "filename": "Source Book.pdf"
+  },
+  "request_key": "stable-source-identity"
+}
+```
+
+The `expected_sha256` key is optional but strongly recommended when the
+original was independently downloaded. An omitted digest is computed from
+the fetched original; a supplied mismatch refuses the import before publication.
+For DjVu use `image/vnd.djvu` and a `.djvu` filename. Each call stores exactly
+one PDF/DjVu DOCUMENT with empty caption/text; to import several sources,
+issue independent calls with stable keys and check the same operation IDs
+through `vibepublish_status` and scoped `media_store.list`. A positive
+`accepted` response is not delivery.
+
+Only the existing **current owner**, its authorized private Telegram binding
+and `publish` right can use this addition. Fetching is restricted to HTTPS
+`prussia.online/Data/Book/...` with matching `.pdf` or `.djvu` extension:
+no userinfo, query, redirects, proxy, credentials, cookies, non-global DNS,
+file paths or non-document response bodies. DNS answers are checked and pinned
+to publicly routable addresses, TLS still verifies the original hostname,
+and both Content-Length and streaming body enforce 128 MiB. MIME/container
+and quota checks run through the unchanged authenticated binary-ingress
+validator. Downloads are bounded to two concurrent requests per process and
+a 90-second total transfer budget.
+
+A second keyed mapping records the original URL command's digest and
+references the ordinary media-store operation. A matching retry returns
+the existing receipt **before** network fetching, even after verified
+staging bytes were purged. The internal asset/put keys are also deterministic,
+so a lost response between stages does not publish another native message.
+Changing the URL, filename, destination or digest with the same key fails
+`idempotency_conflict`. Existing `put` with `source.kind=url` remains
+denied; ordinary publishing and all other media sources are unchanged.
+
 ### Large PDF/DjVu Telegram upload budget — 2026-11-02
 
 Status: `Not confirmed by user` pending live owner acceptance. The original
