@@ -58,6 +58,9 @@ async def test_max_lost_receipt_finishes_without_global_quarantine_or_duplicate(
     await worker.run_once(operation_id=first['operation_id'])
     assert provider.count('effect') == 1
     assert not store.receipt(actor, first['operation_id'])['operation_complete']
+    with store.connection() as db:
+        mutation_deadline = db.execute('SELECT deadline FROM operations WHERE id=?',
+                                       (first['operation_id'],)).fetchone()[0]
 
     second = await app.call(actor, 'vibepublish_publish', {
         'to': ['max'], 'content': {'text': 'Independent publication'}, 'request_key': 'second'})
@@ -71,27 +74,38 @@ async def test_max_lost_receipt_finishes_without_global_quarantine_or_duplicate(
     if not fresh_receipt:
         now[0] += 900
         await worker.run_once(operation_id=first['operation_id'])
+    if not fresh_receipt:
+        pending = store.receipt(actor, first['operation_id'])
+        assert not pending['operation_complete'], pending
+        assert pending['state'] == 'running', pending
+        assert now[0] > mutation_deadline
+        with store.connection() as db:
+            operation = db.execute('SELECT * FROM operations WHERE id=?',
+                                   (first['operation_id'],)).fetchone()
+            assert operation['work_state'] == 'working'
+            assert operation['lease_until'] > now[0]
+            assert operation['deadline'] == mutation_deadline
+        with store.connection() as db:
+            original = dict(db.execute('SELECT * FROM attempts WHERE operation_id=?',
+                                       (first['operation_id'],)).fetchone())
+        provider.lost = False
+        now[0] += 61
+        # Ordinary worker claim after backoff: no external reconcile command.
+        await worker.run_once(operation_id=first['operation_id'])
+        with store.connection() as db:
+            recovered = dict(db.execute('SELECT * FROM attempts WHERE operation_id=?',
+                                        (first['operation_id'],)).fetchone())
+        assert recovered['id'] == original['id']
+        assert recovered['plan_digest'] == original['plan_digest']
     final = store.receipt(actor, first['operation_id'])
     assert final['operation_complete'], final
-    assert final['state'] == ('verified' if fresh_receipt else 'blocked'), final
-    if not fresh_receipt:
-        assert final['error']['code'] == 'publication_unconfirmed', final
-        assert final['next_action'] == 'none', final
+    assert final['state'] == 'verified', final
     assert provider.count('effect') == 2
     replay = await app.call(actor, 'vibepublish_publish', {
         'to': ['max'], 'content': {'text': 'Original lost receipt'}, 'request_key': 'first'})
     assert replay['operation_id'] == first['operation_id']
     assert provider.count('effect') == 2
     assert profile.joinpath('.vibepublish-uncertain').exists()
-
-    if not fresh_receipt:
-        provider.lost = False
-        observed = await app.call(actor, 'vibepublish_publication_update', {
-            'publication_id': first['resource_id'], 'expected_revision': 1,
-            'change': {'kind': 'reconcile', 'operation_id': first['operation_id']},
-            'request_key': 'observe-original-after-terminal-refusal'})
-        assert observed.get('operation_id') == first['operation_id'], observed
-        assert not observed['operation_complete'], observed
-        await worker.run_once(operation_id=first['operation_id'])
-        assert store.receipt(actor, first['operation_id'])['state'] == 'verified'
-        assert provider.count('effect') == 2
+    with provider.db() as db:
+        assert db.execute("SELECT count(*) FROM calls WHERE kind='effect' AND attempt=?",
+                          (provider.original,)).fetchone()[0] == 1
