@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX: accept signed CDN URL rotation across native queue readbacks while retaining native intent and attachment-count checks.
+
 - MAX normal feed and publication readback retain native identity and attachment references without post-dispatch downloads or transcoded-photo hash comparison.
 
 - MAX original-attempt observation uses frozen media metadata after input expiry and the existing 90-second recovery budget; an old checkpoint ID cannot synthesize fresh native success or skip finalization.

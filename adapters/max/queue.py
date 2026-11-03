@@ -63,7 +63,7 @@ async def read(driver,target,native_item=None,*,passes=2):
             result=[await item(driver,target,n,main) for n in natives]
             await driver._account();await driver._scope(target,'scheduled')
             observations.append(result)
-    def evidence(rows):return [{k:v for k,v in r.items() if k!='observed_at'} for r in rows]
+    def evidence(rows):return [{k:len(v) if k=='media' else v for k,v in r.items() if k!='observed_at'} for r in rows]
     if any(evidence(rows)!=evidence(observations[0]) for rows in observations[1:]):raise MaxBlocked('native_queue_changed')
     return observations[-1]
 

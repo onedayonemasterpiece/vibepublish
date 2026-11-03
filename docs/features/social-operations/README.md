@@ -2,6 +2,8 @@
 
 ## MAX reliability repair — 2026-11-03
 
+Live release readback found the same scheduled native ID, text/entities, clock, correlation and attachment count across independent loads, with only signed CDN URLs rotating. Status: **Not done** until follow-up live verification. Cross-load queue comparison uses attachment count; native receipts bind the fresh references with the existing source attribution, without comparing stale CDN URLs. In-page pre-dispatch media guards are preserved.
+
 The November 3 original recovery reproduced an expired-input failure followed by a local saved-ID success shortcut. For MAX Web, an old checkpoint ID is not a new native observation and cannot finish recovery or bypass finalize. The existing reconcile admission gives the same dispatched attempt its bounded 90-second observation window; the immutable plan supplies media metadata after input bytes expire. This permits observation only and never prepare/Send. Live correctness and quarantine release remain **Not done**.
 
 Normal MAX feed, publish, edit and schedule readback observes native text, attachment count and provider references without downloading provider media or comparing transcoded hashes. Existing stored original checkpoints remain immutable. Status: **Not confirmed by user** until live acceptance.

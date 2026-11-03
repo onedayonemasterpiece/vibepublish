@@ -271,7 +271,9 @@ class MaxAdapter:
                 raise OutcomeUnknown('max_native_replacement_unproven')
             replacement = NativeReplacement(request.existing.native_id, item.native_id,
                 request.existing.fingerprint, evidence)
-        item = bind_media(request, item, state['media'])
+        if len(item.provider_media) != len(state['media']):
+            raise OutcomeUnknown('media_identity_missing')
+        item = bind_media(request, item, list(item.provider_media))
         if self.live_enabled and item.provider_media:
             item = replace(item, media_check='provider_identity_only')
         observed = 'reacted' if request.action=='react' else 'deleted' if request.action == 'delete' else 'cancelled' if request.action == 'cancel' else 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
