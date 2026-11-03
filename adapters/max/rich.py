@@ -172,4 +172,23 @@ async def fill(page, composer, text, entities):
             await expect(dialog).to_have_count(0)
     value=await capture(composer)
     if value['text']!=text or not same_entities(value['entities'],entities):
+        import json, logging
+        expected, actual = sorted(entities, key=_key), sorted(value['entities'], key=_key)
+        index = next((i for i in range(max(len(expected), len(actual)))
+                      if expected[i:i+1] != actual[i:i+1]), None)
+        spans = {}
+        for name, rows in (('expected_span', expected), ('observed_span', actual)):
+            spans[name] = ({k: rows[index][k] for k in ('type', 'offset', 'length')}
+                           if index is not None and index < len(rows) else None)
+        at = next((i for i, (a, b) in enumerate(zip(text, value['text'])) if a != b),
+                  min(len(text), len(value['text'])))
+        logging.getLogger(__name__).warning('MAX rich composer mismatch %s', json.dumps({
+            'text_equal': value['text'] == text,
+            'expected_text_length': len(text), 'observed_text_length': len(value['text']),
+            'first_text_difference_utf16': None if value['text'] == text else len(text[:at].encode('utf-16-le'))//2,
+            'expected_entity_count': len(expected), 'observed_entity_count': len(actual),
+            'first_entity_difference': index, **spans,
+            'url_equal': None if index is None or index >= min(len(expected), len(actual))
+                         else expected[index].get('url') == actual[index].get('url'),
+        }, separators=(',', ':')))
         raise MaxBlocked('rich_composer_mismatch')

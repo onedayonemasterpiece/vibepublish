@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX rich composer refusals log only bounded lengths and the first differing entity span before teardown; preserve validation and omit text, URLs, DOM and session data.
+
 - MAX reads expose observed attachment count/order through existing scoped item media positions, without downloads, public CDN URLs or fabricated byte evidence.
 
 - MAX test-group native cancellation: match the observed confirmation heading with its question mark; retain the single guarded deletion and native removal receipt.
