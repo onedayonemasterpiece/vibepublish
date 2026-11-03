@@ -29,7 +29,7 @@ async def test_cancel_exact_native_row_guard_and_recovery(writer,monkeypatch,cha
         menu.firstChild.onclick=()=>{menu.remove();const dialog=document.createElement('dialog');
           dialog.innerHTML='<h2>'+title+'</h2><button>Удалить</button><button>Отмена</button>';
           dialog.querySelector('button').onclick=async()=>{await fetch('/replay-event',{method:'POST',body:JSON.stringify({kind:'effect',action:'delete',target:'-101',existing:'scheduled-own'})});row.remove();dialog.remove();};
-          document.body.append(dialog);dialog.showModal();};document.body.append(menu);};}''','Удалить пост' if policy=='scheduled_only' else 'Удалить сообщение')
+          document.body.append(dialog);dialog.showModal();};document.body.append(menu);};}''','Удалить пост' if policy=='scheduled_only' else 'Удалить сообщение?')
     async def read(*a,**kw):return [dict(item)]
     monkeypatch.setattr(queue,'read',read)
     checks=[]

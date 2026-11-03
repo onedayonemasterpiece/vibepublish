@@ -175,3 +175,14 @@ references without downloaded-byte verification. This does not assert source-byt
 equality, change delivery state, or add downloads. Scheduled remains scheduled,
 not published. The existing contract regression now validates this MAX receipt
 through the normal status output schema. Live status replay follows deployment.
+
+## Test-group scheduled cancellation title, 2026-11-03
+
+Status: **Not confirmed by user**. Live cancellation of the owned scheduled
+photo stopped before dispatch because the exact confirmation heading is
+«Удалить сообщение?»; the recipe expected the same text without its question
+mark. The test-group recipe uses the observed exact heading. The existing
+single trusted deletion, native row guard, durable before-effect fence and
+removal/readback proof are unchanged. The channel heading is unchanged.
+Replay tests use the actual group title and retain one-effect and changed-row
+refusal assertions. Live acceptance must cancel the same scheduled test object.

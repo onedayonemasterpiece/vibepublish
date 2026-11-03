@@ -438,7 +438,7 @@ async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
             # the only provider deletion is its guarded primary button below.
             await driver.page.get_by_role('menu').get_by_role('menuitem',name='Удалить',exact=True).click()
             dialog=driver.page.get_by_role('dialog')
-            title='Удалить пост' if driver.targets[target].policy=='scheduled_only' else 'Удалить сообщение'
+            title='Удалить пост' if driver.targets[target].policy=='scheduled_only' else 'Удалить сообщение?'
             await expect(dialog.get_by_text(title,exact=True)).to_have_count(1)
             await expect(dialog.get_by_role('checkbox')).to_have_count(0)
             button=dialog.get_by_role('button',name='Удалить',exact=True)

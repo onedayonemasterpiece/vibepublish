@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX test-group native cancellation: match the observed confirmation heading with its question mark; retain the single guarded deletion and native removal receipt.
+
 - MAX: accept existing native-only media evidence in the public receipt schema so successful photo publication/scheduling status remains readable without media downloads.
 
 - MAX: remove profile-wide uncertain-marker blocking; preserve browser ownership and durable at-most-once dispatch. Lost receipts use existing bounded observation instead of ending early from a stale ID; independent commands keep moving without manual unlock.
