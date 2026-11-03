@@ -200,3 +200,18 @@ The projection now uses those existing slot references; the same source binding
 and private native snapshot remain authoritative. The distinguishing one/two
 attachment test fails without this projection; live exact reads must confirm
 the observed counts after deployment.
+
+## Normal-path rich composer mismatch diagnostics, 2026-11-03
+
+Status: **Not confirmed by user**. Two normal issue326 attempts refused before dispatch with
+max_rich_composer_mismatch, while the same frozen draft matched three live
+preparations, including the actual channel. The path difference must be captured
+at the existing final comparison, before teardown. Operational diagnostics may
+include only lengths, entity types/UTF-16 offsets and the first differing span;
+never draft text, link URLs, DOM, account data or session contents. Existing rich
+validation and dispatch authority remain unchanged. Transient classification is
+deferred until the actual normal-path difference is observed.
+
+The existing refusal now emits that bounded comparison JSON in the worker
+journal at the same point. It neither waits nor retries and preserves the
+original MaxBlocked code; the source test ensures text/URLs cannot appear.

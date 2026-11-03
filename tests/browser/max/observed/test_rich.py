@@ -87,3 +87,22 @@ async def test_group_native_queue_heading_is_distinct_from_channel(writer):
     assert await (await d._scope('-101','scheduled')).count()==1
     d.timeout=.2
     with pytest.raises((AssertionError,MaxBlocked)):await d._scope('-101','feed')
+
+
+async def test_rich_mismatch_diagnostic_keeps_text_and_urls_private(writer, monkeypatch, caplog):
+    import json
+    from adapters.max import rich
+    _, page, _, _ = writer
+    await page.set_content('<div role="textbox" contenteditable></div>')
+    async def observed(_):
+        return {'text': 'private-observed', 'entities': [
+            {'type': 'text_link', 'offset': 0, 'length': 7, 'url': 'https://private.example/secret'}]}
+    monkeypatch.setattr(rich, 'capture', observed)
+    with pytest.raises(MaxBlocked, match='^rich_composer_mismatch$'):
+        await rich.fill(page, page.get_by_role('textbox'), 'private-intent', [])
+    record = next(r for r in caplog.records if r.message.startswith('MAX rich composer mismatch '))
+    details = json.loads(record.message.removeprefix('MAX rich composer mismatch '))
+    assert details['text_equal'] is False and details['first_entity_difference'] == 0
+    assert details['observed_span'] == {'type': 'text_link', 'offset': 0, 'length': 7}
+    assert all(value not in record.message for value in (
+        'private-intent', 'private-observed', 'private.example', '/secret'))
