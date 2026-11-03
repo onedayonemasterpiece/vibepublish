@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix Prussia Online DjVu source ingestion returning HTTP 406: IIS serves `image/x.djvu` and rejects an Accept header limited to `image/vnd.djvu`. Advertise both MIME variants while retaining exact owner/topic permissions, pinned HTTPS, original SHA integrity and existing private Telegram DOCUMENT delivery. Live provider readback remains required.
+
 - MAX: accept existing native-only media evidence in the public receipt schema so successful photo publication/scheduling status remains readable without media downloads.
 
 - MAX: remove profile-wide uncertain-marker blocking; preserve browser ownership and durable at-most-once dispatch. Lost receipts use existing bounded observation instead of ending early from a stale ID; independent commands keep moving without manual unlock.
