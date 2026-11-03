@@ -43,21 +43,6 @@ def hooks():
     return Hooks(AsyncMock(), AsyncMock(), AsyncMock())
 
 
-async def test_policy_blocker_is_precise_and_does_not_open_or_dispatch(driver):
-    driver.lane.arm('older-attempt', 'older-plan')
-    adapter = MaxAdapter(driver, connection_id='max')
-    h = hooks()
-    with pytest.raises(DomainError) as caught:
-        await adapter.prepare(request(), h)
-    assert caught.value.code == 'max_outcome_unknown'
-    assert caught.value.message == (
-        'MAX preflight not verified: stage=mutation_preflight; reason=outcome_unknown')
-    assert caught.value.output()['retry_safe'] is False
-    driver.page.goto.assert_not_awaited()
-    driver.mutate.assert_not_awaited()
-    h.before_effect.assert_not_awaited()
-    h.checkpoint.assert_not_awaited()
-    assert driver.lane.marker.exists()
 
 
 @pytest.mark.parametrize('changes,reason', [
@@ -106,7 +91,6 @@ async def test_open_phase_and_category_never_export_exception_payload(driver, ph
         f'MAX preflight not verified: stage=open_{phase}; reason={category}')
     assert SENTINEL not in json.dumps(caught.value.output())
     assert driver._busy is False
-    assert not driver.lane.marker.exists()
     driver.mutate.assert_not_awaited()
     h.before_effect.assert_not_awaited()
     h.checkpoint.assert_not_awaited()
@@ -180,7 +164,6 @@ async def test_supported_preflight_keeps_original_request_and_no_effect(driver):
     driver.page.goto.assert_awaited_once_with('https://web.max.ru/-3', wait_until='domcontentloaded')
     driver.mutate.assert_not_awaited()
     h.before_effect.assert_not_awaited()
-    assert not driver.lane.marker.exists()
 
 async def test_temporary_open_failure_uses_existing_worker_retry_without_dispatch(driver):
     from social_operations.worker import Worker

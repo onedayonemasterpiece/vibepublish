@@ -19,7 +19,7 @@ async def test_one_native_reaction_click_or_guarded_zero_then_read_only_reconcil
     async def copy(*a):return old['url'],old['id']
     monkeypatch.setattr(d,'_copy_native_reference',copy)
     async def native_effect(route):
-        assert d.lane.marker.exists() and state['dispatched']==('attempt','plan')
+        assert state['dispatched']==('attempt','plan')
         assert state['checkpoints'][0][0]=='MAX_REACTION_PREPARED'
         effects.append('👍');await route.fulfill(body='ok')
     await page.route('**/reaction-event',native_effect)
@@ -53,4 +53,4 @@ async def test_one_native_reaction_click_or_guarded_zero_then_read_only_reconcil
         assert result[0]['own_reactions']==['👍']
     saved=state['checkpoints'][0][1]
     result=await engagement.reconcile_reaction(d,saved)
-    assert result['item']['own_reactions']==['👍'] and effects==['👍'] and d.lane.marker.exists()
+    assert result['item']['own_reactions']==['👍'] and effects==['👍']

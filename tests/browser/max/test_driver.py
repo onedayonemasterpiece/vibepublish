@@ -92,7 +92,6 @@ async def test_M04_M06_delayed_upload_and_rerender(browser_driver):
     assert len(result[0]['media']) == 2 and result[0]['namespace'] == 'scheduled'
     assert result[0]['media_check'] == 'provider_identity_order'
     assert 'uploading' in hooks.events and 'MAX_OBSERVED' in hooks.states
-    assert not driver.lane.marker.exists()
 
 
 @pytest.mark.parametrize('stage', ['waiting_connection', 'uploading', 'MAX_PREPARED', 'submitting', 'before_effect'])
@@ -127,7 +126,7 @@ async def test_changed_after_callback_never_submits(browser_driver, which):
     # expire before this test reaches its intended post-marker injection.
     with pytest.raises(MaxBlocked, match='outcome_unknown'):
         await driver.mutate(**args(media=images(), scheduled_at=future(), hooks=Hooks(callback=revoke)))
-    assert state['effects'] == 0 and driver.lane.marker.exists()
+    assert state['effects'] == 0
 
 
 @pytest.mark.parametrize('value', ['2000-01-01T00:00:00Z', '2026-09-06', 'invalid'])
@@ -153,9 +152,7 @@ async def test_M10_old_same_text_and_new_text_never_proves_authorship(browser_dr
     with pytest.raises(MaxBlocked, match='outcome_unknown'):
         await driver.mutate(**args())
     assert state['effects'] == 1 and len(state['items']) == 2
-    with pytest.raises(MaxBlocked, match='outcome_unknown'):
-        await driver.mutate(**args(attempt_id='NEW-OPERATION'))
-    assert state['effects'] == 1
+    # Independent command admission belongs to the core ledger, not this driver.
 
 
 async def test_M10_multiple_candidates_remain_unknown(browser_driver):
@@ -195,7 +192,7 @@ async def test_post_effect_checkpoint_failure_preserves_quarantine(browser_drive
     driver, state, _ = browser_driver
     with pytest.raises(MaxBlocked, match='outcome_unknown'):
         await driver.mutate(**args(media=images(), hooks=Hooks(fail='MAX_OBSERVED')))
-    assert state['effects'] == 1 and driver.lane.marker.exists()
+    assert state['effects'] == 1
 
 
 async def test_unsupported_video_and_no_asset_path_access(browser_driver):

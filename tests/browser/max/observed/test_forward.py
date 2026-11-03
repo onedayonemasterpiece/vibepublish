@@ -35,7 +35,7 @@ async def test_native_forward_dialog_identity_is_not_chat_position(writer,monkey
             document.body.append(d);d.showModal();};menu.append(forward);}''')
     monkeypatch.setattr(d,'_open_message_menu',menu)
     async def effect(route):
-        assert state['dispatched']==('attempt','plan') and d.lane.marker.exists()
+        assert state['dispatched']==('attempt','plan')
         assert state['checkpoints'][0][0]=='MAX_FORWARD_PREPARED'
         effects.append(1);await route.fulfill(body='ok')
     await page.route('**/forward-event',effect)

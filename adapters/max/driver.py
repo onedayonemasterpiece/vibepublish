@@ -157,7 +157,7 @@ class FixtureDriver:
         armed = False
         try:
             async with asyncio.timeout(self.timeout):
-                self.lane.assert_clear()
+                self.lane.owned()
                 if action not in {'publish', 'edit', 'reschedule', 'cancel', 'delete'}:
                     raise MaxBlocked('unsupported_action')
                 if not isinstance(text, str) or (action in {'publish', 'edit'} and not text and not media):
@@ -220,7 +220,6 @@ class FixtureDriver:
                 self._time(scheduled_at)
                 if existing:
                     self._cas(await self._items(target, kind), existing)
-                self.lane.arm(attempt_id, plan_digest)
                 armed = True
                 await hooks.before_effect(attempt_id, plan_digest)
                 await self._scope(target, write=True)
@@ -242,7 +241,6 @@ class FixtureDriver:
                 await hooks.emit_progress('reading_back', 'running', '{}')
                 result = await self._reconcile(state)
                 await hooks.checkpoint('MAX_OBSERVED', json.dumps(result))
-                self.lane.resolve_observed()
                 return result
         except BaseException as exc:
             if isinstance(exc, (KeyboardInterrupt, SystemExit, asyncio.CancelledError)):

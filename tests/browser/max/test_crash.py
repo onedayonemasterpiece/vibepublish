@@ -37,8 +37,7 @@ async def test_M09_actual_process_death_observe_not_resubmit(server, tmp_path):
         # Independent provider is alive after every worker/browser process died.
         assert state['effects'] == 1 and len(state['items']) == 1
         with ProfileLane(tmp_path/'profile') as lane:
-            with pytest.raises(MaxBlocked, match='outcome_unknown'):
-                lane.arm('fresh-operation', 'fresh-plan')
+            lane.owned()
             async with async_playwright() as pw:
                 browser = await pw.chromium.launch_persistent_context(str(lane.root/'chromium'), headless=True)
                 try:
@@ -48,7 +47,6 @@ async def test_M09_actual_process_death_observe_not_resubmit(server, tmp_path):
                     driver = FixtureDriver(page, lane, origin=origin, account='fixture-account', allowed_targets=frozenset({'channel-a'}))
                     result = await driver.reconcile(checkpoint)
                     assert result[0]['id'] == state['items'][0]['id']
-                    assert lane.marker.exists()  # Core must durably accept observation.
                 finally:
                     await browser.close()
         assert state['effects'] == 1

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX: remove profile-wide uncertain-marker blocking; preserve browser ownership and durable at-most-once dispatch. Lost receipts use existing bounded observation instead of ending early from a stale ID; independent commands keep moving without manual unlock.
+
 - MAX: accept signed CDN URL rotation across native queue readbacks while retaining native intent and attachment-count checks.
 
 - MAX normal feed and publication readback retain native identity and attachment references without post-dispatch downloads or transcoded-photo hash comparison.

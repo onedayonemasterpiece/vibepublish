@@ -61,7 +61,7 @@ async def runtime(tmp_path, server):
     marker_checks=[]
     def observe_marker(_request):
         with store.connection() as db:
-            rows=db.execute("SELECT * FROM attempts WHERE provider='max' AND dispatched=1").fetchall()
+            rows=db.execute("SELECT * FROM attempts WHERE provider='max' AND dispatched=1 ORDER BY rowid DESC LIMIT 1").fetchall()
             assert len(rows)==1
             row=rows[0]
             checkpoint=json.loads(row['checkpoint'])['adapter']
@@ -237,16 +237,16 @@ async def test_core_refusal_and_uncertain_marker_never_resubmit(tmp_path,server,
         if mode=='marker_crash':
             done=await status(session,accepted)
             assert done['state']=='running' and not done['operation_complete']
-            # New explicit intent cannot bypass the profile quarantine/core lane.
+            # An independent immutable command is not quarantined by this old dispatch.
             newer=await tool(session,'publish',{**args,'content':{'text':'Different operation'},'request_key':'new-key'})
             await worker_done(worker('recover'))
-            # MAX's persisted uncertainty must not be interpreted as absence.
-            # Whether the new preflight is retryable cannot authorize dispatch.
+            # The old attempt remains dispatched and is never executed again;
+            # the new independent attempt has its own durable fence.
             with store.connection() as db:
                 new_child=db.execute('SELECT dispatched,observed FROM attempts WHERE operation_id=?',
                                      (newer['operation_id'],)).fetchone()
-                assert (new_child['dispatched'],new_child['observed'])==(0,'not_attempted')
-            assert state['effects']==0
+                assert (new_child['dispatched'],new_child['observed'])==(1,'published')
+            assert state['effects']==1
 
 
 async def test_core_unknown_max_preserves_verified_telegram_vk(tmp_path,server):

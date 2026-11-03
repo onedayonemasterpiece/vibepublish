@@ -281,7 +281,7 @@ class RealMaxDriver:
             self._busy = False
 
     async def mutation_preflight(self, target, action, *, media=(), scheduled_at=None):
-        self.lane.assert_clear()
+        self.lane.owned()
         if not self.live_writes:
             raise MaxBlocked('causal_receipt_recipe_unverified')
         if target not in self.targets:
@@ -399,7 +399,7 @@ class RealMaxDriver:
         armed = False
         observer = None
         try:
-            self.lane.assert_clear()
+            self.lane.owned()
             if (self.targets[target].policy not in {'test_group', 'publish_channel'}
                     or self.targets[target].policy == 'publish_channel' and reply_to is not None):
                 raise MaxBlocked('immediate_publication_denied')
@@ -472,11 +472,9 @@ class RealMaxDriver:
                 await hooks.emit_progress('submitting', 'running', '{}')
                 await self._account()
                 await self._scope(target)
-                self.lane.arm(attempt_id, plan_digest)
                 armed = True
                 await hooks.before_effect(attempt_id, plan_digest)
                 await self._account()
-                self._check_attempt_fuse(attempt_id, plan_digest)
                 main = await self._scope(target)
                 if await main.locator(COMPOSER).evaluate(rich.TEXT_JS) != text:
                     raise MaxBlocked('composer_changed')
@@ -525,7 +523,6 @@ class RealMaxDriver:
                     from .engagement import verify_reply
                     self._busy=False
                     final=await verify_reply(self,final,reply_to)
-                self._check_attempt_fuse(attempt_id, plan_digest)
                 await hooks.checkpoint('MAX_CANDIDATE_OBSERVED', json.dumps(dict(state, item=final)))
                 return dict(item=final, transition=transition, quarantine_released=False,
                             attribution='requires_core_historical_evidence_validation',
@@ -572,7 +569,7 @@ class RealMaxDriver:
         armed = False
         guard = None
         try:
-            self.lane.assert_clear()
+            self.lane.owned()
             if self.targets[target].policy != 'test_group':
                 raise MaxBlocked('published_channel_edit_denied')
             async with asyncio.timeout(self.timeout):
@@ -632,11 +629,9 @@ class RealMaxDriver:
                 await hooks.emit_progress('submitting','running','{}')
                 await self._account()
                 await self._scope(target)
-                self.lane.arm(attempt_id,plan_digest)
                 armed = True
                 await hooks.before_effect(attempt_id,plan_digest)
                 await self._account()
-                self._check_attempt_fuse(attempt_id,plan_digest)
                 main = await self._scope(target)
                 current = await self._plain_candidate(target,old,rows,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
                 if current['url'] != reference or current.get('observed_media',[]) != existing.get('observed_media',[]) or not await guard.evaluate('(g)=>g.ready()'):
@@ -661,7 +656,6 @@ class RealMaxDriver:
                 updated = self._rows(main,text)
                 item = await self._plain_candidate(target,text,updated,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
                 await self._account()
-                self._check_attempt_fuse(attempt_id,plan_digest)
                 final = await self._plain_candidate(target,text,updated,media_count=len(existing.get('observed_media',[])) or len(existing['media']))
                 if item['url'] != reference or final['url'] != reference or item.get('observed_media',[]) != existing.get('observed_media',[]) or final.get('observed_media',[]) != existing.get('observed_media',[]):
                     raise MaxBlocked('edit_created_other_object')
@@ -795,7 +789,7 @@ class RealMaxDriver:
         armed, guard = False, None
         phase="scope"
         try:
-            self.lane.assert_clear()
+            self.lane.owned()
             if self.targets[target].policy != 'test_group':
                 raise MaxBlocked('published_channel_delete_denied')
             async with asyncio.timeout(self.timeout):
@@ -846,11 +840,10 @@ class RealMaxDriver:
                     existing_id=existing['id'],recovery_reference=reference,attempt_id=attempt_id,plan_digest=plan_digest)
                 await hooks.checkpoint('MAX_DELETE_PREPARED',json.dumps(state))
                 await self._account();await self._scope(target)
-                self.lane.arm(attempt_id,plan_digest);armed=True
+                armed=True
                 await hooks.before_effect(attempt_id,plan_digest)
                 await self._account();await self._scope(target)
                 await self.page.bring_to_front()
-                self._check_attempt_fuse(attempt_id,plan_digest)
                 if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('delete_binding_changed')
                 await observe('delete_submit', dialog.get_by_role('button',name='Удалить',exact=True).click())
                 await expect(dialog).to_have_count(0)
@@ -864,7 +857,6 @@ class RealMaxDriver:
                 await observe('navigation', self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded'))
                 main=await self._scope(target)
                 await self._remaining_rows_exclude(main,text,existing['id'])
-                self._check_attempt_fuse(attempt_id,plan_digest)
                 observed['observed_at']=datetime.now(timezone.utc).isoformat()
                 await hooks.checkpoint('MAX_DELETE_OBSERVED',json.dumps(dict(state,item=observed)))
                 return dict(item=observed,quarantine_released=False)
@@ -1101,21 +1093,6 @@ class RealMaxDriver:
             raise MaxBlocked('native_reference_scope_mismatch')
         return value, native_id
 
-    def _check_attempt_fuse(self, attempt, plan):
-        import json
-        import os
-        try:
-            fd = os.open(self.lane.marker, os.O_RDONLY | os.O_NOFOLLOW)
-            with os.fdopen(fd, 'rb') as stream:
-                raw = stream.read(4097)
-            if len(raw) > 4096:
-                raise ValueError()
-            saved = json.loads(raw)
-        except (OSError, ValueError):
-            raise MaxBlocked('recovery_quarantine_required') from None
-        if saved != {'attempt_id': attempt, 'plan_digest': plan}:
-            raise MaxBlocked('recovery_attempt_mismatch')
-
     async def reconcile(self, state):
         """DOM first; optional scoped visual corroboration, then ONE fresh DOM read.
 
@@ -1124,7 +1101,6 @@ class RealMaxDriver:
         """
         if state.get('action')=='forward':
             from .engagement import forward_candidate
-            self._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
             item=await forward_candidate(self,state)
             return dict(item=item,quarantine_released=False)
         if state.get('action')=='reply':
@@ -1177,7 +1153,6 @@ class RealMaxDriver:
         try:
             async with asyncio.timeout(self.timeout):
                 for _ in range(2):
-                    self._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
                     await self._account()
                     await observe('navigation', self.page.goto(self.origin+'/'+target,wait_until='domcontentloaded'))
                     main=await self._scope(target)
@@ -1218,10 +1193,6 @@ class RealMaxDriver:
             raise MaxBlocked('recovery_evidence_required') from None
         self._enter(target)
         try:
-            # Match, but NEVER clear, the original durable quarantine.
-            def check_fuse():
-                self._check_attempt_fuse(attempt, plan)
-            check_fuse()
             observations = []
             async with asyncio.timeout(self.timeout):
                 for _ in range(2):
@@ -1258,7 +1229,6 @@ class RealMaxDriver:
                     second=fresh['url']
                     if second != reference:
                         raise MaxBlocked('recovery_native_reference_mismatch')
-                    check_fuse()
                     observations.append(dict(id=native_id, url=reference, target=target,
                         namespace='feed',text=text,entities=fresh.get('entities',[]),media=fresh['media'],observed_media=[],scheduled_at=None,
                         observed_at=datetime.now(timezone.utc).isoformat()))

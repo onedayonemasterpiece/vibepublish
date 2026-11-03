@@ -108,7 +108,7 @@ The old send deadline does not prohibit read-only recovery. Provider reconciliat
 receives the original checkpoint plus top-level `core_recovery` containing
 `operation_id`, `attempt_id`, `plan_digest`, and optional `native_reference`.
 Providers independently check original durable intent and native attribution;
-MAX must verify its original marker and fresh exact native item. A positive exact
+MAX verifies the original core attempt/plan binding and fresh exact native item; no profile marker is required. A positive exact
 identity need not prove completeness of unrelated history. Missing checks,
 wrong content/target/media/time/identity, or an unknown observation remain unknown;
 core does not convert an uncertainty enum into a success.
@@ -126,7 +126,7 @@ Providers may implement the additive optional
 child resolution and receives that resolved checkpoint envelope. It must release
 only quarantine matching the original attempt/digest; absent quarantine is
 idempotent success, different quarantine is an error. It must never perform a
-social effect. Old Telegram/VK/provider implementations without the hook remain
+social effect. For MAX, finalize validates the committed native receipt and immutable core binding only; the removed global marker is not a cleanup prerequisite and cannot block independent commands. Old Telegram/VK/provider implementations without the hook remain
 compatible. A pending hook does not relabel a verified child as unknown, but keeps
 the operation incomplete and blocks new effects on its connection. The worker
 retries finalization after a 30-second lease interval or process restart. A crash

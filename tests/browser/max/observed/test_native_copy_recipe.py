@@ -116,7 +116,6 @@ async def assert_observation_only(writer, *, copies):
         await expect(page.get_by_role('menu')).to_have_count(0, timeout=driver.timeout * 1000)
     assert not effects(state)
     assert not state['checkpoints'] and 'dispatched' not in state
-    assert not driver.lane.marker.exists()
     assert state['checks'] == 0
     assert len([event for event in state['events'] if event['kind'] == 'copy']) == copies
     assert await page.evaluate('window.REPLAY_SHORT_COPY_CLICKS') == 0

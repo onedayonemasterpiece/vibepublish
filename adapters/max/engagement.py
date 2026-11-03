@@ -34,7 +34,7 @@ async def react(driver,*,existing,reaction,reaction_mode,attempt_id,plan_digest,
     if reaction_mode not in {'add','remove'} or not isinstance(reaction,str) or not 0<len(reaction)<=100:
         raise MaxBlocked('invalid_reaction_intent')
     if driver.visual_palette is None:raise MaxBlocked('native_canvas_palette_classifier_required')
-    target=existing['target'];driver.lane.assert_clear()
+    target=existing['target'];driver.lane.owned()
     before=await observe(driver,target,existing['id'])
     if not same_content(before,existing):raise MaxBlocked('reaction_source_changed')
     if desired(before,reaction,reaction_mode):raise MaxBlocked('reaction_already_in_requested_state')
@@ -90,10 +90,10 @@ async def react(driver,*,existing,reaction,reaction_mode,attempt_id,plan_digest,
                 observed_media=before.get('observed_media',[]),attempt_id=attempt_id,plan_digest=plan_digest,
                 reaction=reaction,reaction_mode=reaction_mode,baseline=before,palette_proposal=proposal)
             await hooks.checkpoint('MAX_REACTION_PREPARED',json.dumps(state))
-            driver.lane.arm(attempt_id,plan_digest);armed=True
+            armed=True
             await hooks.before_effect(attempt_id,plan_digest)
             await driver._account()
-            driver._check_attempt_fuse(attempt_id,plan_digest);await driver._scope(target)
+            await driver._scope(target)
             await button.click()
             transition=await guard.evaluate('g=>g.state')
             if transition!=dict(clicks=1,blocked=False):raise MaxBlocked('reaction_input_unverified')
@@ -104,7 +104,6 @@ async def react(driver,*,existing,reaction,reaction_mode,attempt_id,plan_digest,
             fresh=await observe(driver,target,before['id'])
             if not same_content(fresh,before) or not desired(fresh,reaction,reaction_mode):
                 raise MaxBlocked('native_reaction_readback_mismatch')
-            driver._check_attempt_fuse(attempt_id,plan_digest)
             state['item']=fresh
             await hooks.checkpoint('MAX_REACTION_OBSERVED',json.dumps(state))
             return [fresh]
@@ -120,14 +119,12 @@ async def react(driver,*,existing,reaction,reaction_mode,attempt_id,plan_digest,
 
 
 async def reconcile_reaction(driver,state):
-    driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
     before=state.get('baseline')
     if not isinstance(before,dict) or desired(before,state['reaction'],state['reaction_mode']):
         raise MaxBlocked('reaction_baseline_unverified')
     fresh=await observe(driver,state['target'],state['existing_id'])
     if not same_content(fresh,before) or not desired(fresh,state['reaction'],state['reaction_mode']):
         raise MaxBlocked('native_reaction_readback_mismatch')
-    driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
     return dict(item=fresh,quarantine_released=False)
 
 
@@ -183,7 +180,7 @@ async def forward_candidate(driver,state):
 async def forward(driver,*,subject,target,attempt_id,plan_digest,hooks):
     if subject['target']!=target or driver.targets[target].policy!='test_group':
         raise MaxBlocked('native_forward_target_recipe_unqualified')
-    driver.lane.assert_clear()
+    driver.lane.owned()
     before=await observe(driver,target,subject['id'])
     if not same_content(before,subject):raise MaxBlocked('forward_source_changed')
     # Reuse that same fresh, exact source read's native set, not a redundant
@@ -231,9 +228,9 @@ async def forward(driver,*,subject,target,attempt_id,plan_digest,hooks):
                 scheduled_at=None,existing_id=None,media=subject['media'],media_slots=len(subject.get('observed_media',[])) or len(subject['media']),
                 subject=subject,baseline_ids=baseline,attempt_id=attempt_id,plan_digest=plan_digest)
             await hooks.checkpoint('MAX_FORWARD_PREPARED',json.dumps(state))
-            driver.lane.arm(attempt_id,plan_digest);armed=True
+            armed=True
             await hooks.before_effect(attempt_id,plan_digest)
-            await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest);await driver._scope(target)
+            await driver._account();await driver._scope(target)
             await dialog.get_by_role('button',name='Отправить сообщение',exact=True).click()
             transition=await guard.evaluate('g=>g.state')
             if transition!=dict(clicks=1,blocked=False):raise MaxBlocked('forward_input_unverified')

@@ -87,7 +87,6 @@ async def test_navigation_failure_recorded_before_open_sanitization(driver):
     assert failed[-1]["operation"] == "navigation"
     assert failed[-1]["error_type"] == "TimeoutError"
     assert PRIVATE not in json.dumps(records)
-    assert not driver.lane.marker.exists()
     driver.page.goto.assert_awaited_once()
 
 
@@ -117,7 +116,6 @@ async def test_post_arm_failure_keeps_original_diagnostic_and_unknown_outcome(dr
     assert PRIVATE not in json.dumps(records)
     button.click.assert_awaited_once()
     hooks.before_effect.assert_awaited_once_with("attempt", "plan")
-    assert driver.lane.marker.exists()
     assert driver._busy is False
 
 

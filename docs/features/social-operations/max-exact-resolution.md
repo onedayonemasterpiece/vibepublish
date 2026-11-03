@@ -6,6 +6,14 @@ Status: **Not confirmed by user**. Implementation and offline verification do no
 
 Status: **Not confirmed by user**. The owner superseded the historical downloaded-SHA acceptance below: MAX delivery now uses fresh native identity, text/entities, attachment count and provider references. Post-dispatch observation and finalize do not reload expired input bytes or download provider media. Stored original checkpoints remain immutable. Temporary preflight errors retain the existing worker retry codes and bounded phase diagnostics. See the [current reliability requirements](README.md#max-reliability-repair--2026-11-03).
 
+## Owner lifecycle correction, 2026-11-03
+
+Status: **Not confirmed by user**. Each independent MAX command must automatically finish with a fresh verified native receipt or a concrete terminal delivery refusal. No terminal unknown/needs-review or manual unlock is part of normal publishing. A historic dispatch must not block another command. A delivery refusal is not evidence that a possible external effect was absent: the same attempt stays fenced against another Send/Save.
+
+The authoritative at-most-once boundary is the existing durable worker before_effect transaction; the profile flock protects browser ownership. Remove the duplicate profile-wide uncertain marker dependency. Dispatched attempts use the existing bounded worker observation of the original immutable attempt, never another execute. Stale checkpoint/native IDs cannot fabricate success or stop fresh observation while its budget remains. Preserve historical checkpoints and marker files as evidence; do not manually unlink them.
+
+This owner decision supersedes historical quarantine/release instructions below for the current MAX publishing path. Live acceptance remains unconfirmed.
+
 ## Owner requirement, 2026-10-10
 
 An owner may resolve an explicitly supplied public MAX channel URL through the existing authenticated MAX product runtime and register a stable destination. Several exact channels may coexist. Resolve never publishes, joins, subscribes, searches message history, enumerates the account, imports credentials, or guesses a native ID.

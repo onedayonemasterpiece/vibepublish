@@ -75,7 +75,6 @@ async def test_channel_readback_deadline_preserves_native_receipt_and_never_rese
     references = [saved for name, saved in state["checkpoints"] if name == "MAX_NATIVE_REFERENCE"]
     assert references and references[0]["native_id"] == "provider-item"
     assert references[0]["recovery_reference"] == "https://max.ru/c/-202/provider-item"
-    assert driver.lane.marker.exists()
     assert len(effects(state)) == 1
     with pytest.raises(MaxBlocked, match="outcome_unknown"):
         await driver.submit_plain_candidate(target="-202", text=TEXT,
@@ -90,5 +89,4 @@ async def test_named_link_group_still_rejects_foreign_outgoing_candidate(writer)
         await driver.submit_plain_candidate(target="-101", text=TEXT,
             entities=ENTITIES, attempt_id="attempt", plan_digest="plan", hooks=hooks)
     assert len(effects(state)) == 1
-    assert driver.lane.marker.exists()
     assert not [checkpoint for checkpoint in state["checkpoints"] if checkpoint[0] == "MAX_NATIVE_REFERENCE"]

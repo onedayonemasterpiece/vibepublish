@@ -12,15 +12,14 @@ ProfileLane, MaxBlocked = module.ProfileLane, module.MaxBlocked
 def claim(root, connection, arm=False):
     try:
         with ProfileLane(Path(root)) as lane:
-            if arm:
-                lane.arm('attempt', 'digest')
+            lane.owned()
             connection.send('owned')
             connection.recv()
     except MaxBlocked as exc:
         connection.send(str(exc))
 
 
-def test_M11_real_process_claim_and_crash_quarantine(tmp_path):
+def test_real_process_claim_and_crash_releases_profile(tmp_path):
     context = multiprocessing.get_context('spawn')
     parent, child = context.Pipe()
     profile = tmp_path/'profile'
@@ -34,8 +33,7 @@ def test_M11_real_process_claim_and_crash_quarantine(tmp_path):
         proc.kill()
         proc.join(10)
         with ProfileLane(profile) as lane:
-            with pytest.raises(MaxBlocked, match='outcome_unknown'):
-                lane.arm('NEW-operation', 'NEW-plan')
+            lane.owned()
     finally:
         if proc.is_alive():
             proc.kill()
@@ -61,14 +59,11 @@ def test_permissions_symlink_and_no_lock_unlink(tmp_path):
             pass
 
 
-def test_lane_required_and_durable_marker(tmp_path):
+def test_lane_requires_ownership(tmp_path):
     lane = ProfileLane(tmp_path/'profile')
     with pytest.raises(MaxBlocked, match='profile_not_owned'):
-        lane.arm('attempt', 'digest')
+        lane.owned()
     with lane:
-        lane.arm('attempt', 'digest')
-        assert lane.marker.stat().st_mode & 0o777 == 0o600
-        with pytest.raises(MaxBlocked, match='outcome_unknown'):
-            lane.assert_clear()
-        lane.resolve_observed()
-        lane.assert_clear()
+        lane.owned()
+    with pytest.raises(MaxBlocked, match='profile_not_owned'):
+        lane.owned()

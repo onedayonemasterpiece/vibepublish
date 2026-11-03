@@ -116,7 +116,7 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
     from .live import COMPOSER
     driver._enter(target);armed=False;guard=None;phase='account'
     try:
-        driver.lane.assert_clear()
+        driver.lane.owned()
         async with asyncio.timeout(driver.timeout) as phase_budget:
             await driver._account()
             # Read the current native queue before composing. A fresh empty queue
@@ -168,10 +168,10 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
             await hooks.checkpoint('MAX_PREPARED',json.dumps(state))
             await hooks.emit_progress('submitting','running','{}')
             await driver._account();await driver._scope(target)
-            driver.lane.arm(attempt_id,plan_digest);armed=True
+            armed=True
             await hooks.before_effect(attempt_id,plan_digest)
             phase_budget.reschedule(asyncio.get_running_loop().time()+driver.timeout)
-            await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
+            await driver._account()
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_schedule_form_changed')
             await observe('schedule_submit', confirm.click())
             transition=await observe('submit_transition', guard.evaluate('(g)=>g.result()'))
@@ -192,7 +192,6 @@ async def publish(driver,*,target,text,media,entities,scheduled_at,attempt_id,pl
             await hooks.checkpoint('MAX_NATIVE_REFERENCE',json.dumps(state))
             fresh=(await read(driver,target,state['native_id']))[0]
             if any(fresh[k]!=result[k] for k in ('id','text','entities','scheduled_at','observed_media')):raise MaxBlocked('native_schedule_readback_changed')
-            driver._check_attempt_fuse(attempt_id,plan_digest)
             await hooks.checkpoint('MAX_CANDIDATE_OBSERVED',json.dumps(dict(state,item=fresh)))
             return [fresh]
     except BaseException as exc:
@@ -215,10 +214,8 @@ async def reconcile(driver,state):
     target=state['target'];driver._enter(target)
     try:
         async with asyncio.timeout(driver.timeout):
-            driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
             if state['action']=='cancel':
                 result=await cancelled_item(driver,state)
-                driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
                 return dict(item=result,state=state)
             native=state.get('native_id')
             if native is None:
@@ -236,7 +233,6 @@ async def reconcile(driver,state):
             if result['text']!=state['text'] or result['scheduled_at']!=state['scheduled_at'] or not rich.same_entities(result['entities'],state.get('entities',[])):
                 raise MaxBlocked('native_schedule_intent_changed')
             state=dict(state,native_id=native,media=result['media'],observed_media=result['observed_media'])
-            driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
             return dict(item=result,state=state)
     finally:driver._busy=False
 
@@ -263,7 +259,6 @@ async def legacy_unreachable_guard(driver,state):
     try:
         async with asyncio.timeout(driver.timeout):
             for _ in range(2):
-                driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
                 await driver._account();await observe('navigation', driver.page.goto(driver.origin+'/'+target,wait_until='domcontentloaded'))
                 main=await driver._scope(target)
                 await main.locator('.messageWrapper').first.wait_for(timeout=driver.timeout*1000)
@@ -281,7 +276,7 @@ async def legacy_unreachable_guard(driver,state):
                 finally:
                     if await driver.page.get_by_role('dialog').count():await driver.page.keyboard.press('Escape')
                     if await c.evaluate(rich.TEXT_JS)==draft:await c.fill('')
-                await driver._scope(target);driver._check_attempt_fuse(state['attempt_id'],state['plan_digest'])
+                await driver._scope(target)
             return dict(trusted_clicks=0,input_unreachable=True,absence_only=False,
                 proof_method='legacy_unreachable_control_flow',legacy_recipe='max-native-schedule-preclick-v0',
                 premise='implicit_native_dialog_cannot_match_explicit_role_guard',fresh_ui_checks=2)
@@ -292,7 +287,7 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
     import asyncio,json,re
     target=existing['target'];driver._enter(target);armed=False;guard=None;phase='read_existing'
     try:
-        driver.lane.assert_clear()
+        driver.lane.owned()
         if existing['namespace']!='scheduled' or not scheduled_at:raise MaxBlocked('exact_native_schedule_required')
         async with asyncio.timeout(driver.timeout) as phase_budget:
             original=(await read(driver,target,existing['id'],passes=1))[0]
@@ -338,10 +333,10 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
                 existing_id=existing['id'],native_id=existing['id'],old_correlation_id=original.get('correlation_id'),attempt_id=attempt_id,plan_digest=plan_digest)
             await hooks.checkpoint('MAX_RESCHEDULE_PREPARED',json.dumps(state))
             await driver._account();await driver._scope(target,'scheduled')
-            driver.lane.arm(attempt_id,plan_digest);armed=True
+            armed=True
             await hooks.before_effect(attempt_id,plan_digest)
             phase_budget.reschedule(asyncio.get_running_loop().time()+driver.timeout)
-            await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
+            await driver._account()
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_reschedule_form_changed')
             await observe('schedule_submit', confirm.click())
             transition=await observe('submit_transition', guard.evaluate('(g)=>g.result()'))
@@ -353,7 +348,6 @@ async def reschedule(driver,*,existing,scheduled_at,attempt_id,plan_digest,hooks
             state['native_id']=result['id']
             if (result['scheduled_at']!=scheduled_at or any(result[k]!=original[k] for k in ('text','entities','observed_media'))):
                 raise MaxBlocked('native_reschedule_readback_changed')
-            driver._check_attempt_fuse(attempt_id,plan_digest)
             await hooks.checkpoint('MAX_CANDIDATE_OBSERVED',json.dumps(dict(state,transition=transition,item=result)))
             return [result]
     except BaseException as exc:
@@ -430,7 +424,7 @@ async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
     import asyncio,json
     target=existing['target'];driver._enter(target);guard=None;armed=False
     try:
-        driver.lane.assert_clear()
+        driver.lane.owned()
         if driver.targets[target].policy not in {'test_group','scheduled_only'} or existing['namespace']!='scheduled':
             raise MaxBlocked('native_cancel_scope_unqualified')
         async with asyncio.timeout(driver.timeout):
@@ -475,9 +469,9 @@ async def cancel(driver,*,existing,attempt_id,plan_digest,hooks):
                 existing_id=original['id'],native_id=original['id'],item=original,attempt_id=attempt_id,plan_digest=plan_digest)
             await hooks.checkpoint('MAX_CANCEL_PREPARED',json.dumps(state))
             await driver._account();await driver._scope(target,'scheduled')
-            driver.lane.arm(attempt_id,plan_digest);armed=True
+            armed=True
             await hooks.before_effect(attempt_id,plan_digest)
-            await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
+            await driver._account()
             if not await guard.evaluate('(g)=>g.ready()'):raise MaxBlocked('native_cancel_guard_changed')
             await observe('scheduled_update_submit', button.click());await expect(dialog).to_have_count(0);await expect(row).to_have_count(0)
             transition=await observe('submit_transition', guard.evaluate('(g)=>g.result()'))
@@ -506,7 +500,7 @@ async def edit(driver,*,existing,text,entities,attempt_id,plan_digest,hooks):
     from .live import COMPOSER
     target=existing['target'];driver._enter(target);armed=False;guard=None
     try:
-        driver.lane.assert_clear()
+        driver.lane.owned()
         if driver.targets[target].policy!='test_group' or existing['namespace']!='scheduled':
             raise MaxBlocked('native_edit_scope_unqualified')
         async with asyncio.timeout(driver.timeout):
@@ -560,9 +554,9 @@ async def edit(driver,*,existing,text,entities,attempt_id,plan_digest,hooks):
                 media_slots=(len(original['observed_media']) or len(original['media'])),existing_id=original['id'],native_id=original['id'],attempt_id=attempt_id,plan_digest=plan_digest)
             await hooks.checkpoint('MAX_NATIVE_EDIT_PREPARED',json.dumps(state))
             await driver._account();await driver._scope(target,'scheduled')
-            driver.lane.arm(attempt_id,plan_digest);armed=True
+            armed=True
             await hooks.before_effect(attempt_id,plan_digest)
-            await driver._account();driver._check_attempt_fuse(attempt_id,plan_digest)
+            await driver._account()
             if not await guard.evaluate('(g)=>g.ready()'):
                 await hooks.emit_progress('validating','failed',__import__('json').dumps(await guard.evaluate('(g)=>g.checks()')))
                 raise MaxBlocked('native_edit_guard_changed')

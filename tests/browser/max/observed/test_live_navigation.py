@@ -127,18 +127,12 @@ async def test_missing_causal_receipt_blocks_before_any_effect(replay, action):
             scheduled_at=None,action=action,attempt_id='attempt',
             plan_digest='plan',hooks=None)
     assert await page.locator('[contenteditable]').inner_text()=='Pre-existing draft'
-    assert not d.lane.marker.exists()
     assert await page.evaluate('provider.visits')==['-101']
 
-async def test_unknown_attempt_survives_read_only_reconcile(replay):
+async def test_read_only_reconcile_requires_original_evidence(replay):
     d,page,_=replay
-    d.lane.arm('unresolved-attempt','unresolved-plan')
-    before=d.lane.marker.read_bytes()
     with pytest.raises(MaxBlocked, match='recovery_evidence_required'):
         await d.reconcile({'text':'Safe example','native_receipt':None})
-    assert d.lane.marker.read_bytes()==before
-    with pytest.raises(MaxBlocked, match='outcome_unknown'):
-        await d.mutation_preflight('-101','publish')
     assert await page.evaluate('provider.visits')==['-101']
 
 RECOVERY_TEXT='Task-owned probe 0123456789abcdef0123456789abcdef'
@@ -154,13 +148,11 @@ async def recovery_setup(replay, *, messages=None, extra=''):
     d.timeout=10
     await page.context.grant_permissions(['clipboard-read','clipboard-write'],origin=d.origin)
     await page.context.add_init_script('window.REPLAY_MESSAGES='+json.dumps(messages if messages is not None else [dict(id='new-item',text=RECOVERY_TEXT,outgoing=True)])+';'+extra)
-    d.lane.arm('original-attempt','original-plan')
     return d,page
 
 @pytest.mark.parametrize('order',list(itertools.permutations(['-101','-202','-303'])))
-async def test_exact_recovery_two_fresh_reads_preserve_original_fuse(replay,order):
+async def test_exact_recovery_two_fresh_reads_preserve_native_identity(replay,order):
     d,page=await recovery_setup(replay,extra='window.REPLAY_ORDER='+json.dumps(order))
-    fuse=d.lane.marker.read_bytes()
     # Reorder the chat list from EACH awaited account callback as well as
     # starting in every permutation. Native item selection must be unaffected.
     async def account():
@@ -173,7 +165,6 @@ async def test_exact_recovery_two_fresh_reads_preserve_original_fuse(replay,orde
     assert result['observation_only'] and not result['quarantine_released']
     assert result['attribution']=='requires_core_historical_evidence_validation'
     assert result['history_complete'] is False
-    assert d.lane.marker.read_bytes()==fuse
     assert await page.evaluate('provider.order')==list(reversed(order))
 
 @pytest.mark.parametrize('fault', ['old_ref','same_text_wrong_id','duplicate','foreign','changed_text','media','wrong_target','stale_clipboard'])
@@ -189,28 +180,21 @@ async def test_recovery_rejects_nonexact_candidates(replay,fault):
     elif fault=='stale_clipboard': extra='window.REPLAY_SILENT_COPY=true'
     d,page=await recovery_setup(replay,messages=messages,extra=extra)
     await page.evaluate('(s)=>navigator.clipboard.writeText(s)',recovery_state()['recovery_reference'])
-    fuse=d.lane.marker.read_bytes()
     with pytest.raises(MaxBlocked): await d.reconcile(recovery_state())
-    assert d.lane.marker.read_bytes()==fuse
 
-@pytest.mark.parametrize('fault',['account','attempt','digest','reference_target'])
+@pytest.mark.parametrize('fault',['account','reference_target'])
 async def test_recovery_binding_rejection(replay,fault):
     d,page=await recovery_setup(replay)
     state=recovery_state()
     if fault=='account': replay[2]['ok']=False
-    elif fault=='attempt': state['attempt_id']='different'
-    elif fault=='digest': state['plan_digest']='different'
     else: state['recovery_reference']='https://max.ru/c/-202/new-item'
-    fuse=d.lane.marker.read_bytes()
     with pytest.raises(MaxBlocked): await d.reconcile(state)
-    assert d.lane.marker.read_bytes()==fuse
 
 async def test_actual_reader_process_crash_restart_never_sends(tmp_path,recovery_server):
     import os,sys,signal,subprocess,asyncio
     origin,state=recovery_server
     with ProfileLane(tmp_path/'profile') as lane:
-        lane.arm('original-attempt','original-plan')
-        fuse=lane.marker.read_bytes()
+        lane.owned()
     (tmp_path/'request.json').write_text(json.dumps(recovery_state()))
     processes=[];logs=[]
     def launch(mode):
@@ -227,12 +211,10 @@ async def test_actual_reader_process_crash_restart_never_sends(tmp_path,recovery
                 await asyncio.sleep(.05)
         os.killpg(first.pid,signal.SIGKILL)
         await asyncio.to_thread(first.wait,10)
-        assert (tmp_path/'profile/.vibepublish-uncertain').read_bytes()==fuse
         restarted=launch('restart')
         assert await asyncio.to_thread(restarted.wait,35)==0
         result=json.loads((tmp_path/'result.json').read_text())
         assert result['item']['id']=='new-item' and result['observation_only']
-        assert (tmp_path/'profile/.vibepublish-uncertain').read_bytes()==fuse
         assert not (tmp_path/'outbound-attempt').exists()
         assert len([e for e in state['events'] if e['kind']=='copy'])==6
         assert not [e for e in state['events'] if e['kind']=='effect']
@@ -243,7 +225,7 @@ async def test_actual_reader_process_crash_restart_never_sends(tmp_path,recovery
             await asyncio.to_thread(proc.wait,10)
         for log in logs: log.close()
 
-@pytest.mark.parametrize('fault',['account','target','text','media','native_ref','quarantine'])
+@pytest.mark.parametrize('fault',['account','target','text','media','native_ref'])
 async def test_recovery_rechecks_after_awaited_callback(replay,fault):
     d,page=await recovery_setup(replay)
     calls=0
@@ -256,14 +238,11 @@ async def test_recovery_rechecks_after_awaited_callback(replay,fault):
             if fault=='text': await page.evaluate("messages[0].text+=' changed';render()")
             if fault=='media': await page.evaluate("messages[0].media=true;render()")
             if fault=='native_ref': await page.evaluate("messages[0].id='other';render()")
-            if fault=='quarantine': d.lane.marker.write_text(json.dumps({'attempt_id':'other','plan_digest':'other'}))
         return True
     d.account_check=account
     with pytest.raises(MaxBlocked): await d.reconcile(recovery_state())
-    assert d.lane.marker.exists()
-    if fault=='quarantine': assert json.loads(d.lane.marker.read_text())['attempt_id']=='other'
 
-async def test_recovery_deadline_is_unknown_and_keeps_original_fuse(replay):
+async def test_recovery_observation_deadline_is_bounded(replay):
     import asyncio
     d,page=await recovery_setup(replay)
     d.timeout=.02
@@ -271,10 +250,8 @@ async def test_recovery_deadline_is_unknown_and_keeps_original_fuse(replay):
         await asyncio.sleep(1)
         return True
     d.account_check=delayed_account
-    before=d.lane.marker.read_bytes()
     with pytest.raises(MaxBlocked,match='recovery_observation_deadline'):
         await d.reconcile(recovery_state())
-    assert d.lane.marker.read_bytes()==before
 
 async def test_two_readers_share_one_serial_profile_lane(replay):
     import asyncio
@@ -286,7 +263,6 @@ async def test_two_readers_share_one_serial_profile_lane(replay):
         if calls==1: entered.set();await release.wait()
         return True
     d.account_check=account
-    before=d.lane.marker.read_bytes()
     first=asyncio.create_task(d.reconcile(recovery_state()))
     try:
         await asyncio.wait_for(entered.wait(),5)
@@ -295,7 +271,7 @@ async def test_two_readers_share_one_serial_profile_lane(replay):
     finally:
         release.set()
     result=await first
-    assert result['item']['id']=='new-item' and d.lane.marker.read_bytes()==before
+    assert result['item']['id']=='new-item'
 
 async def test_recovery_restores_message_page_focus_after_identity_tab(replay):
     d,page=await recovery_setup(replay)
@@ -306,11 +282,9 @@ async def test_recovery_restores_message_page_focus_after_identity_tab(replay):
         assert await identity.evaluate('document.hasFocus()')
         return True
     d.account_check=account_in_other_tab
-    before=d.lane.marker.read_bytes()
     result=await d.reconcile(recovery_state())
     assert result['item']['id']=='new-item'
     assert await page.evaluate('document.hasFocus()')
-    assert d.lane.marker.read_bytes()==before
     await identity.close()
 
 
@@ -318,22 +292,17 @@ async def test_recovery_reopens_disappeared_read_menu_without_social_effect(repl
     d,page=await recovery_setup(replay,extra='window.REPLAY_DROP_MENUS=1;')
     result=await d.reconcile(recovery_state())
     assert result['item']['id']=='new-item' and result['observation_only']
-    assert d.lane.marker.exists()
 
 
 async def test_recovery_missing_menu_retry_is_bounded(replay):
     d,page=await recovery_setup(replay,extra='window.REPLAY_DROP_MENUS=99;')
-    before=d.lane.marker.read_bytes()
     with pytest.raises(MaxBlocked,match='native_copy_menu_unavailable'):
         await d.reconcile(recovery_state())
     assert await page.evaluate('window.REPLAY_MENU_OPENS')==2
-    assert d.lane.marker.read_bytes()==before
 
 
 async def test_recovery_existing_disabled_menu_is_not_reopened(replay):
     d,page=await recovery_setup(replay,extra='window.REPLAY_DISABLED_COPY=true;')
-    before=d.lane.marker.read_bytes()
     with pytest.raises(MaxBlocked,match='native_copy_menu_unavailable'):
         await d.reconcile(recovery_state())
     assert await page.evaluate('window.REPLAY_MENU_OPENS')==1
-    assert d.lane.marker.read_bytes()==before

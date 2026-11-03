@@ -68,7 +68,7 @@ async def test_menu_absence_has_one_bounded_pre_effect_retry(writer,surface,afte
         assert await menu.get_by_role('menuitem',name=label,exact=True).count()==1
     assert await page.evaluate('window.opens')==min(after,2)
     assert await page.evaluate('window.confirmClicks')==0
-    assert not effects(state) and not d.lane.marker.exists()
+    assert not effects(state)
 
 @pytest.mark.parametrize('drift',['detach','text','route','media'])
 async def test_menu_retry_requires_same_connected_subject(writer,drift):
@@ -77,7 +77,7 @@ async def test_menu_retry_requires_same_connected_subject(writer,drift):
     with pytest.raises(MaxBlocked,match='context_menu_subject_changed|native_context_menu_not_open'):
         await d._open_context_menu(control)
     assert await page.evaluate('window.opens')==1
-    assert not effects(state) and not d.lane.marker.exists()
+    assert not effects(state)
 
 async def test_wrong_visible_menu_does_not_reopen_or_select(writer):
     d,page,state,control,_=await setup_menu(writer,'send',1)
@@ -97,7 +97,7 @@ async def test_row_ui_metadata_change_does_not_replace_authored_binding(writer):
     await d._open_context_menu(control)
     assert await page.evaluate('window.opens')==2
     assert await control.text_content()=='Bound caption'
-    assert not effects(state) and not d.lane.marker.exists()
+    assert not effects(state)
 
 class PreparedOnly(SystemExit): pass
 
@@ -180,7 +180,6 @@ async def test_full_native_prepare_and_no_retry_after_arm(writer,monkeypatch,act
     assert await page.evaluate('window.opens')==2
     assert await page.evaluate('window.confirmClicks')==0
     assert not effects(state)
-    assert d.lane.marker.exists()==bool(after_arm)
     assert len(resets)==(1 if after_arm=='after_marker' else 0)
     if resets:assert resets[0]==pytest.approx(d.timeout,abs=.02)
 

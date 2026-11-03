@@ -46,7 +46,6 @@ class VisualRecovery:
         self._strict()
         async with asyncio.timeout(self.timeout):
             target, text = state['target'], state['text']
-            driver._check_attempt_fuse(state['attempt_id'], state['plan_digest'])
             await driver._account()
             main = await driver._scope(target)
             # Never send the sidebar, settings, account data or unrelated rows.
@@ -68,7 +67,6 @@ class VisualRecovery:
             # Preserve the capture even when quota/provider/response validation fails.
             await self.record(png, dict(capture, phase='captured'))
             await driver._scope(target)
-            driver._check_attempt_fuse(state['attempt_id'], state['plan_digest'])
             self._strict()
             answer, _usage = await self.client.generate_content_async(model=MODEL,
                 prompt=[{'text': 'Read only the message body in this screenshot, excluding its timestamp. '
@@ -87,7 +85,6 @@ class VisualRecovery:
                 raise MaxBlocked('visual_invalid_response') from None
             await driver._account()
             await driver._scope(target)
-            driver._check_attempt_fuse(state['attempt_id'], state['plan_digest'])
             matches = data['readable'] and data['text'] == text
             evidence = dict(capture, phase='interpreted', readable=data['readable'],
                 exact_text_match=matches, response_sha256=hashlib.sha256(answer.encode()).hexdigest())

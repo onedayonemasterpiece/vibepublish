@@ -398,19 +398,14 @@ class MaxAdapter:
             # Positive EXISTENCE evidence, not a fabricated resolution. Core
             # must validate historical attribution and commit before release.
             # Do not call checkpoint/before_effect or touch the fuse here.
-            return Observation('outcome_unknown', (self._remote(result['item']),),
-                missing_checks=('core_historical_attribution_resolution', 'history_completeness'))
+            raise DomainError('max_historical_attribution_missing',
+                'Historical native item lacks original-attempt attribution', 'none')
         try:
             items = await self.driver.reconcile(state)
         except MaxBlocked:
             raise OutcomeUnknown('max_outcome_unknown') from None
         result = self._observation(request, items, state)
         await hooks.checkpoint('MAX_RECONCILED', saved_checkpoint(request, driver=state))
-        if self.driver.lane.marker.exists():
-            marker = json.loads(self.driver.lane.marker.read_text())
-            if marker != {'attempt_id': request.attempt_id, 'plan_digest': request.plan_digest}:
-                raise OutcomeUnknown('max_profile_other_uncertain_attempt')
-            self.driver.lane.resolve_observed()
         return result
 
     def _recovery_admission(self, request, admitted):
@@ -438,13 +433,6 @@ class MaxAdapter:
                     or any(admitted.get(k)!=v for k,v in {'operation_id':request.operation_id,
                         'attempt_id':request.attempt_id,'plan_digest':request.plan_digest}.items())):
                 raise OutcomeUnknown('max_no_effect_finalize_binding')
-            self.driver._enter(request.native_target)
-            try:
-                import os
-                if os.path.lexists(self.driver.lane.marker):
-                    self.driver._check_attempt_fuse(request.attempt_id,request.plan_digest)
-                    self.driver.lane.resolve_observed()
-            finally:self.driver._busy=False
             return
         remote = envelope.get('remote', {})
         admitted = envelope.get('core_recovery', {})
@@ -485,16 +473,6 @@ class MaxAdapter:
             exact=(bool(expected_reference) and remote.get('url')==expected_reference and remote.get('namespace')=='published')
         if (not exact or remote.get('native_target')!=request.native_target or remote.get('text')!=self._text(request)):
             raise OutcomeUnknown('max_terminal_receipt_mismatch')
-        self.driver._enter(request.native_target)
-        try:
-            # The worker's durable finalize outbox is authority. An absent marker
-            # means a previous cleanup completed before its acknowledgement.
-            import os
-            if os.path.lexists(self.driver.lane.marker):
-                self.driver._check_attempt_fuse(request.attempt_id, request.plan_digest)
-                self.driver.lane.resolve_observed()
-        finally:
-            self.driver._busy = False
 
     async def read(self, request: ReadRequest, hooks: Hooks) -> ReadPage:
         if self.recovery_only:

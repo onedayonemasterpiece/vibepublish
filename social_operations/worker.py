@@ -533,7 +533,8 @@ class Worker:
                     with self.store.connection() as db:
                         recorded = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
                 known = (recorded and recorded['dispatched'] and self.saved_native_id(recorded)
-                         and json.loads(recorded['plan']).get('workload') != 'media_store')
+                         and json.loads(recorded['plan']).get('workload') != 'media_store'
+                         and child['provider'] != 'max')
                 if self.store.clock() >= self.deadline(op, child) or known:
                     self.expire_child(op, child, actor)
                 elif isinstance(exc, OutcomeUnknown) and recorded['dispatched']:
