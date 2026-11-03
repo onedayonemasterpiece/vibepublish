@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- MAX native Copy takes its stable row snapshot after the existing scroll reveals lazy attachments, retaining exact native identity and content checks.
+
+- Preserve original observation-only recovery for dispatched MAX terminal refusals after the lifecycle state change; the same attempt stays fenced against another provider effect.
+
+- MAX cancellation retains causal removal and one fresh native absence read; removes the duplicate verification pass that exhausted a live command after its single Delete.
+
 - MAX rich composer refusals log only bounded lengths and the first differing entity span before teardown; preserve validation and omit text, URLs, DOM and session data.
 
 - MAX reads expose observed attachment count/order through existing scoped item media positions, without downloads, public CDN URLs or fabricated byte evidence.

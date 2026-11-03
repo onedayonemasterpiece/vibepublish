@@ -31,7 +31,8 @@ def admit(app, actor, args):
             if change.get('attempt_id') and not any(c['id'] == change['attempt_id'] for c in children):
                 raise DomainError('recovery_operation_mismatch')
             from . import vk_allocation_recovery
-            unknown = [c for c in children if c['state'] == 'outcome_unknown' and c['dispatched']]
+            unknown = [c for c in children if c['dispatched'] and (c['state'] == 'outcome_unknown'
+                       or c['provider'] == 'max' and c['state'] == 'blocked' and c['observed'] == 'unknown')]
             pending = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id WHERE a.operation_id=? AND r.finalize_state='pending'", (op['id'],)).fetchone()
             if op['work_state'] == 'done' and not unknown and not pending:
                 if not children or not all(c['state'] in ('verified', 'scheduled', 'cancelled')

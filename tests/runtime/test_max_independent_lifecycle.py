@@ -83,3 +83,15 @@ async def test_max_lost_receipt_finishes_without_global_quarantine_or_duplicate(
     assert replay['operation_id'] == first['operation_id']
     assert provider.count('effect') == 2
     assert profile.joinpath('.vibepublish-uncertain').exists()
+
+    if not fresh_receipt:
+        provider.lost = False
+        observed = await app.call(actor, 'vibepublish_publication_update', {
+            'publication_id': first['resource_id'], 'expected_revision': 1,
+            'change': {'kind': 'reconcile', 'operation_id': first['operation_id']},
+            'request_key': 'observe-original-after-terminal-refusal'})
+        assert observed.get('operation_id') == first['operation_id'], observed
+        assert not observed['operation_complete'], observed
+        await worker.run_once(operation_id=first['operation_id'])
+        assert store.receipt(actor, first['operation_id'])['state'] == 'verified'
+        assert provider.count('effect') == 2

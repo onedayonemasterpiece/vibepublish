@@ -405,18 +405,17 @@ async def cancelled_item(driver,state):
     if (original.get('id')!=state['existing_id'] or original.get('target')!=state['target']
             or original.get('scheduled_at')!=state['old_scheduled_at']):
         raise MaxBlocked('native_cancel_binding_changed')
-    for _ in range(2):
-        async with QueueObserver(driver.page,state['target'],driver.origin,driver.evidence_pages) as observer:
-            await driver._account()
-            await observe('navigation', driver.page.goto(driver.origin+'/'+state['target'],wait_until='domcontentloaded'))
-            main=await driver._scope(state['target'])
-            entry=main.get_by_role('button',name='Открыть отложенные сообщения',exact=True)
-            if await entry.count():
-                natives=await open_queue(driver,state['target'],observer)
-                if any(n['id']==state['existing_id'] for n in natives):raise MaxBlocked('native_cancel_item_still_present')
-            # A last-item deletion removes the queue entry. The persisted causal
-            # removal, not this empty UI alone, proves cancellation vs publication.
-            await driver._account()
+    async with QueueObserver(driver.page,state['target'],driver.origin,driver.evidence_pages) as observer:
+        await driver._account()
+        await observe('navigation', driver.page.goto(driver.origin+'/'+state['target'],wait_until='domcontentloaded'))
+        main=await driver._scope(state['target'])
+        entry=main.get_by_role('button',name='Открыть отложенные сообщения',exact=True)
+        if await entry.count():
+            natives=await open_queue(driver,state['target'],observer)
+            if any(n['id']==state['existing_id'] for n in natives):raise MaxBlocked('native_cancel_item_still_present')
+        # A last-item deletion removes the queue entry. The persisted causal
+        # removal, not this empty UI alone, proves cancellation vs publication.
+        await driver._account()
     return dict(original,observed_at=datetime.now(timezone.utc).isoformat().replace('+00:00','Z'))
 
 
