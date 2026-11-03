@@ -8,6 +8,9 @@
 
 - MAX cancellation retains causal removal and one fresh native absence read; removes the duplicate verification pass that exhausted a live command after its single Delete.
 
+- Fix Prussia Online DjVu source ingestion returning HTTP 406: IIS serves `image/x.djvu` and rejects an Accept header limited to `image/vnd.djvu`. Advertise both MIME variants while retaining exact owner/topic permissions, pinned HTTPS, original SHA integrity and existing private Telegram DOCUMENT delivery. Live provider readback remains required.
+
+
 - MAX rich composer refusals log only bounded lengths and the first differing entity span before teardown; preserve validation and omit text, URLs, DOM and session data.
 
 - MAX reads expose observed attachment count/order through existing scoped item media positions, without downloads, public CDN URLs or fabricated byte evidence.

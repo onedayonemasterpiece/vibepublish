@@ -66,7 +66,7 @@ async def fetch_public_document(url: str, mime: str) -> PublicDocument:
         async with aiohttp.ClientSession(
             connector=connector, timeout=timeout, trust_env=False,
             auto_decompress=False, headers={
-                "Accept": "application/pdf,image/vnd.djvu,application/octet-stream",
+                "Accept": "application/pdf,image/vnd.djvu,image/x.djvu,application/octet-stream",
                 "User-Agent": "VibePublish/1.7 private-original-document-ingress"
             }) as session:
             async with session.get(url, allow_redirects=False) as response:
