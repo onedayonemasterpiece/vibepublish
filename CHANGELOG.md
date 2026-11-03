@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX reads expose observed attachment count/order through existing scoped item media positions, without downloads, public CDN URLs or fabricated byte evidence.
+
 - MAX test-group native cancellation: match the observed confirmation heading with its question mark; retain the single guarded deletion and native removal receipt.
 
 - MAX: accept existing native-only media evidence in the public receipt schema so successful photo publication/scheduling status remains readable without media downloads.

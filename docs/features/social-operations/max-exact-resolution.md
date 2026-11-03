@@ -186,3 +186,17 @@ single trusted deletion, native row guard, durable before-effect fence and
 removal/readback proof are unchanged. The channel heading is unchanged.
 Replay tests use the actual group title and retain one-effect and changed-row
 refusal assertions. Live acceptance must cancel the same scheduled test object.
+
+## Native attachment references in MAX reads, 2026-11-03
+
+Status: **Not confirmed by user**. Normal exact photo and album reads omitted media
+when native attachment references exist but downloaded-byte evidence does not.
+MAX item/feed/queue reads must expose the observed ordered attachment slots
+through the existing media/source=existing/position schema, without downloads,
+new assets or a byte-equality claim. The enclosing scoped item ref identifies
+the native object; role=auto does not guess a media type from a signed URL.
+
+The projection now uses those existing slot references; the same source binding
+and private native snapshot remain authoritative. The distinguishing one/two
+attachment test fails without this projection; live exact reads must confirm
+the observed counts after deployment.
