@@ -1164,7 +1164,7 @@ class Application:
                         media_item.update(width=asset['width'], height=asset['height'])
                     item['media'].append(media_item)
             item['media_evidence'] = evidence
-        elif binding['provider'] == 'max' and remote.get('provider_media'):
+        elif remote.get('media_check') == 'provider_identity_only' and remote.get('provider_media'):
             item['media'] = [{'source': {'kind': 'existing', 'position': i}, 'role': 'auto'}
                              for i in range(len(remote['provider_media']))]
         elif remote.get('media_check', '').startswith('media_download_unavailable:'):
