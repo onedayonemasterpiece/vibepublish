@@ -84,7 +84,7 @@ async def test_standard_factory_owns_session_and_exact_connection(writer,monkeyp
     assert calls[0]['explicit_live'] is True and calls[0]['live_writes'] is True and calls[-1]=='closed'
 
 
-async def test_image_bridge_binds_native_downloads_and_reconciles_without_resend(writer):
+async def test_image_bridge_binds_native_downloads_and_reconciles_without_resend(writer, monkeypatch):
     import base64
     import hashlib
     from adapters.port import Asset
@@ -93,17 +93,17 @@ async def test_image_bridge_binds_native_downloads_and_reconciles_without_resend
     adapter=MaxAdapter(d,connection_id='max')
     data=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
     asset=Asset('asset',hashlib.sha256(data).hexdigest(),'image/png',len(data),data=data)
+    from unittest.mock import AsyncMock
+    download = AsyncMock(side_effect=AssertionError('Publication must not download native media'))
+    monkeypatch.setattr(d, '_download_media', download, raising=False)
     request=ProviderRequest('op','attempt','plan','max','max_web','VIBEPUBLISH_MAX_PROFILE',
         'destination','-101','publish','post',json.dumps({'text':TEXT}),(asset,),None,time.time()+300)
     observed=await adapter.execute(await adapter.prepare(request,h),h)
     item=observed.items[0]
-    assert item.provider_media==() and len(item.observed_media)==1
-    assert item.media_hashes==(asset.sha256,) and item.media_check=='download_binding'
+    download.assert_not_awaited()
+    assert len(item.provider_media)==1 and item.observed_media==()
+    assert item.media_hashes==(asset.sha256,) and item.media_check=='provider_identity_only'
     latest=state['checkpoints'][-1][1]
-    binding=latest['driver']['download_binding']
-    assert binding['native_id']==item.native_id
-    assert binding['source_hashes']==[asset.sha256]
-    assert binding['observed_media']==[asdict(value) for value in item.observed_media]
     recovered=await adapter.reconcile(request,json.dumps(latest),h)
     assert recovered.items[0].observed_media==item.observed_media and len(effects(state))==1
     assert d.lane.marker.exists()
@@ -126,9 +126,9 @@ async def test_video_bridge_downloads_exact_native_tile_not_nested_controls(writ
         'destination','-101','publish','post',json.dumps({'text':TEXT}),(asset,),None,time.time()+300)
     observed=await adapter.execute(await adapter.prepare(request,h),h)
     item=observed.items[0]
-    assert len(effects(state))==1 and item.provider_media==()
-    assert len(item.observed_media)==1 and item.observed_media[0].mime=='video/mp4'
-    assert item.media_hashes==(asset.sha256,) and item.media_check=='download_binding'
+    assert len(effects(state))==1 and len(item.provider_media)==1
+    assert item.observed_media==()
+    assert item.media_hashes==(asset.sha256,) and item.media_check=='provider_identity_only'
     latest=state['checkpoints'][-1][1]
     recovered=await adapter.reconcile(request,json.dumps(latest),h)
     assert recovered.items[0].observed_media==item.observed_media and len(effects(state))==1

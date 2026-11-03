@@ -886,60 +886,6 @@ class RealMaxDriver:
                 except Exception:pass
             self._busy=False
 
-    @observed('media_download')
-    async def _download_media(self, row, target, count, *, namespace='feed'):
-        """Actual UI downloads, not rotating CDN URLs or invented native IDs."""
-        import hashlib
-        import io
-        from pathlib import Path
-        from PIL import Image
-        result=[]
-        for slot in range(count):
-            await self._scope(target,namespace);await self.page.bring_to_front()
-            tiles=row.locator('[aria-label="Прикрепленные фото"] > button')
-            await expect(tiles).to_have_count(count)
-            tile=tiles.nth(slot)
-            video=await tile.locator('video').count()==1
-            if video:
-                # Observed nested player controls intercept centre clicks. Native
-                # keyboard activation opens this exact outer media tile once.
-                await tile.press('Enter')
-            else:await tile.click()
-            dialog=self.page.get_by_role('dialog')
-            await expect(dialog).to_have_count(1)
-            download=None
-            try:
-                async with self.page.expect_download(timeout=self.timeout*1000) as pending:
-                    await dialog.get_by_role('button',name='Скачать видео' if video else 'Скачать',exact=True).click()
-                download=await pending.value
-                if await download.failure():raise MaxBlocked('media_download_failed')
-                path=await download.path()
-                with Path(path).open('rb') as stream:data=stream.read(20*1024*1024+1)
-                if not data or len(data)>20*1024*1024:raise MaxBlocked('media_download_size')
-                if video:
-                    from social_operations.video_assets import verify_video
-                    await asyncio.to_thread(verify_video,data,'video/mp4',artifact_root=Path(path).parent)
-                    mime='video/mp4'
-                else:
-                    with Image.open(io.BytesIO(data)) as image:
-                        mime={'PNG':'image/png','JPEG':'image/jpeg','WEBP':'image/webp'}.get(image.format)
-                        if not mime or image.width*image.height>25_000_000:raise MaxBlocked('media_download_format')
-                        image.verify()
-                result.append(dict(kind='download_sha256',slot=slot,sha256=hashlib.sha256(data).hexdigest(),mime=mime,size=len(data)))
-            finally:
-                # Preserve the primary download/crash failure, not a secondary
-                # TargetClosedError raised while cleaning up the same session.
-                import sys, logging
-                failing = sys.exc_info()[0] is not None
-                try:
-                    if download is not None:await download.delete()
-                    await dialog.get_by_role('button',name='Закрыть',exact=True).click()
-                except Exception as cleanup_error:
-                    logging.getLogger(__name__).warning('MAX media cleanup failed error_type=%s primary_failure=%s',type(cleanup_error).__name__,failing)
-                    if not failing:raise
-            await self._scope(target,namespace)
-        return result
-
     @observed('candidate_readback')
     async def _plain_candidate(self, target, text, row, *, media_count=0, native_history_id=None):
         await self._scope(target)
@@ -976,15 +922,9 @@ class RealMaxDriver:
             native_id=link_id_from_wire_id(native_history_id)
             reference=None
         if await content()!=media:raise MaxBlocked('candidate_changed_during_copy')
-        downloaded=await self._download_media(row,target,media_count) if media_count else []
-        await self._scope(target)
-        if media_count:
-            await content()
-            if native_history_id is None:
-                repeated,_=await self._copy_native_reference(row,target)
-                if repeated!=reference:raise MaxBlocked('media_post_reference_changed')
         return dict(id=native_id,url=reference,target=target,namespace='feed',text=text,
-            media=[],observed_media=downloaded,entities=media['entities'],scheduled_at=None,observed_at=datetime.now(timezone.utc).isoformat())
+            media=media['images']+media['videos'],observed_media=[],entities=media['entities'],
+            scheduled_at=None,observed_at=datetime.now(timezone.utc).isoformat())
 
     @observed('context_menu')
     async def _open_context_menu(self, control, *, non_link_text=False):
@@ -1300,8 +1240,6 @@ class RealMaxDriver:
                     if await content.evaluate(rich.TEXT_JS) != text:
                         raise MaxBlocked('recovery_content_changed')
                     first=await self._plain_candidate(target,text,row,media_count=state.get('media_slots',len(state['media'])))
-                    if state.get('observed_media') and first.get('observed_media',[])!=state['observed_media']:
-                        raise MaxBlocked('recovery_media_not_verified')
                     value,native_id=first['url'],first['id']
                     if value != reference:
                         raise MaxBlocked('recovery_native_reference_mismatch')
@@ -1322,7 +1260,7 @@ class RealMaxDriver:
                         raise MaxBlocked('recovery_native_reference_mismatch')
                     check_fuse()
                     observations.append(dict(id=native_id, url=reference, target=target,
-                        namespace='feed',text=text,entities=fresh.get('entities',[]),media=[],observed_media=fresh.get('observed_media',[]),scheduled_at=None,
+                        namespace='feed',text=text,entities=fresh.get('entities',[]),media=fresh['media'],observed_media=[],scheduled_at=None,
                         observed_at=datetime.now(timezone.utc).isoformat()))
                 return dict(item=observations[-1], observations=observations,
                     attempt_id=attempt, plan_digest=plan, observation_only=True,

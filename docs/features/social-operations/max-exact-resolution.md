@@ -2,6 +2,10 @@
 
 Status: **Not confirmed by user**. Implementation and offline verification do not establish live acceptance.
 
+## November 3 reliability correction
+
+Status: **Not confirmed by user**. The owner superseded the historical downloaded-SHA acceptance below: MAX delivery now uses fresh native identity, text/entities, attachment count and provider references. Post-dispatch observation and finalize do not reload expired input bytes or download provider media. Stored original checkpoints remain immutable. Temporary preflight errors retain the existing worker retry codes and bounded phase diagnostics. See the [current reliability requirements](README.md#max-reliability-repair--2026-11-03).
+
 ## Owner requirement, 2026-10-10
 
 An owner may resolve an explicitly supplied public MAX channel URL through the existing authenticated MAX product runtime and register a stable destination. Several exact channels may coexist. Resolve never publishes, joins, subscribes, searches message history, enumerates the account, imports credentials, or guesses a native ID.

@@ -158,7 +158,8 @@ class MaxAdapter:
             from .rich import QUALIFIED
             if any(e['type'] not in QUALIFIED for e in self._content(request)[1]):
                 raise DomainError('max_rich_recipe_not_qualified')
-        verify_assets(request, allow_video=self.live_enabled)
+        if check_time:
+            verify_assets(request, allow_video=self.live_enabled)
         if any(a.mime not in ({'image/png', 'image/jpeg', 'video/mp4'} if self.live_enabled else {'image/png', 'image/jpeg'}) for a in request.assets):
             raise DomainError('max_media_unsupported')
         if check_time:
@@ -270,29 +271,11 @@ class MaxAdapter:
                 raise OutcomeUnknown('max_native_replacement_unproven')
             replacement = NativeReplacement(request.existing.native_id, item.native_id,
                 request.existing.fingerprint, evidence)
-        # These SHA values describe the validated INPUT assets bound to observed
-        # upload IDs, never hashes calculated from transcoded provider bytes.
-        if getattr(item,'observed_media',()):
-            from adapters.native import bind_download_media
-            item=bind_download_media(request,item,binding=state['download_binding'],replacement=replacement)
-        else:
-            item = bind_media(request, item, state['media'])
+        item = bind_media(request, item, state['media'])
+        if self.live_enabled and item.provider_media:
+            item = replace(item, media_check='provider_identity_only')
         observed = 'reacted' if request.action=='react' else 'deleted' if request.action == 'delete' else 'cancelled' if request.action == 'cancel' else 'provider_scheduled' if item.namespace == 'scheduled' else 'edited' if request.action == 'edit' else 'published'
         return Observation(observed, (item,), replacement=replacement,forward_origin_matched=items[0].get('forward_origin_matched') is True)
-
-    @staticmethod
-    def _download_binding(request,state):
-        observed=state.get('observed_media',[])
-        if not observed:return state
-        source_hashes=[a.sha256 for a in request.assets]
-        if request.action=='publish' and state.get('source_hashes')!=source_hashes:
-            raise OutcomeUnknown('max_uploaded_source_digest_mismatch')
-        binding=dict(operation_id=request.operation_id,attempt_id=request.attempt_id,
-            plan_digest=request.plan_digest,native_target=request.native_target,
-            native_id=state.get('native_id') or state.get('existing_id'),
-            namespace='published' if state['kind']=='feed' else state['kind'],
-            source_hashes=source_hashes,observed_media=observed)
-        return dict(state,download_binding=binding)
 
     async def execute(self, prepared: Prepared, hooks: Hooks) -> Observation:
         if self.recovery_only:
@@ -310,7 +293,6 @@ class MaxAdapter:
                 state = json.loads(raw)
             if state is None:
                 raise DomainError('max_missing_prepare_checkpoint')
-            if self.live_enabled:state=self._download_binding(request,state)
             envelope = saved_checkpoint(request, driver=state)
             self._state(request, envelope)
             # Preserve the reconcile baseline even after observation and before
@@ -353,7 +335,6 @@ class MaxAdapter:
                     raise OutcomeUnknown('max_core_recovery_binding_mismatch')
                 result=await self.driver.reconcile(state)
                 state.update(native_id=result['item']['id'],recovery_reference=result['item']['url'],observed_media=result['item'].get('observed_media',[]))
-                state=self._download_binding(request,state)
                 await hooks.checkpoint('MAX_FORWARD_RECONCILED',saved_checkpoint(request,driver=state))
                 return self._observation(request,[result['item']],state)
             if state['kind']=='scheduled':
@@ -370,7 +351,7 @@ class MaxAdapter:
                         digest(original),'trusted_preinput_guard',canonical(evidence)))
                 try:result=await self.driver.reconcile(state)
                 except MaxBlocked as exc:raise OutcomeUnknown('max_'+str(exc)) from None
-                state=self._download_binding(request,result['state'])
+                state=result['state']
                 self._state(request,saved_checkpoint(request,driver=state))
                 await hooks.checkpoint('MAX_RECONCILED',saved_checkpoint(request,driver=state))
                 return self._observation(request,[result['item']],state)
@@ -394,7 +375,6 @@ class MaxAdapter:
                             'plan_digest':request.plan_digest}.items())):
                     raise OutcomeUnknown('max_original_upload_binding_required')
                 state=dict(state,media=result['item']['media'],observed_media=result['item'].get('observed_media',[]),native_id=result['item']['id'],media_slots=len(request.assets),source_hashes=[a.sha256 for a in request.assets],recovery_reference=reference)
-                state=self._download_binding(request,state)
                 await hooks.checkpoint('MAX_RECOVERY_MEDIA_BOUND',saved_checkpoint(request,driver=state))
             return self._observation(request, [result['item']], state)
         if self.recovery_only:
@@ -478,10 +458,6 @@ class MaxAdapter:
             if isinstance(original, str): original = json.loads(original)
             original_state = self._state(request, json.dumps(original))
             expected_reference = original_state.get('recovery_reference') or admitted.get('native_reference')
-            if original_state.get('observed_media') and remote.get('observed_media',[]) != original_state['observed_media']:
-                raise OutcomeUnknown('max_terminal_download_mismatch')
-            if all(x is not None for x in original_state['media']) and remote.get('provider_media',[]) != original_state['media']:
-                raise OutcomeUnknown('max_terminal_media_mismatch')
         if not self.recovery_only and request.action=='forward':
             from .wire import published_wire_id
             committed=envelope.get('committed_observation',{})

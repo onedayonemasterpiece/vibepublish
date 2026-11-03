@@ -479,7 +479,7 @@ async def test_observed_image_chooser_bound_before_one_send(writer):
     data=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
     result=await d.submit_plain_candidate(target='-101',text=TEXT,attempt_id='attempt',plan_digest='plan',hooks=h,
         media=(dict(name='0.png',mimeType='image/png',buffer=data),))
-    assert result['item']['media']==[] and len(result['item']['observed_media'])==1 and len(effects(state))==1
+    assert len(result['item']['media'])==1 and result['item']['observed_media']==[] and len(effects(state))==1
     assert state['checkpoints'][0][1]['upload_previews'][0]['name']=='0.png'
     assert state['checkpoints'][-1][1]['observed_media']==result['item']['observed_media']
 
@@ -498,7 +498,7 @@ async def test_exact_image_read_waits_for_lazy_tile_image(writer):
         media=['https://i.oneme.ru/replay/0.png'])]
     await page.add_init_script('window.REPLAY_LAZY_MEDIA=600;window.REPLAY_ESCAPE_LEAVES_CHAT=true')
     result=await d.read('-101',native_item='owned')
-    assert result[0]['id']=='owned' and len(result[0]['observed_media'])==1
+    assert result[0]['id']=='owned' and len(result[0]['media'])==1 and result[0]['observed_media']==[]
     assert page.url.endswith('/-101') and not effects(state)
 
 

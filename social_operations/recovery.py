@@ -58,7 +58,8 @@ def admit(app, actor, args):
                     db.execute('INSERT INTO attempt_recovery(attempt_id,plan_digest,original_checkpoint,hint,created) VALUES(?,?,?,?,?) ON CONFLICT(attempt_id) DO UPDATE SET hint=excluded.hint',
                                (child['id'], child['plan_digest'], child['checkpoint'], canonical(hint), store.clock()))
                     db.execute("UPDATE attempts SET state='running',stage='verifying' WHERE id=?", (child['id'],))
-                db.execute("UPDATE operations SET state='accepted',complete=0,work_state='ready',error=NULL WHERE id=?", (op['id'],))
+                deadline = (store.clock() + 90 if any(c['provider'] == 'max' and json.loads(c['plan'])['account_type'] == 'max_web' for c in unknown) else op['deadline'])
+                db.execute("UPDATE operations SET state='accepted',complete=0,work_state='ready',deadline=?,error=NULL WHERE id=?", (deadline, op['id']))
                 store.event(db, op['id'], 'verifying', 'started', 'Observation-only recovery admitted for the original dispatched intent')
             if key and not replay:
                 app._key(db, actor, key, intent_hash, op['id'])

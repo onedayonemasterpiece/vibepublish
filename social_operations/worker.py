@@ -58,6 +58,8 @@ class Worker:
         plan = json.loads(child['plan'])
         if op['action'] not in {'publish', 'publication_update'} or plan.get('workload') == 'media_store':
             return op['deadline']
+        if child['dispatched'] and plan['provider'] == 'max' and plan['account_type'] == 'max_web':
+            return op['deadline']
         when = plan.get('scheduled_at')
         return parse_time(when) - min_lead if when else op['created'] + 900
 
@@ -192,6 +194,9 @@ class Worker:
                         or 'publish' not in json.loads(source_binding['rights'])):
                     raise DomainError('source_access_revoked', next_action='reauthorize')
             for a in plan['assets']:
+                if child['dispatched'] and plan['provider'] == 'max' and plan['account_type'] == 'max_web':
+                    assets.append(Asset(**a))
+                    continue
                 if a.get('provider_ref'):
                     assets.append(Asset(**a))
                     continue
@@ -372,7 +377,8 @@ class Worker:
             child = dict(db.execute('SELECT * FROM attempts WHERE id=?', (child['id'],)).fetchone())
         plan = json.loads(child['plan'])
         ident = (self.saved_native_id(child) if child['dispatched'] and plan['action'] == 'publish'
-                 and plan.get('workload') != 'media_store' else None)
+                 and plan.get('workload') != 'media_store'
+                 and not (plan['provider'] == 'max' and plan['account_type'] == 'max_web') else None)
         if ident:
             try:
                 with self.store.connection() as db:
@@ -707,16 +713,6 @@ class Worker:
                 actual = max_entities(remote.text, json.loads(remote.entities_json))
                 if actual != max_entities(remote.text, expected):
                     raise OutcomeUnknown('entities_readback_mismatch')
-            if plan['provider'] == 'max' and plan['account_type'] == 'max_web':
-                from adapters.port import downloaded_media
-                existing = plan.get('existing') or {}
-                preserved = existing.get('observed_media', ())
-                source_hashes = tuple(a['sha256'] for a in plan['assets'])
-                if preserved and (not source_hashes or source_hashes == tuple(existing.get('media_hashes', ()))):
-                    if remote.observed_media != downloaded_media(preserved):
-                        raise OutcomeUnknown('download_media_lifecycle_changed')
-                if remote.observed_media and (remote.provider_media or remote.media_check != 'download_binding'):
-                    raise OutcomeUnknown('download_media_binding_missing')
             if tuple(remote.media_hashes) != tuple(a['sha256'] for a in plan['assets']):
                 raise OutcomeUnknown('media_readback_mismatch')
         if (observation.observed == 'provider_scheduled'
