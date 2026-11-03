@@ -152,3 +152,100 @@ async def test_repeated_key_with_changed_url_is_conflict_before_refetch(tmp_path
     assert denied["error"]["code"]=="idempotency_conflict"
     assert fetches==[URL]
     assert provider.effects==0
+
+def cached_schema_command(url=URL, sha=None, filename="Original Book.pdf", key="cached-owner-source-1"):
+    """The already-installed owner's MCP schema permits put/source.kind=url."""
+    return {
+        "command": {
+            "kind": "put", "to": "vault",
+            "thread_ref": "https://t.me/c/4379835477/5",
+            "content": {"text": ""},
+            "media": [{"source": {"kind": "url", "url": url},
+                       "role": "document", "caption": "", "alt_text": filename}],
+            "origin": {"system": "prussia_online",
+                       "ref": "https://prussia.online/books/example",
+                       "sha256": sha or hashlib.sha256(PDF).hexdigest()},
+        },
+        "request_key": key,
+    }
+
+
+@pytest.mark.asyncio
+async def test_cached_owner_mcp_put_url_shape_fetches_original_and_reuses_native_receipt(tmp_path):
+    from jsonschema import Draft202012Validator
+    store, owner, _asset, provider, _app, worker = runtime(tmp_path)
+    calls = []
+    async def fetch(url, mime):
+        calls.append((url, mime))
+        return PublicDocument(PDF, "application/pdf", url)
+    app = IngressApplication(store, document_fetcher=fetch)
+    arguments = cached_schema_command()
+    declared = next(t["inputSchema"] for t in app.tools(owner)
+                    if t["name"] == "vibepublish_media_store")
+    assert Draft202012Validator(declared).is_valid(arguments)
+    received = await app.call(owner, "vibepublish_media_store", arguments)
+    assert received.get("operation_id"), received
+    assert (await app.call(owner, "vibepublish_media_store", arguments))["operation_id"] == received["operation_id"]
+    assert calls == [(URL, "application/pdf")]
+    await worker.run_once()
+    result = store.receipt(owner, received["operation_id"])
+    assert result["state"] == "verified" and provider.effects == 1
+    listed = await app.call(owner, "vibepublish_media_store", {"command": {
+        "kind": "list", "to": "vault", "thread_ref": "https://t.me/c/4379835477/5"}})
+    assert any(item.get("origin", {}).get("sha256") == hashlib.sha256(PDF).hexdigest()
+               for item in listed.get("media_store_items", [])), listed
+    assert (await app.call(owner, "vibepublish_media_store", arguments))["operation_id"] == received["operation_id"]
+    assert len(calls) == 1
+    wrong = cached_schema_command(url="https://prussia.online/Data/Book/a/b/changed.pdf")
+    denied = await app.call(owner, "vibepublish_media_store", wrong)
+    assert denied["error"]["code"] == "idempotency_conflict"
+    assert len(calls) == 1 and provider.effects == 1
+
+
+@pytest.mark.asyncio
+async def test_cached_mcp_url_owner_guards_do_not_fetch_or_publish(tmp_path):
+    store, owner, _asset, provider, _app, _worker = runtime(tmp_path)
+    calls=[]
+    async def fetch(url, mime):
+        calls.append(url)
+        return PublicDocument(PDF, mime, url)
+    app = IngressApplication(store, document_fetcher=fetch)
+    variants = [
+        ({"to": "not-bound"}, "access_denied"),
+        ({"content": {"text": "must be blank"}}, "media_store_document_required"),
+        ({"media": [cached_schema_command()["command"]["media"][0]] * 2},
+         "media_store_document_required"),
+        ({"media": [{"source": {"kind": "url", "url": URL},
+                    "role": "image", "alt_text": "Original Book.pdf"}]},
+         "media_store_document_required"),
+        ({"origin": {"system": "prussia_online",
+                     "ref": "https://prussia.online/books/example"}},
+         "media_ingress_not_enabled"),
+    ]
+    for change, expected in variants:
+        args = cached_schema_command(key="blocked-cached-" + str(len(calls)) + "-" + repr(change)[:40])
+        args["command"].update(change)
+        result = await app.call(owner, "vibepublish_media_store", args)
+        assert result["error"]["code"] == expected, result
+        assert calls == [] and provider.effects == 0
+    foreign = cached_schema_command(
+        url="https://evil.example/Data/Book/a/b/source.pdf", key="cached-foreign")
+    denied = await app.call(owner, "vibepublish_media_store", foreign)
+    assert denied["error"]["code"] == "document_url_not_allowed"
+    not_owner = store.authenticate(store.create_principal("t", "scoped-client", scopes={"media.store"}))
+    rejected = await app.call(not_owner, "vibepublish_media_store",
+                              cached_schema_command(key="cached-nonowner-denied"))
+    assert rejected["error"]["code"] == "access_denied"
+    assert calls == [] and provider.effects == 0
+
+
+@pytest.mark.asyncio
+async def test_cached_owner_mcp_url_declared_sha_prevents_mismatched_original(tmp_path):
+    store, owner, _asset, provider, _app, _worker = runtime(tmp_path)
+    async def fetch(url,mime):
+        return PublicDocument(PDF, mime, url)
+    app=IngressApplication(store,document_fetcher=fetch)
+    bad=cached_schema_command(sha="0"*64,key="cached-integrity-negative")
+    result=await app.call(owner,"vibepublish_media_store",bad)
+    assert result["error"]["code"]=="asset_integrity"
+    assert provider.effects==0

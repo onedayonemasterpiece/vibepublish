@@ -581,6 +581,8 @@ class IngressApplication(Application):
             },
             "request_key": "vp-doc-put:" + internal,
         }
+        if command.get("origin") is not None:
+            payload["command"]["origin"] = command["origin"]
         result = await super().call(actor, "vibepublish_media_store", payload)
         if not result.get("operation_id"):
             return result
@@ -609,6 +611,33 @@ class IngressApplication(Application):
             prepared = self._rewrite_direct_thread(actor, name, arguments)
             if list(validator.iter_errors(prepared)):
                 return await super().call(actor, name, prepared)
+            if (name == "vibepublish_media_store"
+                    and prepared.get("command", {}).get("kind") == "put"):
+                cmd = prepared["command"]
+                media = cmd["media"]
+                if any(item["source"]["kind"] == "url" for item in media):
+                    # Compatible with an installed MCP client's pre-put_url
+                    # schema; this is the same owner-only original-import path.
+                    if (len(media) != 1 or media[0].get("role") != "document"
+                            or media[0].get("caption", "") != ""
+                            or cmd.get("content") != {"text": ""}):
+                        raise DomainError("media_store_document_required")
+                    origin = cmd.get("origin")
+                    if not origin or not origin.get("sha256"):
+                        raise DomainError("media_ingress_not_enabled")
+                    url = media[0]["source"]["url"]
+                    suffix = urlsplit(url).path.lower()
+                    mime = ("application/pdf" if suffix.endswith(".pdf") else
+                            "image/vnd.djvu" if suffix.endswith((".djvu", ".djv")) else None)
+                    if mime is None:
+                        raise DomainError("document_url_media_type")
+                    derived = {"command": {
+                        "kind": "put_url", "to": cmd["to"],
+                        "thread_ref": cmd["thread_ref"], "url": url,
+                        "mime": mime, "filename": media[0].get("alt_text", ""),
+                        "expected_sha256": origin["sha256"], "origin": origin,
+                    }, "request_key": prepared["request_key"]}
+                    return await self._import_media_store_document_url(actor, derived)
             if (name == "vibepublish_media_store"
                     and prepared.get("command", {}).get("kind") == "put_url"):
                 return await self._import_media_store_document_url(actor, prepared)

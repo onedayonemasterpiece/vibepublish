@@ -309,8 +309,54 @@ the existing receipt **before** network fetching, even after verified
 staging bytes were purged. The internal asset/put keys are also deterministic,
 so a lost response between stages does not publish another native message.
 Changing the URL, filename, destination or digest with the same key fails
-`idempotency_conflict`. Existing `put` with `source.kind=url` remains
-denied; ordinary publishing and all other media sources are unchanged.
+`idempotency_conflict`. Ordinary publishing and other media sources are unchanged.
+
+#### Cached ChatGPT MCP schema compatibility — 2026-11-03
+
+Status: **Not confirmed by user** until live owner MCP and Telegram readback.
+ChatGPT's installed personal app 1.0.1 can keep a cached tool schema that
+recognizes `media_store.put` but not the new `put_url` command, even in a new
+conversation. Rather than call a local service script or require a new app,
+the server accepts the *existing schema-valid* `put` shape **only** for
+one exact Prussia Online PDF/DjVu original, from the authenticated current
+owner, to an existing authorized private Telegram topic.
+
+```json
+{
+  "command": {
+    "kind": "put",
+    "to": "regional_knowledge_archive",
+    "thread_ref": "https://t.me/c/4368830579/2",
+    "content": {"text": ""},
+    "media": [{
+      "source": {"kind": "url", "url": "https://prussia.online/Data/Book/example/book/source.pdf"},
+      "role": "document",
+      "caption": "",
+      "alt_text": "Source Book.pdf"
+    }],
+    "origin": {
+      "system": "prussia_online",
+      "ref": "https://prussia.online/books/example",
+      "sha256": "<actual lowercase 64-character original SHA-256>"
+    }
+  },
+  "request_key": "stable-owner-original-book-key"
+}
+```
+
+The `origin.sha256` is **required** for this compatibility form and
+is verified against the fetched original before any Telegram dispatch;
+the `origin` provenance is also preserved in the normal media-store
+result. The URL path determines PDF/DjVu MIME and must pass the same
+Prussia Online HTTPS host/path and PDF/DjVu checks as `put_url`.
+Only one explicit DOCUMENT, empty text/caption, safe `alt_text` filename,
+owner authority and matching target/topic are permitted. An unauthorized
+service principal, a non-Prussia URL, image, album, mixed media, missing
+SHA or nonempty caption cannot use this path. Those historical `put`
+URL requests continue to refuse. The existing internal immutable asset/
+native put keys and outward idempotent receipt are reused without a
+second delivery mechanism or queue.
+
 
 ### Large PDF/DjVu Telegram upload budget — 2026-11-02
 

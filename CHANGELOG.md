@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Support the installed ChatGPT Vibe Publish owner's cached `media_store.put` tool schema for one trusted Prussia Online PDF/DjVu DOCUMENT URL with empty caption and mandatory `origin.sha256`, through the existing owner-only, exact-topic `put_url` importer. Reject other URLs/nonowners/mixed media, preserve origin provenance and original keyed native receipt. No new tool, service, token exposure, transport or queue; verified Telegram delivery still required for acceptance.
+
+
 - MAX normal feed and publication readback retain native identity and attachment references without post-dispatch downloads or transcoded-photo hash comparison.
 
 - MAX original-attempt observation uses frozen media metadata after input expiry and the existing 90-second recovery budget; an old checkpoint ID cannot synthesize fresh native success or skip finalization.
