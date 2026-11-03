@@ -5,6 +5,8 @@
 - MAX: remove profile-wide uncertain-marker blocking; preserve browser ownership and durable at-most-once dispatch. Lost receipts use existing bounded observation instead of ending early from a stale ID; independent commands keep moving without manual unlock.
 
 - MAX: accept signed CDN URL rotation across native queue readbacks while retaining native intent and attachment-count checks.
+- Support the installed ChatGPT Vibe Publish owner's cached `media_store.put` tool schema for one trusted Prussia Online PDF/DjVu DOCUMENT URL with empty caption and mandatory `origin.sha256`, through the existing owner-only, exact-topic `put_url` importer. Reject other URLs/nonowners/mixed media, preserve origin provenance and original keyed native receipt. No new tool, service, token exposure, transport or queue; verified Telegram delivery still required for acceptance.
+
 
 - MAX normal feed and publication readback retain native identity and attachment references without post-dispatch downloads or transcoded-photo hash comparison.
 

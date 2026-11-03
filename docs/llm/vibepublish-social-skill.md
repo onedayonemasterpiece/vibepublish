@@ -56,8 +56,17 @@ never fabricate local asset IDs, and do not call ordinary `publish`.
 Keep the returned operation ID; wait for `verified` and then confirm
 the exact document/hash in scoped `media_store.list`. Reuse the same
 request key and input after an uncertain response, never create a duplicate.
-The URL route is restricted to Prussia Online originals; existing binary
-`put` still requires a previously verified asset.
+The URL route is restricted to Prussia Online originals. **If the connected
+ChatGPT client still rejects `put_url` at schema validation**, use the
+same existing `vibepublish_media_store` tool with `command.kind="put"`,
+a single `media:[{"source":{"kind":"url","url":"HTTPS_PRUSSIA_ONLINE_DATA_BOOK_SOURCE"},"role":"document","caption":"","alt_text":"SAFE_FILENAME.pdf"}]`,
+`content:{"text":""}`, the exact bound `to`/`thread_ref`, and
+`origin:{"system":"prussia_online","ref":"https://prussia.online/books/SOURCE_BOOK","sha256":"64-CHAR_VERIFIED_SOURCE_SHA"}`.
+Reuse one stable `request_key`. This is a server-supported owner-only
+compatibility route through the **same** secure exact PDF/DjVu importer.
+`origin.sha256` is mandatory and checked before provider dispatch;
+non-Prussia links and any other legacy `put` URLs remain denied.
+Never route via local scripts, tokens or a general publish command.
 Do not use provider credentials/cookies as tool arguments or delete and
 recreate posts to evade provider errors.
 
