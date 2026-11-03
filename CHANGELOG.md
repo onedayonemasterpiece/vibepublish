@@ -2,7 +2,14 @@
 
 ## [Unreleased]
 
+- MAX native Copy takes its stable row snapshot after the existing scroll reveals lazy attachments, retaining exact native identity and content checks.
+
+- Preserve original observation-only recovery for dispatched MAX terminal refusals after the lifecycle state change; the same attempt stays fenced against another provider effect.
+
+- MAX cancellation retains causal removal and one fresh native absence read; removes the duplicate verification pass that exhausted a live command after its single Delete.
+
 - Fix Prussia Online DjVu source ingestion returning HTTP 406: IIS serves `image/x.djvu` and rejects an Accept header limited to `image/vnd.djvu`. Advertise both MIME variants while retaining exact owner/topic permissions, pinned HTTPS, original SHA integrity and existing private Telegram DOCUMENT delivery. Live provider readback remains required.
+
 
 - MAX rich composer refusals log only bounded lengths and the first differing entity span before teardown; preserve validation and omit text, URLs, DOM and session data.
 

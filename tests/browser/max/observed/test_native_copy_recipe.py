@@ -275,3 +275,24 @@ async def test_rejected_reference_waits_for_fixture_copy_acknowledgement(writer,
             verification.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await verification
+
+
+async def test_scroll_reveals_native_attachment_before_menu_snapshot(writer, monkeypatch):
+    from playwright.async_api import ElementHandle
+    driver, page, _, _ = writer
+    row = await exact_row(writer, plain=True)
+    scroll = ElementHandle.scroll_into_view_if_needed
+    async def reveal(handle, *args, **kwargs):
+        await scroll(handle, *args, **kwargs)
+        await handle.evaluate('''caption=>{
+            const row=caption.closest('.messageWrapper');
+            if(row.querySelector('[aria-label="Прикрепленные фото"]'))return;
+            const grid=document.createElement('div');grid.setAttribute('aria-label','Прикрепленные фото');
+            grid.innerHTML='<button><img src="https://i.oneme.ru/replay/lazy.png"></button>';
+            row.append(grid);
+        }''')
+    monkeypatch.setattr(ElementHandle, 'scroll_into_view_if_needed', reveal)
+    assert await driver._copy_native_reference(row, TARGET) == (
+        'https://max.ru/c/-202/provider-item', 'provider-item')
+    assert await row.locator('[aria-label="Прикрепленные фото"] img').count() == 1
+    await assert_observation_only(writer, copies=1)

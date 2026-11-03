@@ -71,3 +71,25 @@ async def test_native_schedule_context_menu_is_target_surface_specific(writer,po
     await queue.open_schedule_dialog(d,'-101',main)
     assert await page.evaluate('window.selectedScheduleLabel')==label
     assert not [e for e in state['events'] if e['kind']=='effect']
+
+
+async def test_cancel_receipt_uses_causal_removal_and_one_fresh_absence(writer, monkeypatch):
+    d, page, state, _ = writer
+    await d.open('-101')
+    original = dict(id='scheduled-own', target='-101', scheduled_at='2026-11-06T21:30:00Z')
+    saved = dict(existing_id=original['id'], target=original['target'],
+                 old_scheduled_at=original['scheduled_at'], item=original,
+                 transition=dict(clicks=1, removed=True, blocked=False))
+    navigate = page.goto
+    fresh = []
+    async def read_after_removal(*args, **kwargs):
+        if fresh:
+            raise MaxBlocked('account_ui_unavailable_after_verified_absence')
+        result = await navigate(*args, **kwargs)
+        await page.get_by_role('button', name='Открыть отложенные сообщения', exact=True).evaluate_all('(es)=>es.forEach(e=>e.remove())')
+        fresh.append(True)
+        return result
+    monkeypatch.setattr(page, 'goto', read_after_removal)
+    result = await queue.cancelled_item(d, saved)
+    assert result['id'] == original['id'] and result['observed_at']
+    assert fresh and not [e for e in state['events'] if e['kind'] == 'effect']

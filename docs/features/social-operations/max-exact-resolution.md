@@ -215,3 +215,15 @@ deferred until the actual normal-path difference is observed.
 The existing refusal now emits that bounded comparison JSON in the worker
 journal at the same point. It neither waits nor retries and preserves the
 original MaxBlocked code; the source test ensures text/URLs cannot appear.
+
+
+## Cancellation verification after causal removal, 2026-11-03
+
+Status: **Not confirmed by user**. The live cancel persisted exactly one trusted Delete with the exact row removed, then completed a fresh scoped absence read. A duplicate identical verification pass exhausted the existing driver budget and the fixed command horizon; it did not strengthen the causal receipt. Cancellation uses the existing causal removal plus one fresh native absence read, retaining account checks before and after that read and every original binding/identity guard. Absence without the trusted removal remains insufficient. No timeout, retry, state or manual repair path is added. The original live attempt still requires genuine observation; its persisted terminal refusal is not relabelled as success.
+
+The existing original-operation observation endpoint also accepts MAX terminal refusals whose durable dispatched attempt has no observation. It uses the same operation/attempt, frozen checkpoint, authorization and observation-only worker branch; it never re-enters Send/Delete. This preserves compatibility of the existing endpoint after MAX stopped using the terminal outcome_unknown state. It is not a new normal-flow retry or a substitute for the single-pass cancellation fix.
+
+
+## Native Copy baseline after layout, 2026-11-03
+
+Status: **Not confirmed by user**. Repeated normal photo reads failed context_menu_subject_changed. A content-free live capture showed the same connected row retained its text/entities/time while the existing scroll revealed its photo (media DOM0 to1). The existing scroll now precedes the baseline snapshot. Native reference and the complete post-scroll snapshot remain checked unchanged; no wait, retry, media download or weaker identity comparison is added.

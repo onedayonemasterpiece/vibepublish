@@ -940,6 +940,8 @@ class RealMaxDriver:
                 time:row?.querySelector('.meta .text')?.textContent.trim() || null,
                 media:[...media].map(x=>({src:x.currentSrc||x.src,name:x.alt||null}))};
         }"""
+        if non_link_text:
+            await handle.scroll_into_view_if_needed(timeout=self.timeout*1000)
         snapshot = await handle.evaluate(snapshot_js)
         for attempt in range(2):
             current = await handle.evaluate(snapshot_js)
@@ -951,7 +953,6 @@ class RealMaxDriver:
                 # A caption centre may be a named link, which opens a link menu
                 # instead of the message menu. Use only actual non-link text
                 # geometry in this same stable caption/row; never a label fallback.
-                await handle.scroll_into_view_if_needed(timeout=self.timeout*1000)
                 point = await handle.evaluate(MESSAGE_MENU_POINT_JS)
                 current = await handle.evaluate(snapshot_js)
                 if self.page.url != route or not current['connected'] or current != snapshot:
