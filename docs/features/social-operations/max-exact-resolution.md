@@ -14,6 +14,10 @@ The authoritative at-most-once boundary is the existing durable worker before_ef
 
 This owner decision supersedes historical quarantine/release instructions below for the current MAX publishing path. Live acceptance remains unconfirmed.
 
+## Daily rich editor recurrence, 2026-11-04
+
+Status: **Not confirmed by user**. Issue 328 passed account, target and image-upload checks but rich composition failed before dispatch. Production evidence includes an incorrect link span with equal text/entity counts, then an assertion at link-dialog opening. A preparation-only reproduction captured dialog count 0 on entity 4 (offset 280, length 8), with the correct DOM range and active editor. A browser regression separately reproduces deferred focus restoration and return before the native selection event is consumed. The existing selection helper completes focus, waits for the native document selectionchange task, then retains its exact semantic range check before one keyboard action per entity. Input-element selection events cannot substitute for that document event. Strict final text/entities validation remains. The corrected preparation-only live run matched the same frozen 300 characters and all 6 entities, cleaned its own draft, and performed no Send; daily delivery still requires release and a genuine provider receipt. See the [Selection API event contract](https://w3c.github.io/selection-api/#selectionchange-event). Content-free failure diagnostics retain phase, span, dialog count and active selection; no sleeps, key retries, synthetic input events or editor internals are used.
+
 ## Owner requirement, 2026-10-10
 
 An owner may resolve an explicitly supplied public MAX channel URL through the existing authenticated MAX product runtime and register a stable destination. Several exact channels may coexist. Resolve never publishes, joins, subscribes, searches message history, enumerates the account, imports credentials, or guesses a native ID.
