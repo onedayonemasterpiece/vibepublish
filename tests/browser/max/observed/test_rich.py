@@ -106,3 +106,60 @@ async def test_rich_mismatch_diagnostic_keeps_text_and_urls_private(writer, monk
     assert details['observed_span'] == {'type': 'text_link', 'offset': 0, 'length': 7}
     assert all(value not in record.message for value in (
         'private-intent', 'private-observed', 'private.example', '/secret'))
+
+async def test_entity_range_survives_editor_focus_selection_restoration(writer):
+    _, page, _, _ = writer
+    await page.set_content('<button>Outside</button><div role="textbox" contenteditable><strong>Heading</strong> tour label</div>')
+    editor = page.get_by_role('textbox')
+    # A rendered editor can restore its cached selection when focus returns from
+    # a link dialog. That focus work must finish before a new entity is selected.
+    await editor.evaluate("""root => {
+        const saved = document.createRange();
+        saved.selectNodeContents(root.querySelector('strong'));
+        root.addEventListener('focus', () => queueMicrotask(() => {
+            const selection = getSelection();
+            selection.removeAllRanges();
+            selection.addRange(saved.cloneRange());
+        }));
+    }""")
+    await page.get_by_role('button', name='Outside').focus()
+    class EventObservedComposer:
+        async def focus(self):
+            await editor.focus()
+        async def evaluate(self, script, value):
+            # Observe the native event at helper completion, before another
+            # browser task/keyboard action can accidentally hide the race.
+            wrapped = '''async(root, value) => {
+                let consumed = false;
+                const consume = () => consumed = true;
+                document.addEventListener('selectionchange', consume);
+                try {
+                    const result = await (''' + script + ''')(root, value);
+                    root.dataset.selectionConsumed = String(consumed);
+                    return result;
+                } finally { document.removeEventListener('selectionchange', consume); }
+            }'''
+            return await editor.evaluate(wrapped, value)
+    await select_range(EventObservedComposer(), 'Heading tour label', 8, 10)
+    assert await page.evaluate('getSelection().toString()') == 'tour label'
+    assert await editor.get_attribute('data-selection-consumed') == 'true'
+
+async def test_link_assertion_diagnostic_preserves_original_and_privacy(writer, monkeypatch, caplog):
+    import json
+    from adapters.max import rich
+    _, page, _, _ = writer
+    await page.set_content('<div role="textbox" contenteditable></div>')
+    original = AssertionError("Locator expected count 1; actual 0")
+    class Expected:
+        async def to_have_count(self, _):
+            raise original
+    monkeypatch.setattr(rich, 'expect', lambda _: Expected())
+    with pytest.raises(AssertionError) as caught:
+        await rich.fill(page, page.get_by_role('textbox'), 'private-label',
+                        [dict(type='text_link', offset=0, length=13, url='https://private.example/secret')])
+    assert caught.value is original
+    record = next(r for r in caplog.records if r.message.startswith('MAX rich link assertion '))
+    details = json.loads(record.message.removeprefix('MAX rich link assertion '))
+    assert details['phase'] == 'open' and details['dialog_count'] == 0
+    assert details['entity_index'] == 0 and details['selection_length'] == 13
+    assert all(s not in record.message for s in ('private-label', 'private.example', '/secret'))

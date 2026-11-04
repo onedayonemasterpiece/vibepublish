@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX completes editor focus and the native document selectionchange event before rich keyboard actions; failed link-dialog assertions retain content-free phase and selection evidence.
+
 - MAX keeps dispatched attempts in automatic read-only observation across the original mutation deadline, using existing worker backoff; temporary readback failures no longer require consumer reconciliation or permit another Send.
 
 - MAX exact photo reads wait for attachment readiness through the existing native candidate reader; remove the premature Copy Link that mistook lazy image hydration for a changed row.

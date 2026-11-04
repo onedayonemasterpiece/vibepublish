@@ -125,9 +125,10 @@ def _key(value):
 
 
 async def select_range(composer, text, offset, length):
-    ok = await composer.evaluate('(root,x)=>{' + DOM_HELPERS + r"""
+    await composer.focus()
+    ok = await composer.evaluate('async(root,x)=>{' + DOM_HELPERS + r"""
         if(semanticText(root)!==x.text||!root.isConnected)return false;
-        root.focus();const tokens=[];let position=0;
+        const tokens=[];let position=0;
         const visit=n=>{
             const emoji=emojiValue(n);
             if(emoji!==null){tokens.push({node:n,emoji:true,start:position,end:position+emoji.length});position+=emoji.length;return;}
@@ -143,7 +144,16 @@ async def select_range(composer, text, offset, length):
         };
         const start=point(x.offset,false),end=point(x.offset+x.length,true);if(!start||!end)return false;
         const range=document.createRange();range.setStart(...start);range.setEnd(...end);
-        const selection=getSelection();selection.removeAllRanges();selection.addRange(range);
+        const selection=getSelection();
+        const changed=new Promise(resolve=>{
+            const consume=event=>{
+                if(event.target!==document)return;
+                document.removeEventListener('selectionchange',consume);resolve();
+            };
+            document.addEventListener('selectionchange',consume);
+        });
+        selection.removeAllRanges();selection.addRange(range);
+        await changed;
         return selection.rangeCount===1&&semanticText(selection.getRangeAt(0).cloneContents())===x.text.slice(x.offset,x.offset+x.length);
     }""",dict(text=text,offset=offset,length=length))
     if not ok:
@@ -158,18 +168,42 @@ async def fill(page, composer, text, entities):
     # prevents edit mode from carrying the old span's format into new plain text.
     await composer.press('Control+a')
     await composer.press('Control+Backslash')
-    for entity in entities:
+    for entity_index,entity in enumerate(entities):
         await select_range(composer,text,entity['offset'],entity['length'])
         if entity['type'] in {'bold','italic'}:
             await page.keyboard.press('Control+b' if entity['type']=='bold' else 'Control+i')
         else:
-            await page.keyboard.press('Control+k')
-            dialog=page.get_by_role('dialog')
-            await expect(dialog).to_have_count(1)
-            await expect(dialog.get_by_text('Ссылка',exact=True)).to_have_count(1)
-            await dialog.get_by_placeholder('https://max.ru',exact=True).fill(entity['url'])
-            await dialog.get_by_role('button',name='Добавить',exact=True).click()
-            await expect(dialog).to_have_count(0)
+            phase='open'
+            try:
+                await page.keyboard.press('Control+k')
+                dialog=page.get_by_role('dialog')
+                await expect(dialog).to_have_count(1)
+                phase='title'
+                await expect(dialog.get_by_text('Ссылка',exact=True)).to_have_count(1)
+                await dialog.get_by_placeholder('https://max.ru',exact=True).fill(entity['url'])
+                await dialog.get_by_role('button',name='Добавить',exact=True).click()
+                phase='close'
+                await expect(dialog).to_have_count(0)
+            except AssertionError:
+                import json, logging
+                details={'phase':phase,'entity_index':entity_index,'entity':{k:entity[k] for k in ('type','offset','length')}}
+                try:
+                    details['dialog_count']=await page.get_by_role('dialog').count()
+                    details.update(await composer.evaluate('(root)=>{'+DOM_HELPERS+r"""
+                        const s=getSelection(),active=document.activeElement;
+                        let offset=null,length=null;
+                        if(s.rangeCount&&root.contains(s.anchorNode)&&root.contains(s.focusNode)){
+                            const r=s.getRangeAt(0),prefix=r.cloneRange();prefix.selectNodeContents(root);
+                            prefix.setEnd(r.startContainer,r.startOffset);
+                            offset=semanticText(prefix.cloneContents()).length;length=semanticText(r.cloneContents()).length;
+                        }
+                        return {active_tag:active?.tagName,active_role:active?.getAttribute('role'),
+                                selection_offset:offset,selection_length:length};
+                    }"""))
+                except Exception:
+                    pass  # Diagnostic failure must preserve the original assertion.
+                logging.getLogger(__name__).warning('MAX rich link assertion %s',json.dumps(details,separators=(',',':')))
+                raise
     value=await capture(composer)
     if value['text']!=text or not same_entities(value['entities'],entities):
         import json, logging
