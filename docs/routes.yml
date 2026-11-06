@@ -39,6 +39,7 @@ sections:
     events_bot_social_donor_map: docs/reference/events-bot-social-donor-map.md
     native_adapter_provenance: docs/reference/native-adapter-provenance.md
     story_carousel_sources: docs/reference/story-carousel/source-register.md
+    story_carousel_composition_review: docs/reference/story-carousel/composition-and-review.md
   backlog:
     index: docs/backlog/README.md
     historical_video_requirements: docs/backlog/requirements.md
@@ -61,6 +62,7 @@ features:
     research: docs/reports/story-carousel-research-2026-11-06.md
     references: docs/reference/story-carousel/source-register.md
     transition_atlas: docs/reference/story-carousel/transition-atlas.svg
+    composition_review: docs/reference/story-carousel/composition-and-review.md
     proposed_mcp_tool: vibepublish_carousel
     consultation: opus_pending_owner_forward
   media_store:

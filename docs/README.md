@@ -4,10 +4,14 @@
 
 [Story Carousel research](reports/story-carousel-research-2026-11-06.md) is the
 main entry point for seamless card storytelling, the reviewed Slack references,
-tutorials, typography, the seven-card monument case and the Opus consultation brief.
+tutorials, generated lettering and typesetting, the sketch-first workflow, shared
+SVG icon reuse, strong typography and metrics, model-led visual polishing, the
+seven-card monument case, the future dot media/E2E flow and the Opus consultation brief.
 The proposed persistent story and MCP contract live in
 [Story Carousel](features/story-carousel/README.md); source coverage and the
 original transition atlas live in [the reference register](reference/story-carousel/source-register.md).
+[Composition recipes and professional review](reference/story-carousel/composition-and-review.md)
+provide stage-specific advisory questions, observed evidence and local fixes.
 Status: **Draft / Not confirmed by user**. Runtime implementation: **Not done**.
 This documentation package does not change existing publication behavior.
 
