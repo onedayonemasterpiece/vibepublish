@@ -2,6 +2,10 @@
 
 Status: **Not confirmed by user**. Implementation and offline verification do not establish live acceptance.
 
+## Native channel feed-reference roundtrip, 2026-11-06
+
+Status: **Not confirmed by user**. A fresh ordinary channel feed ref failed exact reading with native_reference_scope_mismatch. Failure-only live metadata confirmed that Copy returned a public-handle URL with the correct native post slug, but the existing target had no separately verified public_url; the literal URL guard correctly refused it. Feed and exact channel reads now share the existing target-correlated HistoryObserver and wire-ID conversion, including the closing fresh candidate. They retain the exact requested native ID, account/target checks, full rich content and ordered provider-media references. Empty, ambiguous or unrelated native history cannot prove that item. The test-group Copy path and strict public URL parser remain unchanged; no handle mapping is inferred or persisted. Browser roundtrip and negative history cases passed; live acceptance follows the main release.
+
 ## Tall native album read, 2026-11-06
 
 Status: **Not confirmed by user**. A normal feed read exhausted its 90-second budget waiting for six provider images. A read-only capture proved the 1234-pixel row was visible through its caption while the entire media grid was above the viewport (bottom -19 pixels); all six native photo slots remained lazy placeholders. Scrolling the native attachment slots revealed all six actual provider image references. The existing candidate helper now scrolls its media container for media-bearing rows before the unchanged strict image/video count, provider-origin, text/entities and native-identity checks. It scrolls the row for plain text. No download, viewer opening, URL inference, added retry or budget increase is involved. A real-browser regression reproduces the offscreen placeholder grid and verifies all six ordered references, rich text, native ID and zero external effects. Live acceptance follows the main release.
