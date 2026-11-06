@@ -101,3 +101,49 @@ async def test_exact_read_returns_only_requested_native_object_without_download(
         assert len(result)==1 and result[0]['id']=='wanted' and result[0]['text']=='Exact wanted'
         assert result[0]['media']==[] and result[0]['observed_media']==[]
     assert not downloads and not [e for e in state['events'] if e['kind']=='effect']
+
+
+async def test_tall_album_reveals_native_media_before_readiness(writer):
+    """A visible long caption does not put its lazy photo grid in view."""
+    from adapters.max.wire import link_id_from_wire_id
+    d,page,state,_=writer
+    text='Album caption'
+    media=[f'https://i.oneme.ru/replay/album-{i}.png' for i in range(6)]
+    state['messages']=[dict(id='album',target='-101',text=text,
+                           html='<strong>Album</strong> caption',outgoing=True,media=media)]
+    await d.open('-101')
+    await page.evaluate("""()=>{
+        const main=document.querySelector('main');
+        main.style.cssText='height:500px;width:700px;overflow:auto';
+        const row=main.querySelector('.messageWrapper');
+        row.style.cssText='display:flex;flex-direction:column;height:1234px';
+        const media=row.querySelector('.media');
+        media.style.cssText='display:block;height:505px;flex-shrink:0;order:-1';
+        const grid=media.firstElementChild;
+        grid.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);height:100%';
+        const caption=row.querySelector('.bubbleContent');
+        caption.style.cssText='height:729px;flex-shrink:0';
+        const lazy=new IntersectionObserver(entries=>{
+            for(const entry of entries)if(entry.isIntersecting){
+                const tile=entry.target;
+                const image=document.createElement('img');image.src=tile.dataset.source;
+                tile.replaceChildren(image);lazy.unobserve(tile);
+            }
+        },{root:main});
+        for(const tile of grid.children){
+            tile.dataset.source=tile.querySelector('img').src;
+            const placeholder=document.createElement('div');placeholder.className='image-placeholder';
+            tile.replaceChildren(placeholder);lazy.observe(tile);
+        }
+        main.scrollTop=main.scrollHeight;
+    }""")
+    row=d._rows(page.locator('main'),text,outgoing=True)
+    assert await row.locator('[aria-label="Прикрепленные фото"] > button').count()==6
+    assert await row.locator('.media img').count()<6
+    d.timeout=2
+    item=await d._plain_candidate('-101',text,row,media_count=6,native_history_id='123456789')
+    assert item['id']==link_id_from_wire_id('123456789')
+    assert item['media']==media and item['text']==text
+    assert item['entities']==[dict(type='bold',offset=0,length=5)]
+    assert item['observed_media']==[]
+    assert not [e for e in state['events'] if e['kind'] in {'effect','copy'}]
