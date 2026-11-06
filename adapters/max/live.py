@@ -873,7 +873,7 @@ class RealMaxDriver:
         await self._scope(target)
         await expect(row).to_have_count(1)
         await self.page.bring_to_front()
-        await row.scroll_into_view_if_needed()
+        await (row.locator('.media') if media_count else row).scroll_into_view_if_needed()
         async def content():
             if (self.targets[target].policy not in {'scheduled_only', 'publish_channel'}
                     and 'messageWrapper--isOut' not in (await row.get_attribute('class') or '').split()

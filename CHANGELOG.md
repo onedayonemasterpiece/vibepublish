@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX native album reads reveal the attachment container before checking real provider media references, so a long visible caption cannot leave the photo grid offscreen until the read deadline.
+
 - MAX completes editor focus and the native document selectionchange event before rich keyboard actions; failed link-dialog assertions retain content-free phase and selection evidence.
 
 - MAX keeps dispatched attempts in automatic read-only observation across the original mutation deadline, using existing worker backoff; temporary readback failures no longer require consumer reconciliation or permit another Send.

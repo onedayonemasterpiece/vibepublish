@@ -2,6 +2,10 @@
 
 Status: **Not confirmed by user**. Implementation and offline verification do not establish live acceptance.
 
+## Tall native album read, 2026-11-06
+
+Status: **Not confirmed by user**. A normal feed read exhausted its 90-second budget waiting for six provider images. A read-only capture proved the 1234-pixel row was visible through its caption while the entire media grid was above the viewport (bottom -19 pixels); all six native photo slots remained lazy placeholders. Scrolling the native attachment slots revealed all six actual provider image references. The existing candidate helper now scrolls its media container for media-bearing rows before the unchanged strict image/video count, provider-origin, text/entities and native-identity checks. It scrolls the row for plain text. No download, viewer opening, URL inference, added retry or budget increase is involved. A real-browser regression reproduces the offscreen placeholder grid and verifies all six ordered references, rich text, native ID and zero external effects. Live acceptance follows the main release.
+
 ## November 3 reliability correction
 
 Status: **Not confirmed by user**. The owner superseded the historical downloaded-SHA acceptance below: MAX delivery now uses fresh native identity, text/entities, attachment count and provider references. Post-dispatch observation and finalize do not reload expired input bytes or download provider media. Stored original checkpoints remain immutable. Temporary preflight errors retain the existing worker retry codes and bounded phase diagnostics. See the [current reliability requirements](README.md#max-reliability-repair--2026-11-03).
