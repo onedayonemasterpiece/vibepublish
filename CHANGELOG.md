@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MAX exact channel reads reuse the same correlated native history identity as feed refs, so a freshly issued ref does not require an unrelated public-handle Copy URL binding.
+
 - MAX native album reads reveal the attachment container before checking real provider media references, so a long visible caption cannot leave the photo grid offscreen until the read deadline.
 
 - MAX completes editor focus and the native document selectionchange event before rich keyboard actions; failed link-dialog assertions retain content-free phase and selection evidence.
