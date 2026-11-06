@@ -6,7 +6,10 @@ Start with [full-channel audit and Opus reconciliation](reports/story-carousel-r
 It resolves the review against all seven Slack threads and three completed read-only
 Claude Opus 5.5 consultations. The [canonical feature](features/story-carousel/README.md)
 keeps one proposed MCP tool with six commands, model-led design, addressable image
-views, process journaling and the next no-generation → dot → native E2E sequence.
+views and process journaling. The owner-ordered sequence starts with a no-generation
+TG/VK display test in owner-named test destinations, then develops the three-photo
+prototype and MCP before dot's private import → render → export E2E. The document
+package is frozen after the four corrections to critique §13; execution awaits the owner's start.
 
 Supporting material:
 
@@ -15,7 +18,7 @@ Supporting material:
 - [36-requirement coverage audit](reference/story-carousel/coverage-audit-2026-11-06.md)
   and [source register](reference/story-carousel/source-register.md).
 - [Visual language and E01–E23 audit](reference/story-carousel/visual-language.md),
-  [eight principle illustrations](reference/story-carousel/blockout-atlas.svg),
+  [eight narrow illustrations of two principles, excluded from tool examples](reference/story-carousel/blockout-atlas.svg),
   [twelve palettes and Cyrillic directions](reference/story-carousel/palette-catalog.md),
   [composition/review bank](reference/story-carousel/composition-and-review.md) and
   [5+5 variation study](reference/story-carousel/variation-study.md).

@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="3120" viewBox="0 0 1200 3120" role="img" aria-labelledby="atlas-title atlas-desc">
-<title id="atlas-title">Эскизы геометрии — не готовые варианты</title>
-<desc id="atlas-desc">Восемь оригинальных геометрических схем бесшовной карусели. В каждой пять карточек формата 4:5. Фоновые зоны, условные изображения и текстовые блоки показаны разными графическими обозначениями. Пунктиром обозначены линии реза. Схемы можно изменять; это не эстетические ограничения.</desc>
+<title id="atlas-title">Узкая иллюстрация двух принципов</title>
+<desc id="atlas-desc">Восемь условных схем иллюстрируют только два принципа: границы зон могут не совпадать с резами карточек; единый элемент может продолжаться через шов. Это не словарь визуальных референсов и не образцы для ответа инструмента. В каждой полосе пять окон 4:5; пунктиром обозначены линии реза.</desc>
 <defs><clipPath id="strip-clip"><rect width="1000" height="250"/></clipPath></defs>
 <g font-family="DejaVu Sans, sans-serif">
 <rect x="0.00" y="0.00" width="1200.00" height="3120.00" rx="0.00" fill="#FFFFFF"/>
 <text x="100.00" y="52.00" fill="#536773" font-size="13" font-weight="700" text-anchor="start">STORY CAROUSEL / BLOCK-OUT ATLAS</text>
-<text x="100.00" y="99.00" fill="#243640" font-size="29" font-weight="700" text-anchor="start">Эскизы геометрии — не готовые варианты</text>
-<text x="100.00" y="132.00" fill="#536773" font-size="16" font-weight="400" text-anchor="start">Примеры принципов. Для каждой истории модель строит новый холст по её материалам.</text>
+<text x="100.00" y="99.00" fill="#243640" font-size="29" font-weight="700" text-anchor="start">Узкая иллюстрация двух принципов</text>
+<text x="100.00" y="132.00" fill="#536773" font-size="16" font-weight="400" text-anchor="start">1. Зоны не привязаны к резам.  2. Единый элемент продолжается через шов.</text>
 <rect x="100.00" y="159.00" width="26.00" height="19.00" rx="0.00" fill="#D4DEE3"/>
 <text x="137.00" y="174.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">Зона / панель</text>
 <rect x="316.00" y="159.00" width="26.00" height="19.00" rx="0.00" fill="#6D8795"/>
@@ -406,6 +406,6 @@
 <text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
 </g>
 <line x1="100.00" y1="3053.00" x2="1100.00" y2="3053.00" stroke="#D8E1E6" stroke-width="1"/>
-<text x="100.00" y="3080.00" fill="#536773" font-size="13" font-weight="400" text-anchor="start">Оригинальные схемы для выбора композиции. Масштаб, формы и переходы можно менять под историю.</text>
+<text x="100.00" y="3080.00" fill="#536773" font-size="13" font-weight="400" text-anchor="start">Только два принципа. Не словарь референсов; атлас не возвращается в ответах MCP как образец.</text>
 <text x="100.00" y="3101.00" fill="#536773" font-size="12" font-weight="400" text-anchor="start">Полоса: 1000 × 250. Окно: 200 × 250.  B02, B05 и B06 расширены до пяти окон без растяжения модулей.</text>
 </g></svg>
