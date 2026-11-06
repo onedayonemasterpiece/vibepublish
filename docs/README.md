@@ -1,22 +1,29 @@
 # Documentation
 
-## Story Carousel research and draft design — 2026-11-06
+## Story Carousel research and reconciled draft — 2026-11-06
 
-[Story Carousel research](reports/story-carousel-research-2026-11-06.md) is the
-main entry point for seamless card storytelling, the reviewed Slack references,
-tutorials, generated lettering and typesetting, the sketch-first workflow, shared
-SVG icon reuse, strong typography and metrics, model-led visual polishing, the
-seven-card monument case, the future dot media/E2E flow and the Opus consultation brief.
-The proposed persistent story and MCP contract live in
-[Story Carousel](features/story-carousel/README.md); source coverage and the
-original transition atlas live in [the reference register](reference/story-carousel/source-register.md).
-[Composition recipes and professional review](reference/story-carousel/composition-and-review.md)
-provide stage-specific advisory questions, observed evidence and local fixes.
+Start with [full-channel audit and Opus reconciliation](reports/story-carousel-reconciliation-2026-11-06.md).
+It resolves the review against all seven Slack threads and three completed read-only
+Claude Opus 5.5 consultations. The [canonical feature](features/story-carousel/README.md)
+keeps one proposed MCP tool with six commands, model-led design, addressable image
+views, process journaling and the next no-generation → dot → native E2E sequence.
+
+Supporting material:
+
+- [Original research and tutorials](reports/story-carousel-research-2026-11-06.md).
+- [Original Opus critique](reports/story-carousel-critique-2026-11-06.md), preserved as authored proposals.
+- [36-requirement coverage audit](reference/story-carousel/coverage-audit-2026-11-06.md)
+  and [source register](reference/story-carousel/source-register.md).
+- [Visual language and E01–E23 audit](reference/story-carousel/visual-language.md),
+  [eight principle illustrations](reference/story-carousel/blockout-atlas.svg),
+  [twelve palettes and Cyrillic directions](reference/story-carousel/palette-catalog.md),
+  [composition/review bank](reference/story-carousel/composition-and-review.md) and
+  [5+5 variation study](reference/story-carousel/variation-study.md).
+- [Platform, media and PastVu verification](reference/story-carousel/platform-media-audit-2026-11-06.md).
+
 Status: **Draft / Not confirmed by user**. Runtime implementation: **Not done**.
-This documentation package does not change existing publication behavior.
-[Opus critique](reports/story-carousel-critique-2026-11-06.md) adds missed owner
-requirements, a reference-derived technique catalogue, platform risks (Telegram
-mosaic, VK carousel mode), a staged process, seed palettes and questions for ChatGPT.
+Only documentation and authored reference diagrams changed. Actual dot generation,
+MCP implementation and native platform E2E have not started in this research task.
 
 ## Active MAX completion correction — 2026-09-08
 

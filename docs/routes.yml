@@ -13,6 +13,7 @@ entrypoints:
   native_visual_delivery: docs/handoffs/native-visual-delivery-20260905.md
   max_web_task: docs/handoffs/max-web-codex-20260905.md
   story_carousel_research: docs/reports/story-carousel-research-2026-11-06.md
+  story_carousel_reconciliation: docs/reports/story-carousel-reconciliation-2026-11-06.md
 
 sections:
   architecture:
@@ -40,6 +41,10 @@ sections:
     native_adapter_provenance: docs/reference/native-adapter-provenance.md
     story_carousel_sources: docs/reference/story-carousel/source-register.md
     story_carousel_composition_review: docs/reference/story-carousel/composition-and-review.md
+    story_carousel_visual_language: docs/reference/story-carousel/visual-language.md
+    story_carousel_palettes: docs/reference/story-carousel/palette-catalog.md
+    story_carousel_coverage: docs/reference/story-carousel/coverage-audit-2026-11-06.md
+    story_carousel_platform_media: docs/reference/story-carousel/platform-media-audit-2026-11-06.md
   backlog:
     index: docs/backlog/README.md
     historical_video_requirements: docs/backlog/requirements.md
@@ -48,6 +53,7 @@ sections:
     vibepublish_audit_20260904: docs/reports/vibepublish-audit-20260904.md
     story_carousel_20261106: docs/reports/story-carousel-research-2026-11-06.md
     story_carousel_critique_20261106: docs/reports/story-carousel-critique-2026-11-06.md
+    story_carousel_reconciliation_20261106: docs/reports/story-carousel-reconciliation-2026-11-06.md
     audit_precedence: historical_before_native_only_owner_correction
     incidents: docs/reports/incidents/README.md
     incident_template: docs/reports/incidents/TEMPLATE.md
@@ -65,7 +71,16 @@ features:
     transition_atlas: docs/reference/story-carousel/transition-atlas.svg
     composition_review: docs/reference/story-carousel/composition-and-review.md
     proposed_mcp_tool: vibepublish_carousel
-    consultation: opus_review_done_not_confirmed_by_user
+    consultation: opus_review_and_three_round_reconciliation_complete_not_confirmed_by_user
+    reconciliation: docs/reports/story-carousel-reconciliation-2026-11-06.md
+    coverage_audit: docs/reference/story-carousel/coverage-audit-2026-11-06.md
+    visual_language: docs/reference/story-carousel/visual-language.md
+    blockout_atlas: docs/reference/story-carousel/blockout-atlas.svg
+    variation_study: docs/reference/story-carousel/variation-study.md
+    variation_atlas: docs/reference/story-carousel/variation-study.svg
+    palettes: docs/reference/story-carousel/palette-catalog.md
+    palette_atlas: docs/reference/story-carousel/palette-catalog.svg
+    platform_media_audit: docs/reference/story-carousel/platform-media-audit-2026-11-06.md
     critique: docs/reports/story-carousel-critique-2026-11-06.md
   media_store:
     status: not_confirmed_by_user_production_contract_active
