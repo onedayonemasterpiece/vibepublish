@@ -14,6 +14,9 @@ original transition atlas live in [the reference register](reference/story-carou
 provide stage-specific advisory questions, observed evidence and local fixes.
 Status: **Draft / Not confirmed by user**. Runtime implementation: **Not done**.
 This documentation package does not change existing publication behavior.
+[Opus critique](reports/story-carousel-critique-2026-11-06.md) adds missed owner
+requirements, a reference-derived technique catalogue, platform risks (Telegram
+mosaic, VK carousel mode), a staged process, seed palettes and questions for ChatGPT.
 
 ## Active MAX completion correction — 2026-09-08
 

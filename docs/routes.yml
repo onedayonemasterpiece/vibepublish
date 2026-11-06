@@ -47,6 +47,7 @@ sections:
     index: docs/reports/README.md
     vibepublish_audit_20260904: docs/reports/vibepublish-audit-20260904.md
     story_carousel_20261106: docs/reports/story-carousel-research-2026-11-06.md
+    story_carousel_critique_20261106: docs/reports/story-carousel-critique-2026-11-06.md
     audit_precedence: historical_before_native_only_owner_correction
     incidents: docs/reports/incidents/README.md
     incident_template: docs/reports/incidents/TEMPLATE.md
@@ -64,7 +65,8 @@ features:
     transition_atlas: docs/reference/story-carousel/transition-atlas.svg
     composition_review: docs/reference/story-carousel/composition-and-review.md
     proposed_mcp_tool: vibepublish_carousel
-    consultation: opus_pending_owner_forward
+    consultation: opus_review_done_not_confirmed_by_user
+    critique: docs/reports/story-carousel-critique-2026-11-06.md
   media_store:
     status: not_confirmed_by_user_production_contract_active
     docs: docs/features/media-store/README.md
