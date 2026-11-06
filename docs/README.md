@@ -1,5 +1,16 @@
 # Documentation
 
+## Story Carousel research and draft design — 2026-11-06
+
+[Story Carousel research](reports/story-carousel-research-2026-11-06.md) is the
+main entry point for seamless card storytelling, the reviewed Slack references,
+tutorials, typography, the seven-card monument case and the Opus consultation brief.
+The proposed persistent story and MCP contract live in
+[Story Carousel](features/story-carousel/README.md); source coverage and the
+original transition atlas live in [the reference register](reference/story-carousel/source-register.md).
+Status: **Draft / Not confirmed by user**. Runtime implementation: **Not done**.
+This documentation package does not change existing publication behavior.
+
 ## Active MAX completion correction — 2026-09-08
 
 The owner's [active MAX product-completion task](https://github.com/onedayonemasterpiece/vibepublish/blob/work/vibepublish-max-web-20260904/docs/handoffs/max-product-completion-codex-20260908.md)
@@ -84,3 +95,4 @@ operations in `operations/`, model instructions in `llm/`, references in
 `handoffs/` and tools in `tools/`. Keep explicit Draft, Fixed, Not done,
 Not confirmed by user and Done boundaries. A schema pass, accepted tree or local
 archive is not proof of a remotely delivered and verified runtime.
+

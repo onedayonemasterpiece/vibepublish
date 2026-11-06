@@ -12,6 +12,7 @@ entrypoints:
   implementation_start: docs/handoffs/implementation-start-20260904.md
   native_visual_delivery: docs/handoffs/native-visual-delivery-20260905.md
   max_web_task: docs/handoffs/max-web-codex-20260905.md
+  story_carousel_research: docs/reports/story-carousel-research-2026-11-06.md
 
 sections:
   architecture:
@@ -37,12 +38,14 @@ sections:
     imagegen_plugin_discovery: docs/reference/imagegen-plugin-discovery-20260905.md
     events_bot_social_donor_map: docs/reference/events-bot-social-donor-map.md
     native_adapter_provenance: docs/reference/native-adapter-provenance.md
+    story_carousel_sources: docs/reference/story-carousel/source-register.md
   backlog:
     index: docs/backlog/README.md
     historical_video_requirements: docs/backlog/requirements.md
   reports:
     index: docs/reports/README.md
     vibepublish_audit_20260904: docs/reports/vibepublish-audit-20260904.md
+    story_carousel_20261106: docs/reports/story-carousel-research-2026-11-06.md
     audit_precedence: historical_before_native_only_owner_correction
     incidents: docs/reports/incidents/README.md
     incident_template: docs/reports/incidents/TEMPLATE.md
@@ -51,6 +54,15 @@ sections:
     imagegen_inventory: scripts/inspect/probe_imagegen_plugin.py
 
 features:
+  story_carousel:
+    status: draft_not_confirmed_by_user
+    implementation: not_done
+    docs: docs/features/story-carousel/README.md
+    research: docs/reports/story-carousel-research-2026-11-06.md
+    references: docs/reference/story-carousel/source-register.md
+    transition_atlas: docs/reference/story-carousel/transition-atlas.svg
+    proposed_mcp_tool: vibepublish_carousel
+    consultation: opus_pending_owner_forward
   media_store:
     status: not_confirmed_by_user_production_contract_active
     docs: docs/features/media-store/README.md
@@ -163,3 +175,4 @@ features:
     status: draft_normalization_runtime_not_done
     docs: docs/features/video-stories/README.md
     source_requirements: docs/backlog/requirements.md
+
