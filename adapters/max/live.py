@@ -934,6 +934,7 @@ class RealMaxDriver:
                 media:[...media].map(x=>({src:x.currentSrc||x.src,name:x.alt||null}))};
         }"""
         if non_link_text:
+            await handle.evaluate("(caption)=>caption.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'})")
             await handle.scroll_into_view_if_needed(timeout=self.timeout*1000)
         snapshot = await handle.evaluate(snapshot_js)
         for attempt in range(2):
