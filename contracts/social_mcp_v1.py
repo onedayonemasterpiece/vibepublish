@@ -440,6 +440,7 @@ _carousel_output = obj({
     "reference": _reference, "resource_uri": string(300), "asset_ref": ID,
     "icons": array(_icon, 0, 8), "icon": _icon,
     "scale": {"type": "number", "enum": [0.5, 1]}, "layers": _carousel_layers, "save_asset": {"type": "boolean"},
+    "cutlines": {"type": "boolean"},
     "view": enum("master", "region", "full", "crop"),
     "region": {"anyOf": [_carousel_region, {"type": "null"}]},
     "mime_type": enum("image/png", "image/jpeg", "image/webp"),

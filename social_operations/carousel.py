@@ -187,7 +187,6 @@ class CarouselService:
 
     def get(self, actor, command):
         if command.get('scope') == 'guide':
-            started = time.perf_counter()
             with self.store.connection() as db:
                 if command.get('carousel_id'):
                     self._version(db, actor, command['carousel_id'])
@@ -195,9 +194,8 @@ class CarouselService:
                     self._actor(db, actor)
             result = guide(command.get('topic'), command.get('section'))
             if command.get('carousel_id'):
+                # The service layer journals linked guide reads once, like reference/library/icons.
                 (result.metadata if isinstance(result, GuideImages) else result)['carousel_id'] = command['carousel_id']
-                self.log_event(actor, command['carousel_id'], 'get',
-                    duration_ms=round((time.perf_counter() - started) * 1000), scope='guide')
             return result
         with self.store.connection() as db:
             row = self._version(db, actor, command['carousel_id'], command.get('revision'))
