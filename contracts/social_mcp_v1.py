@@ -305,6 +305,7 @@ tool("publish", "Create one publication now or in native provider queues; return
         "surface": enum("post", "story", "message", "album", "video", "short_video"),
         "delivery": ref("delivery"), "mode": enum("execute", "preview"),
         "renderings": ref("renderings"), "visual": ref("visual_spec"),
+        "vk": obj({"primary_attachments_mode": {"const": "carousel"}}),
         "request_key": KEY, "repeat_of": ID, "routing_revision": REV}, ("to",)), ref("receipt"), "publish")
 
 TOOLS[-1]["inputSchema"]["anyOf"] = [
@@ -413,9 +414,14 @@ _carousel_output = obj({
     "svg": {**string(262144), "minLength": 0},
     "latest_revision": REV, "asset_refs": array(ID, 0, 100),
     "journal": array(obj({"operation_id": ID, "revision": REV,
-        "kind": enum("create", "revise", "export"), "at": DATE,
+        "kind": enum("create", "revise", "export", "render", "get", "asset_import"), "at": DATE,
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "scope": enum("reference", "library", "guide", "icons"),
+        "view": enum("master", "region", "card"), "region": _carousel_region,
+        "card": {"type": "integer", "minimum": 1, "maximum": 10},
+        "reference_id": _reference_id, "asset_ref": ID, "imported_at": DATE,
         "note": string(2000), "reference_use": _reference_use},
-        ("operation_id", "revision", "kind", "at")), 0, 10),
+        ("operation_id", "revision", "kind", "at")), 0, 50),
     "next_step": enum("compose_svg", "render_then_review"),
     "references": array(_reference, 0, 20), "total": {"type": "integer", "minimum": 0},
     "offset": {"type": "integer", "minimum": 0}, "next_offset": {"type": ["integer", "null"]},
@@ -434,12 +440,14 @@ _carousel_commands = [
     arm("create", _carousel_scene, ("brief",)),
     arm("get", {"scope": {"const": "story"}, "carousel_id": ID, "revision": REV,
         "include_svg": {"type": "boolean"}}, ("carousel_id",)),
-    arm("get", {"scope": {"const": "journal"}, "carousel_id": ID, "revision": REV}, ("scope", "carousel_id")),
-    arm("get", {"scope": {"const": "library"}, "query": {**string(500), "minLength": 0},
+    arm("get", {"scope": {"const": "journal"}, "carousel_id": ID, "revision": REV,
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, ("scope", "carousel_id")),
+    arm("get", {"scope": {"const": "library"}, "carousel_id": ID,
+        "query": {**string(500), "minLength": 0},
         "limit": {"type": "integer", "minimum": 1, "maximum": 20},
         "offset": {"type": "integer", "minimum": 0}}, ("scope",)),
-    arm("get", {"scope": {"const": "reference"}, "reference_id": _reference_id,
-        "region": _carousel_region}, ("scope", "reference_id")),
+    arm("get", {"scope": {"const": "reference"}, "carousel_id": ID,
+        "reference_id": _reference_id, "region": _carousel_region}, ("scope", "reference_id")),
     arm("revise", {**_carousel_scene, "carousel_id": ID, "expected_revision": REV,
         "note": string(2000), "reference_use": _reference_use}, ("carousel_id", "expected_revision")),
     arm("render", {"carousel_id": ID, "revision": REV, "view": enum("master", "region"),
@@ -450,6 +458,7 @@ _carousel_commands = [
 tool("carousel", "Create, get, revise, render and export private SVG story carousels. "
     "These commands never publish, edit a social post, send a message or dispatch image generation. "
     "Dot generates components with its own tool and imports them through visual import. "
+    "Pass carousel_id when reading references to record the tool use in the private journal. "
     "get(scope:library) lists real owner-bound reference images; get(scope:reference,reference_id) "
     "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
     "record the visible technique and concrete change in revise.reference_use, then render the changed region. "
