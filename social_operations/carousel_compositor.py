@@ -10,19 +10,25 @@ import io
 import math
 import re
 import warnings
+from collections import OrderedDict
 from functools import lru_cache
+from threading import Lock
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from defusedxml.ElementTree import fromstring
 from defusedxml.common import DefusedXmlException
 from fontTools.ttLib import TTFont
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .domain import DomainError
 
 MAX_SVG_BYTES = 256 * 1024
 MAX_COMPOSITION_ASSET_BYTES = 44 * 1024 * 1024
+_PREPARED_LIMIT_BYTES = 256 * 1024 * 1024
+_prepared_lock = Lock()
+_prepared = OrderedDict()
+_prepared_size = 0
 _SVG = 'http://www.w3.org/2000/svg'
 _XLINK = 'http://www.w3.org/1999/xlink'
 _NUMBER = re.compile(r'[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?')
@@ -281,15 +287,96 @@ def _filter_layers(root, layers):
                               'keep referenced nodes in defs or include their layer')
 
 
+def _prepare_raster(data, mime, sha, target):
+    """Cache a bounded, downsampled representation, never the private original."""
+    global _prepared_size
+    key = (sha, target)
+    with _prepared_lock:
+        cached = _prepared.get(key)
+        if cached is not None:
+            _prepared.move_to_end(key)
+            return cached
+    with Image.open(io.BytesIO(data)) as original:
+        original = ImageOps.exif_transpose(original)
+        natural = original.size
+        max_size = (min(natural[0], max(1, target[0])), min(natural[1], max(1, target[1])))
+        if natural == max_size:
+            result = (data, mime, natural)
+        else:
+            image = original.copy()
+            image.thumbnail(max_size, Image.Resampling.LANCZOS)
+            alpha = 'A' in image.getbands() or 'transparency' in image.info
+            output = io.BytesIO()
+            if alpha:
+                image.convert('RGBA').save(output, format='PNG', optimize=False)
+                out_mime = 'image/png'
+            else:
+                image.convert('RGB').save(output, format='JPEG', quality=90, subsampling=0)
+                out_mime = 'image/jpeg'
+            result = (output.getvalue(), out_mime, image.size)
+    size = len(result[0])
+    if size <= _PREPARED_LIMIT_BYTES:
+        with _prepared_lock:
+            cached = _prepared.get(key)
+            if cached is not None:
+                _prepared.move_to_end(key)
+                return cached
+            _prepared[key] = result
+            _prepared_size += size
+            while _prepared_size > _PREPARED_LIMIT_BYTES:
+                _, evicted = _prepared.popitem(last=False)
+                _prepared_size -= len(evicted[0])
+    return result
+
+
+def _display_targets(root):
+    """Largest painted width/height per asset, including inherited scale transforms."""
+    targets = {}
+    def visit(node, factor=1.0):
+        transform = node.get('transform', '')
+        # Rotating and skew transforms retain the original resolution.
+        if re.search(r'(?:rotate|skewX|skewY)\s*\(', transform):
+            factor = 100000
+        for name, args in re.findall(r'(scale|matrix)\s*\(([^)]*)\)', transform):
+            values = [float(value) for value in _NUMBER.findall(args)]
+            if name == 'scale' and values:
+                factor *= max(abs(v) for v in values[:2])
+            elif name == 'matrix' and len(values) == 6:
+                a, b, c, d = values[:4]
+                factor *= max(math.hypot(a, b), math.hypot(c, d))
+        if node.tag != '{' + _SVG + '}image':
+            for child in node:
+                visit(child, factor)
+            return
+        match = _ASSET.fullmatch(node.get('href', ''))
+        if not match:
+            return
+        try:
+            w = float(node.get('width', '0')) * factor
+            h = float(node.get('height', '0')) * factor
+        except ValueError:
+            w = h = 0
+        if w <= 0 or h <= 0:
+            targets[match[1]] = (100000, 100000)
+            return
+        previous = targets.get(match[1], (0, 0))
+        targets[match[1]] = (max(previous[0], math.ceil(w * 1.5)),
+                             max(previous[1], math.ceil(h * 1.5)))
+    visit(root)
+    return targets
+
+
 def render_svg(svg, *, card_count, card_width, card_height, read_asset, layers=None) -> bytes:
     """Standard resvg shaping/kerning with no system fonts or external resources."""
     import resvg_py
     width, height = _dimensions(card_count, card_width, card_height)
     assets = {}
+    hashes = {}
 
     def collect(ident):
         result = read_asset(ident)
         assets[ident] = (result[0], result[1])
+        hashes[ident] = result[2]
         return result
 
     source = validate_svg(svg, card_count=card_count, card_width=card_width,
@@ -297,6 +384,7 @@ def render_svg(svg, *, card_count, card_width, card_height, read_asset, layers=N
     root = ET.fromstring(source)
     if layers is not None:
         _filter_layers(root, layers)
+    targets = _display_targets(root)
     definitions = ET.SubElement(root, '{' + _SVG + '}defs')
     reused = {}
     reserved_ids = {n.get('id') for n in root.iter() if n.get('id')}
@@ -311,8 +399,15 @@ def render_svg(svg, *, card_count, card_width, card_height, read_asset, layers=N
         alignment = node.get('preserveAspectRatio', 'xMidYMid meet')
         key = ident, alignment
         if key not in reused:
+            # The source was ACL-checked and validated before any filtering.
             with Image.open(io.BytesIO(data)) as im:
-                natural_width, natural_height = im.size
+                original_size = im.size
+            target = targets[ident]
+            ratio = min(1, target[0] / original_size[0], target[1] / original_size[1])
+            target_size = (max(1, math.ceil(original_size[0] * ratio)),
+                           max(1, math.ceil(original_size[1] * ratio)))
+            data, mime, (natural_width, natural_height) = _prepare_raster(
+                data, mime, hashes[ident], target_size)
             name = f'_vp_private_image_{len(reused)}'
             while name in reserved_ids:
                 name += '_'

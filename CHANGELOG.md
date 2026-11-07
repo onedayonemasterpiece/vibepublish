@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel A2: raster images are downsampled for their actual SVG display size with a 1.5× margin (RGBA PNG / opaque JPEG) and cached in a process-bounded 256 MiB LRU keyed by source hash and target pixels. Private `get(scope:components, carousel_id, revision?)` returns each raster's thumbnail, SVG element IDs/classes, and union bounds; reads enter the existing journal. No database state or publication changes.
+
 - Story Carousel C3: fallback from SVG Repo HTTP 429 to Iconify style-scoped search, raw SVG and icon-set license metadata without losing the disk cache or SVG sanitizer. Rank private visual references by Russian/English token overlap and include `matched:false` catalog alternatives instead of empty results. Mocked-network regressions; no new dependency, database or publisher.
 
 - Story Carousel model guide `docs/llm/carousel/` (00–99): engineered process, storytelling roles/arcs/hooks, canvas numbers, 24 seam bridges, type scale and pairs, palette procedure, generation prompt templates (segment backgrounds, object on zone colour, lettering), verified SVG montage recipes (masks, cutouts, bbox stripes, scrim, grading, background word, thread), variation axes, infographics, review passes with tagged question bank. Integrates the ChatGPT research (C01–C16, Q/V/R 80 questions, 12 palettes, variation study, E01–E23 observations) that had not reached runtime. Served by `get(scope:guide)` (separate PR).

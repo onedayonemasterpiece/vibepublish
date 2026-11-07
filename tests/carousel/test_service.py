@@ -289,6 +289,14 @@ async def test_real_application_validates_all_commands_and_status(runtime):
     assert not state['scene_ready'] and state['svg'] == ''
     revised = await call({'kind': 'revise', 'carousel_id': ident,
         'expected_revision': 1, 'svg': svg}, 'app-revise')
+    components = await call({'kind': 'get', 'scope': 'components', 'carousel_id': ident,
+                             'revision': 2})
+    assert len(components['components']) == 1
+    component = components['components'][0]
+    assert component['asset_ref'] == components['asset_refs'][0]
+    assert (component['x'], component['y'], component['w'], component['h']) == (0, 0, 384, 160)
+    assert component['element_ids'] == []
+    assert component['preview_data_url'].startswith('data:image/webp;base64,')
     image = await call({'kind': 'render', 'carousel_id': ident, 'revision': revised['revision'], 'card': 1})
     assert pixels(image.data).size == (128, 160)
     bank = ReferenceBank(store)
@@ -310,6 +318,7 @@ async def test_real_application_validates_all_commands_and_status(runtime):
     journal = await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident})
     kinds = [item['kind'] for item in journal['journal']]
     assert kinds[:2] == ['get', 'get'] and {'asset_import', 'render', 'create', 'revise'} <= set(kinds)
+    assert any(entry.get('scope') == 'components' and entry['revision'] == 2 for entry in journal['journal'])
     assert all('at' in event and 'operation_id' in event for event in journal['journal'])
     assert all(isinstance(event['duration_ms'], int) and event['duration_ms'] >= 0
                for event in journal['journal'] if event['kind'] in {'render', 'get'})
