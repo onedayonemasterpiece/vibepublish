@@ -162,4 +162,25 @@ class ReferenceTests(unittest.TestCase):
         no_hits = self.bank.list(self.actor, 'абсолютнонесуществующее')
         self.assertEqual([row['id'] for row in no_hits['references']], ['E01', 'E02', 'E03'])
         self.assertTrue(all(row['matched'] is False for row in no_hits['references']))
-        self.assertEqual(self.bank.list(self.actor, 'nothing', offset=99)['references'][0]['id'], 'E01')
+        self.assertEqual(self.bank.list(self.actor, 'nothing', offset=99)['references'], [])
+
+    def test_ranked_library_paginates_once_and_stops_at_end(self):
+        self.rows += [{**self.rows[0], 'id': f'E0{number}'} for number in range(2, 6)]
+        self.save_catalog()
+        ids, offset, sizes = [], 0, []
+        while True:
+            page = self.bank.list(self.actor, 'панель', limit=2, offset=offset)
+            self.assertEqual(page['offset'], offset)
+            self.assertEqual(page['total'], 5)
+            ids.extend(row['id'] for row in page['references'])
+            sizes.append(len(page['references']))
+            if page['next_offset'] is None:
+                break
+            offset = page['next_offset']
+        self.assertEqual(sizes, [2, 2, 1])
+        self.assertEqual(ids, ['E01', 'E02', 'E03', 'E04', 'E05'])
+        for offset in (5, 99):
+            end = self.bank.list(self.actor, 'панель', limit=2, offset=offset)
+            self.assertEqual(end['references'], [])
+            self.assertEqual(end['offset'], offset)
+            self.assertIsNone(end['next_offset'])
