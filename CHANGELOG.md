@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel: record linked single-icon reads with the chosen `icon_id` in the existing private journal; expose older events through `get(scope:journal,offset)` and `next_offset`, keeping the 50-event page limit and 10-event story summary. Link the three later owner clarifications (background-aware lettering, expressive freedom and bounded guide stages) in the existing coverage matrix and canonical feature.
 - Story Carousel: log timed render and linked reference/library reads plus first use of imported assets in the existing scoped operation ledger; expose up to 50 journal events without recording prompts or secrets. VK publish accepts `vk.primary_attachments_mode=carousel` and forwards it to native `wall.post` including frozen scheduled replay. No new tables, states, or deployment. Rendering an older revision keeps that revision in the journal.
 - Story Carousel: restore the complete owner scope in the existing canonical feature and coverage audit (37 channel requirements plus five session decisions). Preserve original creative requirements, the author's intent, finished alternatives, exact publication/edit permission output and current E2E pause; distinguish source tests, deployed capability, observed results and owner acceptance. Keep the five-command architecture without reinstating unnecessary Review/Selection state.
 

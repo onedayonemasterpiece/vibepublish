@@ -421,10 +421,10 @@ _carousel_output = obj({
     "journal": array(obj({"operation_id": ID, "revision": REV,
         "kind": enum("create", "revise", "export", "render", "get", "asset_import"), "at": DATE,
         "duration_ms": {"type": "integer", "minimum": 0},
-        "scope": enum("reference", "library", "guide", "icons"),
+        "scope": enum("reference", "library", "guide", "icons", "icon"),
         "view": enum("master", "region", "card"), "region": _carousel_region,
         "card": {"type": "integer", "minimum": 1, "maximum": 10},
-        "reference_id": _reference_id, "asset_ref": ID, "imported_at": DATE,
+        "reference_id": _reference_id, "icon_id": _icon_id, "asset_ref": ID, "imported_at": DATE,
         "note": string(2000), "reference_use": _reference_use},
         ("operation_id", "revision", "kind", "at")), 0, 50),
     "next_step": enum("compose_svg", "render_then_review"),
@@ -447,7 +447,8 @@ _carousel_commands = [
     arm("get", {"scope": {"const": "story"}, "carousel_id": ID, "revision": REV,
         "include_svg": {"type": "boolean"}}, ("carousel_id",)),
     arm("get", {"scope": {"const": "journal"}, "carousel_id": ID, "revision": REV,
-        "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, ("scope", "carousel_id")),
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+        "offset": {"type": "integer", "minimum": 0}}, ("scope", "carousel_id")),
     arm("get", {"scope": {"const": "library"}, "carousel_id": ID,
         "query": {**string(500), "minLength": 0},
         "limit": {"type": "integer", "minimum": 1, "maximum": 20},
@@ -467,7 +468,8 @@ _carousel_commands = [
 tool("carousel", "Create, get, revise, render and export private SVG story carousels. "
     "These commands never publish, edit a social post, send a message or dispatch image generation. "
     "Dot generates components with its own tool and imports them through visual import. "
-    "Pass carousel_id when reading references to record the tool use in the private journal. "
+    "Pass carousel_id when reading references or icons to record the tool use in the private journal. "
+    "get(scope:journal,offset?) returns up to 50 events per page and next_offset for older events. "
     "get(scope:library) lists real owner-bound reference images; get(scope:reference,reference_id) "
     "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
     "record the visible technique and concrete change in revise.reference_use, then render the changed region. "

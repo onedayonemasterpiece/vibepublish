@@ -106,10 +106,12 @@ class Application:
             validated_result = result.metadata if isinstance(result, AssetPreview) else result
             Draft202012Validator(CATALOG[name]['outputSchema'], format_checker=FORMATS).validate(validated_result)
             if (short == 'carousel' and command['kind'] == 'get' and command.get('carousel_id')
-                    and command.get('scope') in {'reference', 'library', 'guide', 'icons'}):
+                    and command.get('scope') in {'reference', 'library', 'guide', 'icons', 'icon'}):
                 details = {'scope': command['scope']}
                 if command.get('reference_id'):
                     details['reference_id'] = command['reference_id']
+                if command.get('scope') == 'icon':
+                    details['icon_id'] = command['id']
                 await asyncio.to_thread(self.carousels.log_event, actor, command['carousel_id'], 'get',
                     duration_ms=round((asyncio.get_running_loop().time() - carousel_started) * 1000),
                     **details)

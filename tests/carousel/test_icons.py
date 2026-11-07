@@ -75,12 +75,19 @@ def test_icon_grid_and_safe_cached_svg_via_mcp(tmp_path):
             with Image.open(io.BytesIO(base64.b64decode(pictures[0]["data"]))) as picture:
                 assert picture.size == (800, 480)
                 assert picture.convert("RGB").getpixel((30, 30)) == (225, 43, 56)
-            selection = rpc({"kind": "get", "scope": "icon", "id": icon["id"]})
+            selection = rpc({"kind": "get", "scope": "icon", "carousel_id": carousel_id,
+                             "id": icon["id"]})
             safe = selection["structuredContent"]["svg"]
             assert "script" not in safe and "foreignObject" not in safe
             assert "evil.example" not in safe and "onmouseover" not in safe
             assert '<' in safe and "path" in safe
             assert len(urls) == 3
+            events = rpc({"kind": "get", "scope": "journal", "carousel_id": carousel_id})
+            selections = [entry for entry in events["structuredContent"]["journal"]
+                          if entry["kind"] == "get" and entry["scope"] == "icon"]
+            assert len(selections) == 1
+            assert selections[0]["icon_id"] == icon["id"]
+            assert selections[0]["revision"] == 1 and selections[0]["duration_ms"] >= 0
 
     # A disconnected SVG Repo never prevents a previously selected cached icon.
     bank = IconBank(store)
