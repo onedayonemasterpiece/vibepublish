@@ -63,14 +63,23 @@ sections:
 
 features:
   story_carousel:
-    status: draft_not_confirmed_by_user
-    implementation: not_done
+    status: fixed_implementation_authorized_not_confirmed_by_user
+    implementation: implemented_in_source_public_deployment_not_done
     docs: docs/features/story-carousel/README.md
     research: docs/reports/story-carousel-research-2026-11-06.md
     references: docs/reference/story-carousel/source-register.md
     transition_atlas: docs/reference/story-carousel/transition-atlas.svg
     composition_review: docs/reference/story-carousel/composition-and-review.md
-    proposed_mcp_tool: vibepublish_carousel
+    mcp_tool: vibepublish_carousel
+    commands: [create, get, revise, render, export]
+    generation: dot_own_tool_only
+    reference_catalog: docs/reference/story-carousel/reference-catalog.json
+    reference_access: exact_owner_tenant_and_principal_plus_visual_scope
+    code:
+      - social_operations/carousel.py
+      - social_operations/carousel_compositor.py
+      - social_operations/carousel_references.py
+      - tests/carousel/
     consultation: opus_review_and_three_round_reconciliation_complete_not_confirmed_by_user
     reconciliation: docs/reports/story-carousel-reconciliation-2026-11-06.md
     coverage_audit: docs/reference/story-carousel/coverage-audit-2026-11-06.md

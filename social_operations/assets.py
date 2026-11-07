@@ -250,6 +250,10 @@ def retired_asset_rows(db, now, *, include_sizes=True):
                        UNION SELECT art_ref FROM visual_candidates
                        UNION SELECT asset_id FROM visual_asset_origins""")
     emoji = refset("SELECT asset_id FROM emoji_asset_origins")
+    carousel = refset("""SELECT j.value FROM carousel_versions c, json_each(c.asset_refs) j
+                         UNION SELECT json_extract(j.value,'$.asset_ref')
+                         FROM operations o, json_each(o.result,'$.cards') j
+                         WHERE o.action='carousel'""")
     rows = []
     source = ("SELECT id,length(bytes),created FROM assets" if include_sizes else
               "SELECT id,0,created FROM assets INDEXED BY assets_retention_lookup")
@@ -266,6 +270,8 @@ def retired_asset_rows(db, now, *, include_sizes=True):
             reason = 'recent_failure'
         elif ident in emoji:
             reason = 'emoji_catalog'
+        elif ident in carousel:
+            reason = 'saved_carousel'
         elif ident in visual and created >= now - 14 * 86400:
             reason = 'recent_visual'
         elif ident not in refs and created >= now - 14 * 86400:

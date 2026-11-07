@@ -1,15 +1,25 @@
 # Documentation
 
-## Story Carousel research and reconciled draft — 2026-11-06
+## Story Carousel private MVP and visual references — 2026-11-07
 
-Start with [full-channel audit and Opus reconciliation](reports/story-carousel-reconciliation-2026-11-06.md).
-It resolves the review against all seven Slack threads and three completed read-only
-Claude Opus 5.5 consultations. The [canonical feature](features/story-carousel/README.md)
-keeps one proposed MCP tool with six commands, model-led design, addressable image
-views and process journaling. The owner-ordered sequence starts with a no-generation
-TG/VK display test in owner-named test destinations, then develops the three-photo
-prototype and MCP before dot's private import → render → export E2E. The document
-package is frozen after the four corrections to critique §13; execution awaits the owner's start.
+Start with the [canonical feature and current limits](features/story-carousel/README.md).
+The owner authorized implementation and a growing bank of actual Slack examples on
+November 7. Source now implements one private `vibepublish_carousel` tool with five
+commands: create, get, revise, render and export. It stores SVG revisions in the
+existing ledger, returns a strip or an original-resolution region, and exports
+ordered private media for an exact revision. Generation remains **dot's own tool**.
+
+The private bank has 23 source records and 22 unique images. The repository keeps
+[reference metadata](reference/story-carousel/reference-catalog.json); runtime image
+reads require the exact bound owner and `visual` scope. The model opens an actual
+reference, identifies one useful improvement, revises its SVG and checks the changed
+region when that comparison helps. The atlas never substitutes for an original image.
+
+The auditor's [November 7 coordination update](https://mira-projects.slack.com/archives/C0CFP01K292/p1794034087770269)
+records the owner's revised display test: seven probe cards in the postponed VK
+posts of «Полюбить Калининград», up to ten days ahead, with one
+`primary_attachments_mode=carousel` attempt. Telegram and separate test destinations
+are no longer prerequisites. Dot's existing private import → render → export E2E is unchanged.
 
 Supporting material:
 
@@ -24,9 +34,12 @@ Supporting material:
   [5+5 variation study](reference/story-carousel/variation-study.md).
 - [Platform, media and PastVu verification](reference/story-carousel/platform-media-audit-2026-11-06.md).
 
-Status: **Draft / Not confirmed by user**. Runtime implementation: **Not done**.
-Only documentation and authored reference diagrams changed. Actual dot generation,
-MCP implementation and native platform E2E have not started in this research task.
+Status: implementation authorized (**Fixed**), source implemented,
+**Not confirmed by user**. Public runtime deployment and native platform/dot E2E:
+**Not done**. Focused source checks and private server image provisioning are evidence
+for those specific steps, not production or visual acceptance. The earlier
+[full-channel audit and Opus reconciliation](reports/story-carousel-reconciliation-2026-11-06.md)
+remain historical research; the canonical feature defines the reduced current contract.
 
 ## Active MAX completion correction — 2026-09-08
 

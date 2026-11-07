@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.12.0-runtime"
+VERSION = "1.13.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -382,6 +382,87 @@ workspace_import_commands = [
     arm("import_status", {"upload_id": ID}, ("upload_id",)),
     arm("import_abort", {"upload_id": ID}, ("upload_id",)),
 ]
+
+# Private carousel authoring. Generation remains with the calling model (dot).
+_carousel_region = array({"type": "integer", "minimum": 0, "maximum": 25600}, 4, 4)
+_reference_id = string(80, pattern=r"^[A-Za-z0-9_-]+$")
+_reference_use = obj({"reference_id": _reference_id, "observation": string(2000),
+    "change": string(2000)}, ("reference_id", "observation", "change"))
+_carousel_scene = {"brief": string(12000), "svg": string(262144),
+    "card_count": {"type": "integer", "minimum": 3, "maximum": 10},
+    "card_width": {"type": "integer", "minimum": 128, "maximum": 2560},
+    "card_height": {"type": "integer", "minimum": 128, "maximum": 2560},
+    "caption": {**string(), "minLength": 0}}
+_carousel_card = obj({"index": {"type": "integer", "minimum": 1, "maximum": 10},
+    "asset_ref": ID, "resource_uri": string(300), "sha256": string(64),
+    "width": {"type": "integer"}, "height": {"type": "integer"},
+    "mime_type": enum("image/png", "image/jpeg")},
+    ("index", "asset_ref", "resource_uri", "sha256", "width", "height", "mime_type"))
+_carousel_receipt_fields = {"carousel_id": ID, "private": {"const": True},
+    "scene_ready": {"type": "boolean"}, "cards": array(_carousel_card, 3, 10),
+    "media": array(ref("media"), 3, 10), "caption": {**string(), "minLength": 0}}
+DEFS["receipt"]["properties"].update(_carousel_receipt_fields)
+_reference = obj({"id": _reference_id, "title": string(1000),
+    "tags": array(string(200), 0, 50), "look_for": string(5000), "transfer": string(5000),
+    "source": obj({"slack_url": URL, "file_id": string(200)}, ("slack_url", "file_id")),
+    "use_note": string(5000), "duplicate_of": _reference_id, "available": {"type": "boolean"}},
+    ("id", "title", "tags", "look_for", "transfer", "source", "use_note", "available"))
+CAROUSEL_REFERENCE = _reference  # Shared catalog validation at import and read boundaries.
+_carousel_output = obj({
+    **DEFS["receipt"]["properties"], **_carousel_scene,
+    "svg": {**string(262144), "minLength": 0},
+    "latest_revision": REV, "asset_refs": array(ID, 0, 100),
+    "journal": array(obj({"operation_id": ID, "revision": REV,
+        "kind": enum("create", "revise", "export"), "at": DATE,
+        "note": string(2000), "reference_use": _reference_use},
+        ("operation_id", "revision", "kind", "at")), 0, 10),
+    "next_step": enum("compose_svg", "render_then_review"),
+    "references": array(_reference, 0, 20), "total": {"type": "integer", "minimum": 0},
+    "offset": {"type": "integer", "minimum": 0}, "next_offset": {"type": ["integer", "null"]},
+    "reference": _reference, "resource_uri": string(300),
+    "view": enum("master", "region", "full", "crop"),
+    "region": {"anyOf": [_carousel_region, {"type": "null"}]},
+    "mime_type": enum("image/png", "image/jpeg", "image/webp"),
+    "width": {"type": "integer", "minimum": 1}, "height": {"type": "integer", "minimum": 1},
+    "source_width": {"type": "integer", "minimum": 1}, "source_height": {"type": "integer", "minimum": 1},
+    "source_sha256": string(64), "preview_sha256": string(64),
+    "size": enum("full"), "reencoded": {"type": "boolean"},
+    "bytes": {"type": "integer", "minimum": 1}, "size_bytes": {"type": "integer", "minimum": 1},
+    "preview_data_url": string(2796240), "full_data_url": string(2796240),
+}, ("private",))
+_carousel_commands = [
+    arm("create", _carousel_scene, ("brief",)),
+    arm("get", {"scope": {"const": "story"}, "carousel_id": ID, "revision": REV,
+        "include_svg": {"type": "boolean"}}, ("carousel_id",)),
+    arm("get", {"scope": {"const": "journal"}, "carousel_id": ID, "revision": REV}, ("scope", "carousel_id")),
+    arm("get", {"scope": {"const": "library"}, "query": {**string(500), "minLength": 0},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+        "offset": {"type": "integer", "minimum": 0}}, ("scope",)),
+    arm("get", {"scope": {"const": "reference"}, "reference_id": _reference_id,
+        "region": _carousel_region}, ("scope", "reference_id")),
+    arm("revise", {**_carousel_scene, "carousel_id": ID, "expected_revision": REV,
+        "note": string(2000), "reference_use": _reference_use}, ("carousel_id", "expected_revision")),
+    arm("render", {"carousel_id": ID, "revision": REV, "view": enum("master", "region"),
+        "region": _carousel_region, "card": {"type": "integer", "minimum": 1, "maximum": 10}},
+        ("carousel_id", "revision")),
+    arm("export", {"carousel_id": ID, "revision": REV}, ("carousel_id", "revision")),
+]
+tool("carousel", "Create, get, revise, render and export private SVG story carousels. "
+    "These commands never publish, edit a social post, send a message or dispatch image generation. "
+    "Dot generates components with its own tool and imports them through visual import. "
+    "get(scope:library) lists real owner-bound reference images; get(scope:reference,reference_id) "
+    "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
+    "record the visible technique and concrete change in revise.reference_use, then render the changed region. "
+    "SVG images use asset:RETURNED_ASSET_ID; no external URLs, scripts, data URLs or CSS. "
+    "Fonts: DejaVu Sans, DejaVu Serif, DejaVu Sans Mono. Use explicit text/tspan line breaks. "
+    "Render master shows composition; render region or card shows readable detail. Export returns "
+    "ordered private assets for the exact revision; export is not owner selection or permission to publish.",
+    obj({"command": {"oneOf": _carousel_commands}, "request_key": KEY}, ("command",)),
+    _carousel_output, "visual")
+TOOLS[-1]["annotations"]["title"] = "Private story carousels — no publication or generation"
+TOOLS[-1]["inputSchema"]["allOf"] = [{
+    "if": {"properties": {"command": {"properties": {"kind": {"enum": ["create", "revise", "export"]}},
+        "required": ["kind"]}}}, "then": {"required": ["request_key"]}}]
 workspace_import_kinds = [v["properties"]["kind"]["const"] for v in workspace_import_commands]
 visual_cmd = {"oneOf": [arm("import"), *workspace_import_commands,
     arm("import_browser_artifact", {"uri": browser_artifact_uri}, ("uri",)),
@@ -415,6 +496,7 @@ tool("visual", "Import a chat attachment, bounded workspace bytes (import_begin/
                       "file_name": string(512)}, ("download_url", "file_id"))},
         ("command",)), ref("receipt"), "visual")
 TOOLS[-1]["_meta"] = {"openai/fileParams": ["file"]}
+TOOLS[-1]["annotations"]["title"] = "Private image import; selection may resume an authorized publication"
 TOOLS[-1]["inputSchema"]["allOf"] = [{
     "if": {"properties": {"command": {"properties": {"kind": {"const": "import"}}, "required": ["kind"]}}},
     "then": {"required": ["file", "request_key"]},
@@ -694,6 +776,8 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
     for item in catalog()["tools"]:
         if item["required_scope"] not in effective:
             continue
+        if item["name"] == "vibepublish_carousel" and "visual" not in scopes:
+            continue  # Publish-only identities receive image import, not private authoring.
         item.pop("required_scope")
         if item["name"] == "vibepublish_publication_update" and "publication.manage" not in scopes:
             schema = item["inputSchema"]
@@ -721,6 +805,7 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
         if item["name"] == "vibepublish_visual" and "visual" not in scopes:
             item["inputSchema"]["properties"]["command"] = {"oneOf": [arm("import"), *copy.deepcopy(workspace_import_commands)]}
             item["description"] = "Import a chat attachment or bounded workspace image bytes as a private image asset, without AI or publication."
+            item["annotations"]["title"] = "Private image import — no publication or generation"
         if item["name"] == "vibepublish_publish" and "visual" not in scopes:
             item["inputSchema"]["properties"].pop("visual", None)
             item["inputSchema"]["anyOf"] = [v for v in item["inputSchema"]["anyOf"] if v.get("required") != ["visual"]]

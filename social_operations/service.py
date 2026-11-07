@@ -28,6 +28,10 @@ class Application:
         self.visuals = VisualService(self)
         from .emojis import EmojiService
         self.emojis = EmojiService(self)
+        from .carousel import CarouselService
+        from .carousel_references import ReferenceBank
+        self.carousels = CarouselService(self)
+        self.carousel_references = ReferenceBank(store)
 
     def tools(self, actor):
         with self.store.connection() as db:
@@ -53,6 +57,19 @@ class Application:
                 result = self.read(actor, arguments)
             elif short == 'media_store':
                 result = self.media_store(actor, arguments)
+            elif short == 'carousel':
+                command = arguments['command']
+                if command['kind'] == 'get' and command.get('scope') == 'library':
+                    result = await asyncio.to_thread(
+                        self.carousel_references.list, actor, command.get('query', ''),
+                        command.get('limit', 5), command.get('offset', 0))
+                    result['private'] = True
+                elif command['kind'] == 'get' and command.get('scope') == 'reference':
+                    result = await asyncio.to_thread(
+                        self.carousel_references.get, actor, command['reference_id'], command.get('region'))
+                    result.metadata['private'] = True
+                else:
+                    result = await asyncio.to_thread(self.carousels.command, actor, arguments)
             elif short in ('publish', 'engage', 'publication_update'):
                 result = self.accept(actor, short, arguments)
             elif short == 'visual':
@@ -257,6 +274,12 @@ class Application:
                    SELECT 1 FROM attempts a JOIN operations o ON o.id=a.operation_id,
                                 json_each(a.plan,'$.assets') j
                    WHERE o.work_state!='done' AND json_extract(j.value,'$.ref')=m.asset_id
+               ) AND NOT EXISTS (
+                   SELECT 1 FROM carousel_versions c, json_each(c.asset_refs) j
+                   WHERE j.value=m.asset_id
+               ) AND NOT EXISTS (
+                   SELECT 1 FROM operations o, json_each(o.result,'$.cards') j
+                   WHERE o.action='carousel' AND json_extract(j.value,'$.asset_ref')=m.asset_id
                )""", (self.store.clock(),))]
         db.executemany('DELETE FROM assets WHERE id=?', [(ident,) for ident in expired])
 
@@ -393,7 +416,7 @@ class Application:
             all_dest = self.aliases(db, actor)
             page = all_dest[offset:offset+50]
             bindings = {r['alias']: r for r in self.store.bindings(db, actor)}
-            result = {'version': '1.7.1-runtime-rkb-media-budget', 'schema_version': VERSION,
+            result = {'version': '1.8.0-runtime-carousel', 'schema_version': VERSION,
                       'skill_sha256': hashlib.sha256(skill.encode()).hexdigest(), 'skill': skill,
                       'estimated_tokens': (len(skill) + 2)//3, 'server_time': timestamp(self.store.clock()),
                       'timezone': actor.timezone, 'policy_epoch': actor.epoch, 'routing_revision': actor.routing_revision,

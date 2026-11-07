@@ -29,6 +29,13 @@ def update(text, change, expect="accept_after_runtime_checks"):
 job("Покажи инструкцию и доступные каналы", "get_started", {})
 job("Покажи примеры вызовов", "get_started", {"section": "examples"})
 job("Покажи возможности работы с картинками", "get_started", {"section": "visuals"})
+job("Найди в банке пример общей панели", "carousel", {"command": {
+    "kind": "get", "scope": "library", "query": "панель"}}, "private_owner_reference_catalog")
+job("Покажи выбранный референс глазами", "carousel", {"command": {
+    "kind": "get", "scope": "reference", "reference_id": "E02"}}, "actual_private_image_content")
+job("Начни семь связанных карточек по моему поручению", "carousel", {"command": {
+    "kind": "create", "brief": "Сохранить исторический смысл памятника", "card_count": 7},
+    "request_key": "carousel-create-1"}, "private_story_without_generation")
 job("Сохрани картинку файлом в приватную медиабазу", "media_store", {"command": {
     "kind": "put", "to": "pka_tg", "thread_ref": "https://t.me/c/4379835477/5",
     "content": {"text": "Подпись"}, "media": [{**ASSET, "role": "document"}]},
