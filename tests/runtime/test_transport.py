@@ -258,7 +258,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     initialized = await session.initialize()
                     self.assertEqual(initialized.protocolVersion,'2025-11-25')
                     tools = await session.list_tools()
-                    self.assertEqual(len(tools.tools),10)
+                    self.assertEqual(len(tools.tools),11)
                     boot = (await session.call_tool('vibepublish_get_started',{'section':'all'})).structuredContent
                     self.assertIn('skill_sha256',boot)
                     self.assertTrue(boot['skill'])

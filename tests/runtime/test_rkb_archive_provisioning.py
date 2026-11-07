@@ -1,8 +1,11 @@
 """No-secret operator acceptance for one-time KB technical archive identity."""
 import importlib.util
 import json
+import sqlite3
 import sys
 from pathlib import Path
+
+import pytest
 
 from social_operations.storage import Store
 
@@ -66,3 +69,17 @@ def test_scoped_archive_provision_dry_run_apply_and_replay(tmp_path, monkeypatch
     logs = capsys.readouterr().out
     for secret in (owner_token, after["service_token"], original["access_token"], original["refresh_token"]):
         assert secret not in logs
+
+
+def test_provision_preflight_rejects_old_schema_without_migrating(tmp_path, monkeypatch):
+    mod = _load()
+    db_path = tmp_path / "old-vibe.sqlite"
+    with sqlite3.connect(db_path) as db:
+        db.execute("PRAGMA user_version=11")
+    before = db_path.read_bytes()
+    monkeypatch.setattr(mod, "DB", db_path)
+    with pytest.raises(RuntimeError, match="schema v12 not active; do not provision"):
+        mod._preflight({})
+    assert db_path.read_bytes() == before
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 11

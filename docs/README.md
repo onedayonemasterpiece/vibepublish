@@ -125,4 +125,3 @@ operations in `operations/`, model instructions in `llm/`, references in
 `handoffs/` and tools in `tools/`. Keep explicit Draft, Fixed, Not done,
 Not confirmed by user and Done boundaries. A schema pass, accepted tree or local
 archive is not proof of a remotely delivered and verified runtime.
-

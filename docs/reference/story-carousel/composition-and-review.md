@@ -246,4 +246,3 @@
 | [Figma — 13 core graphic design principles](https://www.figma.com/resource-library/graphic-design-principles/) | Выравнивание, отрицательное пространство, контраст, пропорции и связность повторений | Не переносим упрощённые универсальные обещания «психологии цвета»; проверяем конкретное соседство |
 | [The Pudding — Part 3: Storytelling](https://pudding.cool/process/how-to-make-dope-shit-part-3/) | Аудитория и центральный вопрос; простой вывод можно дать сразу; сложный вводить через конкретную опору; stepping/carousel структурирует аргумент | Авторская редакционная практика, не обязательный семикарточный шаблон |
 | [Google — Web Stories best practices](https://developers.google.com/search/docs/appearance/web-stories-creation-best-practices) | Контекст и завершение дуги; видимый текст; осмысленная анимация; отсутствие искажённых медиа | Web Stories — соседний формат; его числовые рекомендации не являются нормой этого проекта |
-
