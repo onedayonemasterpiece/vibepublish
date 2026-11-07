@@ -17,9 +17,10 @@ from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
 
 
-# Process-local cache of full rendered canvases (PNG bytes, ~5–10 MB each).
+# Process-local cache of full rendered canvases, bounded by entries and PNG bytes.
 _RENDERED: 'OrderedDict' = OrderedDict()
 _RENDERED_MAX = 12
+_RENDERED_MAX_BYTES = 128 * 1024 * 1024
 _RENDERED_LOCK = threading.Lock()
 
 
@@ -238,22 +239,33 @@ class CarouselService:
     def _render(self, actor, row, layers=None):
         if not row['svg']:
             raise DomainError('carousel_scene_missing', 'Save an SVG composition with revise before rendering or exporting')
-        # A saved revision is immutable and asset IDs are immutable, so the full canvas for the
-        # same owner, SVG and layer filter is identical. Render it once; card/region/export crop it.
+        assets = {}
+
+        def read_asset(ident):
+            if ident not in assets:
+                assets[ident] = self._composition_asset(actor, ident)
+            return assets[ident]
+
+        # Cache hits obey the same current asset checks as cold renders, before layer filtering.
+        validate_svg(row['svg'], card_count=row['card_count'], card_width=row['card_width'],
+                     card_height=row['card_height'], read_asset=read_asset)
+        # The resolver may select an alpha original or its retained derivative.
         key = (actor.tenant_id, actor.principal_id, hashlib.sha256(row['svg'].encode()).hexdigest(),
-               row['card_count'], row['card_width'], row['card_height'], canonical(layers or {}))
+               row['card_count'], row['card_width'], row['card_height'], canonical(layers or {}),
+               tuple((ident, source[2]) for ident, source in assets.items()))
         with _RENDERED_LOCK:
             cached = _RENDERED.get(key)
             if cached is not None:
                 _RENDERED.move_to_end(key)
                 return cached
         data = render_svg(row['svg'], card_count=row['card_count'], card_width=row['card_width'],
-            card_height=row['card_height'], read_asset=lambda ident: self._composition_asset(actor, ident),
-            layers=layers)
-        with _RENDERED_LOCK:
-            _RENDERED[key] = data
-            while len(_RENDERED) > _RENDERED_MAX:
-                _RENDERED.popitem(last=False)
+            card_height=row['card_height'], read_asset=read_asset, layers=layers)
+        if len(data) <= _RENDERED_MAX_BYTES:
+            with _RENDERED_LOCK:
+                _RENDERED[key] = data
+                while (len(_RENDERED) > _RENDERED_MAX
+                       or sum(map(len, _RENDERED.values())) > _RENDERED_MAX_BYTES):
+                    _RENDERED.popitem(last=False)
         return data
 
     def render(self, actor, command):
