@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel A2: render images at max actual SVG display size ×1.5, opaque JPEG / alpha PNG, with 256 MiB SHA/target-size process LRU; add private `get(scope:components)` thumbnails with SVG IDs/classes/bounds and ledger event, no new persisted state.
 - Story Carousel: reuse the full rendered canvas per owner, immutable SVG revision and layer filter (process LRU, 12 canvases). Card, region, half-scale master and export crop the cached render instead of re-running resvg (~30 s per full render on the shared host). No new state or schema.
 
 - Story Carousel C3: fallback from SVG Repo HTTP 429 to Iconify style-scoped search, raw SVG and icon-set license metadata without losing the disk cache or SVG sanitizer. Rank private visual references by Russian/English token overlap and include `matched:false` catalog alternatives instead of empty results. Mocked-network regressions; no new dependency, database or publisher.
