@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel model guide `docs/llm/carousel/` (00–99): engineered process, storytelling roles/arcs/hooks, canvas numbers, 24 seam bridges, type scale and pairs, palette procedure, generation prompt templates (segment backgrounds, object on zone colour, lettering), verified SVG montage recipes (masks, cutouts, bbox stripes, scrim, grading, background word, thread), variation axes, infographics, review passes with tagged question bank. Integrates the ChatGPT research (C01–C16, Q/V/R 80 questions, 12 palettes, variation study, E01–E23 observations) that had not reached runtime. Served by `get(scope:guide)` (separate PR).
 - Story Carousel P0: render same-principal private PNG/WEBP alpha originals as EXIF-free RGBA PNG over the SVG background, including across card seams; leave the existing white-backed publication derivative unchanged.
 
 - Story Carousel: replace CairoSVG with resvg for true kerning, ship eight licensed Cyrillic OFL fonts (Oswald, Unbounded, Montserrat, PT Serif), accept safe standard SVG effects/styles while banning external resources; prefer direct host-supplied file import for dot. No new state/retry/publisher. No merge/deploy or native VK test.
