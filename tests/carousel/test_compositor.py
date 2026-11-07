@@ -191,15 +191,14 @@ def test_large_reused_asset_stays_out_of_svg_and_fetches_only_from_validated_map
     def guarded(**kwargs):
         assert kwargs['skip_system_fonts'] is True
         assert len(kwargs['font_files']) == 10
-        assert kwargs['svg_string'].count(';base64,') == 1
+        assert kwargs['svg_string'].count('data:image/png;base64,') == 1
         assert 'asset:photo' not in kwargs['svg_string']
         return convert(**kwargs)
     monkeypatch.setattr(resvg_py, 'svg_to_bytes', guarded)
     monkeypatch.setattr('social_operations.carousel_compositor.MAX_COMPOSITION_ASSET_BYTES', len(data))
     pixels = image(render_svg(source, read_asset=resolve, **size))
     assert reads == ['photo'] and pixels.size == (896, 128)
-    assert all(max(abs(a - b) for a, b in zip(pixels.getpixel((i*128+64, 64)), (18, 52, 86))) <= 4
-               for i in range(7))  # opaque rasters may be JPEG-embedded
+    assert all(pixels.getpixel((i*128+64, 64)) == (18, 52, 86) for i in range(7))
     with pytest.raises(DomainError) as exc:
         validate_svg(source.replace('asset:photo', 'asset:second', 1), read_asset=resolve, **size)
     assert exc.value.code == 'carousel_svg_limit'  # Unique source bytes remain bounded.
