@@ -30,7 +30,7 @@ POLICIES = {
     'wall.search': ('reader', {'owner_id', 'query', 'count', 'offset'}, {'owner_id', 'query', 'count', 'offset'}),
     'photos.getWallUploadServer': ('media', {'group_id'}, {'group_id'}),
     'photos.saveWallPhoto': ('media', {'group_id', 'server', 'photo', 'hash'}, {'group_id', 'server', 'photo', 'hash'}),
-    'wall.post': ('editor', {'owner_id', 'message', 'from_group', 'signed', 'guid'}, {'owner_id', 'message', 'from_group', 'signed', 'guid', 'attachments', 'publish_date'}),
+    'wall.post': ('editor', {'owner_id', 'message', 'from_group', 'signed', 'guid'}, {'owner_id', 'message', 'from_group', 'signed', 'guid', 'attachments', 'publish_date', 'primary_attachments_mode'}),
     'wall.edit': ('editor', {'owner_id', 'post_id'}, {'owner_id', 'post_id', 'message', 'attachments', 'publish_date'}),
     'wall.delete': ('editor', {'owner_id', 'post_id'}, {'owner_id', 'post_id'}),
     'wall.repost': ('editor', {'object', 'group_id'}, {'object', 'group_id'}),
