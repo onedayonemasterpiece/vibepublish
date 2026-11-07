@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel P0: render same-principal private PNG/WEBP alpha originals as EXIF-free RGBA PNG over the SVG background, including across card seams; leave the existing white-backed publication derivative unchanged.
+
 - Story Carousel: replace CairoSVG with resvg for true kerning, ship eight licensed Cyrillic OFL fonts (Oswald, Unbounded, Montserrat, PT Serif), accept safe standard SVG effects/styles while banning external resources; prefer direct host-supplied file import for dot. No new state/retry/publisher. No merge/deploy or native VK test.
 
 
