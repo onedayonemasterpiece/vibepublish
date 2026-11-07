@@ -201,22 +201,28 @@ class CarouselService:
             row = self._version(db, actor, command['carousel_id'], command.get('revision'))
             latest = self._version(db, actor, row['id'])
             journal = []
-            limit = command.get('limit', 50) if command.get('scope') == 'journal' else 10
-            for op in db.execute("SELECT id,revision,request,result,created FROM operations WHERE tenant_id=? "
+            full_journal = command.get('scope') == 'journal'
+            limit = command.get('limit', 50) if full_journal else 10
+            offset = command.get('offset', 0) if full_journal else 0
+            operations = db.execute("SELECT id,revision,request,result,created FROM operations WHERE tenant_id=? "
                     "AND principal_id=? AND action='carousel' AND json_extract(result,'$.carousel_id')=? "
-                    "ORDER BY created DESC,rowid DESC LIMIT ?", (actor.tenant_id, actor.principal_id, row['id'], limit)):
+                    "ORDER BY created DESC,rowid DESC LIMIT ? OFFSET ?",
+                    (actor.tenant_id, actor.principal_id, row['id'], limit + 1, offset)).fetchall()
+            for op in operations[:limit]:
                 entry = json.loads(op['request'])['command']
                 recorded = json.loads(op['result'])
                 journal.append({'operation_id': op['id'], 'revision': op['revision'], 'kind': entry['kind'],
                     'at': timestamp(op['created']),
                     **{key: entry[key] for key in ('note', 'reference_use', 'scope', 'view',
-                        'region', 'card', 'reference_id', 'asset_ref', 'imported_at',
+                        'region', 'card', 'reference_id', 'icon_id', 'asset_ref', 'imported_at',
                         'scale', 'layers', 'save_asset') if key in entry},
                     **({'duration_ms': recorded['duration_ms']} if 'duration_ms' in recorded else {})})
         result = {key: row[key] for key in ('revision', 'brief', 'card_count', 'card_width', 'card_height', 'caption')}
         result.update(carousel_id=row['id'], latest_revision=latest['revision'], private=True,
             scene_ready=bool(row['svg']), asset_refs=json.loads(row['asset_refs']), journal=journal,
             next_step='render_then_review' if row['svg'] else 'compose_svg')
+        if full_journal:
+            result.update(offset=offset, next_offset=offset + limit if len(operations) > limit else None)
         if command.get('include_svg'):
             result['svg'] = row['svg']
         return result

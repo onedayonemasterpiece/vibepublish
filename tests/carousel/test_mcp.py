@@ -47,7 +47,7 @@ def test_model_sees_reference_changes_seam_and_exports_via_mcp(tmp_path):
         tool = next(t for t in rpc('tools/list', {})['tools'] if t['name'] == 'vibepublish_carousel')
         assert tool['annotations']['readOnlyHint'] is False
         assert tool['annotations']['destructiveHint'] is False
-        assert tool['annotations']['openWorldHint'] is False
+        assert tool['annotations']['openWorldHint'] is True  # icons may read public SVG Repo over HTTP
         listed = call({'kind': 'get', 'scope': 'library', 'query': 'панель'})
         assert listed['structuredContent']['references'][0]['id'] == 'E01'
         assert not any(b['type'] == 'image' for b in listed['content'])

@@ -24,6 +24,10 @@
 
 - Add the owner-authorized private Story Carousel MVP: five MCP commands over SVG revisions, actual image/region previews, exact-revision ordered media export and the existing operation ledger. Add an owner-bound local visual reference bank with real Slack images, original-pixel crops and optional `reference_use` notes for concrete SVG improvements; keep private images out of Git. Preserve dot-owned generation, existing import/alpha limits, private effects and the existing E2E. Focused source checks and the three-photo/seven-card private prototype pass; public rollout, the revised VK-only postponed display test and owner visual acceptance remain pending.
 
+- Publication permission: return a complete request from frozen publish previews through normal status; prepare private edit previews without moving the publication head and return ready execute arguments bound to the existing preview operation. Reject a changed edit payload before dispatch and preserve the exact approved publish footer/entities/media/options after current access/time checks. Keep ordinary authorized execution unchanged. Distinguish technical tool unavailability from permission/content refusals in the skill; mark carousel's public icon lookup as an open-world read while keeping preparation non-publishing.
+
+- Story Carousel: record linked single-icon reads with the chosen `icon_id` in the existing private journal; expose older events through `get(scope:journal,offset)` and `next_offset`, keeping the 50-event page limit and 10-event story summary. Link the three later owner clarifications (background-aware lettering, expressive freedom and bounded guide stages) in the existing coverage matrix and canonical feature.
+
 - Centre MAX native Copy captions before strict hit testing so an in-viewport caption hidden by the composer can be read without changing native identity guards.
 
 - MAX exact channel reads reuse the same correlated native history identity as feed refs, so a freshly issued ref does not require an unrelated public-handle Copy URL binding.

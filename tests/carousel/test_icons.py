@@ -75,12 +75,19 @@ def test_icon_grid_and_safe_cached_svg_via_mcp(tmp_path):
             with Image.open(io.BytesIO(base64.b64decode(pictures[0]["data"]))) as picture:
                 assert picture.size == (800, 480)
                 assert picture.convert("RGB").getpixel((30, 30)) == (225, 43, 56)
-            selection = rpc({"kind": "get", "scope": "icon", "id": icon["id"]})
+            selection = rpc({"kind": "get", "scope": "icon", "carousel_id": carousel_id,
+                             "id": icon["id"]})
             safe = selection["structuredContent"]["svg"]
             assert "script" not in safe and "foreignObject" not in safe
             assert "evil.example" not in safe and "onmouseover" not in safe
             assert '<' in safe and "path" in safe
             assert len(urls) == 3
+            events = rpc({"kind": "get", "scope": "journal", "carousel_id": carousel_id})
+            selections = [entry for entry in events["structuredContent"]["journal"]
+                          if entry["kind"] == "get" and entry["scope"] == "icon"]
+            assert len(selections) == 1
+            assert selections[0]["icon_id"] == icon["id"]
+            assert selections[0]["revision"] == 1 and selections[0]["duration_ms"] >= 0
 
     # A disconnected SVG Repo never prevents a previously selected cached icon.
     bank = IconBank(store)
@@ -200,4 +207,34 @@ def test_iconify_filled_filters_stroke_variants(tmp_path):
         grid = IconBank(store).search(actor, "dove", "filled")
     assert [row["id"] for row in grid.metadata["icons"]] == [
         "mdi:dove", "ph:dove-fill", "fa6-solid:dove"
+    ]
+
+
+def test_iconify_outlined_excludes_tabler_filled_from_real_search_shape(tmp_path):
+    from urllib.error import HTTPError
+
+    store = Store(tmp_path / "ledger.sqlite")
+    actor = store.authenticate(store.create_principal("tenant", "owner", owner=True))
+    # Actual /search?query=heart&prefixes=lucide,tabler,ph,mdi,mdi-light order.
+    candidates = ["mdi:heart", "mdi:heart-outline", "mdi-light:heart", "tabler:heart",
+                  "tabler:heart-filled", "lucide:heart", "ph:heart", "ph:heart-bold",
+                  "ph:heart-duotone", "ph:heart-fill", "ph:heart-light", "ph:heart-thin"]
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0H24V24H0Z"/></svg>'
+
+    def fake_fetch(url, limit):
+        if url.startswith("https://www.svgrepo.com/"):
+            raise HTTPError(url, 429, "Too Many Requests", None, None)
+        if "/search?" in url:
+            return json.dumps({"icons": candidates, "collections": {}}).encode()
+        if "/collections?" in url:
+            return b'{}'
+        if url.endswith(".svg"):
+            return svg
+        raise AssertionError(url)
+
+    with patch("social_operations.carousel_icons._fetch", side_effect=fake_fetch):
+        grid = IconBank(store).search(actor, "heart", "line")
+    assert [row["id"] for row in grid.metadata["icons"]] == [
+        "mdi:heart-outline", "mdi-light:heart", "tabler:heart", "lucide:heart",
+        "ph:heart", "ph:heart-light", "ph:heart-thin",
     ]

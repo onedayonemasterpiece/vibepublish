@@ -259,6 +259,35 @@ def test_render_journal_records_requested_historical_revision(runtime):
     assert render['view'] == 'card' and render['card'] == 1
 
 
+@pytest.mark.asyncio
+async def test_journal_pages_beyond_fifty_events_without_losing_order(runtime):
+    store, actor, app, service, _ = runtime
+    now = store.clock()
+    store.clock = lambda: now  # Equal timestamps must preserve the ledger's row order.
+    first = create(service, actor)
+    ident = first['carousel_id']
+    operation_ids = [first['operation_id']]
+    for revision in range(1, 55):
+        changed = service.command(actor, {'command': {'kind': 'revise', 'carousel_id': ident,
+            'expected_revision': revision, 'note': f'Правка {revision}'},
+            'request_key': f'journal-revise-{revision}'})
+        operation_ids.append(changed['operation_id'])
+    command = {'kind': 'get', 'scope': 'journal', 'carousel_id': ident}
+    first_page = await app.call(actor, 'vibepublish_carousel', {'command': command})
+    assert len(first_page['journal']) == 50
+    assert first_page.get('offset') == 0 and first_page.get('next_offset') == 50
+    last_page = await app.call(actor, 'vibepublish_carousel', {
+        'command': {**command, 'offset': first_page['next_offset']}})
+    assert 'error' not in last_page
+    assert len(last_page['journal']) == 5
+    assert last_page['offset'] == 50 and last_page['next_offset'] is None
+    assert [entry['operation_id'] for entry in first_page['journal'] + last_page['journal']] == operation_ids[::-1]
+    assert last_page['journal'][-1]['kind'] == 'create'
+    story = await app.call(actor, 'vibepublish_carousel', {
+        'command': {'kind': 'get', 'carousel_id': ident}})
+    assert len(story['journal']) == 10 and 'next_offset' not in story
+
+
 def test_private_scope_revocation_and_invalid_regions(runtime):
     store, actor, app, service, svg = runtime
     ident = create(service, actor, svg)['carousel_id']
