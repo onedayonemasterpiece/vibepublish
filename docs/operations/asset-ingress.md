@@ -79,10 +79,16 @@ Status: **Not confirmed by user**. `vibepublish_visual` also accepts
 `command: {kind: "import"}`, a top-level `file`, and `request_key`. The tool's
 `_meta["openai/fileParams"] = ["file"]` follows the
 [official file-input contract](https://developers.openai.com/plugins/reference#Define-file-inputs).
-The client supplies `file.download_url` and `file.file_id`; `mime_type` and
-`file_name` are declared but optional. No manual HTTP upload or server path is
-required. Whether a particular connected client delivers real attachment objects
-still requires client-level acceptance; IDs/URLs must never be fabricated.
+The server receives a host-normalized object with `download_url` and `file_id`;
+`mime_type` and `file_name` are declared but optional. The model uses the file
+shape exposed by its connected client: when `file` is declared as a string,
+pass the real host file ID, not a manually constructed download descriptor.
+No manual HTTP upload or server path is required. A local path, data URL or
+image preview is not a host file ID; if no real host attachment handle is
+available, use the workspace byte import above. Do not invent IDs or URLs.
+The [carousel transport contract and client-level evidence](../features/story-carousel/README.md#7-обмен-медиа-с-dot-и-существующий-e2e)
+record the observed string-file import; other connected clients still need
+their own acceptance check.
 
 The verified standard receipt's `resource_id` is the private sanitized asset for
 publish/tune/compose. Import performs no generation or publication. Principals
