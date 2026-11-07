@@ -1,15 +1,17 @@
 """Private SVG stories, immutable revisions and ordered exports in the existing ledger."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
 import time
+from xml.etree import ElementTree as ET
 
 from PIL import Image, ImageDraw, ImageOps
 
 from .assets import AssetPreview, FULL_MAX_EDGE, insert_verified_image, render_asset_full, render_asset_preview, verify_image
-from .carousel_compositor import render_svg, slice_cards, validate_svg
+from .carousel_compositor import _ASSET, render_svg, slice_cards, validate_svg
 from .carousel_guide import GuideImages, guide, review_questions
 from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
@@ -225,6 +227,38 @@ class CarouselService:
             result.update(offset=offset, next_offset=offset + limit if len(operations) > limit else None)
         if command.get('include_svg'):
             result['svg'] = row['svg']
+        if command.get('scope') == 'components':
+            groups = {}
+            root = ET.fromstring(row['svg']) if row['svg'] else None
+            if root is not None:
+                for node in root.iter():
+                    if node.tag.rsplit('}', 1)[-1] != 'image':
+                        continue
+                    match = _ASSET.fullmatch(node.get('href', ''))
+                    if not match:
+                        continue
+                    ident = match[1]
+                    item = groups.setdefault(ident, {'asset_ref': ident,
+                        'element_ids': [], 'classes': [], 'x': float('inf'), 'y': float('inf'),
+                        'w': 0., 'h': 0.})
+                    if node.get('id'):
+                        item['element_ids'].append(node.get('id'))
+                    for cls in node.get('class', '').split():
+                        if cls not in item['classes']:
+                            item['classes'].append(cls)
+                    x, y = float(node.get('x', 0)), float(node.get('y', 0))
+                    w, h = float(node.get('width', 0)), float(node.get('height', 0))
+                    right = max(item['x'] + item['w'], x + w) if item['x'] != float('inf') else x+w
+                    bottom = max(item['y'] + item['h'], y + h) if item['y'] != float('inf') else y+h
+                    item['x'], item['y'] = min(item['x'], x), min(item['y'], y)
+                    item['w'], item['h'] = right-item['x'], bottom-item['y']
+            result['components'] = []
+            for component in groups.values():
+                data, mime, sha = self._composition_asset(actor, component['asset_ref'])
+                thumb = render_asset_preview(data, sha, '')
+                component['preview_data_url'] = ('data:' + thumb.metadata['mime_type'] + ';base64,'
+                    + base64.b64encode(thumb.data).decode('ascii'))
+                result['components'].append(component)
         return result
 
     def _render(self, actor, row, layers=None):
