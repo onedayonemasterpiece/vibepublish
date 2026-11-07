@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel: keep component pages focused on their images, placements and pagination instead of repeating the full story and journal. Align generation guidance with the author's visual intent: lettering manners follow their roles, generated dates/numbers require an exact visual check, and repeated defects call for a targeted change within the task's budget rather than an automatic reduction of the design.
+
 - Story Carousel guide: preserve the author's intended question in the existing brief, finish and compare distinct requested variants, and reuse the final visual review for unchanged cards. Keep private export separate from authorized publication. Clarify client-declared host-file inputs and the existing programmatic byte-import fallback without fabricated file handles.
 
 - Story Carousel components: return real MCP ImageContent and small indexed metadata, five thumbnails per page (up to eight). Affine image placements and SVG absolute/percent units resolve to canvas coordinates; unsupported geometry reports local placements and bounds_unavailable while retaining previews. Existing journal and asset access checks remain in use.

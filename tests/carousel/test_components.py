@@ -131,6 +131,47 @@ async def test_component_pages_read_only_the_requested_assets(runtime, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_component_page_omits_long_story_context_without_changing_images(runtime):
+    store, actor, app = runtime
+    assets = []
+    for color in ('red', 'blue'):
+        data = io.BytesIO()
+        Image.new('RGB', (30, 40), color).save(data, 'PNG')
+        assets.append(import_image(store, actor, data.getvalue(), 'image/png'))
+    story = await create(app, actor, ''.join(
+        f'<image id="part{index}" href="asset:{asset}" x="{index * 30}" width="30" height="40"/>'
+        for index, asset in enumerate(assets)))
+    request = {'command': {'kind': 'get', 'scope': 'components', 'carousel_id': story,
+                           'limit': 1, 'offset': 0}}
+    before = await app.call(actor, 'vibepublish_carousel', request)
+    brief, caption, note = 'Owner meaning ' * 220, 'Caption context ' * 80, 'Revision detail ' * 100
+    for revision in range(1, 4):
+        revised = await app.call(actor, 'vibepublish_carousel', {'command': {
+            'kind': 'revise', 'carousel_id': story, 'expected_revision': revision,
+            'brief': brief, 'caption': caption, 'note': note}, 'request_key': f'context-{revision}'})
+        assert 'error' not in revised, revised
+
+    after = await app.call(actor, 'vibepublish_carousel', request)
+    page = after.metadata
+    assert not {'brief', 'caption', 'journal', 'asset_refs', 'svg', 'scene_ready'} & page.keys()
+    assert page == {'carousel_id': story, 'revision': 4, 'latest_revision': 4, 'private': True,
+                    'card_count': 3, 'card_width': 240, 'card_height': 256,
+                    'next_step': 'render_then_review', 'components': before.metadata['components'],
+                    'total': 2, 'offset': 0, 'next_offset': 1}
+    assert len(after.images) == 1 and after.images[0].data == before.images[0].data
+    assert page['components'][0]['asset_ref'] == assets[0]
+    assert page['components'][0]['preview']['image_index'] == 0
+
+    # The full context remains available through the story scope, including this read's journal event.
+    state = await app.call(actor, 'vibepublish_carousel', {'command': {
+        'kind': 'get', 'scope': 'story', 'carousel_id': story, 'include_svg': True}})
+    assert state['brief'] == brief and state['caption'] == caption and set(state['asset_refs']) == set(assets)
+    assert all(asset in state['svg'] for asset in assets)
+    assert any(entry.get('note') == note for entry in state['journal'])
+    assert state['journal'][0]['scope'] == 'components' and state['journal'][0]['revision'] == 4
+
+
+@pytest.mark.asyncio
 async def test_component_thumbnails_are_images_in_actual_mcp_transport():
     import httpx
     from mcp import ClientSession

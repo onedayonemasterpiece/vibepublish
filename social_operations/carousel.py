@@ -341,7 +341,8 @@ class CarouselService:
             full_journal = command.get('scope') == 'journal'
             limit = command.get('limit', 50) if full_journal else 10
             offset = command.get('offset', 0) if full_journal else 0
-            operations = db.execute("SELECT id,revision,request,result,created FROM operations WHERE tenant_id=? "
+            operations = [] if command.get('scope') == 'components' else db.execute(
+                    "SELECT id,revision,request,result,created FROM operations WHERE tenant_id=? "
                     "AND principal_id=? AND action='carousel' AND json_extract(result,'$.carousel_id')=? "
                     "ORDER BY created DESC,rowid DESC LIMIT ? OFFSET ?",
                     (actor.tenant_id, actor.principal_id, row['id'], limit + 1, offset)).fetchall()
@@ -354,14 +355,9 @@ class CarouselService:
                         'region', 'card', 'reference_id', 'icon_id', 'asset_ref', 'imported_at',
                         'scale', 'layers', 'save_asset') if key in entry},
                     **({'duration_ms': recorded['duration_ms']} if 'duration_ms' in recorded else {})})
-        result = {key: row[key] for key in ('revision', 'brief', 'card_count', 'card_width', 'card_height', 'caption')}
+        result = {key: row[key] for key in ('revision', 'card_count', 'card_width', 'card_height')}
         result.update(carousel_id=row['id'], latest_revision=latest['revision'], private=True,
-            scene_ready=bool(row['svg']), asset_refs=json.loads(row['asset_refs']), journal=journal,
             next_step='render_then_review' if row['svg'] else 'compose_svg')
-        if full_journal:
-            result.update(offset=offset, next_offset=offset + limit if len(operations) > limit else None)
-        if command.get('include_svg'):
-            result['svg'] = row['svg']
         if command.get('scope') == 'components':
             components = _component_placements(row['svg'],
                 row['card_count'] * row['card_width'], row['card_height'])
@@ -376,6 +372,12 @@ class CarouselService:
                     **{key: thumb.metadata[key] for key in ('mime_type', 'width', 'height')}}
                 images.append(thumb)
             return ComponentImages(result, tuple(images))
+        result.update(brief=row['brief'], caption=row['caption'], scene_ready=bool(row['svg']),
+            asset_refs=json.loads(row['asset_refs']), journal=journal)
+        if full_journal:
+            result.update(offset=offset, next_offset=offset + limit if len(operations) > limit else None)
+        if command.get('include_svg'):
+            result['svg'] = row['svg']
         return result
 
     def _render(self, actor, row, layers=None):
