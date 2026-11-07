@@ -22,8 +22,8 @@
 | [MCP contract](../../../contracts/social_mcp_v1.py) | Один `vibepublish_carousel`, пять команд, scope `visual` | Реализован в исходном коде; публичный rollout и приёмка отдельно |
 | [CarouselService](../../../social_operations/carousel.py) | Приватная история, SVG, ревизии, чтение, рендер и упорядоченный экспорт | Нет отдельной сущности Variant/Review/Selection, генератора или публикационной команды |
 | [SVG compositor](../../../social_operations/carousel_compositor.py) | Безопасная проверка SVG → resvg с пакетными OFL-шрифтами → одно полотно → точная нарезка | Только поддержанное подмножество SVG; HTML и скрипты не принимаются |
-| [ReferenceBank](../../../social_operations/carousel_references.py) | Метаданные и настоящие картинки/кропы локального банка | Только привязанный владелец с `visual`; нет автоматической раздачи другим principals |
-| [IconBank](../../../social_operations/carousel_icons.py) | `get(scope:icons,query,style?)`: локальные SVG → SVG Repo HTTP, до 8 иконок в одной PNG-сетке с ID, вариантом 150/28 px и источником/лицензией; `get(scope:icon,id)`: очищенный inline SVG | Отдельной базы/сервиса нет; файлы кэша в `Store.path.parent/carousel-icons`. Неизвестную лицензию проверить на странице источника. Рендер карточки проверять глазами. |
+| [ReferenceBank](../../../social_operations/carousel_references.py) | Метаданные и настоящие картинки/кропы локального банка; ранжирование по RU/EN-токенам, запасные записи с `matched:false` | Только привязанный владелец с `visual`; нет автоматической раздачи другим principals |
+| [IconBank](../../../social_operations/carousel_icons.py) | `get(scope:icons,query,style?)`: локальные SVG → SVG Repo HTTP → Iconify при HTTP 429 или недоступности; до 8 иконок в одной PNG-сетке с ID, 150/28 px, источником и лицензией набора; `get(scope:icon,id)`: очищенный inline SVG | Отдельной базы/сервиса нет; файлы кэша в `Store.path.parent/carousel-icons`. Неизвестную лицензию проверить на странице источника. Рендер карточки проверять глазами. |
 | Existing assets / operation ledger | Проверка доступа к фото, сохранение операций и export assets, повтор по `request_key` | Превью и данные чужого principal не становятся доступными от наличия URI |
 | Генерация | Dot использует собственный инструмент и передаёт полученный файл разрешённым импортом | Carousel не вызывает `vibepublish_visual generate/tune/compose` |
 
@@ -73,9 +73,9 @@
 | --- | --- | --- |
 | `create` | Brief; необязательно SVG, caption и размеры | Новый `carousel_id`, revision 1, receipt. Без SVG сохраняется задание, `scene_ready:false` |
 | `get` | История/ревизия; `scope:story` или `journal`. `include_svg:true` доступен для story | Краткое состояние, asset refs, последние десять операций; SVG по запросу |
-| `get` | `scope:library`, необязательные `query`, `limit`, `offset` | Метаданные подходящих референсов, наличие файла, `next_offset`; по умолчанию пять записей, максимум двадцать |
+| `get` | `scope:library`, необязательные `query`, `limit`, `offset` | RU/EN-токены названия, тегов и описаний; релевантные записи выше, остальные с `matched:false` (вместо пустой выдачи); `next_offset`, максимум 20 |
 | `get` | `scope:reference`, `reference_id`, необязательный `region:[x,y,w,h]` | Одна реальная картинка или кроп оригинала в MCP `ImageContent`, размеры и источник |
-| `get` | `scope:icons`, `query`, необязательный `style` | Кэш перед SVG Repo (HTTP, без браузера), максимум восемь кандидатов: ID, название, URL, лицензия и один PNG-лист для визуального сравнения 150/28 px |
+| `get` | `scope:icons`, `query`, необязательный `style` | Кэш → SVG Repo (HTTP) → Iconify при 429/недоступности; `line`/`filled`/`illustrative` выбирают подходящие наборы. До 8 кандидатов: ID, название, URL, лицензия набора и PNG-лист сравнения 150/28 px |
 | `get` | `scope:icon`, `id` из поиска | SVG без скриптов, foreignObject, обработчиков событий, внешних ресурсов и CSS-загрузок; подходит для inline в SVG или как референс генератору |
 | `revise` | `carousel_id`, `expected_revision`; изменённые поля, полный новый SVG, необязательные `note`/`reference_use` | Новая ревизия; сервер не придумывает и не применяет геометрическую правку вместо модели |
 | `render` | `carousel_id`, точная `revision`; `view:master` либо `view:region` и bbox; `card` — сокращение для одного окна | Настоящее изображение без сохранения новой ревизии и без генерации |
