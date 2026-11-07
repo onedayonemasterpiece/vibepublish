@@ -30,8 +30,10 @@ class Application:
         self.emojis = EmojiService(self)
         from .carousel import CarouselService
         from .carousel_references import ReferenceBank
+        from .carousel_icons import IconBank
         self.carousels = CarouselService(self)
         self.carousel_references = ReferenceBank(store)
+        self.carousel_icons = IconBank(store)
 
     def tools(self, actor):
         with self.store.connection() as db:
@@ -68,6 +70,11 @@ class Application:
                     result = await asyncio.to_thread(
                         self.carousel_references.get, actor, command['reference_id'], command.get('region'))
                     result.metadata['private'] = True
+                elif command['kind'] == 'get' and command.get('scope') == 'icons':
+                    result = await asyncio.to_thread(
+                        self.carousel_icons.search, actor, command['query'], command.get('style', ''))
+                elif command['kind'] == 'get' and command.get('scope') == 'icon':
+                    result = await asyncio.to_thread(self.carousel_icons.get, actor, command['id'])
                 else:
                     result = await asyncio.to_thread(self.carousels.command, actor, arguments)
             elif short in ('publish', 'engage', 'publication_update'):
