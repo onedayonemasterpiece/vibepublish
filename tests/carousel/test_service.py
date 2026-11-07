@@ -124,7 +124,7 @@ def test_background_fragment_exact_layers_and_private_asset(runtime):
     assert event['region'] == region and event['layers'] == {'only': ['bg-pane']}
     assert event['asset_ref'] == only.metadata['asset_ref'] and event['duration_ms'] >= 0
     code('carousel_layer_not_found', lambda: service.command(actor, {'command': {
-        **command, 'layers': {'only': ['nonexistent']}}))
+        **command, 'layers': {'only': ['nonexistent']}}}))
 
 
 def test_background_fragment_rejects_oversized_exact_crop(runtime):
