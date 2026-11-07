@@ -221,6 +221,21 @@ def test_brief_first_revision_fence_and_key_conflict(runtime):
     code('carousel_reference_unavailable', lambda: service.command(actor, bad))
 
 
+def test_render_journal_records_requested_historical_revision(runtime):
+    _, actor, _, service, svg = runtime
+    ident = create(service, actor, svg, key='historical-create')['carousel_id']
+    updated = service.command(actor, {'command': {'kind': 'revise', 'carousel_id': ident,
+        'expected_revision': 1, 'caption': 'Новая подпись'}, 'request_key': 'historical-revise'})
+    assert updated['revision'] == 2
+    service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+        'revision': 1, 'card': 1}})
+    entries = service.command(actor, {'command': {'kind': 'get',
+        'scope': 'journal', 'carousel_id': ident}})['journal']
+    render = next(entry for entry in entries if entry['kind'] == 'render')
+    assert render['revision'] == 1
+    assert render['view'] == 'card' and render['card'] == 1
+
+
 def test_private_scope_revocation_and_invalid_regions(runtime):
     store, actor, app, service, svg = runtime
     ident = create(service, actor, svg)['carousel_id']

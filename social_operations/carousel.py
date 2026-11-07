@@ -154,9 +154,9 @@ class CarouselService:
         return self.app._new_operation(db, actor, 'carousel', intent,
                                        revision=revision, complete=True, result=result)
 
-    def log_event(self, actor, carousel_id, kind, *, duration_ms, **details):
+    def log_event(self, actor, carousel_id, kind, *, duration_ms, revision=None, **details):
         with self.store.tx() as db:
-            row = self._version(db, actor, carousel_id)
+            row = self._version(db, actor, carousel_id, revision)
             self._log(db, actor, row['id'], row['revision'], kind,
                       duration_ms=duration_ms, **details)
 
