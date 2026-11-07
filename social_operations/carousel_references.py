@@ -147,8 +147,6 @@ class ReferenceBank:
             ranked.append((score, entry))
         ranked.sort(key=lambda item: -item[0])  # Catalog order breaks ties.
         page = ranked[offset:offset + limit]
-        if not page and ranked:
-            page = ranked[:limit]  # Non-empty bank remains usable on oversized offsets.
         result = [{**entry, 'matched': bool(score or not terms)} for score, entry in page]
         return {'references': result, 'total': len(ranked), 'offset': offset,
                 'next_offset': offset + len(page) if offset + len(page) < len(ranked) else None}

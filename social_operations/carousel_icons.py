@@ -75,7 +75,8 @@ _ICONIFY_PREFIXES = {
 def _style_matches(ident: str, category: str) -> bool:
     prefix, name = ident.split(":", 1)
     if category == "outlined":
-        return (prefix in {"lucide", "tabler", "mdi-light"}
+        return (prefix in {"lucide", "mdi-light"}
+                or prefix == "tabler" and not name.endswith("-filled")
                 or prefix == "ph" and not name.endswith(("-fill", "-bold", "-duotone"))
                 or prefix == "mdi" and name.endswith("-outline"))
     if category == "filled":
