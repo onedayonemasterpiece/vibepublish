@@ -14,6 +14,24 @@ Normal publication is the default. Do not turn delivery into a manual investigat
 `file:{"download_url":"HOST_SUPPLIED_URL","file_id":"HOST_SUPPLIED_ID","mime_type":"image/png"}`
 и стабильным `request_key`. Не выдумывай URL/ID. Порционный
 `import_begin/chunk/finish` — только резерв, если file-передача недоступна.
+Если у сгенерированного файла dot **нет download URL**, но его настоящие байты есть
+в workspace, используй три команды **того же** `vibepublish_visual` (пример
+для PNG размером 123456 байт; значения в `<…>` замени данными **самого файла**):
+
+```json
+{"command":{"kind":"import_begin","source_sha256":"<64-символьный lowercase SHA-256 исходных байтов>","mime":"image/png","size_bytes":123456},"request_key":"carousel-texture-01-begin"}
+{"command":{"kind":"import_chunk","upload_id":"<workspace_upload.upload_id из begin>","offset":0,"data_base64":"<base64 первых 123456 байтов файла>"},"request_key":"carousel-texture-01-chunk-0"}
+{"command":{"kind":"import_finish","upload_id":"<тот же upload_id>"},"request_key":"carousel-texture-01-finish"}
+```
+
+`import_begin` вернёт `workspace_upload.upload_id`; сохраняй его. Если
+файл больше 196608 байт, повторяй **только** `import_chunk`: каждый chunk
+≤196608 декодированных байт (base64 ≤262144 символов), `offset` — число
+уже переданных байт / `workspace_upload.received_bytes`, для каждого offset
+отдельный стабильный `request_key`. `import_finish` после всех байт
+вернёт `resource_id` приватного ассета: используй именно его как
+`href="asset:RETURNED_RESOURCE_ID"` в SVG. Не выдумывай upload ID, хеш,
+base64 или байты и не передавай их через текст чата.
 Для первого прохода используй **непрозрачный компонент на нужном фоне**; alpha после нынешнего
 RGB-импорта не обещай. Не переноси генерацию в Vibe.
 
@@ -29,6 +47,7 @@ RGB-импорта не обещай. Не переноси генерацию �
    два разрозненных кадра общей фотографией». Переноси композиционный приём;
    изображение референса не является разрешённым публикационным ассетом.
 4. Собери SVG общего холста и сохрани его через `revise` с `expected_revision`.
+   На каждом шве нужен мост — фото/панель/линия/слово через рез; используй разные приёмы и проверяй `render(view:"region")` на **каждом** шве.
    Изображения: `href="asset:RETURNED_ASSET_ID"`. Для применения референса добавь
    `reference_use:{reference_id,observation,change}`; это краткая заметка в журнале,
    не доказательство просмотра человеком. Неподходящий приём не надо применять.
