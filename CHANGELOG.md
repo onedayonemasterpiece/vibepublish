@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel: retain same-owner PNG/WEBP source dependencies of every saved SVG revision during normal asset cleanup, so alpha cutouts and lettering do not silently revert to white derivatives. A 15-day cleanup regression re-renders and re-exports an older revision while unrelated and foreign originals are reclaimed.
+
 - Story Carousel P0: render same-principal private PNG/WEBP alpha originals as EXIF-free RGBA PNG over the SVG background, including across card seams; leave the existing white-backed publication derivative unchanged.
 
 - Story Carousel: replace CairoSVG with resvg for true kerning, ship eight licensed Cyrillic OFL fonts (Oswald, Unbounded, Montserrat, PT Serif), accept safe standard SVG effects/styles while banning external resources; prefer direct host-supplied file import for dot. No new state/retry/publisher. No merge/deploy or native VK test.
