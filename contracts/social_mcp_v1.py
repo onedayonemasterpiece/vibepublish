@@ -417,6 +417,11 @@ _icon_id = string(10, pattern=r"^[1-9][0-9]{0,9}$")
 _icon = obj({"id": _icon_id, "name": string(120), "source": URL,
     "license": string(100), "style": {**string(60), "minLength": 0}},
     ("id", "name", "source", "license", "style"))
+_carousel_layer_ids = array(string(128, pattern=r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$"), 1, 1200)
+_carousel_layers = {"oneOf": [
+    obj({"only": _carousel_layer_ids}, ("only",)),
+    obj({"hide": _carousel_layer_ids}, ("hide",)),
+]}
 _carousel_output = obj({
     **DEFS["receipt"]["properties"], **_carousel_scene,
     "svg": {**string(262144), "minLength": 0},
@@ -428,13 +433,15 @@ _carousel_output = obj({
         "view": enum("master", "region", "card"), "region": _carousel_region,
         "card": {"type": "integer", "minimum": 1, "maximum": 10},
         "reference_id": _reference_id, "icon_id": _icon_id, "asset_ref": ID, "imported_at": DATE,
+        "scale": {"const": 1}, "layers": _carousel_layers, "save_asset": {"type": "boolean"},
         "note": string(2000), "reference_use": _reference_use},
         ("operation_id", "revision", "kind", "at")), 0, 50),
     "next_step": enum("compose_svg", "render_then_review"),
     "references": array(_reference, 0, 20), "total": {"type": "integer", "minimum": 0},
     "offset": {"type": "integer", "minimum": 0}, "next_offset": {"type": ["integer", "null"]},
-    "reference": _reference, "resource_uri": string(300),
+    "reference": _reference, "resource_uri": string(300), "asset_ref": ID,
     "icons": array(_icon, 0, 8), "icon": _icon,
+    "scale": {"const": 1}, "layers": _carousel_layers, "save_asset": {"type": "boolean"},
     "view": enum("master", "region", "full", "crop"),
     "region": {"anyOf": [_carousel_region, {"type": "null"}]},
     "mime_type": enum("image/png", "image/jpeg", "image/webp"),
@@ -443,7 +450,7 @@ _carousel_output = obj({
     "source_sha256": string(64), "preview_sha256": string(64),
     "size": enum("full"), "reencoded": {"type": "boolean"},
     "bytes": {"type": "integer", "minimum": 1}, "size_bytes": {"type": "integer", "minimum": 1},
-    "preview_data_url": string(2796240), "full_data_url": string(2796240),
+    "preview_data_url": string(2796240), "full_data_url": string(36_000_000),
 }, ("private",))
 _carousel_commands = [
     arm("create", _carousel_scene, ("brief",)),
@@ -464,7 +471,8 @@ _carousel_commands = [
     arm("revise", {**_carousel_scene, "carousel_id": ID, "expected_revision": REV,
         "note": string(2000), "reference_use": _reference_use}, ("carousel_id", "expected_revision")),
     arm("render", {"carousel_id": ID, "revision": REV, "view": enum("master", "region"),
-        "region": _carousel_region, "card": {"type": "integer", "minimum": 1, "maximum": 10}},
+        "region": _carousel_region, "card": {"type": "integer", "minimum": 1, "maximum": 10},
+        "scale": {"const": 1}, "layers": _carousel_layers, "save_asset": {"type": "boolean"}},
         ("carousel_id", "revision")),
     arm("export", {"carousel_id": ID, "revision": REV}, ("carousel_id", "revision")),
 ]
@@ -479,7 +487,9 @@ tool("carousel", "Create, get, revise, render and export private SVG story carou
     "get(scope:icons,query,style?) searches cached SVG Repo icons then HTTPS and returns one PNG contact sheet of up to eight options (150/28 px) with ID labels and source licenses. Inspect the actual pixels, then get(scope:icon,id) for cleaned inline SVG or a visual hint for dot's own image generator. Inspect the composed card too. "
     "SVG images use asset:RETURNED_ASSET_ID; safe style/class/use/filter/pattern/mask/paint-order; no external URLs, scripts, foreignObject or author data: URIs. "
     "Bundled Cyrillic SIL OFL fonts: Oswald (narrow), Unbounded (display), Montserrat (grotesk), PT Serif (serif), their package weights and italic; kerning by resvg. Primary dot asset input: vibepublish_visual import with the host-supplied file in the client-declared shape (the real file ID string when file is declared as a string). Do not construct a download descriptor; the host normalizes the attachment for the server. Begin/chunk/finish is only a fallback. Use explicit text/tspan lines. "
-    "Render master shows composition; render region or card shows readable detail. Export returns "
+    "Render master shows composition; region with scale:1 returns exact PNG up to 2560 px. "
+    "layers.only/hide filters SVG ids; save_asset:true saves the exact region as a private image. "
+    "Export returns "
     "ordered private assets for the exact revision; export is not owner selection or permission to publish.",
     obj({"command": {"oneOf": _carousel_commands}, "request_key": KEY}, ("command",)),
     _carousel_output, "visual")

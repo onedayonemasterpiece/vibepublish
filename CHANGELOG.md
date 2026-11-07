@@ -7,6 +7,11 @@
 - Story Carousel: restore the complete owner scope in the existing canonical feature and coverage audit (37 channel requirements plus five session decisions). Preserve original creative requirements, the author's intent, finished alternatives, exact publication/edit permission output and current E2E pause; distinguish source tests, deployed capability, observed results and owner acceptance. Keep the five-command architecture without reinstating unnecessary Review/Selection state.
 
 - Story Carousel: retain same-owner PNG/WEBP source dependencies of every saved SVG revision during normal asset cleanup, so alpha cutouts and lettering do not silently revert to white derivatives. A 15-day cleanup regression re-renders and re-exports an older revision while unrelated and foreign originals are reclaimed.
+- Story Carousel context fragments: refuse a filtered SVG that loses a required local reference instead of returning a silently empty image; handle root-only/root-hidden selection explicitly. Encode fully opaque exact crops as pixel-identical RGB PNG so allowed 2560×2560 fragments fit the existing save/import limit. Existing ACL and full-scene export behavior are preserved.
+
+- Story Carousel A2: render exact 1:1 PNG regions up to 2560 px, include or omit SVG-id layers without new revisions, and optionally store the crop as a private existing asset. Record render parameters in the existing carousel journal; guide dot through the F1 background-fragment generation cycle.
+
+- Story Carousel: log timed render and linked reference/library reads plus first use of imported assets in the existing scoped operation ledger; expose up to 50 journal events without recording prompts or secrets. VK publish accepts `vk.primary_attachments_mode=carousel` and forwards it to native `wall.post` including frozen scheduled replay. No new tables, states, or deployment.
 
 - Story Carousel P0: render same-principal private PNG/WEBP alpha originals as EXIF-free RGBA PNG over the SVG background, including across card seams; leave the existing white-backed publication derivative unchanged.
 
