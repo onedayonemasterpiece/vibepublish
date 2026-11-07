@@ -256,6 +256,10 @@ class CarouselService:
         else:
             with Image.open(io.BytesIO(data)) as master:
                 cropped = master.crop((x, y, x+w, y+h))
+                if (command.get('scale') == 1 and cropped.mode == 'RGBA'
+                        and cropped.getextrema()[3] == (255, 255)):
+                    # Keep exact pixels without a redundant alpha channel exceeding ingress limits.
+                    cropped = cropped.convert('RGB')
                 output = io.BytesIO()
                 cropped.save(output, format='PNG')
             exact_png = output.getvalue()
