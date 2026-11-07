@@ -39,10 +39,13 @@ def test_icon_grid_and_safe_cached_svg_via_mcp(tmp_path):
             client.headers.update({"Authorization": "Bearer " + token,
                                    "Accept": "application/json, text/event-stream"})
 
-            def rpc(command):
+            def rpc(command, key=None):
+                args = {"command": command}
+                if key:
+                    args["request_key"] = key
                 response = client.post("/mcp/", json={"jsonrpc": "2.0", "id": 2,
                     "method": "tools/call", "params": {"name": "vibepublish_carousel",
-                    "arguments": {"command": command}}})
+                    "arguments": args}})
                 assert response.status_code == 200, response.text
                 result = response.json()["result"]
                 assert not result.get("isError"), result
@@ -52,8 +55,18 @@ def test_icon_grid_and_safe_cached_svg_via_mcp(tmp_path):
                 "method": "initialize", "params": {"protocolVersion": "2025-11-25",
                 "capabilities": {}, "clientInfo": {"name": "icon-test", "version": "1"}}})
             assert initial.status_code == 200
-            grid = rpc({"kind": "get", "scope": "icons", "query": "library", "style": "outlined"})
+            created = rpc({"kind": "create", "brief": "Иконки"}, "icons-journal-create")
+            carousel_id = created["structuredContent"]["carousel_id"]
+            grid = rpc({"kind": "get", "scope": "icons", "carousel_id": carousel_id,
+                        "query": "library", "style": "outlined"})
             assert len(grid["structuredContent"]["icons"]) == 1
+            events = rpc({"kind": "get", "scope": "journal", "carousel_id": carousel_id})
+            journal = events["structuredContent"]["journal"]
+            icon_reads = [entry for entry in journal
+                          if entry["kind"] == "get" and entry["scope"] == "icons"]
+            assert len(icon_reads) == 1
+            assert icon_reads[0]["duration_ms"] >= 0
+            assert "library" not in json.dumps(icon_reads)
             icon = grid["structuredContent"]["icons"][0]
             assert icon["id"] == "342687"
             assert icon["license"] == "CC0 License"

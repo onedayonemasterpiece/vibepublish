@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import time
 
 from PIL import Image, ImageOps
 
@@ -47,6 +48,7 @@ class CarouselService:
             return self.render(actor, command)
         if kind not in {'create', 'revise', 'export'}:
             raise DomainError('invalid_input')
+        started = time.perf_counter()
         if not args.get('request_key'):
             raise DomainError('carousel_request_key_required')
         # Both admission and commit reuse the existing key. Pure rendering happens
@@ -92,13 +94,26 @@ class CarouselService:
                         media=[{'source': {'kind': 'asset', 'id': card['asset_ref']}} for card in cards])
                 else:
                     result['scene_ready'] = bool(scene['svg'])
+                result['duration_ms'] = round((time.perf_counter() - started) * 1000)
                 op = self.app._new_operation(db, actor, 'carousel', intent,
                     revision=revision, complete=True, result=result)
                 if kind != 'export':
+                    # Track each imported asset at its first use in this carousel.
+                    previously_used = {r[0] for r in db.execute(
+                        "SELECT DISTINCT j.value FROM carousel_versions v, json_each(v.asset_refs) j "
+                        "WHERE v.id=? AND v.tenant_id=? AND v.principal_id=?",
+                        (ident, actor.tenant_id, actor.principal_id))}
                     db.execute('INSERT INTO carousel_versions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
                         (ident, revision, actor.tenant_id, actor.principal_id, op,
                          scene['brief'], scene['svg'], scene['card_count'], scene['card_width'],
                          scene['card_height'], scene['caption'], canonical(scene['asset_refs']), self.store.clock()))
+                    for ref in scene['asset_refs']:
+                        if ref not in previously_used:
+                            asset = db.execute(
+                                'SELECT created FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
+                                (ref, actor.tenant_id, actor.principal_id)).fetchone()
+                            self._log(db, actor, ident, revision, 'asset_import',
+                                      asset_ref=ref, imported_at=timestamp(asset['created']))
                 self.app._key(db, actor, args['request_key'], digest(['carousel', intent]), op)
         return self.store.receipt(actor, op)
 
@@ -131,6 +146,20 @@ class CarouselService:
         rgba = output.getvalue()
         return rgba, 'image/png', hashlib.sha256(rgba).hexdigest()
 
+    def _log(self, db, actor, carousel_id, revision, kind, *, duration_ms=None, **details):
+        intent = {'command': {'kind': kind, 'carousel_id': carousel_id, **details}}
+        result = {'carousel_id': carousel_id}
+        if duration_ms is not None:
+            result['duration_ms'] = duration_ms
+        return self.app._new_operation(db, actor, 'carousel', intent,
+                                       revision=revision, complete=True, result=result)
+
+    def log_event(self, actor, carousel_id, kind, *, duration_ms, revision=None, **details):
+        with self.store.tx() as db:
+            row = self._version(db, actor, carousel_id, revision)
+            self._log(db, actor, row['id'], row['revision'], kind,
+                      duration_ms=duration_ms, **details)
+
     def _prepare(self, actor, command, previous):
         defaults = {'brief': '', 'svg': '', 'card_count': 7, 'card_width': 1080,
                     'card_height': 1350, 'caption': ''}
@@ -160,12 +189,17 @@ class CarouselService:
             row = self._version(db, actor, command['carousel_id'], command.get('revision'))
             latest = self._version(db, actor, row['id'])
             journal = []
-            for op in db.execute("SELECT id,revision,request,created FROM operations WHERE tenant_id=? "
+            limit = command.get('limit', 50) if command.get('scope') == 'journal' else 10
+            for op in db.execute("SELECT id,revision,request,result,created FROM operations WHERE tenant_id=? "
                     "AND principal_id=? AND action='carousel' AND json_extract(result,'$.carousel_id')=? "
-                    "ORDER BY created DESC,rowid DESC LIMIT 10", (actor.tenant_id, actor.principal_id, row['id'])):
+                    "ORDER BY created DESC,rowid DESC LIMIT ?", (actor.tenant_id, actor.principal_id, row['id'], limit)):
                 entry = json.loads(op['request'])['command']
+                recorded = json.loads(op['result'])
                 journal.append({'operation_id': op['id'], 'revision': op['revision'], 'kind': entry['kind'],
-                    'at': timestamp(op['created']), **{key: entry[key] for key in ('note', 'reference_use') if key in entry}})
+                    'at': timestamp(op['created']),
+                    **{key: entry[key] for key in ('note', 'reference_use', 'scope', 'view',
+                        'region', 'card', 'reference_id', 'asset_ref', 'imported_at') if key in entry},
+                    **({'duration_ms': recorded['duration_ms']} if 'duration_ms' in recorded else {})})
         result = {key: row[key] for key in ('revision', 'brief', 'card_count', 'card_width', 'card_height', 'caption')}
         result.update(carousel_id=row['id'], latest_revision=latest['revision'], private=True,
             scene_ready=bool(row['svg']), asset_refs=json.loads(row['asset_refs']), journal=journal,
@@ -181,6 +215,7 @@ class CarouselService:
             card_height=row['card_height'], read_asset=lambda ident: self._composition_asset(actor, ident))
 
     def render(self, actor, command):
+        started = time.perf_counter()
         with self.store.connection() as db:
             row = self._version(db, actor, command['carousel_id'], command['revision'])
         data = self._render(actor, row)
@@ -216,6 +251,14 @@ class CarouselService:
         # pixels to an actor revoked while the compositor was running.
         with self.store.connection() as db:
             self._version(db, actor, row['id'], row['revision'])
+        details = {'view': 'card' if 'card' in command else view}
+        if 'card' in command:
+            details['card'] = command['card']
+        elif view == 'region':
+            details['region'] = list(region)
+        self.log_event(actor, row['id'], 'render',
+                       duration_ms=round((time.perf_counter() - started) * 1000),
+                       revision=row['revision'], **details)
         metadata = {key: value for key, value in preview.metadata.items() if key != 'resource_uri'}
         metadata.update(carousel_id=row['id'], revision=row['revision'], private=True,
                         view=view, source_width=width, source_height=height)
