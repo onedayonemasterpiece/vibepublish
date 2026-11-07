@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import secrets
 import sys
 import sqlite3
@@ -120,7 +121,13 @@ class Application:
             return result
         except DomainError as exc:
             return exc.output()
-        except sqlite3.Error:
+        except sqlite3.Error as exc:
+            logging.getLogger(__name__).error(
+                "store_unavailable tool=%s sqlite_errorcode=%s sqlite_errorname=%s",
+                name if name in CATALOG else "unknown",
+                getattr(exc, "sqlite_errorcode", None),
+                getattr(exc, "sqlite_errorname", None),
+            )
             return DomainError("store_unavailable", "No receipt could be returned. Recover using status or the same request key, never a new send", "contact_owner").output()
 
     def read_asset(self, actor, ident):
