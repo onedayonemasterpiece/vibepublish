@@ -110,21 +110,6 @@ render → приватный export**. Актуальный тест показ
 11. Never ask the user to inspect a provider manually. Never invoke recovery or
     resubmission commands to complete this recipe.
 
-### Если для точного действия ещё нужно поручение
-
-Для публикации используй существующий `mode:"preview"`, дождись обычного
-`vibepublish_status` и передай владельцу готовый `permission_request` целиком:
-в нём уже есть назначения, текст со ссылками/футером, порядок медиа и время.
-После согласия применяется существующий `change.kind:"approve"` с возвращённым
-токеном; подтверждение сохраняет просмотренный payload.
-
-Для правки вызови `vibepublish_publication_update` с `change.kind:"edit"`,
-`change.mode:"preview"` и точной правкой. Это приватная подготовка, без изменения
-поста или ревизии. Покажи `permission_request`; после согласия используй готовые
-`execute_args`. Если подготовленный payload изменился, `permission_preview_changed`
-отказывает до отправки: получи актуальный preview. Уже достаточное поручение
-позволяет обычный execute; обязательного дополнительного согласования нет.
-
 ## Boundaries and exceptional paths
 
 Use only server-returned aliases, IDs, queue references and revisions; respect
@@ -162,6 +147,21 @@ non-Prussia links and any other legacy `put` URLs remain denied.
 Never route via local scripts, tokens or a general publish command.
 Do not use provider credentials/cookies as tool arguments or delete and
 recreate posts to evade provider errors.
+
+## Если для точного действия ещё нужно поручение
+
+Для публикации используй существующий `mode:"preview"`, дождись обычного
+`vibepublish_status` и передай владельцу готовый `permission_request` целиком:
+в нём уже есть назначения, текст со ссылками/футером, порядок медиа и время.
+После согласия применяется существующий `change.kind:"approve"` с возвращённым
+токеном; подтверждение сохраняет просмотренный payload.
+
+Для правки вызови `vibepublish_publication_update` с `change.kind:"edit"`,
+`change.mode:"preview"` и точной правкой. Это приватная подготовка, без изменения
+поста или ревизии. Покажи `permission_request`; после согласия используй готовые
+`execute_args`. Если подготовленный payload изменился, `permission_preview_changed`
+отказывает до отправки: получи актуальный preview. Уже достаточное поручение
+позволяет обычный execute; обязательного дополнительного согласования нет.
 
 
 ## Хештеги VK

@@ -1,13 +1,16 @@
 # Documentation
 
-## Story Carousel private MVP and visual references — 2026-11-07
+## Story Carousel: full requirements and actual delivery — 2026-11-07
 
-Start with the [canonical feature and current limits](features/story-carousel/README.md).
-The owner authorized implementation and a growing bank of actual Slack examples on
-November 7. Source now implements one private `vibepublish_carousel` tool with five
-commands: create, get, revise, render and export. It stores SVG revisions in the
-existing ledger, returns a strip or an original-resolution region, and exports
-ordered private media for an exact revision. Generation remains **dot's own tool**.
+Start with the [canonical feature](features/story-carousel/README.md) and the
+[current coverage matrix](reference/story-carousel/coverage-audit-2026-11-06.md#текущая-полнота-на-7-ноября-2026).
+The owner asked for the full creative process: natural input and meaning, a common
+composition, typography and palettes, generated components, actual references,
+professional advisory review, polishing and finished alternatives when requested.
+The five private MCP commands implement the technical foundation; their existence
+does not establish that the complete product or a finished story is accepted.
+Generation remains **dot's own tool**. The original requirements and later owner
+decisions take precedence over an auditor's narrower implementation proposal.
 
 The private bank has 23 source records and 22 unique images. The repository keeps
 [reference metadata](reference/story-carousel/reference-catalog.json); runtime image
@@ -25,7 +28,7 @@ Supporting material:
 
 - [Original research and tutorials](reports/story-carousel-research-2026-11-06.md).
 - [Original Opus critique](reports/story-carousel-critique-2026-11-06.md), preserved as authored proposals.
-- [36-requirement coverage audit](reference/story-carousel/coverage-audit-2026-11-06.md)
+- [37 channel requirements and five session decisions, with historical audit retained](reference/story-carousel/coverage-audit-2026-11-06.md)
   and [source register](reference/story-carousel/source-register.md).
 - [Visual language and E01–E23 audit](reference/story-carousel/visual-language.md),
   [eight narrow illustrations of two principles, excluded from tool examples](reference/story-carousel/blockout-atlas.svg),
@@ -34,12 +37,14 @@ Supporting material:
   [5+5 variation study](reference/story-carousel/variation-study.md).
 - [Platform, media and PastVu verification](reference/story-carousel/platform-media-audit-2026-11-06.md).
 
-Status: implementation authorized (**Fixed**), source implemented,
-**Not confirmed by user**. Public runtime deployment and native platform/dot E2E:
-**Not done**. Focused source checks and private server image provisioning are evidence
-for those specific steps, not production or visual acceptance. The earlier
+Status: requirements and implementation authorized (**Fixed**); full product
+**Not done / Not confirmed by user**. Code tests, deployed MCP availability,
+observed images and owner acceptance are separate evidence. The canonical feature
+and matrix record their actual scope, dates and remaining owners. The existing
+third dot E2E is paused; its single live operator continues the same story after
+the required capabilities are ready. The earlier
 [full-channel audit and Opus reconciliation](reports/story-carousel-reconciliation-2026-11-06.md)
-remain historical research; the canonical feature defines the reduced current contract.
+remain research and decision history, not authority to delete owner requirements.
 
 ## Active MAX completion correction — 2026-09-08
 
