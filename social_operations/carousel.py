@@ -4,14 +4,19 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
+import re
 import time
 import threading
 from collections import OrderedDict
+from dataclasses import dataclass
+from xml.etree import ElementTree as ET
 
+from fontTools.misc.transform import Identity
 from PIL import Image, ImageDraw, ImageOps
 
 from .assets import AssetPreview, FULL_MAX_EDGE, insert_verified_image, render_asset_full, render_asset_preview, verify_image
-from .carousel_compositor import render_svg, slice_cards, validate_svg
+from .carousel_compositor import _ASSET, _NUMBER, _XLINK, render_svg, slice_cards, validate_svg
 from .carousel_guide import GuideImages, guide, review_questions
 from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
@@ -22,6 +27,129 @@ _RENDERED: 'OrderedDict' = OrderedDict()
 _RENDERED_MAX = 12
 _RENDERED_MAX_BYTES = 128 * 1024 * 1024
 _RENDERED_LOCK = threading.Lock()
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentImages:
+    metadata: dict
+    images: tuple[AssetPreview, ...]
+
+
+def _placement_transform(value):
+    """Parse SVG affine operations; matrix arithmetic stays in fontTools."""
+    pattern = r'([A-Za-z]+)\s*\(([^()]*)\)'
+    if re.sub(pattern, '', value).strip(' ,\t\r\n'):
+        raise ValueError('Unsupported SVG transform')
+    transform = Identity
+    for name, arguments in re.findall(pattern, value):
+        if _NUMBER.sub('', arguments).strip(' ,\t\r\n'):
+            raise ValueError('Unsupported SVG transform arguments')
+        values = [float(n) for n in _NUMBER.findall(arguments)]
+        match name, values:
+            case 'matrix', [a, b, c, d, e, f]:
+                transform = transform.transform((a, b, c, d, e, f))
+            case 'translate', [x]:
+                transform = transform.translate(x)
+            case 'translate', [x, y]:
+                transform = transform.translate(x, y)
+            case 'scale', [x]:
+                transform = transform.scale(x)
+            case 'scale', [x, y]:
+                transform = transform.scale(x, y)
+            case 'rotate', [angle, *center] if len(center) in (0, 2):
+                x, y = center or (0, 0)
+                transform = transform.translate(x, y).rotate(math.radians(angle)).translate(-x, -y)
+            case 'skewX', [angle]:
+                transform = transform.skew(math.radians(angle), 0)
+            case 'skewY', [angle]:
+                transform = transform.skew(0, math.radians(angle))
+            case _:
+                raise ValueError('Unsupported SVG transform')
+    return transform
+
+
+def _placement_length(value, viewport):
+    match = re.fullmatch(rf'({_NUMBER.pattern})(px|in|cm|mm|pt|pc|%)?', value.strip())
+    if not match:
+        raise ValueError('Length needs computed CSS, font metrics or intrinsic image dimensions')
+    number, unit = match.groups()
+    # SVG absolute lengths use CSS's 96 dpi; percentages use the current viewport.
+    factor = {'px': 1, 'in': 96, 'cm': 96 / 2.54, 'mm': 96 / 25.4,
+              'pt': 96 / 72, 'pc': 16, '%': viewport / 100, None: 1}[unit]
+    return float(number) * factor
+
+
+def _component_placements(svg, width, height):
+    """Image placement rectangles, not alpha/clip painted bounds or a second renderer."""
+    if not svg:
+        return []
+    root, groups = ET.fromstring(svg), {}
+    css_geometry = r'(?:^|[;{])\s*(?:transform(?:-origin|-box)?|x|y|width|height)\s*:'
+    styled = any(node.tag.rsplit('}', 1)[-1] == 'style'
+                 and re.search(css_geometry, node.text or '', re.I) for node in root.iter())
+    referenced = {node.get('href', node.get('{' + _XLINK + '}href', '')).removeprefix('#') for node in root.iter()
+                  if node.tag.rsplit('}', 1)[-1] == 'use'}
+
+    def visit(node, matrix=Identity, transforms=(), unavailable=None):
+        tag = node.tag.rsplit('}', 1)[-1]
+        own_transform = node.get('transform', '')
+        if own_transform:
+            transforms = (*transforms, own_transform)
+            try:
+                matrix = matrix.transform(_placement_transform(own_transform))
+            except (ValueError, OverflowError):
+                unavailable = 'Unsupported SVG transform'
+        if (tag in {'defs', 'symbol', 'pattern', 'mask', 'clipPath'}
+                or tag == 'svg' and node is not root or node.get('id') in referenced):
+            unavailable = 'Nested or referenced viewport; canvas bounds require a rendered crop'
+        if (styled or re.search(css_geometry, node.get('style', ''), re.I)
+                or 'transform-origin' in node.attrib or 'transform-box' in node.attrib):
+            unavailable = 'CSS geometry is not resolved; inspect the local placement and rendered crop'
+        href = node.get('href', node.get('{' + _XLINK + '}href', ''))
+        match = _ASSET.fullmatch(href) if tag == 'image' else None
+        if match:
+            item = groups.setdefault(match[1], {'asset_ref': match[1],
+                'element_ids': [], 'classes': [], 'placements': []})
+            placement = {}
+            if node.get('id'):
+                item['element_ids'].append(node.get('id'))
+                placement['element_id'] = node.get('id')
+            for name in node.get('class', '').split():
+                if name not in item['classes']:
+                    item['classes'].append(name)
+            local = {key: node.get(key, '0' if key in {'x', 'y'} else 'auto')
+                     for key in ('x', 'y', 'width', 'height')}
+            try:
+                if unavailable:
+                    raise ValueError(unavailable)
+                x, y, w, h = (_placement_length(local[key], axis) for key, axis in
+                              zip(local, (width, height, width, height)))
+                if w < 0 or h < 0:
+                    raise ValueError('Negative image dimensions')
+                corners = [matrix.transformPoint(point) for point in
+                           ((x, y), (x + w, y), (x, y + h), (x + w, y + h))]
+                if not all(math.isfinite(n) for point in corners for n in point):
+                    raise ValueError('Non-finite placement bounds')
+                xs, ys = zip(*corners)
+                placement.update(x=min(xs), y=min(ys), w=max(xs) - min(xs), h=max(ys) - min(ys))
+            except (ValueError, OverflowError) as exc:
+                placement.update(bounds_unavailable=str(exc)[:160],
+                    local={key: value[:256] for key, value in local.items()},
+                    transforms=[value[:1024] for value in transforms])
+            item['placements'].append(placement)
+        for child in node:
+            visit(child, matrix, transforms, unavailable)
+
+    visit(root)
+    for item in groups.values():
+        placements = item['placements']
+        if any('bounds_unavailable' in placement for placement in placements):
+            item['bounds_unavailable'] = 'See placements; some canvas bounds are unavailable'
+        else:
+            x, y = min(p['x'] for p in placements), min(p['y'] for p in placements)
+            item.update(x=x, y=y, w=max(p['x'] + p['w'] for p in placements) - x,
+                        h=max(p['y'] + p['h'] for p in placements) - y)
+    return list(groups.values())
 
 
 class CarouselService:
@@ -234,6 +362,20 @@ class CarouselService:
             result.update(offset=offset, next_offset=offset + limit if len(operations) > limit else None)
         if command.get('include_svg'):
             result['svg'] = row['svg']
+        if command.get('scope') == 'components':
+            components = _component_placements(row['svg'],
+                row['card_count'] * row['card_width'], row['card_height'])
+            limit, offset = command.get('limit', 5), command.get('offset', 0)
+            result.update(components=components[offset:offset + limit], total=len(components),
+                offset=offset, next_offset=offset + limit if offset + limit < len(components) else None)
+            images = []
+            for component in result['components']:
+                data, mime, sha = self._composition_asset(actor, component['asset_ref'])
+                thumb = render_asset_preview(data, sha, '')
+                component['preview'] = {'image_index': len(images),
+                    **{key: thumb.metadata[key] for key in ('mime_type', 'width', 'height')}}
+                images.append(thumb)
+            return ComponentImages(result, tuple(images))
         return result
 
     def _render(self, actor, row, layers=None):

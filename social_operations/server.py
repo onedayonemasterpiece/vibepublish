@@ -19,6 +19,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route, Mount
 from .assets import AssetPreview
+from .carousel import ComponentImages
 from .carousel_guide import GuideImages
 from .domain import DomainError, canonical
 from .ingress import IngressApplication
@@ -127,12 +128,14 @@ def create_app(store, *, allowed_hosts=('127.0.0.1', 'localhost', 'testserver'),
                 structuredContent=structured,
                 isError=False,
             )
-        if isinstance(result, GuideImages):
+        if isinstance(result, (GuideImages, ComponentImages)):
+            images = [(preview.data, preview.metadata['mime_type']) for preview in result.images] \
+                if isinstance(result, ComponentImages) else [(png, 'image/png') for png in result.images]
             return types.CallToolResult(
                 content=[
                     types.TextContent(type='text', text=canonical(result.metadata)),
-                    *[types.ImageContent(type='image', data=base64.b64encode(png).decode('ascii'),
-                                         mimeType='image/png') for png in result.images],
+                    *[types.ImageContent(type='image', data=base64.b64encode(data).decode('ascii'),
+                                         mimeType=mime) for data, mime in images],
                 ],
                 structuredContent=result.metadata, isError=False,
             )
