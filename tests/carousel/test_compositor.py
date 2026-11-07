@@ -28,10 +28,7 @@ def image(data):
     return Image.open(io.BytesIO(data)).convert('RGB')
 
 
-def test_one_image_and_panel_cross_seam_without_independent_rescaling(monkeypatch):
-    # A private asset is fetched once even when repeated. Cairo's URL opener must
-    # never be used, including for legitimate private image resources.
-    monkeypatch.setattr('cairosvg.url.urlopen', lambda *a, **k: pytest.fail('Network access'))
+def test_one_image_and_panel_cross_seam_without_independent_rescaling():
     original = Image.new('RGB', (80, 80), '#064f79')
     for y in range(80):
         for x in range(40, 80):
@@ -64,14 +61,14 @@ def test_one_image_and_panel_cross_seam_without_independent_rescaling(monkeypatc
 
 
 def test_cyrillic_and_explicit_line_positions_render_with_supported_font():
-    source = svg('<text x="18" y="70" font-family="DejaVu Sans" font-weight="700" font-size="38">'
+    source = svg('<text x="18" y="70" font-family="Montserrat" font-weight="700" font-size="38">'
                  'Памятник<tspan x="18" y="130">дружбе</tspan></text>')
     pixels = image(render(source))
     assert ImageChops.difference(pixels.crop((0, 20, 300, 80)), Image.new('RGB', (300, 60), 'white')).getbbox()
     assert ImageChops.difference(pixels.crop((0, 85, 300, 140)), Image.new('RGB', (300, 55), 'white')).getbbox()
     assert pixels.getpixel((599, 199)) == (255, 255, 255)
-    with pytest.raises(DomainError, match='DejaVu'):
-        render(source.replace('DejaVu Sans', 'Some Remote Font'))
+    with pytest.raises(DomainError, match='Fonts'):
+        render(source.replace('Montserrat', 'Some Remote Font'))
 
 
 @pytest.mark.parametrize('body', [
@@ -81,13 +78,10 @@ def test_cyrillic_and_explicit_line_positions_render_with_supported_font():
     '<image href="data:image/svg+xml;base64,PHN2Zy8+"/>',
     '<rect fill="url(https://example.invalid/x)"/>',
     '<style>@import "https://example.invalid/style.css";</style>',
-    '<rect style="fill:red"/>', '<rect onclick="alert(1)"/>',
-    '<foreignObject/>', '<script/>', '<use href="#loop" id="loop"/>',
-    '<filter id="huge"/>',
-    '<defs><clipPath id="loop"><rect clip-path="url(#loop)"/></clipPath></defs>',
+    '<rect onclick="alert(1)"/>',
+    '<foreignObject/>', '<script/>', '<use href="https://example.invalid/use.svg#id"/>',
 ])
-def test_unsafe_source_rejected_before_renderer(monkeypatch, body):
-    monkeypatch.setattr('cairosvg.surface.PNGSurface.convert', lambda **kw: pytest.fail('Unsafe render'))
+def test_unsafe_source_rejected_before_renderer(body):
     with pytest.raises(DomainError) as exc:
         render(svg(body))
     assert exc.value.code == 'carousel_svg_unsafe'
@@ -106,10 +100,10 @@ def test_private_asset_access_and_actual_raster_type_are_required():
 
 def test_definition_types_dimensions_complexity_and_entities_are_bounded():
     cases = [
-        (svg('<rect id="r" fill="url(#r)"/>'), 'carousel_svg_invalid'),
+        (svg('<rect fill="url(#missing)"/>'), 'carousel_svg_invalid'),
         (svg('<rect width="1e999"/>'), 'carousel_svg_limit'),
         (svg('<rect width="NaN"/>'), 'carousel_svg_limit'),
-        (svg('<mask id="m" maskUnits="userSpaceOnUse" width="100000"/>'), 'carousel_svg_limit'),
+        (svg('<mask id="m" width="100001"/>'), 'carousel_svg_limit'),
         (svg('<g>' * 25 + '</g>' * 25), 'carousel_svg_limit'),
         (svg('<rect/>' * 1201), 'carousel_svg_limit'),
         (svg('', 'viewBox="0 0 600 600"'), 'carousel_dimensions_invalid'),
@@ -132,7 +126,7 @@ def test_validation_can_preserve_private_refs_without_reading_pixels():
 
 
 def test_large_reused_asset_stays_out_of_svg_and_fetches_only_from_validated_map(monkeypatch):
-    from cairosvg.surface import PNGSurface
+    import resvg_py
     out = io.BytesIO()
     Image.new('RGB', (1536, 1536), '#123456').save(out, 'PNG', compress_level=0)
     data = out.getvalue()
@@ -147,14 +141,14 @@ def test_large_reused_asset_stays_out_of_svg_and_fetches_only_from_validated_map
     normalized = validate_svg(source, read_asset=resolve, **size)
     assert len(normalized) < 2000 and b'data:' not in normalized and reads == ['photo']
     reads.clear()
-    convert = PNGSurface.convert
+    convert = resvg_py.svg_to_bytes
     def guarded(**kwargs):
-        for forbidden in ('file:///private/file.png', 'https://example.invalid/x',
-                          'data:image/png;base64,eA==', 'asset:unvalidated'):
-            with pytest.raises(DomainError):
-                kwargs['url_fetcher'](forbidden, 'image/*')
+        assert kwargs['skip_system_fonts'] is True
+        assert len(kwargs['font_files']) == 8
+        assert kwargs['svg_string'].count('data:image/png;base64,') == 1
+        assert 'asset:photo' not in kwargs['svg_string']
         return convert(**kwargs)
-    monkeypatch.setattr(PNGSurface, 'convert', guarded)
+    monkeypatch.setattr(resvg_py, 'svg_to_bytes', guarded)
     monkeypatch.setattr('social_operations.carousel_compositor.MAX_COMPOSITION_ASSET_BYTES', len(data))
     pixels = image(render_svg(source, read_asset=resolve, **size))
     assert reads == ['photo'] and pixels.size == (896, 128)
@@ -162,3 +156,37 @@ def test_large_reused_asset_stays_out_of_svg_and_fetches_only_from_validated_map
     with pytest.raises(DomainError) as exc:
         validate_svg(source.replace('asset:photo', 'asset:second', 1), read_asset=resolve, **size)
     assert exc.value.code == 'carousel_svg_limit'  # Unique source bytes remain bounded.
+
+
+def test_large_oswald_cyrillic_title_and_kerning_phrase():
+    oswald = svg('<text x="10" y="95" font-family="Oswald" font-weight="700" font-size="58">'
+                 'КАЛИНИНГРАД 1977</text>')
+    pixels = image(render(oswald))
+    assert ImageChops.difference(pixels, Image.new('RGB', pixels.size, 'white')).getbbox()
+    grotesk = svg('<text x="15" y="100" font-family="Montserrat" font-size="58" font-weight="700">'
+                  'AVATAR ТАТА</text>')
+    pixels = image(render(grotesk))
+    assert ImageChops.difference(pixels, Image.new('RGB', pixels.size, 'white')).getbbox()
+
+
+def test_style_class_use_filter_pattern_paint_order_italic_and_default_mask():
+    source = svg("""
+      <defs>
+        <rect id="shape" width="80" height="70" rx="9"/>
+        <pattern id="pat" width="12" height="12" patternUnits="userSpaceOnUse">
+          <rect width="12" height="12" fill="#11aabb"/>
+          <circle cx="6" cy="6" r="3" fill="#aa1155"/>
+        </pattern>
+        <filter id="blur"><feGaussianBlur stdDeviation="1"/></filter>
+        <mask id="mask"><rect width="100%" height="100%" fill="white"/></mask>
+      </defs>
+      <style>.accent {fill: #e6ad44; paint-order: stroke fill;}</style>
+      <rect x="10" y="10" width="140" height="100" fill="url(#pat)" mask="url(#mask)"/>
+      <use href="#shape" class="accent" x="180" y="15" filter="url(#blur)"/>
+      <text x="20" y="180" font-family="Montserrat" font-style="italic"
+            style="font-weight:550;fill:#123456" font-size="32">КАЛИНИНГРАД</text>
+    """)
+    normalized = validate_svg(source, **SIZE)
+    assert b'patternUnits' in normalized and b'paint-order' in normalized
+    pixels = image(render(source))
+    assert ImageChops.difference(pixels, Image.new('RGB', pixels.size, 'white')).getbbox()

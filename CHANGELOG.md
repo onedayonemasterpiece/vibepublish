@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Story Carousel: replace CairoSVG with resvg for true kerning, ship eight licensed Cyrillic OFL fonts (Oswald, Unbounded, Montserrat, PT Serif), accept safe standard SVG effects/styles while banning external resources; prefer direct host-supplied file import for dot. No new state/retry/publisher. No merge/deploy or native VK test.
+
+
 - Add the owner-authorized private Story Carousel MVP: five MCP commands over SVG revisions, actual image/region previews, exact-revision ordered media export and the existing operation ledger. Add an owner-bound local visual reference bank with real Slack images, original-pixel crops and optional `reference_use` notes for concrete SVG improvements; keep private images out of Git. Preserve dot-owned generation, existing import/alpha limits, private effects and the existing E2E. Focused source checks and the three-photo/seven-card private prototype pass; public rollout, the revised VK-only postponed display test and owner visual acceptance remain pending.
 
 - Centre MAX native Copy captions before strict hit testing so an in-viewport caption hidden by the composer can be read without changing native identity guards.

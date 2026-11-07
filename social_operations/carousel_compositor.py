@@ -5,6 +5,7 @@ asset IDs with its existing ACL; this module never opens a model-supplied URL.
 """
 from __future__ import annotations
 
+import base64
 import io
 import math
 import re
@@ -22,37 +23,28 @@ from .domain import DomainError
 
 MAX_SVG_BYTES = 256 * 1024
 MAX_COMPOSITION_ASSET_BYTES = 44 * 1024 * 1024
-FONTS = ('DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono')
-_FONT_FILES = dict(zip(FONTS, ('DejaVuSans', 'DejaVuSerif', 'DejaVuSansMono')))
 _SVG = 'http://www.w3.org/2000/svg'
 _XLINK = 'http://www.w3.org/1999/xlink'
 _NUMBER = re.compile(r'[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?')
 _ID = re.compile(r'[A-Za-z_][A-Za-z0-9_.-]{0,127}')
 _ASSET = re.compile(r'(?:asset:|vibepublish://assets/)([A-Za-z0-9_][A-Za-z0-9_.-]{0,127})')
-_PAINT = re.compile(r'url\(\s*([\'"]?)#(?P<id>[A-Za-z_][A-Za-z0-9_.-]{0,127})\1\s*\)')
-_GLOBAL = set(('id transform fill fill-opacity fill-rule stroke stroke-width '
-               'stroke-linecap stroke-linejoin stroke-miterlimit stroke-dasharray '
-               'stroke-dashoffset stroke-opacity opacity clip-path clip-rule mask '
-               'color font-family font-size font-style font-weight text-anchor '
-               'dominant-baseline letter-spacing').split())
-_ATTRS = {
-    'svg': {'width', 'height', 'viewBox'}, 'g': set(), 'defs': set(),
-    'rect': {'x', 'y', 'width', 'height', 'rx', 'ry'},
-    'circle': {'cx', 'cy', 'r'}, 'ellipse': {'cx', 'cy', 'rx', 'ry'},
-    'line': {'x1', 'y1', 'x2', 'y2'}, 'path': {'d'},
-    'polygon': {'points'}, 'polyline': {'points'},
-    'image': {'x', 'y', 'width', 'height', 'href', 'preserveAspectRatio'},
-    'text': {'x', 'y', 'dx', 'dy', 'rotate'}, 'tspan': {'x', 'y', 'dx', 'dy', 'rotate'},
-    'clipPath': {'clipPathUnits'},
-    'mask': {'x', 'y', 'width', 'height', 'maskUnits', 'maskContentUnits'},
-    'linearGradient': {'x1', 'y1', 'x2', 'y2', 'gradientUnits', 'gradientTransform', 'spreadMethod'},
-    'radialGradient': {'cx', 'cy', 'r', 'fx', 'fy', 'gradientUnits', 'gradientTransform', 'spreadMethod'},
-    'stop': {'offset', 'stop-color', 'stop-opacity'}, 'title': set(), 'desc': set(),
-}
+_LOCAL_URL = re.compile(r"url\s*\(\s*['\"]?#([A-Za-z_][A-Za-z0-9_.-]{0,127})['\"]?\s*\)", re.I)
 _NUMERIC = set(('x y dx dy x1 y1 x2 y2 cx cy r rx ry fx fy width height d points '
                 'transform gradientTransform font-size letter-spacing stroke-width '
-                'stroke-miterlimit stroke-dasharray stroke-dashoffset rotate').split())
-_DEFINITIONS = {'clipPath', 'mask', 'linearGradient', 'radialGradient'}
+                'stroke-miterlimit stroke-dasharray stroke-dashoffset rotate '
+                'stdDeviation patternTransform filterRes').split())
+_FONT_DIR = Path(__file__).resolve().parent / 'fonts'
+# (regular, bold, italic, bold-italic); variable fonts share an exact font file.
+_FONT_VARIANTS = {
+    'Oswald': ('Oswald[wght].ttf',) * 4,
+    'Unbounded': ('Unbounded[wght].ttf',) * 4,
+    'Montserrat': ('Montserrat[wght].ttf',) * 2 + ('Montserrat-Italic[wght].ttf',) * 2,
+    'PT Serif': ('PT_Serif-Web-Regular.ttf', 'PT_Serif-Web-Bold.ttf',
+                 'PT_Serif-Web-Italic.ttf', 'PT_Serif-Web-BoldItalic.ttf'),
+}
+FONTS = tuple(_FONT_VARIANTS)
+_RENDER_FONT_FILES = tuple(str(_FONT_DIR / name)
+                           for name in sorted({name for variants in _FONT_VARIANTS.values() for name in variants}))
 
 
 def _dimensions(card_count, card_width, card_height):
@@ -64,14 +56,58 @@ def _dimensions(card_count, card_width, card_height):
     return card_count * card_width, card_height
 
 
-@lru_cache(maxsize=6)
-def _font_chars(family, bold):
-    name = _FONT_FILES[family] + ('-Bold' if bold else '') + '.ttf'
-    path = Path('/usr/share/fonts/truetype/dejavu') / name
+@lru_cache(maxsize=16)
+def _font_chars(path: Path):
     if not path.is_file():
-        raise DomainError('carousel_font_not_available', 'Install the documented DejaVu font package', 'contact_owner')
+        raise DomainError('carousel_font_not_available', 'Packaged OFL font file is missing', 'contact_owner')
     with TTFont(path) as font:
         return frozenset(font.getBestCmap())
+
+
+def _resolve_font(family: str, weight: int, italic: bool):
+    if family not in _FONT_VARIANTS:
+        raise DomainError('carousel_font_not_available', 'Fonts: Oswald, Unbounded, Montserrat, PT Serif')
+    filename = _FONT_VARIANTS[family][int(weight >= 600) + 2 * italic]
+    return _FONT_DIR / filename
+
+
+def _font_selection(attrs, inherited):
+    family, weight, italic = inherited
+    style = attrs.get('style', '')
+    css = {name.lower(): value.strip() for name, value in re.findall(
+        r'(?:^|;)\s*(font-family|font-weight|font-style)\s*:\s*([^;]+)', style, re.I)}
+    value = attrs.get('font-family', css.get('font-family'))
+    if value:
+        names = [part.strip().strip('"\'') for part in value.split(',')]
+        family = next((name for name in names if name in FONTS), names[0])
+    value = attrs.get('font-weight', css.get('font-weight', '')).strip().lower()
+    if value:
+        if value == 'normal':
+            weight = 400
+        elif value == 'bold':
+            weight = 700
+        elif value == 'bolder':
+            weight = min(weight + 300, 900)
+        elif value == 'lighter':
+            weight = max(weight - 300, 100)
+        elif value not in {'inherit', 'unset'}:
+            if not value.isdecimal() or not 100 <= int(value) <= 900:
+                raise DomainError('carousel_font_not_available', 'Use a bundled variable/static font weight')
+            weight = int(value)
+    value = attrs.get('font-style', css.get('font-style', '')).strip().lower()
+    if value and value not in {'inherit', 'unset'}:
+        italic = value.startswith(('italic', 'oblique'))
+        if not italic and value != 'normal':
+            raise DomainError('carousel_font_not_available', 'Use normal, italic or oblique')
+    return family, weight, italic
+
+
+def _safe_local_urls(value: str):
+    if re.search(r'@import\b', value, re.I):
+        raise DomainError('carousel_svg_unsafe', 'CSS imports are forbidden')
+    without_local = _LOCAL_URL.sub('', value)
+    if re.search(r'url\s*\(', without_local, re.I):
+        raise DomainError('carousel_svg_unsafe', 'Only local url(#id) references are permitted')
 
 
 def _image_bytes(ident, read_asset):
@@ -93,11 +129,7 @@ def _image_bytes(ident, read_asset):
 
 
 def validate_svg(svg, *, card_count, card_width, card_height, read_asset=None) -> bytes:
-    """Validate without rendering; optionally resolve ACL-checked private assets.
-
-    Source always retains canonical asset: links, never repeated inline bytes.
-    A resolver validates each unique image once, outside a write transaction.
-    """
+    """Preserve ordinary SVG; reject code, external references and bounded-resource abuse."""
     width, height = _dimensions(card_count, card_width, card_height)
     try:
         size = len(svg.encode('utf-8')) if isinstance(svg, str) else 0
@@ -108,7 +140,7 @@ def validate_svg(svg, *, card_count, card_width, card_height, read_asset=None) -
     try:
         root = fromstring(svg, forbid_dtd=True, forbid_entities=True, forbid_external=True)
     except (ET.ParseError, DefusedXmlException, UnicodeError, LookupError, ValueError) as exc:
-        raise DomainError('carousel_svg_invalid', 'SVG must be valid XML without DTDs or entities') from exc
+        raise DomainError('carousel_svg_invalid', 'SVG must be XML without DTDs or entities') from exc
     if root.tag not in {'svg', '{' + _SVG + '}svg'}:
         raise DomainError('carousel_svg_invalid', 'An SVG root is required')
     for key, expected in (('width', width), ('height', height)):
@@ -124,114 +156,137 @@ def validate_svg(svg, *, card_count, card_width, card_height, read_asset=None) -
         if values != [0, 0, width, height]:
             raise DomainError('carousel_dimensions_invalid', 'Use viewBox="0 0 canvas_width card_height"')
     root.set('viewBox', f'0 0 {width} {height}')
-    root.set('font-family', root.get('font-family', FONTS[0]))
-    ids, references, images = {}, [], {}
-    stack = [(root, 0, False, FONTS[0], False)]
+    root.set('font-family', root.get('font-family', 'Montserrat'))
+    seen_ids, links, images = set(), [], set()
+    stack = [(root, 0, ('Montserrat', 400, False))]
     count = text_count = asset_bytes = 0
     while stack:
-        node, depth, in_definition, family, bold = stack.pop()
+        node, depth, font = stack.pop()
         count += 1
         if count > 1200 or depth > 24:
             raise DomainError('carousel_svg_limit', 'SVG is too complex')
-        tag = node.tag.removeprefix('{' + _SVG + '}')
-        if tag not in _ATTRS or tag == 'svg' and node is not root:
-            raise DomainError('carousel_svg_unsafe', 'Use supported SVG shapes, text, images and definitions')
-        node.tag = '{' + _SVG + '}' + tag
+        tag = node.tag.rsplit('}', 1)[-1]
+        if tag.lower() in {'script', 'foreignobject'}:
+            raise DomainError('carousel_svg_unsafe', 'Script and foreignObject are forbidden')
+        if not node.tag.startswith('{'):
+            node.tag = '{' + _SVG + '}' + tag
         attrs = {}
         for raw_key, value in node.attrib.items():
-            key = 'href' if raw_key == '{' + _XLINK + '}href' else raw_key
-            if key == '{http://www.w3.org/XML/1998/namespace}space' and value in {'preserve', 'default'}:
-                attrs[key] = value
-                continue
-            if key not in _GLOBAL | _ATTRS[tag] or key in attrs:
-                raise DomainError('carousel_svg_unsafe', 'Use SVG presentation attributes; CSS, events and external resources are forbidden')
-            if len(value) > 32_768 or ('url' in value.lower() and not _PAINT.fullmatch(value)):
-                raise DomainError('carousel_svg_unsafe', 'Only local definition references are allowed')
+            key = raw_key.rsplit('}', 1)[-1]
+            if key.lower().startswith('on') or key == 'base' and raw_key.endswith('}base'):
+                raise DomainError('carousel_svg_unsafe', 'SVG events and external bases are forbidden')
+            if len(value) > 32_768:
+                raise DomainError('carousel_svg_limit', 'SVG attribute is too large')
+            _safe_local_urls(value)
+            if key == 'style' and '\\' in value:
+                raise DomainError('carousel_svg_unsafe', 'Escaped CSS resources are forbidden')
+            if key == 'href':
+                if raw_key not in {'href', '{' + _XLINK + '}href'}:
+                    raise DomainError('carousel_svg_unsafe', 'Untrusted href namespace')
+                match = _ASSET.fullmatch(value)
+                if match:
+                    if tag != 'image':
+                        raise DomainError('carousel_svg_unsafe', 'Assets are allowed only in image elements')
+                    value = 'asset:' + match[1]
+                    if match[1] not in images:
+                        images.add(match[1])
+                        if read_asset is not None:
+                            asset_bytes += len(_image_bytes(match[1], read_asset))
+                            if asset_bytes > MAX_COMPOSITION_ASSET_BYTES:
+                                raise DomainError('carousel_svg_limit', 'Unique image bytes exceed the composition budget')
+                elif not (value.startswith('#') and _ID.fullmatch(value[1:])):
+                    raise DomainError('carousel_svg_unsafe', 'href must be asset:ID or #id')
             if key in _NUMERIC and (re.search(r'\b(?:nan|inf(?:inity)?)\b', value, re.I)
                                     or any(not math.isfinite(float(n)) or abs(float(n)) > 100_000
                                            for n in _NUMBER.findall(value))):
                 raise DomainError('carousel_svg_limit', 'SVG coordinates are out of bounds')
-            if key == 'font-size' and (not re.fullmatch(r'\d+(?:\.\d+)?(?:px)?', value)
-                                       or not 1 <= float(value.removesuffix('px')) <= 2560):
-                raise DomainError('carousel_svg_limit', 'Use a font size from 1 to 2560 pixels')
-            ref = _PAINT.fullmatch(value)
-            if ref:
-                expected = {'fill': {'linearGradient', 'radialGradient'}, 'stroke': {'linearGradient', 'radialGradient'},
-                            'clip-path': {'clipPath'}, 'mask': {'mask'}}.get(key)
-                if not expected or in_definition or tag in _DEFINITIONS:
-                    raise DomainError('carousel_svg_unsafe', 'Recursive or unsupported definition references are forbidden')
-                references.append((ref['id'], expected))
-            attrs[key] = value
+            if key == 'font-size' and re.fullmatch(r'\d+(?:\.\d+)?(?:px)?', value):
+                if not 1 <= float(value.removesuffix('px')) <= 2560:
+                    raise DomainError('carousel_svg_limit', 'Font size is out of bounds')
+            if raw_key == '{' + _XLINK + '}href':
+                raw_key = 'href'
+            if raw_key in attrs:
+                raise DomainError('carousel_svg_invalid', 'Duplicate href')
+            attrs[raw_key] = value
+            for ident in re.findall(r'url\s*\(\s*[\'"]?#([A-Za-z_][A-Za-z0-9_.-]{0,127})', value, re.I):
+                links.append(ident)
         node.attrib.clear()
         node.attrib.update(attrs)
         if 'id' in attrs:
-            if not _ID.fullmatch(attrs['id']) or attrs['id'] in ids:
+            if not _ID.fullmatch(attrs['id']) or attrs['id'] in seen_ids:
                 raise DomainError('carousel_svg_invalid', 'SVG IDs must be unique')
-            ids[attrs['id']] = tag
-        family = attrs.get('font-family', family).strip('"\'')
-        if family not in FONTS or attrs.get('font-style', 'normal') != 'normal':
-            raise DomainError('carousel_font_not_available', 'Use DejaVu Sans, DejaVu Serif or DejaVu Sans Mono, normal style')
-        weight = attrs.get('font-weight', '700' if bold else '400')
-        if weight not in {'normal', 'bold', '400', '700'}:
-            raise DomainError('carousel_font_not_available', 'Use font-weight 400 or 700')
-        bold = weight in {'bold', '700'}
+            seen_ids.add(attrs['id'])
         text = (node.text or '') + ''.join(child.tail or '' for child in node)
         text_count += len(text)
         if text_count > 16_000:
             raise DomainError('carousel_svg_limit', 'SVG contains too much text')
-        if tag in {'text', 'tspan'} and any(ord(c) not in _font_chars(family, bold) for c in text if not c.isspace()):
-            raise DomainError('carousel_glyph_not_available', 'A text character is not covered by the selected font')
-        if tag == 'mask':
-            if (attrs.get('maskUnits') != 'userSpaceOnUse'
-                    or attrs.get('maskContentUnits', 'userSpaceOnUse') != 'userSpaceOnUse'):
-                raise DomainError('carousel_svg_invalid', 'Masks require userSpaceOnUse units')
-            for key, bound in (('width', width), ('height', height)):
-                value = attrs.get(key, str(bound))
-                if not re.fullmatch(r'\d+(?:\.\d+)?', value) or not 0 < float(value) <= bound:
-                    raise DomainError('carousel_svg_limit', 'Mask dimensions must fit the canvas')
-                node.set(key, value)
-        if tag == 'image':
-            match = _ASSET.fullmatch(attrs.get('href', ''))
-            if not match:
-                raise DomainError('carousel_svg_unsafe', 'Images require an authorized asset:ID reference')
-            node.set('href', 'asset:' + match[1])
-            if read_asset is not None:
-                if match[1] not in images:
-                    images[match[1]] = _image_bytes(match[1], read_asset)
-                    asset_bytes += len(images[match[1]])
-                    if asset_bytes > MAX_COMPOSITION_ASSET_BYTES:
-                        raise DomainError('carousel_svg_limit', 'Unique image bytes exceed the composition budget')
-        stack.extend((child, depth + 1, in_definition or tag in _DEFINITIONS, family, bold) for child in node)
-    if any(ids.get(ident) not in expected for ident, expected in references):
-        raise DomainError('carousel_svg_invalid', 'A referenced local definition is missing or has the wrong type')
+        if tag == 'style' and ('\\' in text or re.search(r'@import\b|url\s*\(', text, re.I)):
+            raise DomainError('carousel_svg_unsafe', 'Stylesheets cannot load resources')
+        font = _font_selection(attrs, font)
+        if tag in {'text', 'tspan'}:
+            missing = [c for c in text if not c.isspace() and ord(c) not in _font_chars(_resolve_font(*font))]
+            if missing:
+                raise DomainError('carousel_glyph_not_available', 'The selected bundled font lacks text glyphs')
+        stack.extend((child, depth + 1, font) for child in node)
+    if any(ident not in seen_ids for ident in links):
+        raise DomainError('carousel_svg_invalid', 'A local paint/filter/mask definition is missing')
     return ET.tostring(root, encoding='utf-8')
 
 
 def render_svg(svg, *, card_count, card_width, card_height, read_asset) -> bytes:
-    """Render one long canvas; no generation, network, provider or publication."""
-    from cairosvg.surface import PNGSurface, cairo
+    """Standard resvg shaping/kerning with no system fonts or external resources."""
+    import resvg_py
     width, height = _dimensions(card_count, card_width, card_height)
     assets = {}
 
     def collect(ident):
         result = read_asset(ident)
-        assets['asset:' + ident] = result[0]
+        assets[ident] = (result[0], result[1])
         return result
 
     source = validate_svg(svg, card_count=card_count, card_width=card_width,
                           card_height=card_height, read_asset=collect)
-
-    def private_fetch(url, _resource_type):
-        if url not in assets:
-            raise DomainError('carousel_svg_unsafe', 'Only prevalidated private assets are available')
-        return assets[url]
-
+    root = ET.fromstring(source)
+    definitions = ET.SubElement(root, '{' + _SVG + '}defs')
+    reused = {}
+    reserved_ids = {n.get('id') for n in root.iter() if n.get('id')}
+    for node in list(root.iter()):
+        if node.tag != '{' + _SVG + '}image':
+            continue
+        match = _ASSET.fullmatch(node.get('href', ''))
+        if not match:
+            continue
+        ident = match[1]
+        data, mime = assets[ident]
+        alignment = node.get('preserveAspectRatio', 'xMidYMid meet')
+        key = ident, alignment
+        if key not in reused:
+            with Image.open(io.BytesIO(data)) as im:
+                natural_width, natural_height = im.size
+            name = f'_vp_private_image_{len(reused)}'
+            while name in reserved_ids:
+                name += '_'
+            reserved_ids.add(name)
+            symbol = ET.SubElement(definitions, '{' + _SVG + '}symbol', {
+                'id': name, 'viewBox': f'0 0 {natural_width} {natural_height}',
+                'preserveAspectRatio': alignment})
+            ET.SubElement(symbol, '{' + _SVG + '}image', {
+                'width': str(natural_width), 'height': str(natural_height),
+                'href': 'data:' + mime + ';base64,' + base64.b64encode(data).decode('ascii')})
+            reused[key] = name
+        attrs = dict(node.attrib)
+        node.tag = '{' + _SVG + '}use'
+        node.attrib.clear()
+        node.attrib.update({k: v for k, v in attrs.items() if k not in {'href', 'preserveAspectRatio'}})
+        node.set('href', '#' + reused[key])
     try:
-        return PNGSurface.convert(bytestring=source, output_width=width, output_height=height,
-                                  unsafe=False, background_color='#ffffff', url_fetcher=private_fetch)
-    except (ValueError, TypeError, ArithmeticError, OSError, RecursionError,
-            KeyError, IndexError, cairo.CairoError) as exc:
-        raise DomainError('carousel_svg_invalid', 'The SVG cannot be rendered; check its geometry and attributes') from exc
+        return resvg_py.svg_to_bytes(svg_string=ET.tostring(root, encoding='unicode'),
+                                     width=width, height=height, background='#ffffff',
+                                     skip_system_fonts=True, font_files=list(_RENDER_FONT_FILES),
+                                     font_family='Montserrat', serif_family='PT Serif',
+                                     sans_serif_family='Montserrat')
+    except (ValueError, TypeError, OSError, RuntimeError, OverflowError) as exc:
+        raise DomainError('carousel_svg_invalid', 'The SVG cannot be rendered') from exc
 
 
 def slice_cards(master_png, *, card_count, card_width, card_height) -> list[bytes]:

@@ -453,8 +453,8 @@ tool("carousel", "Create, get, revise, render and export private SVG story carou
     "get(scope:library) lists real owner-bound reference images; get(scope:reference,reference_id) "
     "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
     "record the visible technique and concrete change in revise.reference_use, then render the changed region. "
-    "SVG images use asset:RETURNED_ASSET_ID; no external URLs, scripts, data URLs or CSS. "
-    "Fonts: DejaVu Sans, DejaVu Serif, DejaVu Sans Mono. Use explicit text/tspan line breaks. "
+    "SVG images use asset:RETURNED_ASSET_ID; safe style/class/use/filter/pattern/mask/paint-order; no external URLs, scripts, foreignObject or author data: URIs. "
+    "Bundled Cyrillic SIL OFL fonts: Oswald (narrow), Unbounded (display), Montserrat (grotesk), PT Serif (serif), their package weights and italic; kerning by resvg. Primary dot asset input: vibepublish_visual import with host-supplied file:{download_url,file_id}; begin/chunk/finish only fallback. Use explicit text/tspan lines. "
     "Render master shows composition; render region or card shows readable detail. Export returns "
     "ordered private assets for the exact revision; export is not owner selection or permission to publish.",
     obj({"command": {"oneOf": _carousel_commands}, "request_key": KEY}, ("command",)),
