@@ -208,11 +208,16 @@ def retired_asset_rows(db, now, *, include_sizes=True):
     """One transaction's local-byte retention decision; native media is canonical."""
     stale = {row['attempt_id'] for row in stale_unsent_attempts(db, now)}
     refs, pending, uncertain, failed = set(), set(), set(), set()
+    # Private edit inspection is not native use; new inputs keep their ordinary 14-day TTL.
     for ref, attempt_id, work, operation_state, attempt_state, created, seen, scheduled in db.execute(
         """SELECT json_extract(j.value,'$.ref'),t.id,o.work_state,o.state,t.state,
                   o.created,o.worker_seen,json_extract(t.plan,'$.scheduled_at')
            FROM attempts t JOIN operations o ON o.id=t.operation_id
-           JOIN json_each(t.plan,'$.assets') j"""
+           JOIN json_each(t.plan,'$.assets') j
+           WHERE NOT (o.action='publication_update' AND o.publication_id IS NULL
+                      AND o.complete=1 AND t.dispatched=0
+                      AND COALESCE(json_extract(o.request,'$.change.kind'),'')='edit'
+                      AND json_extract(o.result,'$.dry_run') IS 1)"""
     ):
         if not ref:
             continue

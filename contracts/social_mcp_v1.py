@@ -280,7 +280,7 @@ def tool(name, description, inputs, outputs, scope, read_only=False):
 # Only lifecycle changes can delete or overwrite published posts.
 DESTRUCTIVE = {"publication_update"}
 # Tools that write to or read from social networks; private asset work is not open-world.
-OPEN_WORLD = {"publish", "media_store", "publication_update", "read", "engage", "destinations"}
+OPEN_WORLD = {"publish", "media_store", "publication_update", "read", "engage", "destinations", "carousel"}
 
 
 tool("get_started", "Get the versioned skill, allowed aliases and current capabilities. Never grants access.",
@@ -337,6 +337,7 @@ TOOLS[-1]["inputSchema"]["allOf"] = [{
 change = {"oneOf": [
     arm("approve", {"token": string(512)}, ("token",)),
     arm("edit", {"content": ref("content"), "media": array(ref("media"), 0, 20), "renderings": ref("renderings"),
+        "mode": enum("execute", "preview"), "preview_operation_id": ID,
         "destinations": {**array(ALIAS, 1, 20), "uniqueItems": True}}),
     arm("reschedule", {"delivery": DEFS["delivery"]["oneOf"][1]}, ("delivery",)),
     arm("cancel"), arm("delete"),
@@ -346,7 +347,9 @@ change = {"oneOf": [
     arm("supersede_failed", {"destinations": {**array(ALIAS, 1, 20), "uniqueItems": True},
         "content": ref("content")}, ("destinations", "content"))]}
 change["oneOf"][1]["anyOf"] = [{"required": [p]} for p in ("content", "media", "renderings")]
-tool("publication_update", "Change an existing publication at an exact revision. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication. Reconcile observes the original uncertain operation without repeating its effect. For a never-dispatched tracked VK edit conflict, an owner may pass a fresh same-post item ref as native_reference to accept a new local baseline revision; this performs no provider write and requires a separate edit. A fresh exact Telegram item_ref may replace one image/video only on a provably managed same-principal published message; it creates a new revision of that same publication, edits the existing message, and retains unselected sibling receipts. VK edits can order new assets and existing attachment positions from the same freshly read post, including postponed posts; Telegram retains its single managed replacement rule. An edit may select existing publication destinations by alias with a request key; only verified selected targets execute. Unselected target evidence remains visible with desired/applied revision and synchronization status.",
+change["oneOf"][1]["allOf"] = [{"if": {"required": ["preview_operation_id"]},
+    "then": {"properties": {"mode": {"const": "execute"}}}}]
+tool("publication_update", "Change an existing publication at an exact revision. An edit with change.mode=preview privately prepares an exact permission request without changing a native post or publication revision; it performs no provider preflight. The preview returns execute_args bound to its private operation; execute refuses a changed payload. Omitting mode and preview_operation_id preserves normal execution. Use preview only when existing authorization does not cover the exact payload. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication. Reconcile observes the original uncertain operation without repeating its effect. For a never-dispatched tracked VK edit conflict, an owner may pass a fresh same-post item ref as native_reference to accept a new local baseline revision; this performs no provider write and requires a separate edit. A fresh exact Telegram item_ref may replace one image/video only on a provably managed same-principal published message; it creates a new revision of that same publication, edits the existing message, and retains unselected sibling receipts. VK edits can order new assets and existing attachment positions from the same freshly read post, including postponed posts; Telegram retains its single managed replacement rule. An edit may select existing publication destinations by alias with a request key; only verified selected targets execute. Unselected target evidence remains visible with desired/applied revision and synchronization status.",
     obj({"publication_id": ID, "expected_revision": REV, "item_ref": ID, "change": change, "request_key": KEY},
         ("change",)), ref("receipt"), "publication.manage")
 # Existing private publication CAS or one exact immutable observed native item.
@@ -690,6 +693,11 @@ DEFS["receipt"]["properties"].update({"emoji_catalog": ref("emoji_catalog"),
     "emoji_rule": ref("emoji_rule"), "emoji_rules": array(ref("emoji_rule"), 0, 100), "content_previews": array(obj({"destination": ALIAS,
         "provider": PROVIDER, "text": {**string(), "minLength": 0},
         "entities": array(ref("semantic_entity"), 0, 1000)}, ("destination", "provider", "text", "entities")), 0, 100)})
+DEFS["receipt"]["properties"]["permission_request"] = {"type": "string", "minLength": 1}
+DEFS["receipt"]["properties"]["execute_args"] = next(
+    tool["inputSchema"] for tool in TOOLS if tool["name"] == "vibepublish_publication_update")
+for _field in ("dry_run", "content_previews", "permission_request", "execute_args"):
+    DEFS["status_snapshot"]["properties"][_field] = DEFS["receipt"]["properties"][_field]
 DEFS["read_item"]["properties"]["entities"] = array(ref("semantic_entity"), 0, 1000)
 for _tool in TOOLS:
     _name = _tool["name"]
