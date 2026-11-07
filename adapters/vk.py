@@ -626,6 +626,8 @@ class VKAdapter:
             else:
                 method = 'wall.post'
                 params.update(from_group=1, signed=0, guid=digest([r.operation_id, r.attempt_id]))
+                if r.vk_primary_attachments_mode:
+                    params['primary_attachments_mode'] = r.vk_primary_attachments_mode
                 if attachments:
                     params['attachments'] = ','.join(attachments)
         checkpoint = {
@@ -868,6 +870,8 @@ class VKAdapter:
         }
         if attachments:
             params['attachments'] = ','.join(attachments)
+        if request.vk_primary_attachments_mode:
+            params['primary_attachments_mode'] = request.vk_primary_attachments_mode
         await hooks.emit_progress(
             'submitting', 'started',
             'VK postponed queue has no exact frozen item; replaying the same idempotency key',
