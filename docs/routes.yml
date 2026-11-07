@@ -64,7 +64,7 @@ sections:
 features:
   story_carousel:
     status: fixed_implementation_authorized_not_confirmed_by_user
-    implementation: implemented_in_source_public_deployment_not_done
+    implementation: partial_delivery_full_requirements_audited
     docs: docs/features/story-carousel/README.md
     research: docs/reports/story-carousel-research-2026-11-06.md
     references: docs/reference/story-carousel/source-register.md
@@ -80,7 +80,7 @@ features:
       - social_operations/carousel_compositor.py
       - social_operations/carousel_references.py
       - tests/carousel/
-    consultation: opus_review_and_three_round_reconciliation_complete_not_confirmed_by_user
+    consultation: full_channel_reaudit_and_parallel_implementation_not_confirmed_by_user
     reconciliation: docs/reports/story-carousel-reconciliation-2026-11-06.md
     coverage_audit: docs/reference/story-carousel/coverage-audit-2026-11-06.md
     visual_language: docs/reference/story-carousel/visual-language.md
