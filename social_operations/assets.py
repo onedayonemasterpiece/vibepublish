@@ -250,7 +250,16 @@ def retired_asset_rows(db, now, *, include_sizes=True):
                        UNION SELECT art_ref FROM visual_candidates
                        UNION SELECT asset_id FROM visual_asset_origins""")
     emoji = refset("SELECT asset_id FROM emoji_asset_origins")
+    # Saved SVGs may render the alpha source behind their imported derivative.
+    # Keep that same-owner dependency for every immutable revision.
     carousel = refset("""SELECT j.value FROM carousel_versions c, json_each(c.asset_refs) j
+                         UNION SELECT source.id FROM carousel_versions c, json_each(c.asset_refs) j
+                         JOIN assets derived ON derived.id=j.value
+                           AND derived.tenant_id=c.tenant_id AND derived.principal_id=c.principal_id
+                         JOIN assets source ON source.tenant_id=derived.tenant_id
+                           AND source.principal_id=derived.principal_id
+                           AND source.sha256=derived.source_sha256
+                         WHERE source.mime IN ('image/png','image/webp')
                          UNION SELECT json_extract(j.value,'$.asset_ref')
                          FROM operations o, json_each(o.result,'$.cards') j
                          WHERE o.action='carousel'""")
