@@ -13,6 +13,7 @@ import time
 import unittest
 from dataclasses import asdict, replace
 from pathlib import Path
+from unittest.mock import patch
 from PIL import Image
 from adapters.fake import FakeProvider
 from adapters.port import UnavailableAdapter
@@ -51,6 +52,38 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     def scheduled(self, seconds=3600):
         return {'kind': 'at', 'at': timestamp(time.time()+seconds)}
+
+    async def test_sqlite_failure_logs_reason_without_private_request(self):
+        private_url = 'https://files.example/private.png?signature=download-secret'
+        args = {'command': {'kind': 'create', 'brief': 'private-prompt ' + private_url},
+                'request_key': 'private-request-key'}
+        sql = 'SELECT * FROM private_sql_token'
+
+        def fail_key(db, *unused):
+            db.execute(sql)  # Real SQLite error attributes and private exception text.
+
+        with patch.object(self.app, '_key', side_effect=fail_key):
+            with self.assertLogs('social_operations.service', level='ERROR') as captured:
+                result = await self.call('carousel', args)
+
+        message = ('No receipt could be returned. Recover using status or the same '
+                   'request key, never a new send')
+        self.assertEqual(result, {
+            'error': {'code': 'store_unavailable', 'message': message},
+            'message': message, 'next_action': 'contact_owner', 'retry_safe': False})
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        for field in ('tool=vibepublish_carousel', 'sqlite_errorcode=1',
+                      'sqlite_errorname=SQLITE_ERROR'):
+            self.assertIn(field, record.getMessage())
+        self.assertIsNone(record.exc_info)
+        logged = '\n'.join(captured.output) + repr(vars(record))
+        for private in ('private-prompt', private_url, args['request_key'], self.token,
+                        sql, 'private_sql_token', 'no such table'):
+            self.assertNotIn(private, logged)
+            self.assertNotIn(private, json.dumps(result))
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM carousel_versions').fetchone()[0], 0)
 
     async def test_bootstrap_exposes_bound_native_identity_but_not_set_identity(self):
         await self.call('destinations', {'command': {
