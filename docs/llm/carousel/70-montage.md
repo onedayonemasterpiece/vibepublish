@@ -79,6 +79,17 @@
 
 Вставь очищенный SVG иконки из `get(scope:icon)` в `<g transform="translate(x y) scale(s)">…</g>`, цвет — `fill`/`stroke` из палитры.
 
+## §11 Вписывание фрагмента по месту (для F1) и растушёвка края
+
+```svg
+<defs>
+ <linearGradient id="fadeX" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".06" stop-color="#fff"/><stop offset=".94" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+ <mask id="feather" maskUnits="userSpaceOnUse" x="1180" y="180" width="1400" height="420"><rect x="1180" y="180" width="1400" height="420" fill="url(#fadeX)"/></mask>
+</defs>
+<image href="asset:TITLE_ON_BG" x="1180" y="180" width="1400" height="420" mask="url(#feather)"/>
+```
+Сгенерированный по фрагменту кусок ставится в те же координаты, что и вырезанный фон; маска с растушёвкой по краям 6 % ширины (24–48 px) прячет мелкий сдвиг тона. Фоновые слои помечай `id="bg-…"`, чтобы рендерить фон отдельно (`only`).
+
 ## Порядок проверки после монтажа
 
 `render(view:master)` → каждый шов `render(view:region)` → каждая карточка `render(card:N)` → 90-review.
