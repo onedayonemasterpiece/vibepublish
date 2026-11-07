@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel: reuse the full rendered canvas per owner, immutable SVG revision and layer filter (process LRU, 12 canvases). Card, region, half-scale master and export crop the cached render instead of re-running resvg (~30 s per full render on the shared host). No new state or schema.
+
 - Story Carousel C3: fallback from SVG Repo HTTP 429 to Iconify style-scoped search, raw SVG and icon-set license metadata without losing the disk cache or SVG sanitizer. Rank private visual references by Russian/English token overlap and include `matched:false` catalog alternatives instead of empty results. Mocked-network regressions; no new dependency, database or publisher.
 
 - Story Carousel model guide `docs/llm/carousel/` (00–99): engineered process, storytelling roles/arcs/hooks, canvas numbers, 24 seam bridges, type scale and pairs, palette procedure, generation prompt templates (segment backgrounds, object on zone colour, lettering), verified SVG montage recipes (masks, cutouts, bbox stripes, scrim, grading, background word, thread), variation axes, infographics, review passes with tagged question bank. Integrates the ChatGPT research (C01–C16, Q/V/R 80 questions, 12 palettes, variation study, E01–E23 observations) that had not reached runtime. Served by `get(scope:guide)` (separate PR).
