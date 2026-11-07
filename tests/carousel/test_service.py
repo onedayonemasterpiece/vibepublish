@@ -321,7 +321,7 @@ async def test_real_application_validates_all_commands_and_status(runtime):
     components = await call({'kind': 'get', 'scope': 'components', 'carousel_id': ident,
                              'revision': 2})
     assert len(components.metadata['components']) == len(components.images) == 1
-    assert components.metadata['components'][0]['asset_ref'] == components.metadata['asset_refs'][0]
+    assert f"asset:{components.metadata['components'][0]['asset_ref']}" in svg
     assert components.metadata['components'][0]['preview']['mime_type'] == 'image/webp'
     image = await call({'kind': 'render', 'carousel_id': ident, 'revision': revised['revision'], 'card': 1})
     assert pixels(image.data).size == (128, 160)

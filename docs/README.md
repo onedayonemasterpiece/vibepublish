@@ -28,7 +28,7 @@ Supporting material:
 
 - [Original research and tutorials](reports/story-carousel-research-2026-11-06.md).
 - [Original Opus critique](reports/story-carousel-critique-2026-11-06.md), preserved as authored proposals.
-- [37 channel requirements and five session decisions, with historical audit retained](reference/story-carousel/coverage-audit-2026-11-06.md)
+- [40 channel requirements and five session decisions, with historical audit retained](reference/story-carousel/coverage-audit-2026-11-06.md)
   and [source register](reference/story-carousel/source-register.md).
 - [Visual language and E01–E23 audit](reference/story-carousel/visual-language.md),
   [eight narrow illustrations of two principles, excluded from tool examples](reference/story-carousel/blockout-atlas.svg),
