@@ -190,7 +190,7 @@ def test_large_reused_asset_stays_out_of_svg_and_fetches_only_from_validated_map
     convert = resvg_py.svg_to_bytes
     def guarded(**kwargs):
         assert kwargs['skip_system_fonts'] is True
-        assert len(kwargs['font_files']) == 8
+        assert len(kwargs['font_files']) == 10
         assert kwargs['svg_string'].count('data:image/png;base64,') == 1
         assert 'asset:photo' not in kwargs['svg_string']
         return convert(**kwargs)

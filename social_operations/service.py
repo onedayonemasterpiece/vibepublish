@@ -10,6 +10,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
 from contracts.social_mcp_v1 import VERSION, catalog, project_catalog
 from .assets import AssetPreview, render_asset_full, render_asset_preview
+from .carousel_guide import GuideImages
 from .domain import DomainError, canonical, digest, new_id, normalize_intent, parse_source, parse_time, timestamp
 from .network_footers import append_network_footer
 
@@ -103,7 +104,7 @@ class Application:
             else:
                 raise DomainError('capability_not_implemented', next_action='contact_owner')
             # Validate outputs too; a malformed success must never escape to clients.
-            validated_result = result.metadata if isinstance(result, AssetPreview) else result
+            validated_result = result.metadata if isinstance(result, (AssetPreview, GuideImages)) else result
             Draft202012Validator(CATALOG[name]['outputSchema'], format_checker=FORMATS).validate(validated_result)
             if (short == 'carousel' and command['kind'] == 'get' and command.get('carousel_id')
                     and command.get('scope') in {'reference', 'library', 'guide', 'icons', 'icon'}):
