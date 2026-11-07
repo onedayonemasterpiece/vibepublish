@@ -233,7 +233,55 @@ def validate_svg(svg, *, card_count, card_width, card_height, read_asset=None) -
     return ET.tostring(root, encoding='utf-8')
 
 
-def render_svg(svg, *, card_count, card_width, card_height, read_asset) -> bytes:
+def _filter_layers(root, layers):
+    """Keep SVG definitions and ancestors, selecting or hiding painted subtrees by id."""
+    if not isinstance(layers, dict) or len(layers) != 1:
+        raise DomainError('carousel_layers_invalid')
+    mode, requested = next(iter(layers.items()))
+    if mode not in {'only', 'hide'} or not isinstance(requested, list) or not requested or any(
+            not isinstance(ident, str) for ident in requested):
+        raise DomainError('carousel_layers_invalid')
+    ids = set(requested)
+    if ids - {node.get('id') for node in root.iter()}:
+        raise DomainError('carousel_layer_not_found', 'Select existing SVG element ids')
+    if root.get('id') in ids:
+        if mode == 'hide':
+            for child in list(root):
+                root.remove(child)
+        return
+    resources = {'defs', 'style', 'symbol', 'linearGradient', 'radialGradient',
+                 'clipPath', 'mask', 'pattern', 'filter', 'marker'}
+
+    def retain(node, selected=False):
+        if mode == 'hide' and node.get('id') in ids:
+            return False
+        if mode == 'only' and node.tag.rsplit('}', 1)[-1] in resources:
+            return True
+        selected = selected or (mode == 'only' and node.get('id') in ids)
+        for child in list(node):
+            if not retain(child, selected):
+                node.remove(child)
+        return mode == 'hide' or selected or len(node) > 0
+
+    for child in list(root):
+        if not retain(child):
+            root.remove(child)
+    if mode == 'only':
+        required = set()
+        for node in root.iter():
+            href = node.get('href', '')
+            if href.startswith('#'):
+                required.add(href[1:])
+            for value in node.attrib.values():
+                required.update(match[1] for match in _LOCAL_URL.finditer(value))
+        missing = required - {node.get('id') for node in root.iter()}
+        if missing:
+            raise DomainError('carousel_layer_dependency',
+                              f'Layer selection removes SVG reference #{sorted(missing)[0]}; '
+                              'keep referenced nodes in defs or include their layer')
+
+
+def render_svg(svg, *, card_count, card_width, card_height, read_asset, layers=None) -> bytes:
     """Standard resvg shaping/kerning with no system fonts or external resources."""
     import resvg_py
     width, height = _dimensions(card_count, card_width, card_height)
@@ -247,6 +295,8 @@ def render_svg(svg, *, card_count, card_width, card_height, read_asset) -> bytes
     source = validate_svg(svg, card_count=card_count, card_width=card_width,
                           card_height=card_height, read_asset=collect)
     root = ET.fromstring(source)
+    if layers is not None:
+        _filter_layers(root, layers)
     definitions = ET.SubElement(root, '{' + _SVG + '}defs')
     reused = {}
     reserved_ids = {n.get('id') for n in root.iter() if n.get('id')}

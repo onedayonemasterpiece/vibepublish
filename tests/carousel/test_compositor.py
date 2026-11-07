@@ -60,6 +60,46 @@ def test_one_image_and_panel_cross_seam_without_independent_rescaling():
     assert image(master).getpixel((150, 20)) == (255, 255, 255)  # rounded corner
 
 
+def test_only_preserves_defs_and_ancestor_transform_while_hide_removes_subtree():
+    source = svg('''
+      <defs><linearGradient id="gradient"><stop stop-color="#114477"/></linearGradient></defs>
+      <g transform="translate(10 0)"><g id="background">
+        <rect width="500" height="200" fill="url(#gradient)"/>
+      </g></g>
+      <g id="foreground"><rect x="15" y="30" width="50" height="50" fill="#ff0000"/></g>
+    ''')
+    only = image(render_svg(source, read_asset=no_asset, layers={'only': ['background']}, **SIZE))
+    hide = image(render_svg(source, read_asset=no_asset, layers={'hide': ['foreground']}, **SIZE))
+    assert only.getpixel((25, 40)) == (17, 68, 119)
+    assert only.getpixel((5, 40)) == (255, 255, 255)
+    assert hide.getpixel((25, 40)) == (17, 68, 119)
+    assert image(render(source)).getpixel((25, 40)) == (255, 0, 0)
+
+
+def test_only_rejects_removed_use_dependency_and_accepts_a_definition():
+    shape = '<rect id="shape" width="40" height="40" fill="#ff0000"/>'
+    copy = '<use id="background-copy" href="#shape" x="100"/>'
+    source = svg(shape + copy)
+    assert image(render(source)).getpixel((120, 20)) == (255, 0, 0)
+    with pytest.raises(DomainError) as error:
+        render_svg(source, read_asset=no_asset, layers={'only': ['background-copy']}, **SIZE)
+    assert error.value.code == 'carousel_layer_dependency'
+
+    defined = svg('<defs>' + shape + '</defs>' + copy)
+    selected = image(render_svg(defined, read_asset=no_asset,
+                                layers={'only': ['background-copy']}, **SIZE))
+    assert selected.getpixel((120, 20)) == (255, 0, 0)
+    assert selected.getpixel((20, 20)) == (255, 255, 255)
+
+
+def test_root_layer_selection_keeps_all_or_hides_all():
+    source = svg('<rect width="600" height="200" fill="#114477"/>', 'id="canvas"')
+    only = render_svg(source, read_asset=no_asset, layers={'only': ['canvas']}, **SIZE)
+    assert image(only).tobytes() == image(render(source)).tobytes()
+    hidden = render_svg(source, read_asset=no_asset, layers={'hide': ['canvas']}, **SIZE)
+    assert image(hidden).getextrema() == ((255, 255),) * 3
+
+
 def test_cyrillic_and_explicit_line_positions_render_with_supported_font():
     source = svg('<text x="18" y="70" font-family="Montserrat" font-weight="700" font-size="38">'
                  'Памятник<tspan x="18" y="130">дружбе</tspan></text>')
@@ -93,6 +133,12 @@ def test_private_asset_access_and_actual_raster_type_are_required():
     with pytest.raises(DomainError) as exc:
         render(svg('<image href="asset:private"/>'), revoked)
     assert exc.value.code == 'access_revoked'
+    source = svg('<image id="private" href="asset:private"/>'
+                 '<rect id="background" width="600" height="200"/>', 'id="canvas"')
+    for layers in ({'only': ['background']}, {'hide': ['canvas']}):
+        with pytest.raises(DomainError) as exc:
+            render_svg(source, read_asset=revoked, layers=layers, **SIZE)
+        assert exc.value.code == 'access_revoked'
     with pytest.raises(DomainError) as exc:
         render(svg('<image href="asset:private"/>'), lambda _: (b'<svg/>', 'image/png', 'fake'))
     assert exc.value.code == 'carousel_asset_invalid'
