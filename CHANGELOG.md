@@ -4,6 +4,10 @@
 
 - Add the owner-authorized private Story Carousel MVP: five MCP commands over SVG revisions, actual image/region previews, exact-revision ordered media export and the existing operation ledger. Add an owner-bound local visual reference bank with real Slack images, original-pixel crops and optional `reference_use` notes for concrete SVG improvements; keep private images out of Git. Preserve dot-owned generation, existing import/alpha limits, private effects and the existing E2E. Focused source checks and the three-photo/seven-card private prototype pass; public rollout, the revised VK-only postponed display test and owner visual acceptance remain pending.
 
+- Centre MAX native Copy captions before strict hit testing so an in-viewport caption hidden by the composer can be read without changing native identity guards.
+
+- MAX exact channel reads reuse the same correlated native history identity as feed refs, so a freshly issued ref does not require an unrelated public-handle Copy URL binding.
+
 - MAX native album reads reveal the attachment container before checking real provider media references, so a long visible caption cannot leave the photo grid offscreen until the read deadline.
 
 - MAX completes editor focus and the native document selectionchange event before rich keyboard actions; failed link-dialog assertions retain content-free phase and selection evidence.

@@ -689,7 +689,8 @@ class RealMaxDriver:
         try:
             async with asyncio.timeout(self.timeout):
                 history_rows = None
-                if native_item is None:
+                if (native_item is None
+                        or self.targets[target].policy in {'scheduled_only', 'publish_channel'}):
                     # A correlated provider-native history response proves that
                     # the target history request completed, including an empty
                     # history. Do not use the presence of an outgoing text node as
@@ -702,6 +703,7 @@ class RealMaxDriver:
                         history_rows=await history.wait(min(self.timeout,25))
                     if not history_rows:
                         await self._account();await self._scope(target)
+                        if native_item:raise MaxBlocked('exact_read_not_observed')
                         return []
                 else:
                     await self._account()
@@ -748,7 +750,8 @@ class RealMaxDriver:
                     if native_item:
                         if item['id']==native_item:
                             await self._account();await self._scope(target)
-                            fresh=await self._plain_candidate(target,text,row,media_count=len(item.get('observed_media',[])) or len(item['media']))
+                            fresh=await self._plain_candidate(target,text,row,media_count=len(item.get('observed_media',[])) or len(item['media']),
+                                native_history_id=native_history_id)
                             if fresh['url']!=item['url'] or fresh.get('observed_media',[])!=item.get('observed_media',[]):raise MaxBlocked('native_reference_changed')
                             return [fresh]
                     else:
@@ -931,6 +934,7 @@ class RealMaxDriver:
                 media:[...media].map(x=>({src:x.currentSrc||x.src,name:x.alt||null}))};
         }"""
         if non_link_text:
+            await handle.evaluate("(caption)=>caption.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'})")
             await handle.scroll_into_view_if_needed(timeout=self.timeout*1000)
         snapshot = await handle.evaluate(snapshot_js)
         for attempt in range(2):

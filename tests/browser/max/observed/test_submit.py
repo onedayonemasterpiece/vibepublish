@@ -521,3 +521,43 @@ async def test_single_closing_identity_check_then_fresh_native_receipt(writer):
     assert result['item']['id'] == 'provider-item'
     assert len(effects(state)) == 1 and verified_after_effect
     assert state['checkpoints'][-1][0] == 'MAX_CANDIDATE_OBSERVED'
+
+
+@pytest.mark.parametrize('history_case',['ready','empty','ambiguous','absent'])
+async def test_channel_feed_native_reference_roundtrip_without_public_handle_binding(writer,monkeypatch,history_case):
+    from adapters.max import wire
+    from adapters.max.references import native_reference_id
+    from tests.browser.max.observed.test_native_copy_recipe import MENU_FIXTURE
+    d,page,state,_=writer
+    native=wire.link_id_from_wire_id('42')
+    text='Channel album'
+    media=['https://i.oneme.ru/replay/0.png','https://i.oneme.ru/replay/1.png']
+    state['messages']=[dict(id=native,target='-202',text=text,html='<strong>Channel</strong> album',
+                           outgoing=False,media=media)]
+    public='https://max.ru/channel_fixture/'+native
+    await page.add_init_script('window.REPLAY_NATIVE_LABEL_MODE="post";window.REPLAY_PUBLIC_REFERENCE='+json.dumps(public)+';'+MENU_FIXTURE)
+    rows=[dict(id='42',text=text,media_count=2)]
+    class History:
+        def __init__(self,page,target,*args,**kwargs):assert target=='-202'
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def wait(self,*args):return rows
+    monkeypatch.setattr(wire,'HistoryObserver',History)
+    issued=(await d.read('-202'))[0]
+    assert issued['id']==native and issued['url'] is None
+    # The public handle has no separately verified binding. The URL guard stays strict.
+    assert native_reference_id(public,'-202') is None
+    if history_case=='empty':rows=[]
+    elif history_case=='ambiguous':rows=rows+[dict(id='43',text=text,media_count=2)]
+    elif history_case=='absent':rows=[dict(id='43',text=text,media_count=2)]
+    if history_case=='ready':
+        result=await d.read('-202',native_item=issued['id'])
+        assert len(result)==1 and result[0]['id']==issued['id']
+        assert result[0]['text']==text and result[0]['entities']==issued['entities']
+        assert result[0]['media']==media and result[0]['observed_media']==[]
+    else:
+        reason='native_history_dom_projection_ambiguous' if history_case=='ambiguous' else 'exact_read_not_observed'
+        with pytest.raises(MaxBlocked,match='^'+reason+'$'):
+            await d.read('-202',native_item=issued['id'])
+    assert not [e for e in state['events'] if e['kind'] in {'effect','copy'}]
+    assert 'dispatched' not in state and not state['checkpoints']

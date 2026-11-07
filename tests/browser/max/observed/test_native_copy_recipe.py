@@ -145,6 +145,35 @@ async def test_plain_caption_still_copies_native_reference(writer):
     await assert_observation_only(writer, copies=1)
 
 
+
+async def test_native_copy_centers_caption_occluded_by_fixed_composer(writer):
+    driver, page, _, _ = writer
+    await page.set_viewport_size({'width': 1280, 'height': 720})
+    row = await exact_row(writer, plain=True, media=True)
+    await page.add_style_tag(content="""
+        main .history { position:fixed; top:0; left:0; width:700px; height:720px; overflow:auto; }
+        .messageWrapper { padding-top:630px; padding-bottom:720px; }
+        .bubbleContent > .text { display:block; width:490px; padding:8px; line-height:21px; }
+        [data-testid="composer"] { position:fixed; left:0; right:0; bottom:0;
+            height:100px; z-index:5; background:white; }
+        [role="menu"] { position:fixed; top:100px; left:800px; z-index:10; }
+    """)
+    caption = row.locator('.bubbleContent > .text')
+    await caption.scroll_into_view_if_needed()
+    from adapters.max.live import MESSAGE_MENU_POINT_JS
+    assert await caption.evaluate(MESSAGE_MENU_POINT_JS) is None
+    assert await caption.evaluate("""e=>{
+        const r=e.getBoundingClientRect();
+        return r.top>=620 && r.bottom<=innerHeight &&
+            !e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
+    }""")
+    assert await driver._copy_native_reference(row, TARGET) == (
+        'https://max.ru/c/-202/provider-item', 'provider-item')
+    assert await caption.evaluate(MESSAGE_MENU_POINT_JS) is not None
+    assert await page.evaluate('window.REPLAY_CONTEXT_EVENTS') == 1
+    await assert_observation_only(writer, copies=1)
+
+
 async def test_all_link_caption_fails_before_opening_menu(writer):
     driver, page, _, _ = writer
     row = await exact_row(writer, all_link=True)
