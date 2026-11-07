@@ -480,9 +480,11 @@ class Store:
                 operation_result = json.loads(op["result"])
                 for item in deliveries:
                     success = item["observed"] in ("published", "provider_scheduled", "edited", "reacted")
-                    state = "готово" if success else "отказ" if op["complete"] else "выполняется"
+                    state = "готово" if success or operation_result.get("dry_run") else "отказ" if op["complete"] else "выполняется"
                     view = {"destination": item["destination"], "provider": item["provider"], "status": state}
-                    if success:
+                    if operation_result.get("dry_run"):
+                        view["reason"] = "Предпросмотр; отправки не было"
+                    elif success:
                         delivered += 1
                         for key in ("url", "queue_ref", "item_ref"):
                             if item.get(key):
@@ -515,7 +517,9 @@ class Store:
                                           else "Сеть не смогла доставить публикацию")
                     outcomes.append(view)
                 count = len(outcomes)
-                if not op["complete"]:
+                if operation_result.get("dry_run"):
+                    overall = "Предпросмотр готов; отправки не было"
+                elif not op["complete"]:
                     overall = "выполняется"
                 elif count and delivered == count:
                     overall = "доставлено во все сети"
@@ -529,8 +533,9 @@ class Store:
                             "summary": {"result": overall, "networks": outcomes}}
                 if op["publication_id"]:
                     snapshot["resource_id"] = op["publication_id"]
-                if operation_result.get("review_token"):
-                    snapshot["review_token"] = operation_result["review_token"]
+                for key in ("review_token", "dry_run", "content_previews", "permission_request"):
+                    if key in operation_result:
+                        snapshot[key] = operation_result[key]
                 dependency = db.execute(
                     "SELECT id,state,reason,event_status,child_operation_id,expires "
                     "FROM vk_story_dependencies WHERE parent_attempt_id IN "

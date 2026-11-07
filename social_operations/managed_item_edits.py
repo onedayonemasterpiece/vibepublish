@@ -97,7 +97,7 @@ def _fresh_read(db, actor, source, binding, remote, now):
         raise DomainError('managed_media_reference_unverified', next_action='refresh')
 
 
-def adopt(app, db, actor, args, source, binding, remote):
+def adopt(app, db, actor, args, source, binding, remote, *, persist=True):
     """An exact owned managed target may use the existing item-ref edit contract."""
     change = args['change']
     if not args.get('request_key'):
@@ -177,8 +177,9 @@ def adopt(app, db, actor, args, source, binding, remote):
     plan['managed_item_edit'] = {'source_attempt_id': child['id'],
                                  'source_revision': child['target_revision'], 'item_ref': source['id']}
     revision = publication['revision'] + 1
-    changed = db.execute('UPDATE publications SET revision=? WHERE id=? AND revision=?',
-                         (revision, publication['id'], publication['revision'])).rowcount
-    if changed != 1:
-        raise DomainError('revision_conflict', next_action='refresh')
+    if persist:
+        changed = db.execute('UPDATE publications SET revision=? WHERE id=? AND revision=?',
+                             (revision, publication['id'], publication['revision'])).rowcount
+        if changed != 1:
+            raise DomainError('revision_conflict', next_action='refresh')
     return publication['id'], revision, [plan]

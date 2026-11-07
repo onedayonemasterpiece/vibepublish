@@ -222,7 +222,8 @@ class Worker:
                                topic_root_id=plan.get('topic_root_id'),
                                basic_group_schedule_authorized=bool(plan.get('basic_group_schedule_authorized')),
                                story_link_json=plan.get('story_link_json', '{}'),
-                               story_parent_json=plan.get('story_parent_json', '{}'))
+                               story_parent_json=plan.get('story_parent_json', '{}'),
+                               vk_primary_attachments_mode=plan.get('vk_primary_attachments_mode'))
 
     async def heartbeat(self, op):
         while True:
@@ -860,11 +861,17 @@ class Worker:
             self.store.event(db, op['id'], 'finished', 'completed', 'Automatic command work ended; future delivery remains provider-owned')
 
     def preview(self, op, actor, children):
+        from .permission_preview import permission_result
+        preview = permission_result([json.loads(child['plan']) for child in children],
+                                    timezone=actor.timezone, revision=op['revision'], publication_id=op['publication_id'])
         token = secrets.token_urlsafe(32)
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
             db.execute('INSERT INTO decisions VALUES(?,?,?,?,?,?,?,NULL)', (new_id('decision'), actor.tenant_id, actor.principal_id, op['publication_id'], op['revision'], digest([c['plan_digest'] for c in children]), self.store.token_hash(token)))
-            db.execute('UPDATE operations SET state=\'needs_approval\',complete=1,work_state=\'done\',result=? WHERE id=?', (canonical({**json.loads(db.execute('SELECT result FROM operations WHERE id=?',(op['id'],)).fetchone()[0]), 'review_token': token, 'dry_run': True, 'content_previews': [{'destination': c['alias'], 'provider': c['provider'], 'text': json.loads(json.loads(c['plan'])['content_json'])['text'], 'entities': json.loads(json.loads(c['plan'])['content_json']).get('entities', [])} for c in children]}), op['id']))
+            result = {**json.loads(db.execute('SELECT result FROM operations WHERE id=?', (op['id'],)).fetchone()[0]),
+                      'review_token': token, **preview}
+            db.execute("UPDATE operations SET state='needs_approval',complete=1,work_state='done',result=? WHERE id=?",
+                       (canonical(result), op['id']))
             for child in children:
                 db.execute('UPDATE attempts SET state=\'needs_approval\',stage=\'awaiting_approval\' WHERE id=?', (child['id'],))
             self.store.event(db, op['id'], 'awaiting_approval', 'completed', 'Preview only; no provider mutation occurred')

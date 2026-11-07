@@ -163,6 +163,21 @@ def test_brief_first_revision_fence_and_key_conflict(runtime):
     code('carousel_reference_unavailable', lambda: service.command(actor, bad))
 
 
+def test_render_journal_records_requested_historical_revision(runtime):
+    _, actor, _, service, svg = runtime
+    ident = create(service, actor, svg, key='historical-create')['carousel_id']
+    updated = service.command(actor, {'command': {'kind': 'revise', 'carousel_id': ident,
+        'expected_revision': 1, 'caption': 'Новая подпись'}, 'request_key': 'historical-revise'})
+    assert updated['revision'] == 2
+    service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+        'revision': 1, 'card': 1}})
+    entries = service.command(actor, {'command': {'kind': 'get',
+        'scope': 'journal', 'carousel_id': ident}})['journal']
+    render = next(entry for entry in entries if entry['kind'] == 'render')
+    assert render['revision'] == 1
+    assert render['view'] == 'card' and render['card'] == 1
+
+
 def test_private_scope_revocation_and_invalid_regions(runtime):
     store, actor, app, service, svg = runtime
     ident = create(service, actor, svg)['carousel_id']
@@ -195,7 +210,43 @@ async def test_real_application_validates_all_commands_and_status(runtime):
         'expected_revision': 1, 'svg': svg}, 'app-revise')
     image = await call({'kind': 'render', 'carousel_id': ident, 'revision': revised['revision'], 'card': 1})
     assert pixels(image.data).size == (128, 160)
+    bank = ReferenceBank(store)
+    bank.root.mkdir()
+    Image.new('RGB', (24, 24), '#efdbbd').save(bank.root / 'panel.png')
+    (bank.root / 'catalog.json').write_text(json.dumps({
+        'owner': {'tenant_id': actor.tenant_id, 'principal_id': actor.principal_id}, 'references': [{
+            'id': 'E02', 'file': 'panel.png', 'title': 'Панель', 'tags': ['панель'],
+            'look_for': 'Одна панель', 'transfer': 'Повторить приём',
+            'source': {'slack_url': 'https://example.slack.com/archives/C1/p1', 'file_id': 'F1'},
+            'use_note': 'Reference only'}]}))
+    library = await call({'kind': 'get', 'scope': 'library', 'carousel_id': ident,
+                          'query': 'private-query-must-not-be-logged'})
+    assert library['references'] == []
+    original = await call({'kind': 'get', 'scope': 'reference', 'carousel_id': ident,
+                           'reference_id': 'E02'})
+    assert pixels(original.data).size == (24, 24)
+    journal = await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident})
+    kinds = [item['kind'] for item in journal['journal']]
+    assert kinds[:2] == ['get', 'get'] and {'asset_import', 'render', 'create', 'revise'} <= set(kinds)
+    assert all('at' in event and 'operation_id' in event for event in journal['journal'])
+    assert all(isinstance(event['duration_ms'], int) and event['duration_ms'] >= 0
+               for event in journal['journal'] if event['kind'] in {'render', 'get'})
+    assert journal['journal'][0]['reference_id'] == 'E02'
+    assert journal['journal'][1]['scope'] == 'library'
+    assert not any('private-query-must-not-be-logged' in json.dumps(event)
+                   for event in journal['journal'])
+    assert [item['view'] for item in journal['journal'] if item['kind'] == 'render'] == ['card']
+    imports = [item for item in journal['journal'] if item['kind'] == 'asset_import']
+    assert len(imports) == 1 and imports[0]['asset_ref'] in journal['asset_refs']
+    assert 'imported_at' in imports[0]
+    assert len((await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident,
+                            'limit': 3}))['journal']) == 3
+    assert (await app.call(actor, 'vibepublish_carousel', {'command': {
+        'kind': 'get', 'scope': 'journal', 'carousel_id': ident, 'limit': 51}}))['error']['code'] == 'invalid_input'
     exported = await call({'kind': 'export', 'carousel_id': ident, 'revision': 2}, 'app-export')
+    timings = (await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident}))['journal']
+    assert {'create', 'revise', 'render', 'export', 'get'} <= {
+        entry['kind'] for entry in timings if isinstance(entry.get('duration_ms'), int)}
     status = await app.call(actor, 'vibepublish_status', {'ids': [exported['operation_id']]})
     assert status['receipts'][0]['cards'] == exported['cards']
     with store.connection() as db:

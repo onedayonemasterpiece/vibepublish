@@ -61,6 +61,7 @@ class Application:
                 result = self.media_store(actor, arguments)
             elif short == 'carousel':
                 command = arguments['command']
+                carousel_started = asyncio.get_running_loop().time()
                 if command['kind'] == 'get' and command.get('scope') == 'library':
                     result = await asyncio.to_thread(
                         self.carousel_references.list, actor, command.get('query', ''),
@@ -104,6 +105,14 @@ class Application:
             # Validate outputs too; a malformed success must never escape to clients.
             validated_result = result.metadata if isinstance(result, AssetPreview) else result
             Draft202012Validator(CATALOG[name]['outputSchema'], format_checker=FORMATS).validate(validated_result)
+            if (short == 'carousel' and command['kind'] == 'get' and command.get('carousel_id')
+                    and command.get('scope') in {'reference', 'library', 'guide', 'icons'}):
+                details = {'scope': command['scope']}
+                if command.get('reference_id'):
+                    details['reference_id'] = command['reference_id']
+                await asyncio.to_thread(self.carousels.log_event, actor, command['carousel_id'], 'get',
+                    duration_ms=round((asyncio.get_running_loop().time() - carousel_started) * 1000),
+                    **details)
             return result
         except DomainError as exc:
             return exc.output()
@@ -578,7 +587,9 @@ class Application:
                 if fixture and fixture[0]:
                     raise DomainError('fixture_asset_native_publish_forbidden', next_action='contact_owner')
         admission_error = None
-        if action not in ('forward', 'cancel', 'delete', 'react'):
+        if action == 'approve':
+            self.emojis.frozen_access(db, actor, content)
+        elif action not in ('forward', 'cancel', 'delete', 'react'):
             try:
                 content = self.emojis.compile(db, actor, content, binding, target)
             except DomainError as exc:
@@ -607,6 +618,8 @@ class Application:
                 'scheduled_at': scheduled, 'mode': target.get('mode', 'execute'), 'existing': existing,
                 'selection': target.get('selection', 'post'), 'source': None, 'source_authorized': False,
                 'basic_group_schedule_authorized': 'basic_group_schedule' in binding_rights,
+                **({'vk_primary_attachments_mode': target['vk']['primary_attachments_mode']}
+                   if binding['provider'] == 'vk' and target.get('vk') else {}),
                 **(story_link or {}),
                 **({'topic_root_id': topic_root_id} if topic_root_id else {}),
                 **({'admission_error': admission_error} if admission_error else {})}
@@ -700,6 +713,10 @@ class Application:
             if 'publication.manage' not in actor.scopes and (
                     'publish' not in actor.scopes or args['change']['kind'] not in {'retry_failed', 'supersede_failed', 'reconcile'}):
                 raise DomainError('access_denied', next_action='contact_owner')
+        if (action == 'publication_update' and args['change']['kind'] == 'edit'
+                and args['change'].get('mode', 'execute') == 'preview'):
+            from .permission_preview import preview_edit
+            return preview_edit(self, actor, args)
         if action == 'publication_update' and args['change']['kind'] == 'reconcile_removed':
             from .unknown_resolution import accept_resolution
             return accept_resolution(self, actor, args)
@@ -727,6 +744,9 @@ class Application:
                     raise DomainError('routing_stale', 'Refresh destination profiles before publishing', 'refresh')
                 if action == 'publication_update':
                     publication, revision, plans = (self._adopt_plan(db, actor, args) if args.get('item_ref') else self._update_plan(db, actor, args))
+                    if args['change'].get('preview_operation_id'):
+                        from .permission_preview import require_edit_preview
+                        require_edit_preview(self, db, actor, args, plans)
                 else:
                     target = intent if action in {'publish', 'media_store'} else intent['command']
                     actual = 'publish' if action in {'publish', 'media_store'} else target['kind']
@@ -853,7 +873,7 @@ class Application:
                     self._key(db, actor, args['request_key'], digest([action, intent]), op)
         return self.store.receipt(actor, op)
 
-    def _adopt_plan(self, db, actor, args):
+    def _adopt_plan(self, db, actor, args, *, persist=True):
         """A shared-channel read ref gives item CAS, never another author's draft."""
         source = self.resolve_item(db, actor, args['item_ref'])
         b = self.store.binding(db, actor, binding_id=source['binding_id'])
@@ -861,7 +881,7 @@ class Application:
         if 'media' in args['change']:
             if b['provider'] == 'telegram':
                 from .managed_item_edits import adopt
-                return adopt(self, db, actor, args, source, b, remote)
+                return adopt(self, db, actor, args, source, b, remote, persist=persist)
             if b['provider'] != 'vk':
                 raise DomainError('external_media_replace_needs_review', next_action='contact_owner')
             from .managed_item_edits import _fresh_read
@@ -897,12 +917,14 @@ class Application:
         if kind in {'cancel', 'delete'}:
             target['delivery'] = {'kind': 'now'}
         plan = self._plan(db, actor, b, target, kind, remote)
-        publication = new_id('pub')
-        db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)',
-                   (publication, actor.tenant_id, actor.principal_id, 1, 'forward' if remote.get('origin') else 'publish', self.store.clock()))
+        publication = None
+        if persist:
+            publication = new_id('pub')
+            db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)',
+                       (publication, actor.tenant_id, actor.principal_id, 1, 'forward' if remote.get('origin') else 'publish', self.store.clock()))
         return publication, 1, [plan]
 
-    def _update_plan(self, db, actor, args):
+    def _update_plan(self, db, actor, args, *, persist=True):
         pub = db.execute('SELECT * FROM publications WHERE id=? AND tenant_id=? AND principal_id=?', (args['publication_id'], actor.tenant_id, actor.principal_id)).fetchone()
         if not pub or pub['revision'] != args['expected_revision']:
             raise DomainError('revision_conflict', 'Refresh the exact publication revision', 'refresh')
@@ -950,13 +972,15 @@ class Application:
                 target['delivery'] = change['delivery']
             if kind in ('cancel', 'delete'):
                 target['delivery'] = {'kind': 'now'}
-            plan = self._plan(db, actor, b, target, 'publish' if kind == 'approve' else kind, observed,
+            plan = self._plan(db, actor, b, target, kind, observed,
                               topic_root_id=old.get('topic_root_id') if kind == 'approve' else None)
             if kind == 'approve':
-                plan.update(action=old['action'], source=old['source'], source_authorized=old['source_authorized'])
+                # Rights, assets and time were revalidated; execute exactly the approved payload.
+                plan = {**old, 'mode': 'execute'}
             plans.append(plan)
         revision = pub['revision'] + 1
-        db.execute('UPDATE publications SET revision=? WHERE id=? AND revision=?', (revision, pub['id'], pub['revision']))
+        if persist:
+            db.execute('UPDATE publications SET revision=? WHERE id=? AND revision=?', (revision, pub['id'], pub['revision']))
         return pub['id'], revision, plans
 
     async def status(self, actor, args):
