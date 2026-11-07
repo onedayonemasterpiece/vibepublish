@@ -408,6 +408,10 @@ _reference = obj({"id": _reference_id, "title": string(1000),
     "use_note": string(5000), "duplicate_of": _reference_id, "available": {"type": "boolean"}},
     ("id", "title", "tags", "look_for", "transfer", "source", "use_note", "available"))
 CAROUSEL_REFERENCE = _reference  # Shared catalog validation at import and read boundaries.
+_icon_id = string(10, pattern=r"^[1-9][0-9]{0,9}$")
+_icon = obj({"id": _icon_id, "name": string(120), "source": URL,
+    "license": string(100), "style": {**string(60), "minLength": 0}},
+    ("id", "name", "source", "license", "style"))
 _carousel_output = obj({
     **DEFS["receipt"]["properties"], **_carousel_scene,
     "svg": {**string(262144), "minLength": 0},
@@ -420,6 +424,7 @@ _carousel_output = obj({
     "references": array(_reference, 0, 20), "total": {"type": "integer", "minimum": 0},
     "offset": {"type": "integer", "minimum": 0}, "next_offset": {"type": ["integer", "null"]},
     "reference": _reference, "resource_uri": string(300),
+    "icons": array(_icon, 0, 8), "icon": _icon,
     "view": enum("master", "region", "full", "crop"),
     "region": {"anyOf": [_carousel_region, {"type": "null"}]},
     "mime_type": enum("image/png", "image/jpeg", "image/webp"),
@@ -440,6 +445,9 @@ _carousel_commands = [
         "offset": {"type": "integer", "minimum": 0}}, ("scope",)),
     arm("get", {"scope": {"const": "reference"}, "reference_id": _reference_id,
         "region": _carousel_region}, ("scope", "reference_id")),
+    arm("get", {"scope": {"const": "icons"}, "query": string(100),
+        "style": {**string(60), "minLength": 0}}, ("scope", "query")),
+    arm("get", {"scope": {"const": "icon"}, "id": _icon_id}, ("scope", "id")),
     arm("revise", {**_carousel_scene, "carousel_id": ID, "expected_revision": REV,
         "note": string(2000), "reference_use": _reference_use}, ("carousel_id", "expected_revision")),
     arm("render", {"carousel_id": ID, "revision": REV, "view": enum("master", "region"),
@@ -453,6 +461,7 @@ tool("carousel", "Create, get, revise, render and export private SVG story carou
     "get(scope:library) lists real owner-bound reference images; get(scope:reference,reference_id) "
     "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
     "record the visible technique and concrete change in revise.reference_use, then render the changed region. "
+    "get(scope:icons,query,style?) searches cached SVG Repo icons then HTTPS and returns one PNG contact sheet of up to eight options (150/28 px) with ID labels and source licenses. Inspect the actual pixels, then get(scope:icon,id) for cleaned inline SVG or a visual hint for dot's own image generator. Inspect the composed card too. "
     "SVG images use asset:RETURNED_ASSET_ID; safe style/class/use/filter/pattern/mask/paint-order; no external URLs, scripts, foreignObject or author data: URIs. "
     "Bundled Cyrillic SIL OFL fonts: Oswald (narrow), Unbounded (display), Montserrat (grotesk), PT Serif (serif), their package weights and italic; kerning by resvg. Primary dot asset input: vibepublish_visual import with host-supplied file:{download_url,file_id}; begin/chunk/finish only fallback. Use explicit text/tspan lines. "
     "Render master shows composition; render region or card shows readable detail. Export returns "
