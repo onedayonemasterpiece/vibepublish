@@ -48,6 +48,7 @@ class CarouselService:
             return self.render(actor, command)
         if kind not in {'create', 'revise', 'export'}:
             raise DomainError('invalid_input')
+        started = time.perf_counter()
         if not args.get('request_key'):
             raise DomainError('carousel_request_key_required')
         # Both admission and commit reuse the existing key. Pure rendering happens
@@ -93,6 +94,7 @@ class CarouselService:
                         media=[{'source': {'kind': 'asset', 'id': card['asset_ref']}} for card in cards])
                 else:
                     result['scene_ready'] = bool(scene['svg'])
+                result['duration_ms'] = round((time.perf_counter() - started) * 1000)
                 op = self.app._new_operation(db, actor, 'carousel', intent,
                     revision=revision, complete=True, result=result)
                 if kind != 'export':
