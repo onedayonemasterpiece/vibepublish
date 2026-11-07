@@ -4,7 +4,7 @@ import json
 import sqlite3
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from social_operations.assets import import_image, reclaim_asset_bytes, retired_asset_rows
 from social_operations.carousel import CarouselService
@@ -79,6 +79,64 @@ def test_transparent_original_renders_over_background_across_seam(runtime):
     assert pixels(app.read_asset(actor, asset)[0]).getpixel((2, 2)) == (255, 255, 255)
     assert len(service.command(actor, {'command': {'kind': 'export', 'carousel_id': ident,
         'revision': 1}, 'request_key': 'transparent-export'})['cards']) == 3
+
+
+def test_background_fragment_exact_layers_and_private_asset(runtime):
+    store, actor, app, service, _ = runtime
+    svg = ('''<svg xmlns="http://www.w3.org/2000/svg" width="384" height="160">
+      <defs><linearGradient id="ink"><stop stop-color="#d93628"/></linearGradient></defs>
+      <g transform="translate(4 0)"><rect id="bg-pane" x="0" y="0" width="380" height="160"
+        fill="#173957"/></g>
+      <g id="text-zone"><rect x="120" y="20" width="70" height="100"
+        fill="url(#ink)"/></g></svg>''')
+    ident = create(service, actor, svg, key='fragment-scene')['carousel_id']
+    with store.connection() as db:
+        row = service._version(db, actor, ident, 1)
+    master = pixels(service._render(actor, row))
+    region = [110, 30, 80, 70]
+    command = {'kind': 'render', 'carousel_id': ident, 'revision': 1,
+               'view': 'region', 'region': region, 'scale': 1}
+    exact = service.command(actor, {'command': command})
+    assert exact.metadata['mime_type'] == 'image/png' and exact.metadata['reencoded'] is False
+    assert exact.metadata['width'] == 80 and exact.metadata['height'] == 70
+    assert exact.data.startswith(b'\x89PNG\r\n\x1a\n')
+    assert ImageChops.difference(pixels(exact.data), master.crop((110, 30, 190, 100))).getbbox() is None
+
+    only = service.command(actor, {'command': {**command,
+        'layers': {'only': ['bg-pane']}, 'save_asset': True}})
+    assert pixels(only.data).getpixel((30, 20)) == (23, 57, 87)
+    assert pixels(only.data).getpixel((5, 20)) == (23, 57, 87)
+    assert only.metadata['resource_uri'] == 'vibepublish://assets/' + only.metadata['asset_ref']
+    saved, mime, _ = app.read_asset(actor, only.metadata['asset_ref'])
+    assert mime == 'image/png'
+    assert ImageChops.difference(pixels(saved), pixels(only.data)).getbbox() is None
+
+    hide = service.command(actor, {'command': {**command,
+        'layers': {'hide': ['text-zone']}}})
+    assert pixels(hide.data).getpixel((30, 20)) == (23, 57, 87)
+    assert pixels(exact.data).getpixel((30, 20)) == (217, 54, 40)
+    assert pixels(service.command(actor, {'command': {**command,
+        'layers': {'only': ['text-zone']}}}).data).getpixel((5, 20)) == (255, 255, 255)
+    journal = service.command(actor, {'command': {'kind': 'get', 'scope': 'journal',
+        'carousel_id': ident}})['journal']
+    event = next(e for e in journal if e.get('save_asset'))
+    assert event['revision'] == 1 and event['scale'] == 1
+    assert event['region'] == region and event['layers'] == {'only': ['bg-pane']}
+    assert event['asset_ref'] == only.metadata['asset_ref'] and event['duration_ms'] >= 0
+    code('carousel_layer_not_found', lambda: service.command(actor, {'command': {
+        **command, 'layers': {'only': ['nonexistent']}}}))
+
+
+def test_background_fragment_rejects_oversized_exact_crop(runtime):
+    _, actor, _, service, _ = runtime
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="2700" height="160"/>'
+    ident = service.command(actor, {'command': {'kind': 'create', 'brief': 'Large canvas',
+        'card_count': 3, 'card_width': 900, 'card_height': 160, 'svg': svg},
+        'request_key': 'large-background'})['carousel_id']
+    with pytest.raises(DomainError, match='split into smaller regions') as error:
+        service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+            'revision': 1, 'view': 'region', 'region': [0, 0, 2561, 160], 'scale': 1}})
+    assert error.value.code == 'carousel_region_exact_limit'
 
 
 def test_reference_edit_renders_exact_seam_and_replayable_private_export(runtime):
@@ -163,6 +221,21 @@ def test_brief_first_revision_fence_and_key_conflict(runtime):
     code('carousel_reference_unavailable', lambda: service.command(actor, bad))
 
 
+def test_render_journal_records_requested_historical_revision(runtime):
+    _, actor, _, service, svg = runtime
+    ident = create(service, actor, svg, key='historical-create')['carousel_id']
+    updated = service.command(actor, {'command': {'kind': 'revise', 'carousel_id': ident,
+        'expected_revision': 1, 'caption': 'Новая подпись'}, 'request_key': 'historical-revise'})
+    assert updated['revision'] == 2
+    service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+        'revision': 1, 'card': 1}})
+    entries = service.command(actor, {'command': {'kind': 'get',
+        'scope': 'journal', 'carousel_id': ident}})['journal']
+    render = next(entry for entry in entries if entry['kind'] == 'render')
+    assert render['revision'] == 1
+    assert render['view'] == 'card' and render['card'] == 1
+
+
 def test_private_scope_revocation_and_invalid_regions(runtime):
     store, actor, app, service, svg = runtime
     ident = create(service, actor, svg)['carousel_id']
@@ -195,7 +268,43 @@ async def test_real_application_validates_all_commands_and_status(runtime):
         'expected_revision': 1, 'svg': svg}, 'app-revise')
     image = await call({'kind': 'render', 'carousel_id': ident, 'revision': revised['revision'], 'card': 1})
     assert pixels(image.data).size == (128, 160)
+    bank = ReferenceBank(store)
+    bank.root.mkdir()
+    Image.new('RGB', (24, 24), '#efdbbd').save(bank.root / 'panel.png')
+    (bank.root / 'catalog.json').write_text(json.dumps({
+        'owner': {'tenant_id': actor.tenant_id, 'principal_id': actor.principal_id}, 'references': [{
+            'id': 'E02', 'file': 'panel.png', 'title': 'Панель', 'tags': ['панель'],
+            'look_for': 'Одна панель', 'transfer': 'Повторить приём',
+            'source': {'slack_url': 'https://example.slack.com/archives/C1/p1', 'file_id': 'F1'},
+            'use_note': 'Reference only'}]}))
+    library = await call({'kind': 'get', 'scope': 'library', 'carousel_id': ident,
+                          'query': 'private-query-must-not-be-logged'})
+    assert library['references'] == []
+    original = await call({'kind': 'get', 'scope': 'reference', 'carousel_id': ident,
+                           'reference_id': 'E02'})
+    assert pixels(original.data).size == (24, 24)
+    journal = await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident})
+    kinds = [item['kind'] for item in journal['journal']]
+    assert kinds[:2] == ['get', 'get'] and {'asset_import', 'render', 'create', 'revise'} <= set(kinds)
+    assert all('at' in event and 'operation_id' in event for event in journal['journal'])
+    assert all(isinstance(event['duration_ms'], int) and event['duration_ms'] >= 0
+               for event in journal['journal'] if event['kind'] in {'render', 'get'})
+    assert journal['journal'][0]['reference_id'] == 'E02'
+    assert journal['journal'][1]['scope'] == 'library'
+    assert not any('private-query-must-not-be-logged' in json.dumps(event)
+                   for event in journal['journal'])
+    assert [item['view'] for item in journal['journal'] if item['kind'] == 'render'] == ['card']
+    imports = [item for item in journal['journal'] if item['kind'] == 'asset_import']
+    assert len(imports) == 1 and imports[0]['asset_ref'] in journal['asset_refs']
+    assert 'imported_at' in imports[0]
+    assert len((await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident,
+                            'limit': 3}))['journal']) == 3
+    assert (await app.call(actor, 'vibepublish_carousel', {'command': {
+        'kind': 'get', 'scope': 'journal', 'carousel_id': ident, 'limit': 51}}))['error']['code'] == 'invalid_input'
     exported = await call({'kind': 'export', 'carousel_id': ident, 'revision': 2}, 'app-export')
+    timings = (await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident}))['journal']
+    assert {'create', 'revise', 'render', 'export', 'get'} <= {
+        entry['kind'] for entry in timings if isinstance(entry.get('duration_ms'), int)}
     status = await app.call(actor, 'vibepublish_status', {'ids': [exported['operation_id']]})
     assert status['receipts'][0]['cards'] == exported['cards']
     with store.connection() as db:

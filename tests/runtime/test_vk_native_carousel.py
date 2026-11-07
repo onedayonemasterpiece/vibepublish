@@ -76,6 +76,37 @@ def edit(fresh, asset):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scheduled", [False, True])
+async def test_native_vk_carousel_mode_reaches_wall_post(tmp_path, scheduled):
+    env = setup(tmp_path)
+    command = {
+        'to': ['lovekenig_vk'],
+        'content': {'text': 'Семь карточек'},
+        'media': [{'source': {'kind': 'asset', 'id': env.new_asset}}],
+        'vk': {'primary_attachments_mode': 'carousel'},
+        'request_key': 'vk-carousel-native-mode',
+    }
+    if scheduled:
+        command['delivery'] = {'kind': 'at', 'at': timestamp(NOW + 3600)}
+    admitted = await env.app.call(env.actor, 'vibepublish_publish', command)
+    assert 'error' not in admitted, admitted
+    with env.store.connection() as db:
+        plan = json.loads(db.execute(
+            "SELECT plan FROM attempts WHERE operation_id=?", (admitted['operation_id'],)
+        ).fetchone()[0])
+    assert plan['vk_primary_attachments_mode'] == 'carousel'
+    assert await env.worker.run_once()
+    native_posts = [params for method, _role, params in env.transport.calls if method == 'wall.post']
+    assert len(native_posts) == 1
+    assert native_posts[0]['primary_attachments_mode'] == 'carousel'
+    assert native_posts[0]['attachments'].startswith('photo')
+    assert ('publish_date' in native_posts[0]) is scheduled
+    invalid = await env.app.call(env.actor, 'vibepublish_publish',
+        {**command, 'request_key': 'bad-mode', 'vk': {'primary_attachments_mode': 'grid'}})
+    assert invalid['error']['code'] == 'invalid_input'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True])
 async def test_exact_vk_photo_read_downloads_bytes_and_keeps_native_edit_cas(tmp_path, scheduled):
     env = setup(tmp_path, scheduled=scheduled)
     photo = env.transport.posts[(OWNER, 223)]['attachments'][0]['photo']

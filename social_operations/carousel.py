@@ -4,10 +4,11 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import time
 
 from PIL import Image, ImageOps
 
-from .assets import AssetPreview, insert_verified_image, render_asset_full, render_asset_preview, verify_image
+from .assets import AssetPreview, FULL_MAX_EDGE, insert_verified_image, render_asset_full, render_asset_preview, verify_image
 from .carousel_compositor import render_svg, slice_cards, validate_svg
 from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
@@ -47,6 +48,7 @@ class CarouselService:
             return self.render(actor, command)
         if kind not in {'create', 'revise', 'export'}:
             raise DomainError('invalid_input')
+        started = time.perf_counter()
         if not args.get('request_key'):
             raise DomainError('carousel_request_key_required')
         # Both admission and commit reuse the existing key. Pure rendering happens
@@ -92,13 +94,26 @@ class CarouselService:
                         media=[{'source': {'kind': 'asset', 'id': card['asset_ref']}} for card in cards])
                 else:
                     result['scene_ready'] = bool(scene['svg'])
+                result['duration_ms'] = round((time.perf_counter() - started) * 1000)
                 op = self.app._new_operation(db, actor, 'carousel', intent,
                     revision=revision, complete=True, result=result)
                 if kind != 'export':
+                    # Track each imported asset at its first use in this carousel.
+                    previously_used = {r[0] for r in db.execute(
+                        "SELECT DISTINCT j.value FROM carousel_versions v, json_each(v.asset_refs) j "
+                        "WHERE v.id=? AND v.tenant_id=? AND v.principal_id=?",
+                        (ident, actor.tenant_id, actor.principal_id))}
                     db.execute('INSERT INTO carousel_versions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
                         (ident, revision, actor.tenant_id, actor.principal_id, op,
                          scene['brief'], scene['svg'], scene['card_count'], scene['card_width'],
                          scene['card_height'], scene['caption'], canonical(scene['asset_refs']), self.store.clock()))
+                    for ref in scene['asset_refs']:
+                        if ref not in previously_used:
+                            asset = db.execute(
+                                'SELECT created FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
+                                (ref, actor.tenant_id, actor.principal_id)).fetchone()
+                            self._log(db, actor, ident, revision, 'asset_import',
+                                      asset_ref=ref, imported_at=timestamp(asset['created']))
                 self.app._key(db, actor, args['request_key'], digest(['carousel', intent]), op)
         return self.store.receipt(actor, op)
 
@@ -131,6 +146,20 @@ class CarouselService:
         rgba = output.getvalue()
         return rgba, 'image/png', hashlib.sha256(rgba).hexdigest()
 
+    def _log(self, db, actor, carousel_id, revision, kind, *, duration_ms=None, **details):
+        intent = {'command': {'kind': kind, 'carousel_id': carousel_id, **details}}
+        result = {'carousel_id': carousel_id}
+        if duration_ms is not None:
+            result['duration_ms'] = duration_ms
+        return self.app._new_operation(db, actor, 'carousel', intent,
+                                       revision=revision, complete=True, result=result)
+
+    def log_event(self, actor, carousel_id, kind, *, duration_ms, revision=None, **details):
+        with self.store.tx() as db:
+            row = self._version(db, actor, carousel_id, revision)
+            self._log(db, actor, row['id'], row['revision'], kind,
+                      duration_ms=duration_ms, **details)
+
     def _prepare(self, actor, command, previous):
         defaults = {'brief': '', 'svg': '', 'card_count': 7, 'card_width': 1080,
                     'card_height': 1350, 'caption': ''}
@@ -160,12 +189,18 @@ class CarouselService:
             row = self._version(db, actor, command['carousel_id'], command.get('revision'))
             latest = self._version(db, actor, row['id'])
             journal = []
-            for op in db.execute("SELECT id,revision,request,created FROM operations WHERE tenant_id=? "
+            limit = command.get('limit', 50) if command.get('scope') == 'journal' else 10
+            for op in db.execute("SELECT id,revision,request,result,created FROM operations WHERE tenant_id=? "
                     "AND principal_id=? AND action='carousel' AND json_extract(result,'$.carousel_id')=? "
-                    "ORDER BY created DESC,rowid DESC LIMIT 10", (actor.tenant_id, actor.principal_id, row['id'])):
+                    "ORDER BY created DESC,rowid DESC LIMIT ?", (actor.tenant_id, actor.principal_id, row['id'], limit)):
                 entry = json.loads(op['request'])['command']
+                recorded = json.loads(op['result'])
                 journal.append({'operation_id': op['id'], 'revision': op['revision'], 'kind': entry['kind'],
-                    'at': timestamp(op['created']), **{key: entry[key] for key in ('note', 'reference_use') if key in entry}})
+                    'at': timestamp(op['created']),
+                    **{key: entry[key] for key in ('note', 'reference_use', 'scope', 'view',
+                        'region', 'card', 'reference_id', 'asset_ref', 'imported_at',
+                        'scale', 'layers', 'save_asset') if key in entry},
+                    **({'duration_ms': recorded['duration_ms']} if 'duration_ms' in recorded else {})})
         result = {key: row[key] for key in ('revision', 'brief', 'card_count', 'card_width', 'card_height', 'caption')}
         result.update(carousel_id=row['id'], latest_revision=latest['revision'], private=True,
             scene_ready=bool(row['svg']), asset_refs=json.loads(row['asset_refs']), journal=journal,
@@ -174,17 +209,17 @@ class CarouselService:
             result['svg'] = row['svg']
         return result
 
-    def _render(self, actor, row):
+    def _render(self, actor, row, layers=None):
         if not row['svg']:
             raise DomainError('carousel_scene_missing', 'Save an SVG composition with revise before rendering or exporting')
         return render_svg(row['svg'], card_count=row['card_count'], card_width=row['card_width'],
-            card_height=row['card_height'], read_asset=lambda ident: self._composition_asset(actor, ident))
+            card_height=row['card_height'], read_asset=lambda ident: self._composition_asset(actor, ident),
+            layers=layers)
 
     def render(self, actor, command):
+        started = time.perf_counter()
         with self.store.connection() as db:
             row = self._version(db, actor, command['carousel_id'], command['revision'])
-        data = self._render(actor, row)
-        sha = hashlib.sha256(data).hexdigest()
         view = command.get('view', 'master')
         width, height = row['card_width'] * row['card_count'], row['card_height']
         region = command.get('region')
@@ -197,7 +232,6 @@ class CarouselService:
         if view == 'master':
             if region is not None:
                 raise DomainError('carousel_region_invalid', 'Use view:region for a crop')
-            preview = render_asset_preview(data, sha, '')
         elif view == 'region':
             if (not isinstance(region, (list, tuple)) or len(region) != 4
                     or any(type(v) is not int for v in region)):
@@ -205,20 +239,62 @@ class CarouselService:
             x, y, w, h = region
             if min(x, y) < 0 or min(w, h) <= 0 or x+w > width or y+h > height:
                 raise DomainError('carousel_region_invalid')
+            if command.get('scale') == 1 and max(w, h) > FULL_MAX_EDGE:
+                raise DomainError('carousel_region_exact_limit',
+                                  'Exact region exceeds 2560 pixels; split into smaller regions')
+        else:
+            raise DomainError('carousel_view_invalid')
+        if (('scale' in command and view != 'region')
+                or (command.get('save_asset') and (view != 'region' or command.get('scale') != 1))):
+            raise DomainError('carousel_region_exact_required',
+                              'Saving a fragment requires view:region with scale:1')
+
+        data = self._render(actor, row, layers=command.get('layers'))
+        sha = hashlib.sha256(data).hexdigest()
+        if view == 'master':
+            preview = render_asset_preview(data, sha, '')
+        else:
             with Image.open(io.BytesIO(data)) as master:
                 cropped = master.crop((x, y, x+w, y+h))
                 output = io.BytesIO()
                 cropped.save(output, format='PNG')
-            preview = render_asset_full(output.getvalue(), 'image/png', sha, '')
-        else:
-            raise DomainError('carousel_view_invalid')
-        # An in-flight render is still private after it completes; do not return
-        # pixels to an actor revoked while the compositor was running.
-        with self.store.connection() as db:
+            exact_png = output.getvalue()
+            if command.get('scale') == 1:
+                preview = AssetPreview({
+                    'source_sha256': hashlib.sha256(exact_png).hexdigest(),
+                    'mime_type': 'image/png', 'width': w, 'height': h,
+                    'bytes': len(exact_png), 'size': 'full', 'reencoded': False,
+                }, exact_png)
+            else:
+                preview = render_asset_full(exact_png, 'image/png', sha, '')
+
+        details = {'view': 'card' if 'card' in command else view}
+        if 'card' in command:
+            details['card'] = command['card']
+        elif view == 'region':
+            details['region'] = list(region)
+        for name in ('scale', 'layers', 'save_asset'):
+            if name in command:
+                details[name] = command[name]
+        # The original revision remains private and authorized through the render.
+        # A saved fragment and its journal record share one existing store transaction.
+        with self.store.tx() as db:
+            actor = self._actor(db, actor)
             self._version(db, actor, row['id'], row['revision'])
+            if command.get('save_asset'):
+                details['asset_ref'] = insert_verified_image(self.store, db, actor,
+                                                             verify_image(preview.data, 'image/png'))
+            self._log(db, actor, row['id'], row['revision'], 'render',
+                      duration_ms=round((time.perf_counter() - started) * 1000), **details)
         metadata = {key: value for key, value in preview.metadata.items() if key != 'resource_uri'}
         metadata.update(carousel_id=row['id'], revision=row['revision'], private=True,
                         view=view, source_width=width, source_height=height)
         if view == 'region':
             metadata['region'] = list(region)
+        for name in ('scale', 'layers', 'save_asset'):
+            if name in command:
+                metadata[name] = command[name]
+        if 'asset_ref' in details:
+            metadata['asset_ref'] = details['asset_ref']
+            metadata['resource_uri'] = 'vibepublish://assets/' + details['asset_ref']
         return AssetPreview(metadata, preview.data)

@@ -212,6 +212,7 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
                     ("requested_route", "actual_executor", "actual_model", "fixture")),
     "next_action": NEXT, "retry_safe": {"type": "boolean"}, "receipt_ref": ID,
     "generation_dispatch": enum("not_sent"),
+    "duration_ms": {"type": "integer", "minimum": 0},
     "observation_recovery": obj({"job_id": ID, "execution_ref": ID,
         "input_digest": string(64, pattern=r"^[a-f0-9]{64}$"),
         "operation_revision": REV, "visual_revision": REV,
@@ -305,6 +306,7 @@ tool("publish", "Create one publication now or in native provider queues; return
         "surface": enum("post", "story", "message", "album", "video", "short_video"),
         "delivery": ref("delivery"), "mode": enum("execute", "preview"),
         "renderings": ref("renderings"), "visual": ref("visual_spec"),
+        "vk": obj({"primary_attachments_mode": {"const": "carousel"}}),
         "request_key": KEY, "repeat_of": ID, "routing_revision": REV}, ("to",)), ref("receipt"), "publish")
 
 TOOLS[-1]["inputSchema"]["anyOf"] = [
@@ -408,18 +410,30 @@ _reference = obj({"id": _reference_id, "title": string(1000),
     "use_note": string(5000), "duplicate_of": _reference_id, "available": {"type": "boolean"}},
     ("id", "title", "tags", "look_for", "transfer", "source", "use_note", "available"))
 CAROUSEL_REFERENCE = _reference  # Shared catalog validation at import and read boundaries.
+_carousel_layer_ids = array(string(128, pattern=r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$"), 1, 1200)
+_carousel_layers = {"oneOf": [
+    obj({"only": _carousel_layer_ids}, ("only",)),
+    obj({"hide": _carousel_layer_ids}, ("hide",)),
+]}
 _carousel_output = obj({
     **DEFS["receipt"]["properties"], **_carousel_scene,
     "svg": {**string(262144), "minLength": 0},
     "latest_revision": REV, "asset_refs": array(ID, 0, 100),
     "journal": array(obj({"operation_id": ID, "revision": REV,
-        "kind": enum("create", "revise", "export"), "at": DATE,
+        "kind": enum("create", "revise", "export", "render", "get", "asset_import"), "at": DATE,
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "scope": enum("reference", "library", "guide", "icons"),
+        "view": enum("master", "region", "card"), "region": _carousel_region,
+        "card": {"type": "integer", "minimum": 1, "maximum": 10},
+        "reference_id": _reference_id, "asset_ref": ID, "imported_at": DATE,
+        "scale": {"const": 1}, "layers": _carousel_layers, "save_asset": {"type": "boolean"},
         "note": string(2000), "reference_use": _reference_use},
-        ("operation_id", "revision", "kind", "at")), 0, 10),
+        ("operation_id", "revision", "kind", "at")), 0, 50),
     "next_step": enum("compose_svg", "render_then_review"),
     "references": array(_reference, 0, 20), "total": {"type": "integer", "minimum": 0},
     "offset": {"type": "integer", "minimum": 0}, "next_offset": {"type": ["integer", "null"]},
-    "reference": _reference, "resource_uri": string(300),
+    "reference": _reference, "resource_uri": string(300), "asset_ref": ID,
+    "scale": {"const": 1}, "layers": _carousel_layers, "save_asset": {"type": "boolean"},
     "view": enum("master", "region", "full", "crop"),
     "region": {"anyOf": [_carousel_region, {"type": "null"}]},
     "mime_type": enum("image/png", "image/jpeg", "image/webp"),
@@ -428,34 +442,40 @@ _carousel_output = obj({
     "source_sha256": string(64), "preview_sha256": string(64),
     "size": enum("full"), "reencoded": {"type": "boolean"},
     "bytes": {"type": "integer", "minimum": 1}, "size_bytes": {"type": "integer", "minimum": 1},
-    "preview_data_url": string(2796240), "full_data_url": string(2796240),
+    "preview_data_url": string(2796240), "full_data_url": string(36_000_000),
 }, ("private",))
 _carousel_commands = [
     arm("create", _carousel_scene, ("brief",)),
     arm("get", {"scope": {"const": "story"}, "carousel_id": ID, "revision": REV,
         "include_svg": {"type": "boolean"}}, ("carousel_id",)),
-    arm("get", {"scope": {"const": "journal"}, "carousel_id": ID, "revision": REV}, ("scope", "carousel_id")),
-    arm("get", {"scope": {"const": "library"}, "query": {**string(500), "minLength": 0},
+    arm("get", {"scope": {"const": "journal"}, "carousel_id": ID, "revision": REV,
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, ("scope", "carousel_id")),
+    arm("get", {"scope": {"const": "library"}, "carousel_id": ID,
+        "query": {**string(500), "minLength": 0},
         "limit": {"type": "integer", "minimum": 1, "maximum": 20},
         "offset": {"type": "integer", "minimum": 0}}, ("scope",)),
-    arm("get", {"scope": {"const": "reference"}, "reference_id": _reference_id,
-        "region": _carousel_region}, ("scope", "reference_id")),
+    arm("get", {"scope": {"const": "reference"}, "carousel_id": ID,
+        "reference_id": _reference_id, "region": _carousel_region}, ("scope", "reference_id")),
     arm("revise", {**_carousel_scene, "carousel_id": ID, "expected_revision": REV,
         "note": string(2000), "reference_use": _reference_use}, ("carousel_id", "expected_revision")),
     arm("render", {"carousel_id": ID, "revision": REV, "view": enum("master", "region"),
-        "region": _carousel_region, "card": {"type": "integer", "minimum": 1, "maximum": 10}},
+        "region": _carousel_region, "card": {"type": "integer", "minimum": 1, "maximum": 10},
+        "scale": {"const": 1}, "layers": _carousel_layers, "save_asset": {"type": "boolean"}},
         ("carousel_id", "revision")),
     arm("export", {"carousel_id": ID, "revision": REV}, ("carousel_id", "revision")),
 ]
 tool("carousel", "Create, get, revise, render and export private SVG story carousels. "
     "These commands never publish, edit a social post, send a message or dispatch image generation. "
     "Dot generates components with its own tool and imports them through visual import. "
+    "Pass carousel_id when reading references to record the tool use in the private journal. "
     "get(scope:library) lists real owner-bound reference images; get(scope:reference,reference_id) "
     "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
     "record the visible technique and concrete change in revise.reference_use, then render the changed region. "
     "SVG images use asset:RETURNED_ASSET_ID; safe style/class/use/filter/pattern/mask/paint-order; no external URLs, scripts, foreignObject or author data: URIs. "
     "Bundled Cyrillic SIL OFL fonts: Oswald (narrow), Unbounded (display), Montserrat (grotesk), PT Serif (serif), their package weights and italic; kerning by resvg. Primary dot asset input: vibepublish_visual import with host-supplied file:{download_url,file_id}; begin/chunk/finish only fallback. Use explicit text/tspan lines. "
-    "Render master shows composition; render region or card shows readable detail. Export returns "
+    "Render master shows composition; region with scale:1 returns exact PNG up to 2560 px. "
+    "layers.only/hide filters SVG ids; save_asset:true saves the exact region as a private image. "
+    "Export returns "
     "ordered private assets for the exact revision; export is not owner selection or permission to publish.",
     obj({"command": {"oneOf": _carousel_commands}, "request_key": KEY}, ("command",)),
     _carousel_output, "visual")

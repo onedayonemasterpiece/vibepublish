@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Story Carousel A2: render exact 1:1 PNG regions up to 2560 px, include or omit SVG-id layers without new revisions, and optionally store the crop as a private existing asset. Record render parameters in the existing carousel journal; guide dot through the F1 background-fragment generation cycle.
+
+- Story Carousel: log timed render and linked reference/library reads plus first use of imported assets in the existing scoped operation ledger; expose up to 50 journal events without recording prompts or secrets. VK publish accepts `vk.primary_attachments_mode=carousel` and forwards it to native `wall.post` including frozen scheduled replay. No new tables, states, or deployment. Rendering an older revision keeps that revision in the journal.
+
 - Story Carousel P0: render same-principal private PNG/WEBP alpha originals as EXIF-free RGBA PNG over the SVG background, including across card seams; leave the existing white-backed publication derivative unchanged.
 
 - Story Carousel: replace CairoSVG with resvg for true kerning, ship eight licensed Cyrillic OFL fonts (Oswald, Unbounded, Montserrat, PT Serif), accept safe standard SVG effects/styles while banning external resources; prefer direct host-supplied file import for dot. No new state/retry/publisher. No merge/deploy or native VK test.

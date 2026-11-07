@@ -59,6 +59,7 @@ class Application:
                 result = self.media_store(actor, arguments)
             elif short == 'carousel':
                 command = arguments['command']
+                carousel_started = asyncio.get_running_loop().time()
                 if command['kind'] == 'get' and command.get('scope') == 'library':
                     result = await asyncio.to_thread(
                         self.carousel_references.list, actor, command.get('query', ''),
@@ -97,6 +98,14 @@ class Application:
             # Validate outputs too; a malformed success must never escape to clients.
             validated_result = result.metadata if isinstance(result, AssetPreview) else result
             Draft202012Validator(CATALOG[name]['outputSchema'], format_checker=FORMATS).validate(validated_result)
+            if (short == 'carousel' and command['kind'] == 'get' and command.get('carousel_id')
+                    and command.get('scope') in {'reference', 'library', 'guide', 'icons'}):
+                details = {'scope': command['scope']}
+                if command.get('reference_id'):
+                    details['reference_id'] = command['reference_id']
+                await asyncio.to_thread(self.carousels.log_event, actor, command['carousel_id'], 'get',
+                    duration_ms=round((asyncio.get_running_loop().time() - carousel_started) * 1000),
+                    **details)
             return result
         except DomainError as exc:
             return exc.output()
@@ -600,6 +609,8 @@ class Application:
                 'scheduled_at': scheduled, 'mode': target.get('mode', 'execute'), 'existing': existing,
                 'selection': target.get('selection', 'post'), 'source': None, 'source_authorized': False,
                 'basic_group_schedule_authorized': 'basic_group_schedule' in binding_rights,
+                **({'vk_primary_attachments_mode': target['vk']['primary_attachments_mode']}
+                   if binding['provider'] == 'vk' and target.get('vk') else {}),
                 **(story_link or {}),
                 **({'topic_root_id': topic_root_id} if topic_root_id else {}),
                 **({'admission_error': admission_error} if admission_error else {})}

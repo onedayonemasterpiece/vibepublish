@@ -222,7 +222,8 @@ class Worker:
                                topic_root_id=plan.get('topic_root_id'),
                                basic_group_schedule_authorized=bool(plan.get('basic_group_schedule_authorized')),
                                story_link_json=plan.get('story_link_json', '{}'),
-                               story_parent_json=plan.get('story_parent_json', '{}'))
+                               story_parent_json=plan.get('story_parent_json', '{}'),
+                               vk_primary_attachments_mode=plan.get('vk_primary_attachments_mode'))
 
     async def heartbeat(self, op):
         while True:
