@@ -1,5 +1,46 @@
 # Documentation
 
+## Story Carousel private MVP and visual references — 2026-11-07
+
+Start with the [canonical feature and current limits](features/story-carousel/README.md).
+The owner authorized implementation and a growing bank of actual Slack examples on
+November 7. Source now implements one private `vibepublish_carousel` tool with five
+commands: create, get, revise, render and export. It stores SVG revisions in the
+existing ledger, returns a strip or an original-resolution region, and exports
+ordered private media for an exact revision. Generation remains **dot's own tool**.
+
+The private bank has 23 source records and 22 unique images. The repository keeps
+[reference metadata](reference/story-carousel/reference-catalog.json); runtime image
+reads require the exact bound owner and `visual` scope. The model opens an actual
+reference, identifies one useful improvement, revises its SVG and checks the changed
+region when that comparison helps. The atlas never substitutes for an original image.
+
+The auditor's [November 7 coordination update](https://mira-projects.slack.com/archives/C0CFP01K292/p1794034087770269)
+records the owner's revised display test: seven probe cards in the postponed VK
+posts of «Полюбить Калининград», up to ten days ahead, with one
+`primary_attachments_mode=carousel` attempt. Telegram and separate test destinations
+are no longer prerequisites. Dot's existing private import → render → export E2E is unchanged.
+
+Supporting material:
+
+- [Original research and tutorials](reports/story-carousel-research-2026-11-06.md).
+- [Original Opus critique](reports/story-carousel-critique-2026-11-06.md), preserved as authored proposals.
+- [36-requirement coverage audit](reference/story-carousel/coverage-audit-2026-11-06.md)
+  and [source register](reference/story-carousel/source-register.md).
+- [Visual language and E01–E23 audit](reference/story-carousel/visual-language.md),
+  [eight narrow illustrations of two principles, excluded from tool examples](reference/story-carousel/blockout-atlas.svg),
+  [twelve palettes and Cyrillic directions](reference/story-carousel/palette-catalog.md),
+  [composition/review bank](reference/story-carousel/composition-and-review.md) and
+  [5+5 variation study](reference/story-carousel/variation-study.md).
+- [Platform, media and PastVu verification](reference/story-carousel/platform-media-audit-2026-11-06.md).
+
+Status: implementation authorized (**Fixed**), source implemented,
+**Not confirmed by user**. Public runtime deployment and native platform/dot E2E:
+**Not done**. Focused source checks and private server image provisioning are evidence
+for those specific steps, not production or visual acceptance. The earlier
+[full-channel audit and Opus reconciliation](reports/story-carousel-reconciliation-2026-11-06.md)
+remain historical research; the canonical feature defines the reduced current contract.
+
 ## Active MAX completion correction — 2026-09-08
 
 The owner's [active MAX product-completion task](https://github.com/onedayonemasterpiece/vibepublish/blob/work/vibepublish-max-web-20260904/docs/handoffs/max-product-completion-codex-20260908.md)

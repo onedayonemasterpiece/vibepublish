@@ -19,3 +19,5 @@ artifacts/codex/*
 .claude/settings.local.json
 
 *.egg-info/
+# Owner-provided reference images and local carousel data are never source artifacts.
+/private-data/

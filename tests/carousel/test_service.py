@@ -1,0 +1,206 @@
+"""A real reference-led edit, exact crops and a replayable private card export."""
+import io
+import json
+import sqlite3
+
+import pytest
+from PIL import Image
+
+from social_operations.assets import import_image, reclaim_asset_bytes, retired_asset_rows
+from social_operations.carousel import CarouselService
+from social_operations.carousel_references import ReferenceBank
+from social_operations.domain import DomainError
+from social_operations.service import Application
+from social_operations.storage import Store
+
+
+@pytest.fixture
+def runtime(tmp_path):
+    store = Store(tmp_path / 'ledger.sqlite')
+    actor = store.authenticate(store.create_principal('tenant', 'owner', owner=True))
+    app = Application(store)
+    service = CarouselService(app)
+    source = Image.new('RGB', (384, 160), '#ecb84f')
+    source.paste('#244858', (0, 0, 128, 160))
+    source.paste('#784238', (256, 0, 384, 160))
+    data = io.BytesIO(); source.save(data, format='PNG')
+    asset = import_image(store, actor, data.getvalue(), 'image/png')
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="384" height="160">'
+           f'<image href="asset:{asset}" width="384" height="160"/></svg>')
+    return store, actor, app, service, svg
+
+
+def create(service, actor, svg='', key='create'):
+    return service.command(actor, {'command': {'kind': 'create', 'brief': 'Три связанные карточки',
+        'card_count': 3, 'card_width': 128, 'card_height': 160, 'svg': svg}, 'request_key': key})
+
+
+def code(expected, fn):
+    with pytest.raises(DomainError) as error:
+        fn()
+    assert error.value.code == expected
+
+
+def pixels(data):
+    with Image.open(io.BytesIO(data)) as image:
+        return image.convert('RGB')
+
+
+def test_reference_edit_renders_exact_seam_and_replayable_private_export(runtime):
+    store, actor, app, service, svg = runtime
+    bank = ReferenceBank(store)
+    bank.root.mkdir()
+    Image.new('RGB', (20, 20), '#f6ead4').save(bank.root / 'panel.png')
+    (bank.root / 'catalog.json').write_text(json.dumps({
+        'owner': {'tenant_id': actor.tenant_id, 'principal_id': actor.principal_id}, 'references': [{
+        'id': 'E02', 'file': 'panel.png', 'title': 'Общая панель', 'tags': ['панель'],
+        'look_for': 'Панель проходит через шов', 'transfer': 'Объединить соседние зоны',
+        'source': {'slack_url': 'https://example.slack.com/archives/C1/p1', 'file_id': 'F1'},
+        'use_note': 'Reference only'}]}))
+    first = create(service, actor, svg)
+    ident = first['carousel_id']
+    assert first['private'] and first['generation_dispatch'] == 'not_sent'
+    seen = bank.get(actor, 'E02')
+    assert pixels(seen.data).getpixel((10, 10)) == (246, 234, 212)
+    revised_svg = svg.replace('</svg>', '<rect x="108" y="30" width="40" height="100" fill="#f6ead4"/></svg>')
+    args = {'command': {'kind': 'revise', 'carousel_id': ident, 'expected_revision': 1,
+        'svg': revised_svg, 'note': 'Упростить переход 1|2',
+        'reference_use': {'reference_id': 'E02', 'observation': 'Общая панель связывает зоны',
+                          'change': 'Добавлена одна панель через шов 1|2'}}, 'request_key': 'use-E02'}
+    second = service.command(actor, args)
+    assert second['revision'] == 2
+    assert service.command(actor, args)['operation_id'] == second['operation_id']
+    compact = service.command(actor, {'command': {'kind': 'get', 'carousel_id': ident}})
+    assert compact['journal'][0]['reference_use'] == args['command']['reference_use']
+    assert compact['asset_refs'] and 'svg' not in compact
+    original = service.command(actor, {'command': {'kind': 'get', 'carousel_id': ident,
+                                                   'revision': 1, 'include_svg': True}})
+    assert original['svg'] == svg and original['latest_revision'] == 2
+    crop = service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+        'revision': 2, 'view': 'region', 'region': [118, 35, 20, 90]}})
+    assert crop.metadata['region'] == [118, 35, 20, 90]
+    assert pixels(crop.data).getextrema() == ((246, 246), (234, 234), (212, 212))
+    card = service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+        'revision': 2, 'card': 2}})
+    assert pixels(card.data).size == (128, 160)
+    whole = service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+        'revision': 2, 'view': 'region', 'region': [0, 0, 384, 160]}})
+    export = {'command': {'kind': 'export', 'carousel_id': ident, 'revision': 2}, 'request_key': 'export-two'}
+    result = service.command(actor, export)
+    assert result['state'] == 'verified' and result['deliveries'] == [] and result['private']
+    assert [card['index'] for card in result['cards']] == [1, 2, 3]
+    joined = Image.new('RGB', (384, 160))
+    for index, card in enumerate(result['cards']):
+        raw, mime, sha = app.read_asset(actor, card['asset_ref'])
+        assert mime == card['mime_type'] and sha == card['sha256']
+        assert result['media'][index]['source']['id'] == card['asset_ref']
+        joined.paste(pixels(raw), (index * 128, 0))
+    assert joined.tobytes() == pixels(whole.data).tobytes()
+    with store.connection() as db:
+        before = db.execute('SELECT count(*) FROM assets').fetchone()[0]
+        for table in ('attempts', 'publications', 'visual_jobs'):
+            assert db.execute('SELECT count(*) FROM ' + table).fetchone()[0] == 0
+    replay = service.command(actor, export)
+    assert replay['operation_id'] == result['operation_id'] and replay['cards'] == result['cards']
+    assert store.receipt(actor, result['operation_id'])['cards'] == result['cards']
+    with store.connection() as db:
+        assert db.execute('SELECT count(*) FROM assets').fetchone()[0] == before
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute('UPDATE carousel_versions SET brief=? WHERE id=?', ('overwrite', ident))
+
+
+def test_brief_first_revision_fence_and_key_conflict(runtime):
+    _, actor, _, service, svg = runtime
+    first = create(service, actor)
+    ident = first['carousel_id']
+    assert not first['scene_ready']
+    code('carousel_scene_missing', lambda: service.command(actor, {'command': {
+        'kind': 'render', 'carousel_id': ident, 'revision': 1}}))
+    change = {'command': {'kind': 'revise', 'carousel_id': ident,
+                         'expected_revision': 1, 'svg': svg}, 'request_key': 'compose'}
+    ready = service.command(actor, change)
+    assert ready['revision'] == 2 and ready['scene_ready']
+    code('carousel_revision_conflict', lambda: service.command(actor, {**change, 'request_key': 'stale'}))
+    code('idempotency_conflict', lambda: create(service, actor, svg))
+    code('carousel_request_key_required', lambda: service.command(actor, {'command': change['command']}))
+    bad = {**change, 'command': {**change['command'], 'expected_revision': 2,
+        'reference_use': {'reference_id': 'unknown', 'observation': 'claim', 'change': 'claim'}}, 'request_key': 'missing-bank'}
+    code('carousel_reference_unavailable', lambda: service.command(actor, bad))
+
+
+def test_private_scope_revocation_and_invalid_regions(runtime):
+    store, actor, app, service, svg = runtime
+    ident = create(service, actor, svg)['carousel_id']
+    other = store.authenticate(store.create_principal('tenant', 'other', owner=True))
+    get = {'command': {'kind': 'get', 'carousel_id': ident}}
+    code('carousel_not_available', lambda: service.command(other, get))
+    for region in ([0, 0, 0, 1], [-1, 0, 20, 20], [380, 0, 10, 20], [True, 0, 1, 1]):
+        code('carousel_region_invalid', lambda: service.command(actor, {'command': {
+            'kind': 'render', 'carousel_id': ident, 'revision': 1, 'view': 'region', 'region': region}}))
+    with store.tx() as db:
+        db.execute('UPDATE principals SET active=0 WHERE id=?', (actor.principal_id,))
+    code('access_revoked', lambda: service.command(actor, get))
+    code('access_revoked', lambda: create(service, actor, svg))
+
+
+@pytest.mark.asyncio
+async def test_real_application_validates_all_commands_and_status(runtime):
+    store, actor, app, _, svg = runtime
+    async def call(command, key=None):
+        args = {'command': command, **({'request_key': key} if key else {})}
+        result = await app.call(actor, 'vibepublish_carousel', args)
+        assert 'error' not in (result if isinstance(result, dict) else result.metadata)
+        return result
+    created = await call({'kind': 'create', 'brief': 'История без готового рисунка',
+        'card_count': 3, 'card_width': 128, 'card_height': 160}, 'app-create')
+    ident = created['carousel_id']
+    state = await call({'kind': 'get', 'carousel_id': ident, 'include_svg': True})
+    assert not state['scene_ready'] and state['svg'] == ''
+    revised = await call({'kind': 'revise', 'carousel_id': ident,
+        'expected_revision': 1, 'svg': svg}, 'app-revise')
+    image = await call({'kind': 'render', 'carousel_id': ident, 'revision': revised['revision'], 'card': 1})
+    assert pixels(image.data).size == (128, 160)
+    exported = await call({'kind': 'export', 'carousel_id': ident, 'revision': 2}, 'app-export')
+    status = await app.call(actor, 'vibepublish_status', {'ids': [exported['operation_id']]})
+    assert status['receipts'][0]['cards'] == exported['cards']
+    with store.connection() as db:
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 12
+
+
+def test_saved_story_and_export_survive_cache_expiry_and_asset_reclamation(runtime):
+    store, actor, app, service, svg = runtime
+    ident = create(service, actor, svg)['carousel_id']
+    scene = service.command(actor, {'command': {'kind': 'get', 'carousel_id': ident}})
+    export_args = {'command': {'kind': 'export', 'carousel_id': ident, 'revision': 1},
+                   'request_key': 'durable-export'}
+    exported = service.command(actor, export_args)
+    retained = set(scene['asset_refs']) | {card['asset_ref'] for card in exported['cards']}
+    render_args = {'command': {'kind': 'render', 'carousel_id': ident, 'revision': 1,
+                              'view': 'region', 'region': [0, 0, 384, 160]}}
+    before = pixels(service.command(actor, render_args).data).tobytes()
+    unused_bytes = io.BytesIO()
+    Image.new('RGB', (16, 16), 'black').save(unused_bytes, format='PNG')
+    unused = import_image(store, actor, unused_bytes.getvalue(), 'image/png')
+    started = store.clock()
+    with store.tx() as db:
+        # Local FK-valid download-cache fixtures, with no grants or provider calls.
+        db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?)',
+            ('pub_cache_fixture', actor.tenant_id, actor.principal_id, 1, 'media_store', started))
+        db.executemany('INSERT INTO media_store_assets VALUES(?,?,?,?)',
+            [(ref, 'pub_cache_fixture', 'download_cache', started + 3600) for ref in retained | {unused}])
+    store.clock = lambda: started + 15 * 86400
+    with store.tx() as db:
+        rows = retired_asset_rows(db, store.clock())
+        reasons = {row['id']: row['reason'] for row in rows}
+        assert all(reasons[ref] == 'saved_carousel' for ref in retained)
+        assert reasons[unused] == 'reclaim'
+        app._purge_media_store_assets(db)
+        assert db.execute('SELECT 1 FROM assets WHERE id=?', (unused,)).fetchone() is None
+        reclaim_asset_bytes(db, rows)
+        remaining = {row[0] for row in db.execute('SELECT id FROM assets')}
+        assert retained <= remaining
+    assert pixels(service.command(actor, render_args).data).tobytes() == before
+    assert service.command(actor, export_args)['cards'] == exported['cards']
+    for card in exported['cards']:
+        raw, _, sha = app.read_asset(actor, card['asset_ref'])
+        assert pixels(raw).size == (128, 160) and sha == card['sha256']

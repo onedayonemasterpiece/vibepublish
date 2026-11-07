@@ -24,7 +24,7 @@ class SkillExamplesTests(unittest.TestCase):
 
     def test_rare_flows_are_linked_not_inlined(self):
         text = SKILL.read_text()
-        self.assertIn('Version: `1.7.1`', text)
+        self.assertIn('Version: `1.8.0`', text)
         for path in ('mcp-contract-v1.md', 'asset-ingress.md', 'media-store/README.md',
                      'vk-media-binding.md', 'network-footers.md',
                      'telegram-custom-emoji-v1.md'):

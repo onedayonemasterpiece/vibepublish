@@ -1,0 +1,411 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="3120" viewBox="0 0 1200 3120" role="img" aria-labelledby="atlas-title atlas-desc">
+<title id="atlas-title">Узкая иллюстрация двух принципов</title>
+<desc id="atlas-desc">Восемь условных схем иллюстрируют только два принципа: границы зон могут не совпадать с резами карточек; единый элемент может продолжаться через шов. Это не словарь визуальных референсов и не образцы для ответа инструмента. В каждой полосе пять окон 4:5; пунктиром обозначены линии реза.</desc>
+<defs><clipPath id="strip-clip"><rect width="1000" height="250"/></clipPath></defs>
+<g font-family="DejaVu Sans, sans-serif">
+<rect x="0.00" y="0.00" width="1200.00" height="3120.00" rx="0.00" fill="#FFFFFF"/>
+<text x="100.00" y="52.00" fill="#536773" font-size="13" font-weight="700" text-anchor="start">STORY CAROUSEL / BLOCK-OUT ATLAS</text>
+<text x="100.00" y="99.00" fill="#243640" font-size="29" font-weight="700" text-anchor="start">Узкая иллюстрация двух принципов</text>
+<text x="100.00" y="132.00" fill="#536773" font-size="16" font-weight="400" text-anchor="start">1. Зоны не привязаны к резам.  2. Единый элемент продолжается через шов.</text>
+<rect x="100.00" y="159.00" width="26.00" height="19.00" rx="0.00" fill="#D4DEE3"/>
+<text x="137.00" y="174.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">Зона / панель</text>
+<rect x="316.00" y="159.00" width="26.00" height="19.00" rx="0.00" fill="#6D8795"/>
+<line x1="320.00" y1="162.00" x2="338.00" y2="175.00" stroke="#FFFFFF" stroke-width="1"/>
+<line x1="338.00" y1="162.00" x2="320.00" y2="175.00" stroke="#FFFFFF" stroke-width="1"/>
+<text x="353.00" y="174.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">Медиа / объект</text>
+<rect x="552.00" y="159.00" width="25.00" height="3.00" rx="0.00" fill="#243640"/>
+<rect x="552.00" y="166.00" width="20.00" height="3.00" rx="0.00" fill="#243640"/>
+<rect x="552.00" y="173.00" width="23.00" height="3.00" rx="0.00" fill="#243640"/>
+<text x="590.00" y="174.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">Текст</text>
+<line x1="737.00" y1="157.00" x2="737.00" y2="181.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="751.00" y="174.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">Рез карточки</text>
+<text x="100.00" y="205.00" fill="#536773" font-size="13" font-weight="400" text-anchor="start">C* — соответствие композиционной библиотеке. Все формы условны; чужие изображения не используются.</text>
+<line x1="100.00" y1="221.00" x2="1100.00" y2="221.00" stroke="#D8E1E6" stroke-width="1"/>
+<text x="100.00" y="246.00" fill="#243640" font-size="24" font-weight="700" text-anchor="start">B01  Фотозоны и вложения</text>
+<text x="100.00" y="272.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">C01 + C08 + C10  ·  Границы больших и малых изображений смещены относительно резов</text>
+<g id="B01" transform="translate(100,292)">
+<g clip-path="url(#strip-clip)">
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="0.00" y="0.00" width="230.00" height="250.00" rx="0.00" fill="#6D8795"/>
+<line x1="6.00" y1="6.00" x2="224.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="224.00" y1="6.00" x2="6.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="230.00" y="0.00" width="260.00" height="250.00" rx="0.00" fill="#4D6978"/>
+<line x1="236.00" y1="6.00" x2="484.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="484.00" y1="6.00" x2="236.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="490.00" y="0.00" width="360.00" height="250.00" rx="0.00" fill="#8CA0AB"/>
+<line x1="496.00" y1="6.00" x2="844.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="844.00" y1="6.00" x2="496.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="850.00" y="0.00" width="150.00" height="250.00" rx="0.00" fill="#4D6978"/>
+<line x1="856.00" y1="6.00" x2="994.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="994.00" y1="6.00" x2="856.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="13.00" y="18.00" width="138.00" height="64.00" rx="4.00" fill="#FFFFFF"/>
+<rect x="20.00" y="25.00" width="109.12" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="20.00" y="39.00" width="124.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="20.00" y="49.00" width="101.68" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="20.00" y="59.00" width="112.84" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="350.00" y="45.00" width="130.00" height="100.00" rx="0.00" fill="#4D6978" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="356.00" y1="51.00" x2="474.00" y2="139.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="474.00" y1="51.00" x2="356.00" y2="139.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="350.00" y="157.50" width="130.00" height="75.00" rx="0.00" fill="#6D8795" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="356.00" y1="163.50" x2="474.00" y2="226.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="474.00" y1="163.50" x2="356.00" y2="226.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="720.00" y="87.50" width="120.00" height="100.00" rx="0.00" fill="#4D6978" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="726.00" y1="93.50" x2="834.00" y2="181.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="834.00" y1="93.50" x2="726.00" y2="181.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="609.00" y="20.50" width="110.00" height="59.00" rx="4.00" fill="#FFFFFF"/>
+<rect x="616.00" y="27.50" width="84.48" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="616.00" y="41.50" width="96.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="616.00" y="51.50" width="78.72" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="616.00" y="61.50" width="87.36" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="873.00" y="163.00" width="100.00" height="56.50" rx="4.00" fill="#FFFFFF"/>
+<rect x="880.00" y="170.00" width="75.68" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="880.00" y="184.00" width="86.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="880.00" y="194.00" width="70.52" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="880.00" y="204.00" width="78.26" height="4.00" rx="1.00" fill="#536773"/>
+</g>
+<line x1="200.00" y1="0.00" x2="200.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="400.00" y1="0.00" x2="400.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800.00" y1="0.00" x2="800.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="none" stroke="#9CAEB8" stroke-width="1.3"/>
+<text x="100.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">01</text>
+<text x="300.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">02</text>
+<text x="500.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">03</text>
+<text x="700.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">04</text>
+<text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
+</g>
+<text x="100.00" y="598.00" fill="#243640" font-size="24" font-weight="700" text-anchor="start">B02  Панорама и контактная пара</text>
+<text x="100.00" y="624.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">C01 + C06 + C10  ·  Общий слой продолжается; небольшие окна меняют крупность</text>
+<g id="B02" transform="translate(100,644)">
+<g clip-path="url(#strip-clip)">
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="0.00" y="0.00" width="164.00" height="250.00" rx="0.00" fill="#6D8795"/>
+<line x1="6.00" y1="6.00" x2="158.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="158.00" y1="6.00" x2="6.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="164.00" y="0.00" width="316.00" height="250.00" rx="0.00" fill="#90A3AD"/>
+<line x1="170.00" y1="6.00" x2="474.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="474.00" y1="6.00" x2="170.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="480.00" y="0.00" width="370.00" height="250.00" rx="0.00" fill="#4D6978"/>
+<line x1="486.00" y1="6.00" x2="844.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="844.00" y1="6.00" x2="486.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="850.00" y="0.00" width="150.00" height="250.00" rx="0.00" fill="#6D8795"/>
+<line x1="856.00" y1="6.00" x2="994.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="994.00" y1="6.00" x2="856.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="146.00" y="67.50" width="90.00" height="115.00" rx="0.00" fill="#4D6978" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="152.00" y1="73.50" x2="230.00" y2="176.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="230.00" y1="73.50" x2="152.00" y2="176.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="454.00" y="40.00" width="104.00" height="85.00" rx="0.00" fill="#6D8795" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="460.00" y1="46.00" x2="552.00" y2="119.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="552.00" y1="46.00" x2="460.00" y2="119.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="454.00" y="130.00" width="104.00" height="75.00" rx="0.00" fill="#6D8795" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="460.00" y1="136.00" x2="552.00" y2="199.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="552.00" y1="136.00" x2="460.00" y2="199.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="13.00" y="13.00" width="114.00" height="56.50" rx="4.00" fill="#FFFFFF"/>
+<rect x="20.00" y="20.00" width="88.00" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="20.00" y="34.00" width="100.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="20.00" y="44.00" width="82.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="20.00" y="54.00" width="91.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="263.00" y="168.00" width="124.00" height="56.50" rx="4.00" fill="#FFFFFF"/>
+<rect x="270.00" y="175.00" width="96.80" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="270.00" y="189.00" width="110.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="270.00" y="199.00" width="90.20" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="270.00" y="209.00" width="100.10" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="629.00" y="25.50" width="144.00" height="56.50" rx="4.00" fill="#FFFFFF"/>
+<rect x="636.00" y="32.50" width="114.40" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="636.00" y="46.50" width="130.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="636.00" y="56.50" width="106.60" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="636.00" y="66.50" width="118.30" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="867.00" y="163.00" width="100.00" height="56.50" rx="4.00" fill="#FFFFFF"/>
+<rect x="874.00" y="170.00" width="75.68" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="874.00" y="184.00" width="86.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="874.00" y="194.00" width="70.52" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="874.00" y="204.00" width="78.26" height="4.00" rx="1.00" fill="#536773"/>
+</g>
+<line x1="200.00" y1="0.00" x2="200.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="400.00" y1="0.00" x2="400.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800.00" y1="0.00" x2="800.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="none" stroke="#9CAEB8" stroke-width="1.3"/>
+<text x="100.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">01</text>
+<text x="300.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">02</text>
+<text x="500.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">03</text>
+<text x="700.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">04</text>
+<text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
+</g>
+<text x="100.00" y="950.00" fill="#243640" font-size="24" font-weight="700" text-anchor="start">B03  Общая лента</text>
+<text x="100.00" y="976.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">C03 + C09  ·  Одна панель объединяет самостоятельные текстовые ячейки</text>
+<g id="B03" transform="translate(100,996)">
+<g clip-path="url(#strip-clip)">
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="390.00" y="0.00" width="220.00" height="250.00" rx="0.00" fill="#E6EBED"/>
+<circle cx="110.00" cy="88.00" r="38.00" fill="#4D6978"/>
+<path d="M 41.60 250.00 L 48.80 166.00 Q 56.00 128.00 110.00 128.00 Q 164.00 128.00 171.20 166.00 L 178.40 250.00 Z" fill="#6D8795"/>
+<circle cx="500.00" cy="52.82" r="40.32" fill="#4D6978"/>
+<path d="M 436.16 250.00 L 442.88 150.25 Q 449.60 105.12 500.00 105.12 Q 550.40 105.12 557.12 150.25 L 563.84 250.00 Z" fill="#6D8795"/>
+<circle cx="902.00" cy="102.17" r="34.67" fill="#4D6978"/>
+<path d="M 842.72 250.00 L 848.96 173.35 Q 855.20 138.68 902.00 138.68 Q 948.80 138.68 955.04 173.35 L 961.28 250.00 Z" fill="#6D8795"/>
+<rect x="226.00" y="30.00" width="126.72" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="226.00" y="44.00" width="144.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="226.00" y="54.00" width="118.08" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="226.00" y="64.00" width="131.04" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="30.00" width="112.64" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="630.00" y="44.00" width="128.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="54.00" width="104.96" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="64.00" width="116.48" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="210.00" y="120.00" width="580.00" height="90.00" rx="15.00" fill="#D4DEE3"/>
+<rect x="230.00" y="145.00" width="119.68" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="230.00" y="159.00" width="136.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="230.00" y="169.00" width="111.52" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="230.00" y="179.00" width="123.76" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="430.00" y="145.00" width="119.68" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="430.00" y="159.00" width="136.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="430.00" y="169.00" width="111.52" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="430.00" y="179.00" width="123.76" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="145.00" width="119.68" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="630.00" y="159.00" width="136.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="169.00" width="111.52" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="179.00" width="123.76" height="4.00" rx="1.00" fill="#536773"/>
+</g>
+<line x1="200.00" y1="0.00" x2="200.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="400.00" y1="0.00" x2="400.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800.00" y1="0.00" x2="800.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="none" stroke="#9CAEB8" stroke-width="1.3"/>
+<text x="100.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">01</text>
+<text x="300.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">02</text>
+<text x="500.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">03</text>
+<text x="700.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">04</text>
+<text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
+</g>
+<text x="100.00" y="1302.00" fill="#243640" font-size="24" font-weight="700" text-anchor="start">B04  Капсула на фото</text>
+<text x="100.00" y="1328.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">C03 + C08  ·  Крупная мягкая форма удерживает центральный эпизод</text>
+<g id="B04" transform="translate(100,1348)">
+<g clip-path="url(#strip-clip)">
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="0.00" y="0.00" width="800.00" height="250.00" rx="0.00" fill="#91A4AE"/>
+<line x1="6.00" y1="6.00" x2="794.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="794.00" y1="6.00" x2="6.00" y2="244.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<circle cx="171.00" cy="53.58" r="46.08" fill="#4D6978"/>
+<path d="M 83.60 250.00 L 92.80 148.15 Q 102.00 102.08 171.00 102.08 Q 240.00 102.08 249.20 148.15 L 258.40 250.00 Z" fill="#6D8795"/>
+<rect x="330.00" y="40.00" width="440.00" height="165.00" rx="82.00" fill="#E6EBED"/>
+<rect x="17.00" y="160.50" width="138.00" height="64.00" rx="4.00" fill="#FFFFFF"/>
+<rect x="24.00" y="167.50" width="109.12" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="24.00" y="181.50" width="124.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="24.00" y="191.50" width="101.68" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="24.00" y="201.50" width="112.84" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="420.00" y="72.50" width="123.20" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="420.00" y="86.50" width="140.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="420.00" y="96.50" width="114.80" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="420.00" y="106.50" width="127.40" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="72.50" width="96.80" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="620.00" y="86.50" width="110.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="96.50" width="90.20" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="106.50" width="100.10" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="650.00" y="132.50" width="70.00" height="90.00" rx="0.00" fill="#4D6978" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="656.00" y1="138.50" x2="714.00" y2="216.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="714.00" y1="138.50" x2="656.00" y2="216.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="832.00" y="47.50" width="116.16" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="832.00" y="61.50" width="132.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="832.00" y="71.50" width="108.24" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="832.00" y="81.50" width="120.12" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="828.00" y="160.00" width="142.00" height="45.00" rx="22.00" fill="#D4DEE3"/>
+</g>
+<line x1="200.00" y1="0.00" x2="200.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="400.00" y1="0.00" x2="400.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800.00" y1="0.00" x2="800.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="none" stroke="#9CAEB8" stroke-width="1.3"/>
+<text x="100.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">01</text>
+<text x="300.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">02</text>
+<text x="500.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">03</text>
+<text x="700.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">04</text>
+<text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
+</g>
+<text x="100.00" y="1654.00" fill="#243640" font-size="24" font-weight="700" text-anchor="start">B05  Герой у шва</text>
+<text x="100.00" y="1680.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">C02 + C09 + C13  ·  Два эпизода с фигурой; между ними спокойная смысловая пауза</text>
+<g id="B05" transform="translate(100,1700)">
+<g clip-path="url(#strip-clip)">
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="0.00" y="0.00" width="200.00" height="250.00" rx="0.00" fill="#D4DEE3"/>
+<rect x="200.00" y="0.00" width="500.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="700.00" y="0.00" width="300.00" height="250.00" rx="0.00" fill="#E6EBED"/>
+<circle cx="200.00" cy="57.24" r="42.24" fill="#4D6978"/>
+<path d="M 133.12 250.00 L 140.16 151.30 Q 147.20 106.65 200.00 106.65 Q 252.80 106.65 259.84 151.30 L 266.88 250.00 Z" fill="#6D8795"/>
+<circle cx="800.00" cy="59.16" r="44.16" fill="#4D6978"/>
+<path d="M 730.08 250.00 L 737.44 151.30 Q 744.80 106.65 800.00 106.65 Q 855.20 106.65 862.56 151.30 L 869.92 250.00 Z" fill="#6D8795"/>
+<rect x="16.00" y="32.50" width="75.68" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="16.00" y="46.50" width="86.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="16.00" y="56.50" width="70.52" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="16.00" y="66.50" width="78.26" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="298.00" y="37.50" width="75.68" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="298.00" y="51.50" width="86.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="298.00" y="61.50" width="70.52" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="298.00" y="71.50" width="78.26" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="436.00" y="80.00" width="110.88" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="436.00" y="94.00" width="126.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="436.00" y="104.00" width="103.32" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="436.00" y="114.00" width="114.66" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="42.50" width="61.60" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="620.00" y="56.50" width="70.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="66.50" width="57.40" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="76.50" width="63.70" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="904.00" y="45.00" width="66.88" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="904.00" y="59.00" width="76.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="904.00" y="69.00" width="62.32" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="904.00" y="79.00" width="69.16" height="4.00" rx="1.00" fill="#536773"/>
+</g>
+<line x1="200.00" y1="0.00" x2="200.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="400.00" y1="0.00" x2="400.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800.00" y1="0.00" x2="800.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="none" stroke="#9CAEB8" stroke-width="1.3"/>
+<text x="100.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">01</text>
+<text x="300.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">02</text>
+<text x="500.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">03</text>
+<text x="700.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">04</text>
+<text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
+</g>
+<text x="100.00" y="2006.00" fill="#243640" font-size="24" font-weight="700" text-anchor="start">B06  Цветовой peek и стрелка</text>
+<text x="100.00" y="2032.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">C04 + C05 + C12  ·  Направление и смена зон связывают карточки без фотографий</text>
+<g id="B06" transform="translate(100,2052)">
+<g clip-path="url(#strip-clip)">
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="0.00" y="0.00" width="544.00" height="250.00" rx="0.00" fill="#E6EBED"/>
+<rect x="544.00" y="0.00" width="400.00" height="250.00" rx="0.00" fill="#D4DEE3"/>
+<rect x="944.00" y="0.00" width="56.00" height="250.00" rx="0.00" fill="#E6EBED"/>
+<line x1="30.00" y1="195.00" x2="232.00" y2="195.00" stroke="#4D6978" stroke-width="11"/>
+<path d="M 220.00 175.00 L 244.00 195.00 L 220.00 215.00" fill="none" stroke="#4D6978" stroke-width="11" stroke-linejoin="miter"/>
+<line x1="310.00" y1="72.50" x2="434.00" y2="72.50" stroke="#4D6978" stroke-width="11"/>
+<path d="M 422.00 52.50 L 446.00 72.50 L 422.00 92.50" fill="none" stroke="#4D6978" stroke-width="11" stroke-linejoin="miter"/>
+<line x1="564.00" y1="195.00" x2="756.00" y2="195.00" stroke="#4D6978" stroke-width="11"/>
+<path d="M 744.00 175.00 L 768.00 195.00 L 744.00 215.00" fill="none" stroke="#4D6978" stroke-width="11" stroke-linejoin="miter"/>
+<rect x="28.00" y="35.00" width="116.16" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="28.00" y="49.00" width="132.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="28.00" y="59.00" width="108.24" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="28.00" y="69.00" width="120.12" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="252.00" y="122.50" width="109.12" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="252.00" y="136.50" width="124.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="252.00" y="146.50" width="101.68" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="252.00" y="156.50" width="112.84" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="462.00" y="35.00" width="93.28" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="462.00" y="49.00" width="106.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="462.00" y="59.00" width="86.92" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="462.00" y="69.00" width="96.46" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="40.00" width="112.64" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="620.00" y="54.00" width="128.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="64.00" width="104.96" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="620.00" y="74.00" width="116.48" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="828.00" y="80.00" width="109.12" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="828.00" y="94.00" width="124.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="828.00" y="104.00" width="101.68" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="828.00" y="114.00" width="112.84" height="4.00" rx="1.00" fill="#536773"/>
+</g>
+<line x1="200.00" y1="0.00" x2="200.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="400.00" y1="0.00" x2="400.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800.00" y1="0.00" x2="800.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="none" stroke="#9CAEB8" stroke-width="1.3"/>
+<text x="100.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">01</text>
+<text x="300.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">02</text>
+<text x="500.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">03</text>
+<text x="700.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">04</text>
+<text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
+</g>
+<text x="100.00" y="2358.00" fill="#243640" font-size="24" font-weight="700" text-anchor="start">B07  Заголовок-панорама</text>
+<text x="100.00" y="2384.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">C12 + C01 + C10  ·  Общая строка и фотоокна; текстовые опоры остаются в локальных окнах</text>
+<g id="B07" transform="translate(100,2404)">
+<g clip-path="url(#strip-clip)">
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="0.00" y="0.00" width="286.00" height="250.00" rx="0.00" fill="#E6EBED"/>
+<rect x="286.00" y="0.00" width="490.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="776.00" y="0.00" width="224.00" height="250.00" rx="0.00" fill="#D4DEE3"/>
+<rect x="16.00" y="92.50" width="260.00" height="140.00" rx="0.00" fill="#6D8795" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="22.00" y1="98.50" x2="270.00" y2="226.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="270.00" y1="98.50" x2="22.00" y2="226.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="430.00" y="107.50" width="290.00" height="122.50" rx="0.00" fill="#4D6978" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="436.00" y1="113.50" x2="714.00" y2="224.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="714.00" y1="113.50" x2="436.00" y2="224.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="848.00" y="25.00" width="118.00" height="127.50" rx="0.00" fill="#6D8795" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="854.00" y1="31.00" x2="960.00" y2="146.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="960.00" y1="31.00" x2="854.00" y2="146.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="130.00" y="20.00" width="370.00" height="60.00" rx="0.00" fill="#FFFFFF"/>
+<text x="142.00" y="64.00" fill="#243640" font-size="34" font-weight="700" text-anchor="start">ЗАГОЛОВОК</text>
+<rect x="304.00" y="120.00" width="82.72" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="304.00" y="134.00" width="94.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="304.00" y="144.00" width="77.08" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="304.00" y="154.00" width="85.54" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="30.00" width="109.12" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="630.00" y="44.00" width="124.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="54.00" width="101.68" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="630.00" y="64.00" width="112.84" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="846.00" y="180.00" width="109.12" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="846.00" y="194.00" width="124.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="846.00" y="204.00" width="101.68" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="846.00" y="214.00" width="112.84" height="4.00" rx="1.00" fill="#536773"/>
+</g>
+<line x1="200.00" y1="0.00" x2="200.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="400.00" y1="0.00" x2="400.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800.00" y1="0.00" x2="800.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="none" stroke="#9CAEB8" stroke-width="1.3"/>
+<text x="100.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">01</text>
+<text x="300.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">02</text>
+<text x="500.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">03</text>
+<text x="700.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">04</text>
+<text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
+</g>
+<text x="100.00" y="2710.00" fill="#243640" font-size="24" font-weight="700" text-anchor="start">B08  Дневник и досье</text>
+<text x="100.00" y="2736.00" fill="#536773" font-size="14" font-weight="400" text-anchor="start">C08 + C09 + C10  ·  Главы, карточки с числами и небольшие фото задают переменный ритм</text>
+<g id="B08" transform="translate(100,2756)">
+<g clip-path="url(#strip-clip)">
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="0.00" y="0.00" width="290.00" height="250.00" rx="0.00" fill="#E6EBED"/>
+<rect x="290.00" y="0.00" width="380.00" height="250.00" rx="0.00" fill="#F7F9FA"/>
+<rect x="670.00" y="0.00" width="330.00" height="250.00" rx="0.00" fill="#D4DEE3"/>
+<rect x="110.00" y="70.00" width="136.00" height="155.00" rx="0.00" fill="#6D8795" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="116.00" y1="76.00" x2="240.00" y2="219.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="240.00" y1="76.00" x2="116.00" y2="219.00" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="510.00" y="95.00" width="150.00" height="132.50" rx="0.00" fill="#4D6978" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="516.00" y1="101.00" x2="654.00" y2="221.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="654.00" y1="101.00" x2="516.00" y2="221.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="850.00" y="97.50" width="120.00" height="125.00" rx="0.00" fill="#6D8795" stroke="#FFFFFF" stroke-width="3"/>
+<line x1="856.00" y1="103.50" x2="964.00" y2="216.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<line x1="964.00" y1="103.50" x2="856.00" y2="216.50" stroke="#F3F7F9" stroke-width="1" opacity="0.28"/>
+<rect x="260.00" y="35.00" width="76.00" height="62.50" rx="10.00" fill="#FFFFFF"/>
+<text x="298.00" y="79.00" fill="#243640" font-size="29" font-weight="700" text-anchor="middle">01</text>
+<rect x="630.00" y="37.50" width="90.00" height="62.50" rx="10.00" fill="#FFFFFF"/>
+<text x="675.00" y="81.50" fill="#243640" font-size="29" font-weight="700" text-anchor="middle">02</text>
+<rect x="20.00" y="25.00" width="114.40" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="20.00" y="39.00" width="130.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="20.00" y="49.00" width="106.60" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="284.00" y="120.00" width="88.00" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="284.00" y="134.00" width="100.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="284.00" y="144.00" width="82.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="284.00" y="154.00" width="91.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="440.00" y="22.50" width="100.32" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="440.00" y="36.50" width="114.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="440.00" y="46.50" width="93.48" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="816.00" y="32.50" width="137.28" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="816.00" y="46.50" width="156.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="816.00" y="56.50" width="127.92" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="816.00" y="66.50" width="141.96" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="690.00" y="167.50" width="88.00" height="7.00" rx="1.00" fill="#243640"/>
+<rect x="690.00" y="181.50" width="100.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="690.00" y="191.50" width="82.00" height="4.00" rx="1.00" fill="#536773"/>
+<rect x="690.00" y="201.50" width="91.00" height="4.00" rx="1.00" fill="#536773"/>
+</g>
+<line x1="200.00" y1="0.00" x2="200.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="400.00" y1="0.00" x2="400.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="800.00" y1="0.00" x2="800.00" y2="250.00" stroke="#BD542F" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="0.00" y="0.00" width="1000.00" height="250.00" rx="0.00" fill="none" stroke="#9CAEB8" stroke-width="1.3"/>
+<text x="100.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">01</text>
+<text x="300.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">02</text>
+<text x="500.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">03</text>
+<text x="700.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">04</text>
+<text x="900.00" y="270.00" fill="#536773" font-size="13" font-weight="400" text-anchor="middle">05</text>
+</g>
+<line x1="100.00" y1="3053.00" x2="1100.00" y2="3053.00" stroke="#D8E1E6" stroke-width="1"/>
+<text x="100.00" y="3080.00" fill="#536773" font-size="13" font-weight="400" text-anchor="start">Только два принципа. Не словарь референсов; атлас не возвращается в ответах MCP как образец.</text>
+<text x="100.00" y="3101.00" fill="#536773" font-size="12" font-weight="400" text-anchor="start">Полоса: 1000 × 250. Окно: 200 × 250.  B02, B05 и B06 расширены до пяти окон без растяжения модулей.</text>
+</g></svg>
