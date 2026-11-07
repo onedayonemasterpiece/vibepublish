@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: preserve the author's intended question in the existing brief, finish and compare distinct requested variants, and reuse the final visual review for unchanged cards. Keep private export separate from authorized publication. Clarify client-declared host-file inputs and the existing programmatic byte-import fallback without fabricated file handles.
+
 - Story Carousel components: return real MCP ImageContent and small indexed metadata, five thumbnails per page (up to eight). Affine image placements and SVG absolute/percent units resolve to canvas coordinates; unsupported geometry reports local placements and bounds_unavailable while retaining previews. Existing journal and asset access checks remain in use.
 - Story Carousel: preserve original raster bytes in resvg, including scaled `use` instances and `preserveAspectRatio="none"/"slice"`; remove the lossy raster downsampling and second cache after pixel regressions exposed lost detail.
 - Story Carousel: reuse the full rendered canvas per owner, SVG and layer filter (process LRU, 12 canvases / 128 MiB PNG). Card, region, half-scale master and export crop the cached render. Source availability is checked before every hit; selected-source hashes prevent stale alpha/derivative results. No new persistent state.
