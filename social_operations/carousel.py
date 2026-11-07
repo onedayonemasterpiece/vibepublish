@@ -5,7 +5,7 @@ import hashlib
 import io
 import json
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from .assets import AssetPreview, insert_verified_image, render_asset_full, render_asset_preview, verify_image
 from .carousel_compositor import render_svg, slice_cards, validate_svg
@@ -102,6 +102,35 @@ class CarouselService:
                 self.app._key(db, actor, args['request_key'], digest(['carousel', intent]), op)
         return self.store.receipt(actor, op)
 
+    def _composition_asset(self, actor, ident):
+        """Use the private alpha original only for this carousel's SVG resources."""
+        derivative = self.app.read_asset(actor, ident)
+        with self.store.connection() as db:
+            actor = self._actor(db, actor)
+            original = db.execute(
+                """SELECT source.id FROM assets AS derived
+                   JOIN assets AS source
+                     ON source.tenant_id=derived.tenant_id
+                    AND source.principal_id=derived.principal_id
+                    AND source.sha256=derived.source_sha256
+                   WHERE derived.id=? AND derived.tenant_id=? AND derived.principal_id=?
+                     AND source.id!=derived.id AND source.mime IN ('image/png','image/webp')
+                   ORDER BY source.rowid LIMIT 1""",
+                (ident, actor.tenant_id, actor.principal_id)).fetchone()
+        if not original:
+            return derivative
+        original_bytes, _, _ = self.app.read_asset(actor, original['id'])
+        with Image.open(io.BytesIO(original_bytes)) as source:
+            oriented = ImageOps.exif_transpose(source)
+            if 'A' not in oriented.getbands() and 'transparency' not in oriented.info:
+                return derivative
+            clean = Image.new('RGBA', oriented.size)
+            clean.paste(oriented.convert('RGBA'))
+            output = io.BytesIO()
+            clean.save(output, format='PNG')
+        rgba = output.getvalue()
+        return rgba, 'image/png', hashlib.sha256(rgba).hexdigest()
+
     def _prepare(self, actor, command, previous):
         defaults = {'brief': '', 'svg': '', 'card_count': 7, 'card_width': 1080,
                     'card_height': 1350, 'caption': ''}
@@ -118,7 +147,7 @@ class CarouselService:
         assets = {}
         def read_asset(ident):
             if ident not in assets:
-                assets[ident] = self.app.read_asset(actor, ident)
+                assets[ident] = self._composition_asset(actor, ident)
             return assets[ident]
         if scene['svg']:
             validate_svg(scene['svg'], card_count=count, card_width=width,
@@ -149,7 +178,7 @@ class CarouselService:
         if not row['svg']:
             raise DomainError('carousel_scene_missing', 'Save an SVG composition with revise before rendering or exporting')
         return render_svg(row['svg'], card_count=row['card_count'], card_width=row['card_width'],
-            card_height=row['card_height'], read_asset=lambda ident: self.app.read_asset(actor, ident))
+            card_height=row['card_height'], read_asset=lambda ident: self._composition_asset(actor, ident))
 
     def render(self, actor, command):
         with self.store.connection() as db:
