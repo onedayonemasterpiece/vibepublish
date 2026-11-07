@@ -229,6 +229,9 @@ async def test_real_application_validates_all_commands_and_status(runtime):
     assert (await app.call(actor, 'vibepublish_carousel', {'command': {
         'kind': 'get', 'scope': 'journal', 'carousel_id': ident, 'limit': 51}}))['error']['code'] == 'invalid_input'
     exported = await call({'kind': 'export', 'carousel_id': ident, 'revision': 2}, 'app-export')
+    timings = (await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident}))['journal']
+    assert {'create', 'revise', 'render', 'export', 'get'} <= {
+        entry['kind'] for entry in timings if isinstance(entry.get('duration_ms'), int)}
     status = await app.call(actor, 'vibepublish_status', {'ids': [exported['operation_id']]})
     assert status['receipts'][0]['cards'] == exported['cards']
     with store.connection() as db:
