@@ -146,3 +146,20 @@ class ReferenceTests(unittest.TestCase):
         self.bank.root.rename(self.root / 'hidden-bank')
         self.bank.root.symlink_to(self.root / 'hidden-bank', target_is_directory=True)
         self.code('carousel_reference_unavailable', lambda: self.bank.list(self.actor))
+
+
+    def test_semantic_token_overlap_uses_russian_inflections_and_never_hides_bank(self):
+        self.rows += [
+            {**self.rows[0], 'id': 'E02', 'title': 'Монументальная архитектура',
+             'tags': ['памятник'], 'look_for': 'Масштаб фасада'},
+            {**self.rows[0], 'id': 'E03', 'title': 'Типография и плакат',
+             'tags': ['леттеринг'], 'look_for': 'Крупный заголовок'},
+        ]
+        self.save_catalog()
+        result = self.bank.list(self.actor, 'типографика памятник монумент архитектура')
+        self.assertEqual([row['id'] for row in result['references']], ['E02', 'E03', 'E01'])
+        self.assertEqual([row['matched'] for row in result['references']], [True, True, False])
+        no_hits = self.bank.list(self.actor, 'абсолютнонесуществующее')
+        self.assertEqual([row['id'] for row in no_hits['references']], ['E01', 'E02', 'E03'])
+        self.assertTrue(all(row['matched'] is False for row in no_hits['references']))
+        self.assertEqual(self.bank.list(self.actor, 'nothing', offset=99)['references'][0]['id'], 'E01')
