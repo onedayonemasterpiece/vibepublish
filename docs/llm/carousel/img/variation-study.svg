@@ -1,0 +1,524 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="3460" viewBox="0 0 1560 3460" role="img" aria-labelledby="title desc">
+<title id="title">Композиционная грамматика: проверка вариативности</title><desc id="desc">Десять оригинальных учебных схем. Пять схем одной семикарточной истории сохраняют роли и фактическое ядро, меняя геометрию. Пять разных гипотетических историй используют от четырёх до девяти карточек. Это иллюстрации, не пресеты и не тест генерации dot.</desc>
+<rect x="0.00" y="0.00" width="1560.00" height="3460.00" rx="0" fill="#FFFFFF"/>
+<text x="100.00" y="48.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="13" font-weight="700" text-anchor="start">STORY CAROUSEL / VARIATION STUDY</text>
+<text x="100.00" y="96.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="34" font-weight="700" text-anchor="start">Грамматика даёт разные композиции</text>
+<text x="100.00" y="130.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="18" font-weight="400" text-anchor="start">Учебные схемы, не пресеты. Цветовая система постоянна: различия создаются структурой.</text>
+<rect x="100.00" y="157.00" width="25.00" height="18.00" rx="0" fill="#D6E0E5"/>
+<text x="136.00" y="171.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Зона / панель</text>
+<rect x="315.00" y="157.00" width="25.00" height="18.00" rx="0" fill="#718D9B"/>
+<text x="351.00" y="171.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Медиа / объект</text>
+<line x1="552.00" y1="158.00" x2="577.00" y2="158.00" stroke="#263943" stroke-width="5"/>
+<line x1="552.00" y1="168.00" x2="574.00" y2="168.00" stroke="#546A76" stroke-width="3"/>
+<text x="590.00" y="171.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Текст / число</text>
+<line x1="798.00" y1="154.00" x2="798.00" y2="179.00" stroke="#BE5938" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="812.00" y="171.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Рез окна 4:5</text>
+<text x="100.00" y="212.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="20" font-weight="700" text-anchor="start">A. Одна история, пять решений · семь ролей и авторский замысел остаются одинаковыми</text>
+<text x="100.00" y="238.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="13" font-weight="400" text-anchor="start">Памятник: имя и 1977 → архив 1983 → видимая разница → предел знания → предложение вернуть имя в пространство города.</text>
+<text x="100.00" y="279.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">A1  Панорамное фотоэссе</text>
+<text x="100.00" y="305.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Доминанта: фото · мосты: панорама и общая зона · плотность: широкие медиа и короткие опоры</text>
+<g id="A1" transform="translate(100,322)">
+<clipPath id="clip-A1"><rect width="1050" height="187.5"/></clipPath>
+<g clip-path="url(#clip-A1)">
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<rect x="0.00" y="0.00" width="352.50" height="187.50" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="5.00" y1="5.00" x2="347.50" y2="182.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="347.50" y1="5.00" x2="5.00" y2="182.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="352.50" y="0.00" width="285.00" height="187.50" rx="0" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="357.50" y1="5.00" x2="632.50" y2="182.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="632.50" y1="5.00" x2="357.50" y2="182.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="637.50" y="0.00" width="412.50" height="187.50" rx="0" fill="#A1B3BD" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="642.50" y1="5.00" x2="1045.00" y2="182.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="1045.00" y1="5.00" x2="642.50" y2="182.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="9.00" y="12.75" width="120.00" height="45.00" rx="3" fill="#FFFFFF"/>
+<rect x="15.00" y="18.75" width="95.04" height="6.00" rx="1" fill="#263943"/>
+<rect x="15.00" y="32.75" width="102.60" height="3.00" rx="1" fill="#546A76"/>
+<rect x="15.00" y="41.75" width="88.56" height="3.00" rx="1" fill="#546A76"/>
+<text x="171.00" y="58.12" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="32" font-weight="700" text-anchor="start">1977</text>
+<rect x="360.00" y="33.75" width="108.00" height="112.50" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="365.00" y1="38.75" x2="463.00" y2="141.25" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="463.00" y1="38.75" x2="365.00" y2="141.25" stroke="#C6D4DC" stroke-width="1"/>
+<text x="367.50" y="157.50" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="18" font-weight="700" text-anchor="start">1983</text>
+<rect x="537.00" y="63.75" width="108.00" height="103.13" rx="0" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="542.00" y1="68.75" x2="640.00" y2="161.88" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="640.00" y1="68.75" x2="542.00" y2="161.88" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="618.00" y="18.38" width="109.50" height="35.00" rx="3" fill="#FFFFFF"/>
+<rect x="624.00" y="24.38" width="85.80" height="6.00" rx="1" fill="#263943"/>
+<rect x="624.00" y="38.38" width="92.62" height="3.00" rx="1" fill="#546A76"/>
+<rect x="769.50" y="106.50" width="111.00" height="45.00" rx="3" fill="#FFFFFF"/>
+<rect x="775.50" y="112.50" width="87.12" height="6.00" rx="1" fill="#263943"/>
+<rect x="775.50" y="126.50" width="94.05" height="3.00" rx="1" fill="#546A76"/>
+<rect x="775.50" y="135.50" width="81.18" height="3.00" rx="1" fill="#546A76"/>
+<rect x="915.00" y="16.50" width="115.50" height="45.00" rx="3" fill="#FFFFFF"/>
+<rect x="921.00" y="22.50" width="91.08" height="6.00" rx="1" fill="#263943"/>
+<rect x="921.00" y="36.50" width="98.32" height="3.00" rx="1" fill="#546A76"/>
+<rect x="921.00" y="45.50" width="84.87" height="3.00" rx="1" fill="#546A76"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="750.00" y1="0.00" x2="750.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Крупности: общий / деталь</text>
+<text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: широкие прямоугольники</text>
+<text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Типографика: подписи поверх фото</text>
+</g>
+<text x="100.00" y="579.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">A2  Типографический манифест</text>
+<text x="100.00" y="605.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Доминанта: слова и даты · мосты: строка и полоса · плотность: чередование крупных слов и пауз</text>
+<g id="A2" transform="translate(100,622)">
+<clipPath id="clip-A2"><rect width="1050" height="187.5"/></clipPath>
+<g clip-path="url(#clip-A2)">
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<rect x="0.00" y="0.00" width="247.50" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="420.00" y="0.00" width="247.50" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="810.00" y="0.00" width="240.00" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="22.50" y="133.12" width="1005.00" height="24.38" rx="0" fill="#4B6B7B"/>
+<text x="12.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="32" font-weight="700" text-anchor="start">ИМЯ?</text>
+<text x="165.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="38" font-weight="700" text-anchor="start">1977</text>
+<text x="318.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="32" font-weight="700" text-anchor="start">1983</text>
+<text x="465.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">СЕЙЧАС</text>
+<text x="651.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="64" font-weight="700" text-anchor="start">?</text>
+<text x="760.50" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="26" font-weight="700" text-anchor="start">ПАМЯТЬ</text>
+<text x="907.50" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="21" font-weight="700" text-anchor="start">ВЕРНУТЬ?</text>
+<rect x="168.00" y="99.38" width="89.76" height="6.00" rx="1" fill="#263943"/>
+<rect x="168.00" y="113.38" width="96.90" height="3.00" rx="1" fill="#546A76"/>
+<rect x="318.00" y="99.38" width="89.76" height="6.00" rx="1" fill="#263943"/>
+<rect x="318.00" y="113.38" width="96.90" height="3.00" rx="1" fill="#546A76"/>
+<rect x="468.00" y="99.38" width="89.76" height="6.00" rx="1" fill="#263943"/>
+<rect x="468.00" y="113.38" width="96.90" height="3.00" rx="1" fill="#546A76"/>
+<rect x="765.00" y="99.38" width="89.76" height="6.00" rx="1" fill="#263943"/>
+<rect x="765.00" y="113.38" width="96.90" height="3.00" rx="1" fill="#546A76"/>
+<rect x="915.00" y="99.38" width="89.76" height="6.00" rx="1" fill="#263943"/>
+<rect x="915.00" y="113.38" width="96.90" height="3.00" rx="1" fill="#546A76"/>
+<rect x="399.00" y="150.00" width="67.50" height="31.88" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="404.00" y1="155.00" x2="461.50" y2="176.88" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="461.50" y1="155.00" x2="404.00" y2="176.88" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="546.00" y="150.00" width="67.50" height="31.88" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="551.00" y1="155.00" x2="608.50" y2="176.88" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="608.50" y1="155.00" x2="551.00" y2="176.88" stroke="#C6D4DC" stroke-width="1"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="750.00" y1="0.00" x2="750.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Мотив: слово и горизонт</text>
+<text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: большие буквенные массы</text>
+<text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Медиа: две маленькие опоры</text>
+</g>
+<text x="100.00" y="879.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">A3  Архивное досье</text>
+<text x="100.00" y="905.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Доминанта: документы · мосты: наложение носителей · плотность: частые небольшие группы</text>
+<g id="A3" transform="translate(100,922)">
+<clipPath id="clip-A3"><rect width="1050" height="187.5"/></clipPath>
+<g clip-path="url(#clip-A3)">
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<rect x="0.00" y="0.00" width="405.00" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="682.50" y="0.00" width="367.50" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="12.00" y="46.50" width="132.00" height="136.38" rx="0" fill="#FFFFFF"/>
+<rect x="18.00" y="52.50" width="120.00" height="114.38" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="23.00" y1="57.50" x2="133.00" y2="161.88" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="133.00" y1="57.50" x2="23.00" y2="161.88" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="118.50" y="7.13" width="169.50" height="98.88" rx="0" fill="#FFFFFF"/>
+<rect x="124.50" y="13.13" width="157.50" height="76.88" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="129.50" y1="18.12" x2="277.00" y2="85.00" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="277.00" y1="18.12" x2="129.50" y2="85.00" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="267.00" y="59.62" width="154.50" height="125.13" rx="0" fill="#FFFFFF"/>
+<rect x="273.00" y="65.62" width="142.50" height="103.13" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="278.00" y1="70.62" x2="410.50" y2="163.75" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="410.50" y1="70.62" x2="278.00" y2="163.75" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="399.00" y="16.50" width="142.50" height="119.50" rx="0" fill="#FFFFFF"/>
+<rect x="405.00" y="22.50" width="130.50" height="97.50" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="410.00" y1="27.50" x2="530.50" y2="115.00" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="530.50" y1="27.50" x2="410.00" y2="115.00" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="538.50" y="54.00" width="142.50" height="130.75" rx="0" fill="#FFFFFF"/>
+<rect x="544.50" y="60.00" width="130.50" height="108.75" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="549.50" y1="65.00" x2="670.00" y2="163.75" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="670.00" y1="65.00" x2="549.50" y2="163.75" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="759.00" y="20.25" width="169.50" height="123.25" rx="0" fill="#FFFFFF"/>
+<rect x="765.00" y="26.25" width="157.50" height="101.25" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="770.00" y1="31.25" x2="917.50" y2="122.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="917.50" y1="31.25" x2="770.00" y2="122.50" stroke="#C6D4DC" stroke-width="1"/>
+<text x="172.50" y="127.50" fill="#263943" font-family="DejaVu Serif,sans-serif" font-size="28" font-weight="700" text-anchor="start">1977</text>
+<text x="319.50" y="43.12" fill="#263943" font-family="DejaVu Serif,sans-serif" font-size="26" font-weight="700" text-anchor="start">1983</text>
+<rect x="18.00" y="16.88" width="83.16" height="6.00" rx="1" fill="#263943"/>
+<rect x="18.00" y="30.88" width="89.77" height="3.00" rx="1" fill="#546A76"/>
+<rect x="618.00" y="18.75" width="81.84" height="6.00" rx="1" fill="#263943"/>
+<rect x="618.00" y="32.75" width="88.35" height="3.00" rx="1" fill="#546A76"/>
+<rect x="618.00" y="41.75" width="76.26" height="3.00" rx="1" fill="#546A76"/>
+<rect x="777.00" y="144.38" width="89.76" height="6.00" rx="1" fill="#263943"/>
+<rect x="777.00" y="158.38" width="96.90" height="3.00" rx="1" fill="#546A76"/>
+<rect x="925.50" y="58.12" width="83.16" height="6.00" rx="1" fill="#263943"/>
+<rect x="925.50" y="72.12" width="89.77" height="3.00" rx="1" fill="#546A76"/>
+<rect x="925.50" y="81.12" width="77.49" height="3.00" rx="1" fill="#546A76"/>
+<rect x="925.50" y="90.12" width="89.77" height="3.00" rx="1" fill="#546A76"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="750.00" y1="0.00" x2="750.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Мотив: бумажный носитель</text>
+<text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: вложенные рамки</text>
+<text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Типографика: индекс и антиква</text>
+</g>
+<text x="100.00" y="1179.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">A4  Рассмотрение детали</text>
+<text x="100.00" y="1205.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Доминанта: выделенная деталь · мосты: линия выноски · плотность: разреженная</text>
+<g id="A4" transform="translate(100,1222)">
+<clipPath id="clip-A4"><rect width="1050" height="187.5"/></clipPath>
+<g clip-path="url(#clip-A4)">
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<circle cx="126.00" cy="103.13" r="97.50" fill="#718D9B" stroke="#FFFFFF" stroke-width="3"/>
+<circle cx="382.50" cy="97.50" r="60.00" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="3"/>
+<circle cx="547.50" cy="97.50" r="94.50" fill="#718D9B" stroke="#FFFFFF" stroke-width="3"/>
+<path d="M 165.0 97.5 L 255.0 142.5 L 367.5 97.5 L 690.0 97.5 L 795.0 144.375 L 967.5 144.375" fill="none" stroke="#4B6B7B" stroke-width="3"/>
+<text x="177.00" y="56.25" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="27" font-weight="700" text-anchor="start">1977</text>
+<text x="324.00" y="31.88" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="23" font-weight="700" text-anchor="start">1983</text>
+<rect x="12.00" y="18.75" width="87.12" height="6.00" rx="1" fill="#263943"/>
+<rect x="12.00" y="32.75" width="94.05" height="3.00" rx="1" fill="#546A76"/>
+<rect x="472.50" y="18.75" width="80.52" height="6.00" rx="1" fill="#263943"/>
+<rect x="472.50" y="32.75" width="86.92" height="3.00" rx="1" fill="#546A76"/>
+<rect x="622.50" y="30.00" width="88.44" height="6.00" rx="1" fill="#263943"/>
+<rect x="622.50" y="44.00" width="95.47" height="3.00" rx="1" fill="#546A76"/>
+<rect x="769.50" y="52.50" width="87.12" height="6.00" rx="1" fill="#263943"/>
+<rect x="769.50" y="66.50" width="94.05" height="3.00" rx="1" fill="#546A76"/>
+<rect x="769.50" y="75.50" width="81.18" height="3.00" rx="1" fill="#546A76"/>
+<rect x="919.50" y="30.00" width="87.12" height="6.00" rx="1" fill="#263943"/>
+<rect x="919.50" y="44.00" width="94.05" height="3.00" rx="1" fill="#546A76"/>
+<rect x="919.50" y="53.00" width="81.18" height="3.00" rx="1" fill="#546A76"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="750.00" y1="0.00" x2="750.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Мотив: фокус и объяснение</text>
+<text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: круги и выноски</text>
+<text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Медиа: контекст → увеличение</text>
+</g>
+<text x="100.00" y="1479.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">A5  Объект и маршрут взгляда</text>
+<text x="100.00" y="1505.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Доминанта: вертикальный объект · мосты: ритм и путь · плотность: крупный силуэт / компактный текст</text>
+<g id="A5" transform="translate(100,1522)">
+<clipPath id="clip-A5"><rect width="1050" height="187.5"/></clipPath>
+<g clip-path="url(#clip-A5)">
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<rect x="0.00" y="0.00" width="202.50" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="397.50" y="0.00" width="322.50" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="930.00" y="0.00" width="120.00" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="108.00" y="26.25" width="79.50" height="161.25" rx="15" fill="#718D9B"/>
+<rect x="315.00" y="65.62" width="67.50" height="121.88" rx="15" fill="#718D9B"/>
+<rect x="555.00" y="30.00" width="64.50" height="157.50" rx="15" fill="#718D9B"/>
+<rect x="873.00" y="30.00" width="85.50" height="157.50" rx="15" fill="#718D9B"/>
+<path d="M 0 155.625 C 150 120.0 240.0 178.125 375.0 148.125 S 690.0 120.0 810.0 150.0 S 975.0 176.25 1050 144.375" fill="none" stroke="#4B6B7B" stroke-width="4"/>
+<text x="169.50" y="54.37" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="29" font-weight="700" text-anchor="start">1977</text>
+<text x="382.50" y="50.62" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="23" font-weight="700" text-anchor="start">1983</text>
+<rect x="15.00" y="18.75" width="63.36" height="6.00" rx="1" fill="#263943"/>
+<rect x="15.00" y="32.75" width="68.40" height="3.00" rx="1" fill="#546A76"/>
+<rect x="15.00" y="41.75" width="59.04" height="3.00" rx="1" fill="#546A76"/>
+<rect x="172.50" y="78.75" width="80.52" height="6.00" rx="1" fill="#263943"/>
+<rect x="172.50" y="92.75" width="86.92" height="3.00" rx="1" fill="#546A76"/>
+<rect x="172.50" y="101.75" width="75.03" height="3.00" rx="1" fill="#546A76"/>
+<rect x="465.00" y="24.38" width="63.36" height="6.00" rx="1" fill="#263943"/>
+<rect x="465.00" y="38.38" width="68.40" height="3.00" rx="1" fill="#546A76"/>
+<rect x="465.00" y="47.38" width="59.04" height="3.00" rx="1" fill="#546A76"/>
+<rect x="625.50" y="37.50" width="84.48" height="6.00" rx="1" fill="#263943"/>
+<rect x="625.50" y="51.50" width="91.20" height="3.00" rx="1" fill="#546A76"/>
+<rect x="625.50" y="60.50" width="78.72" height="3.00" rx="1" fill="#546A76"/>
+<rect x="765.00" y="22.50" width="73.92" height="6.00" rx="1" fill="#263943"/>
+<rect x="765.00" y="36.50" width="79.80" height="3.00" rx="1" fill="#546A76"/>
+<rect x="765.00" y="45.50" width="68.88" height="3.00" rx="1" fill="#546A76"/>
+<rect x="964.50" y="28.12" width="63.36" height="6.00" rx="1" fill="#263943"/>
+<rect x="964.50" y="42.12" width="68.40" height="3.00" rx="1" fill="#546A76"/>
+<rect x="964.50" y="51.12" width="59.04" height="3.00" rx="1" fill="#546A76"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="750.00" y1="0.00" x2="750.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Мотив: объект возвращается</text>
+<text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: вертикали и кривая</text>
+<text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Типографика: короткие метки</text>
+</g>
+<text x="100.00" y="1818.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="20" font-weight="700" text-anchor="start">B. Пять разных историй · меняются длина, последовательность и визуальная логика</text>
+<text x="100.00" y="1846.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Все сюжеты и числа в этом разделе условные. Это проверка разнообразия геометрии, не готовые публикации.</text>
+<text x="100.00" y="1885.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">B1  Маршрут · 6 карточек</text>
+<text x="100.00" y="1911.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Три остановки за условные 45 минут: путь становится сквозным композиционным мотивом</text>
+<g id="B1" transform="translate(100,1928)">
+<clipPath id="clip-B1"><rect width="900" height="187.5"/></clipPath>
+<g clip-path="url(#clip-B1)">
+<rect x="0.00" y="0.00" width="900.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<path d="M 0 142.5 C 150 142.5 135.0 58.125 240.0 71.25 S 375.0 178.125 510.0 118.125 S 660.0 22.5 705.0 73.125 L 825.0 131.25" fill="none" stroke="#4B6B7B" stroke-width="6"/>
+<circle cx="240.00" cy="71.25" r="19.50" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="3"/>
+<text x="240.00" y="76.25" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="16" font-weight="700" text-anchor="middle">1</text>
+<circle cx="510.00" cy="118.12" r="19.50" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="3"/>
+<text x="510.00" y="123.12" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="16" font-weight="700" text-anchor="middle">2</text>
+<circle cx="705.00" cy="73.12" r="19.50" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="3"/>
+<text x="705.00" y="78.12" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="16" font-weight="700" text-anchor="middle">3</text>
+<rect x="165.00" y="9.38" width="97.50" height="45.00" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="170.00" y1="14.38" x2="257.50" y2="49.38" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="257.50" y1="14.38" x2="170.00" y2="49.38" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="468.00" y="18.75" width="94.50" height="46.88" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="473.00" y1="23.75" x2="557.50" y2="60.62" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="557.50" y1="23.75" x2="473.00" y2="60.62" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="622.50" y="125.63" width="102.00" height="52.50" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="627.50" y1="130.62" x2="719.50" y2="173.13" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="719.50" y1="130.62" x2="627.50" y2="173.13" stroke="#C6D4DC" stroke-width="1"/>
+<text x="18.00" y="48.75" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="25" font-weight="700" text-anchor="start">45 мин</text>
+<rect x="318.00" y="30.00" width="87.12" height="6.00" rx="1" fill="#263943"/>
+<rect x="318.00" y="44.00" width="94.05" height="3.00" rx="1" fill="#546A76"/>
+<rect x="318.00" y="53.00" width="81.18" height="3.00" rx="1" fill="#546A76"/>
+<rect x="772.50" y="35.62" width="85.80" height="6.00" rx="1" fill="#263943"/>
+<rect x="772.50" y="49.62" width="92.62" height="3.00" rx="1" fill="#546A76"/>
+<rect x="772.50" y="58.62" width="79.95" height="3.00" rx="1" fill="#546A76"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="750.00" y1="0.00" x2="750.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="900.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Старт</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Точка 1</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Переход</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Точка 2</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Точка 3</text>
+<text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Итог</text>
+</g>
+<text x="100.00" y="2185.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">B2  Объяснение числа · 4 карточки</text>
+<text x="100.00" y="2211.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Условные 50 из 200 = 25%: величина → знаменатель → визуальное отношение → смысл</text>
+<g id="B2" transform="translate(100,2228)">
+<clipPath id="clip-B2"><rect width="600" height="187.5"/></clipPath>
+<g clip-path="url(#clip-B2)">
+<rect x="0.00" y="0.00" width="600.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<rect x="0.00" y="0.00" width="225.00" height="187.50" rx="0" fill="#D6E0E5"/>
+<text x="15.00" y="97.50" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="52" font-weight="700" text-anchor="start">25%</text>
+<text x="168.00" y="69.38" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="42" font-weight="700" text-anchor="start">200</text>
+<rect x="168.00" y="103.13" width="92.40" height="6.00" rx="1" fill="#263943"/>
+<rect x="168.00" y="117.13" width="99.75" height="3.00" rx="1" fill="#546A76"/>
+<rect x="168.00" y="126.13" width="86.10" height="3.00" rx="1" fill="#546A76"/>
+<rect x="319.50" y="50.62" width="112.50" height="31.88" rx="0" fill="#D6E0E5"/>
+<rect x="319.50" y="50.62" width="28.12" height="31.88" rx="0" fill="#4B6B7B"/>
+<text x="319.50" y="125.63" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="21" font-weight="700" text-anchor="start">50 / 200</text>
+<rect x="471.00" y="52.50" width="95.04" height="6.00" rx="1" fill="#263943"/>
+<rect x="471.00" y="66.50" width="102.60" height="3.00" rx="1" fill="#546A76"/>
+<rect x="471.00" y="75.50" width="88.56" height="3.00" rx="1" fill="#546A76"/>
+<rect x="471.00" y="84.50" width="102.60" height="3.00" rx="1" fill="#546A76"/>
+<line x1="127.50" y1="142.50" x2="577.50" y2="142.50" stroke="#4B6B7B" stroke-width="3"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="600.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · 25%</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · База: 200</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · 50 из 200</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Вывод</text>
+</g>
+<text x="100.00" y="2485.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">B3  Личная история · 8 карточек</text>
+<text x="100.00" y="2511.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Две попытки и встреча: крупности и эмоциональные паузы меняются вместе с действием</text>
+<g id="B3" transform="translate(100,2528)">
+<clipPath id="clip-B3"><rect width="1200" height="187.5"/></clipPath>
+<g clip-path="url(#clip-B3)">
+<rect x="0.00" y="0.00" width="1200.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<rect x="18.00" y="20.62" width="102.00" height="127.50" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="23.00" y1="25.62" x2="115.00" y2="143.12" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="115.00" y1="25.62" x2="23.00" y2="143.12" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="232.50" y="88.12" width="102.00" height="80.62" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="237.50" y1="93.12" x2="329.50" y2="163.75" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="329.50" y1="93.12" x2="237.50" y2="163.75" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="333.00" y="18.75" width="168.00" height="93.75" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="338.00" y1="23.75" x2="496.00" y2="107.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="496.00" y1="23.75" x2="338.00" y2="107.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="630.00" y="56.25" width="97.50" height="106.87" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="635.00" y1="61.25" x2="722.50" y2="158.12" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="722.50" y1="61.25" x2="635.00" y2="158.12" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="822.00" y="15.00" width="142.50" height="120.00" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="827.00" y1="20.00" x2="959.50" y2="130.00" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="959.50" y1="20.00" x2="827.00" y2="130.00" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="997.50" y="82.50" width="100.50" height="84.38" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="1002.50" y1="87.50" x2="1093.00" y2="161.88" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="1093.00" y1="87.50" x2="1002.50" y2="161.88" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="525.00" y="0.00" width="97.50" height="187.50" rx="0" fill="#D6E0E5"/>
+<rect x="18.00" y="159.38" width="85.80" height="6.00" rx="1" fill="#263943"/>
+<rect x="18.00" y="173.38" width="92.62" height="3.00" rx="1" fill="#546A76"/>
+<rect x="169.50" y="24.38" width="85.80" height="6.00" rx="1" fill="#263943"/>
+<rect x="169.50" y="38.38" width="92.62" height="3.00" rx="1" fill="#546A76"/>
+<rect x="471.00" y="26.25" width="85.80" height="6.00" rx="1" fill="#263943"/>
+<rect x="471.00" y="40.25" width="92.62" height="3.00" rx="1" fill="#546A76"/>
+<rect x="618.00" y="15.00" width="85.80" height="6.00" rx="1" fill="#263943"/>
+<rect x="618.00" y="29.00" width="92.62" height="3.00" rx="1" fill="#546A76"/>
+<rect x="768.00" y="148.12" width="85.80" height="6.00" rx="1" fill="#263943"/>
+<rect x="768.00" y="162.12" width="92.62" height="3.00" rx="1" fill="#546A76"/>
+<rect x="1068.00" y="39.38" width="85.80" height="6.00" rx="1" fill="#263943"/>
+<rect x="1068.00" y="53.38" width="92.62" height="3.00" rx="1" fill="#546A76"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="750.00" y1="0.00" x2="750.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="1050.00" y1="0.00" x2="1050.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="1200.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Привычка</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Неудобство</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Попытка 1</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Неудача</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Встреча</text>
+<text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Попытка 2</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Изменение</text>
+<text x="1125.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">8 · Вывод</text>
+</g>
+<text x="100.00" y="2785.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">B4  До / после · 5 карточек</text>
+<text x="100.00" y="2811.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Условный двор: одинаковые окна сравнения, центральный эпизод объясняет изменение</text>
+<g id="B4" transform="translate(100,2828)">
+<clipPath id="clip-B4"><rect width="750" height="187.5"/></clipPath>
+<g clip-path="url(#clip-B4)">
+<rect x="0.00" y="0.00" width="750.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<rect x="120.00" y="28.12" width="165.00" height="127.50" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="125.00" y1="33.12" x2="280.00" y2="150.62" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="280.00" y1="33.12" x2="125.00" y2="150.62" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="465.00" y="28.12" width="165.00" height="127.50" rx="0" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="470.00" y1="33.12" x2="625.00" y2="150.62" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="625.00" y1="33.12" x2="470.00" y2="150.62" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="255.00" y="136.88" width="247.50" height="28.12" rx="0" fill="#D6E0E5"/>
+<text x="157.50" y="22.50" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="19" font-weight="700" text-anchor="start">2010</text>
+<text x="495.00" y="22.50" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="19" font-weight="700" text-anchor="start">2026</text>
+<rect x="12.00" y="33.75" width="76.56" height="6.00" rx="1" fill="#263943"/>
+<rect x="12.00" y="47.75" width="82.65" height="3.00" rx="1" fill="#546A76"/>
+<rect x="12.00" y="56.75" width="71.34" height="3.00" rx="1" fill="#546A76"/>
+<rect x="12.00" y="65.75" width="82.65" height="3.00" rx="1" fill="#546A76"/>
+<rect x="322.50" y="45.00" width="84.48" height="6.00" rx="1" fill="#263943"/>
+<rect x="322.50" y="59.00" width="91.20" height="3.00" rx="1" fill="#546A76"/>
+<rect x="322.50" y="68.00" width="78.72" height="3.00" rx="1" fill="#546A76"/>
+<rect x="322.50" y="77.00" width="91.20" height="3.00" rx="1" fill="#546A76"/>
+<rect x="637.50" y="31.88" width="84.48" height="6.00" rx="1" fill="#263943"/>
+<rect x="637.50" y="45.88" width="91.20" height="3.00" rx="1" fill="#546A76"/>
+<rect x="637.50" y="54.88" width="78.72" height="3.00" rx="1" fill="#546A76"/>
+<rect x="637.50" y="63.88" width="91.20" height="3.00" rx="1" fill="#546A76"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="750.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Было: 2010</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Изменение</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Стало: 2026</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Смысл</text>
+</g>
+<text x="100.00" y="3085.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">B5  Процесс · 9 карточек</text>
+<text x="100.00" y="3111.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Три действия с промежуточной проверкой: ошибка и исправление получают собственные окна</text>
+<g id="B5" transform="translate(100,3128)">
+<clipPath id="clip-B5"><rect width="1350" height="187.5"/></clipPath>
+<g clip-path="url(#clip-B5)">
+<rect x="0.00" y="0.00" width="1350.00" height="187.50" rx="0" fill="#EDF1F3"/>
+<line x1="37.50" y1="142.50" x2="1312.50" y2="142.50" stroke="#4B6B7B" stroke-width="4"/>
+<circle cx="375.00" cy="142.50" r="22.50" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="3"/>
+<text x="375.00" y="148.50" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="19" font-weight="700" text-anchor="middle">1</text>
+<circle cx="525.00" cy="142.50" r="22.50" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="3"/>
+<text x="525.00" y="148.50" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="19" font-weight="700" text-anchor="middle">2</text>
+<circle cx="825.00" cy="142.50" r="22.50" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="3"/>
+<text x="825.00" y="148.50" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="19" font-weight="700" text-anchor="middle">3</text>
+<rect x="169.50" y="22.50" width="100.50" height="75.00" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="174.50" y1="27.50" x2="265.00" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="265.00" y1="27.50" x2="174.50" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="325.50" y="22.50" width="100.50" height="75.00" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="330.50" y1="27.50" x2="421.00" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="421.00" y1="27.50" x2="330.50" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="475.50" y="22.50" width="100.50" height="75.00" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="480.50" y1="27.50" x2="571.00" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="571.00" y1="27.50" x2="480.50" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="775.50" y="22.50" width="100.50" height="75.00" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="780.50" y1="27.50" x2="871.00" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="871.00" y1="27.50" x2="780.50" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="922.50" y="22.50" width="100.50" height="75.00" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="927.50" y1="27.50" x2="1018.00" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="1018.00" y1="27.50" x2="927.50" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="1072.50" y="22.50" width="100.50" height="75.00" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="1077.50" y1="27.50" x2="1168.00" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<line x1="1168.00" y1="27.50" x2="1077.50" y2="92.50" stroke="#C6D4DC" stroke-width="1"/>
+<rect x="612.00" y="0.00" width="126.00" height="187.50" rx="0" fill="#D6E0E5"/>
+<text x="630.00" y="76.88" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="42" font-weight="700" text-anchor="start">✓</text>
+<rect x="18.00" y="39.38" width="92.40" height="6.00" rx="1" fill="#263943"/>
+<rect x="18.00" y="53.38" width="99.75" height="3.00" rx="1" fill="#546A76"/>
+<rect x="18.00" y="62.38" width="86.10" height="3.00" rx="1" fill="#546A76"/>
+<rect x="18.00" y="71.38" width="99.75" height="3.00" rx="1" fill="#546A76"/>
+<rect x="1221.00" y="39.38" width="92.40" height="6.00" rx="1" fill="#263943"/>
+<rect x="1221.00" y="53.38" width="99.75" height="3.00" rx="1" fill="#546A76"/>
+<rect x="1221.00" y="62.38" width="86.10" height="3.00" rx="1" fill="#546A76"/>
+<rect x="1221.00" y="71.38" width="99.75" height="3.00" rx="1" fill="#546A76"/>
+<rect x="921.00" y="108.75" width="88.44" height="6.00" rx="1" fill="#263943"/>
+<rect x="921.00" y="122.75" width="95.47" height="3.00" rx="1" fill="#546A76"/>
+<rect x="1072.50" y="108.75" width="87.12" height="6.00" rx="1" fill="#263943"/>
+<rect x="1072.50" y="122.75" width="94.05" height="3.00" rx="1" fill="#546A76"/>
+</g>
+<line x1="150.00" y1="0.00" x2="150.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="300.00" y1="0.00" x2="300.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="450.00" y1="0.00" x2="450.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="600.00" y1="0.00" x2="600.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="750.00" y1="0.00" x2="750.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="1050.00" y1="0.00" x2="1050.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<line x1="1200.00" y1="0.00" x2="1200.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
+<rect x="0.00" y="0.00" width="1350.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
+<text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Цель</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Материалы</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Шаг 1</text>
+<text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Шаг 2</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Проверка</text>
+<text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Шаг 3</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Ошибка</text>
+<text x="1125.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">8 · Правка</text>
+<text x="1275.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">9 · Результат</text>
+</g>
+<line x1="100.00" y1="3370.00" x2="1450.00" y2="3370.00" stroke="#D8E1E5" stroke-width="1"/>
+<text x="100.00" y="3400.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="18" font-weight="700" text-anchor="start">Доказана геометрическая разница; не качество dot и не качество реальной истории.</text>
+<text x="100.00" y="3426.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="13" font-weight="400" text-anchor="start">Стандартный SVG, без фотографий и генерации. Подписи обозначают роли; это учебное документирование, не MCP-прототип.</text>
+</svg>
