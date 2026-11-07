@@ -46,6 +46,41 @@ def pixels(data):
         return image.convert('RGB')
 
 
+def test_transparent_original_renders_over_background_across_seam(runtime):
+    store, actor, app, service, _ = runtime
+    original = Image.new('RGBA', (100, 60), (255, 255, 255, 0))
+    original.paste((240, 45, 25, 255), (20, 15, 84, 45))
+    exif = Image.Exif()
+    exif[270] = 'Original private metadata'
+    data = io.BytesIO()
+    original.save(data, format='PNG', exif=exif)
+    asset = import_image(store, actor, data.getvalue(), 'image/png')
+    derivative, _, _ = app.read_asset(actor, asset)
+    assert pixels(derivative).getpixel((2, 2)) == (255, 255, 255)
+
+    rgba, mime, _ = service._composition_asset(actor, asset)
+    assert mime == 'image/png'
+    with Image.open(io.BytesIO(rgba)) as image:
+        assert image.mode == 'RGBA' and 'exif' not in image.info
+        assert image.getpixel((2, 2))[3] == 0
+
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="384" height="160">'
+           '<rect width="384" height="160" fill="#173957"/>'
+           f'<image href="asset:{asset}" x="90" y="20" width="100" height="60"/>'
+           '</svg>')
+    ident = create(service, actor, svg, key='transparent-cutout')['carousel_id']
+    rendered = service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+        'revision': 1, 'view': 'region', 'region': [90, 20, 100, 60]}})
+    result = pixels(rendered.data)
+    assert result.getpixel((2, 2)) == (23, 57, 87)  # transparent, not white
+    assert result.getpixel((29, 30)) == (240, 45, 25)  # left of seam x=128
+    assert result.getpixel((51, 30)) == (240, 45, 25)  # right of seam
+    assert result.getpixel((98, 58)) == (23, 57, 87)
+    assert pixels(app.read_asset(actor, asset)[0]).getpixel((2, 2)) == (255, 255, 255)
+    assert len(service.command(actor, {'command': {'kind': 'export', 'carousel_id': ident,
+        'revision': 1}, 'request_key': 'transparent-export'})['cards']) == 3
+
+
 def test_reference_edit_renders_exact_seam_and_replayable_private_export(runtime):
     store, actor, app, service, svg = runtime
     bank = ReferenceBank(store)
