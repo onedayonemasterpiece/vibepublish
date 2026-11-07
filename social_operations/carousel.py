@@ -6,10 +6,11 @@ import io
 import json
 import time
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 
 from .assets import AssetPreview, FULL_MAX_EDGE, insert_verified_image, render_asset_full, render_asset_preview, verify_image
 from .carousel_compositor import render_svg, slice_cards, validate_svg
+from .carousel_guide import GuideImages, guide, review_questions
 from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
 
@@ -185,6 +186,19 @@ class CarouselService:
         return scene
 
     def get(self, actor, command):
+        if command.get('scope') == 'guide':
+            started = time.perf_counter()
+            with self.store.connection() as db:
+                if command.get('carousel_id'):
+                    self._version(db, actor, command['carousel_id'])
+                else:
+                    self._actor(db, actor)
+            result = guide(command.get('topic'), command.get('section'))
+            if command.get('carousel_id'):
+                (result.metadata if isinstance(result, GuideImages) else result)['carousel_id'] = command['carousel_id']
+                self.log_event(actor, command['carousel_id'], 'get',
+                    duration_ms=round((time.perf_counter() - started) * 1000), scope='guide')
+            return result
         with self.store.connection() as db:
             row = self._version(db, actor, command['carousel_id'], command.get('revision'))
             latest = self._version(db, actor, row['id'])
@@ -244,14 +258,35 @@ class CarouselService:
                                   'Exact region exceeds 2560 pixels; split into smaller regions')
         else:
             raise DomainError('carousel_view_invalid')
-        if (('scale' in command and view != 'region')
-                or (command.get('save_asset') and (view != 'region' or command.get('scale') != 1))):
+        scale = command.get('scale')
+        if (scale is not None and not ((view == 'region' and scale == 1) or (view == 'master' and scale == 0.5))
+                or (command.get('cutlines') and not (view == 'master' and scale == 0.5))
+                or (command.get('save_asset') and (view != 'region' or scale != 1))):
             raise DomainError('carousel_region_exact_required',
-                              'Saving a fragment requires view:region with scale:1')
+                              'Use scale:1 (and save_asset) only with view:region; scale:0.5 and cutlines only with view:master')
 
         data = self._render(actor, row, layers=command.get('layers'))
         sha = hashlib.sha256(data).hexdigest()
-        if view == 'master':
+        if view == 'master' and scale == 0.5:
+            with Image.open(io.BytesIO(data)) as master:
+                rgba = master.convert('RGBA')
+                clean = Image.new('RGB', rgba.size, 'white')
+                clean.paste(rgba, mask=rgba.getchannel('A'))
+                half = clean.resize(
+                    (width // 2, height // 2), Image.Resampling.LANCZOS)
+            if command.get('cutlines'):
+                draw = ImageDraw.Draw(half)
+                for index in range(1, row['card_count']):
+                    x = round(index * row['card_width'] / 2)
+                    draw.line((x, 0, x, half.height), fill='white', width=3)
+                    draw.line((x, 0, x, half.height), fill='#303030', width=1)
+            output = io.BytesIO()
+            half.save(output, format='JPEG', quality=82, optimize=True)
+            encoded = output.getvalue()
+            preview = AssetPreview({'mime_type': 'image/jpeg', 'width': half.width,
+                'height': half.height, 'size': 'full', 'reencoded': True,
+                'bytes': len(encoded), 'source_sha256': sha}, encoded)
+        elif view == 'master':
             preview = render_asset_preview(data, sha, '')
         else:
             with Image.open(io.BytesIO(data)) as master:
@@ -291,8 +326,17 @@ class CarouselService:
             self._log(db, actor, row['id'], row['revision'], 'render',
                       duration_ms=round((time.perf_counter() - started) * 1000), **details)
         metadata = {key: value for key, value in preview.metadata.items() if key != 'resource_uri'}
+        review_view = 'card' if 'card' in command else view
+        if view == 'region' and 'card' not in command:
+            x, _, w, _ = region
+            if any(x < i * row['card_width'] < x + w for i in range(1, row['card_count'])):
+                review_view = 'pair'
         metadata.update(carousel_id=row['id'], revision=row['revision'], private=True,
-                        view=view, source_width=width, source_height=height)
+                        view=view, source_width=width, source_height=height,
+                        review_questions=review_questions(review_view))
+        if view == 'master' and command.get('scale') == 0.5:
+            metadata['scale'] = 0.5
+            metadata['cutlines'] = bool(command.get('cutlines'))
         if view == 'region':
             metadata['region'] = list(region)
         for name in ('scale', 'layers', 'save_asset'):

@@ -55,6 +55,33 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         self.server_log.close()
         self.temp.cleanup()
 
+    async def test_carousel_guide_returns_full_markdown_and_image_content(self):
+        """Actual MCP SDK stream must include both complete markdown and PNG pixels."""
+        import base64
+        import io
+        from PIL import Image
+        from social_operations.carousel_guide import _read
+
+        headers = {'Authorization': 'Bearer ' + self.token}
+        async with httpx.AsyncClient(headers=headers, trust_env=False) as http:
+            async with streamable_http_client(
+                    self.base + '/mcp/', http_client=http) as (read, write, _):
+                async with ClientSession(read, write,
+                        read_timeout_seconds=timedelta(seconds=30)) as session:
+                    await session.initialize()
+                    response = await session.call_tool('vibepublish_carousel', {
+                        'command': {'kind': 'get', 'scope': 'guide', 'topic': '30-seams', 'section': 'Введение'}})
+                    self.assertFalse(response.isError, response)
+                    self.assertIn('transition-atlas.svg', response.structuredContent['content'])
+                    self.assertEqual(response.structuredContent['section'], 'Введение')
+                    self.assertLessEqual(len(response.structuredContent['content']), 7000)
+                    self.assertEqual(response.structuredContent['images'][0]['mime_type'], 'image/png')
+                    blocks = [item for item in response.content if item.type == 'image']
+                    self.assertEqual(len(blocks), 1)
+                    self.assertEqual(blocks[0].mimeType, 'image/png')
+                    with Image.open(io.BytesIO(base64.b64decode(blocks[0].data))) as im:
+                        self.assertEqual(im.size, (1320, 1470))
+
     async def run_worker(self, *, imagegen=False):
         result = await asyncio.to_thread(subprocess.run, [sys.executable,'-m','social_operations.cli','--db',str(self.store.path),
                     'worker','--once','--fake-remote',str(self.root/'remote.sqlite')]+(['--fake-imagegen',str(self.root/'imagegen')] if imagegen else []), capture_output=True,timeout=15)
