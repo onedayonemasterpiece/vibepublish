@@ -36,6 +36,8 @@ _NUMERIC = set(('x y dx dy x1 y1 x2 y2 cx cy r rx ry fx fy width height d points
 _FONT_DIR = Path(__file__).resolve().parent / 'fonts'
 # (regular, bold, italic, bold-italic); variable fonts share an exact font file.
 _FONT_VARIANTS = {
+    'Bebas Neue': ('BebasNeue-Regular.ttf', 'BebasNeue-Bold.ttf',
+                   'BebasNeue-Regular.ttf', 'BebasNeue-Bold.ttf'),
     'Oswald': ('Oswald[wght].ttf',) * 4,
     'Unbounded': ('Unbounded[wght].ttf',) * 4,
     'Montserrat': ('Montserrat[wght].ttf',) * 2 + ('Montserrat-Italic[wght].ttf',) * 2,
@@ -279,10 +281,17 @@ def render_svg(svg, *, card_count, card_width, card_height, read_asset) -> bytes
         node.attrib.clear()
         node.attrib.update({k: v for k, v in attrs.items() if k not in {'href', 'preserveAspectRatio'}})
         node.set('href', '#' + reused[key])
+    return render_document_svg(ET.tostring(root, encoding='unicode'),
+                               width=width, height=height)
+
+
+def render_document_svg(svg: str, *, width: int, height: int) -> bytes:
+    """Rasterize checked-in guide illustrations using the production resvg/fonts."""
+    import resvg_py
     try:
-        return resvg_py.svg_to_bytes(svg_string=ET.tostring(root, encoding='unicode'),
-                                     width=width, height=height, background='#ffffff',
-                                     skip_system_fonts=True, font_files=list(_RENDER_FONT_FILES),
+        return resvg_py.svg_to_bytes(svg_string=svg, width=width, height=height,
+                                     background='#ffffff', skip_system_fonts=True,
+                                     font_files=list(_RENDER_FONT_FILES),
                                      font_family='Montserrat', serif_family='PT Serif',
                                      sans_serif_family='Montserrat')
     except (ValueError, TypeError, OSError, RuntimeError, OverflowError) as exc:

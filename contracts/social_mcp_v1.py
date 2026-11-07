@@ -429,9 +429,25 @@ _carousel_output = obj({
     "size": enum("full"), "reencoded": {"type": "boolean"},
     "bytes": {"type": "integer", "minimum": 1}, "size_bytes": {"type": "integer", "minimum": 1},
     "preview_data_url": string(2796240), "full_data_url": string(2796240),
+    "topic": string(80, pattern=r"^(?:[0-9]{2}-[a-z][a-z-]*|steps/s(?:0[1-9]|10))$"),
+    "section": string(160),
+    "topics": array(string(80, pattern=r"^(?:[0-9]{2}-[a-z][a-z-]*|steps/s(?:0[1-9]|10))$"), 0, 24),
+    "content": string(90000), "sources": array(string(180), 0, 8),
+    "images": array(obj({"path": string(180), "mime_type": enum("image/png"),
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1}},
+        ("path", "mime_type", "width", "height")), 0, 8),
+    "review_questions": array(obj({"id": string(6), "question": string(2000),
+        "observe": string(5000), "suggestion": string(5000)},
+        ("id", "question", "observe", "suggestion")), 0, 5),
+    "scale": {"type": "number", "enum": [0.5]}, "cutlines": {"type": "boolean"},
 }, ("private",))
 _carousel_commands = [
     arm("create", _carousel_scene, ("brief",)),
+    arm("get", {"scope": {"const": "guide"}, "carousel_id": ID,
+        "topic": string(80, pattern=r"^(?:[0-9]{2}-[a-z][a-z-]*|steps/s(?:0[1-9]|10))$"),
+        "section": string(160)},
+        ("scope",)),
     arm("get", {"scope": {"const": "story"}, "carousel_id": ID, "revision": REV,
         "include_svg": {"type": "boolean"}}, ("carousel_id",)),
     arm("get", {"scope": {"const": "journal"}, "carousel_id": ID, "revision": REV}, ("scope", "carousel_id")),
@@ -443,19 +459,23 @@ _carousel_commands = [
     arm("revise", {**_carousel_scene, "carousel_id": ID, "expected_revision": REV,
         "note": string(2000), "reference_use": _reference_use}, ("carousel_id", "expected_revision")),
     arm("render", {"carousel_id": ID, "revision": REV, "view": enum("master", "region"),
-        "region": _carousel_region, "card": {"type": "integer", "minimum": 1, "maximum": 10}},
+        "region": _carousel_region, "card": {"type": "integer", "minimum": 1, "maximum": 10},
+        "cutlines": {"type": "boolean"}, "scale": {"type": "number", "enum": [0.5]}},
         ("carousel_id", "revision")),
     arm("export", {"carousel_id": ID, "revision": REV}, ("carousel_id", "revision")),
 ]
 tool("carousel", "Create, get, revise, render and export private SVG story carousels. "
+    "Work step-by-step: begin with get(scope:guide,topic:steps/s01); do not load the full library. Chapters return heading/size indexes; request one section by its heading/prefix. "
     "These commands never publish, edit a social post, send a message or dispatch image generation. "
     "Dot generates components with its own tool and imports them through visual import. "
     "get(scope:library) lists real owner-bound reference images; get(scope:reference,reference_id) "
     "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
     "record the visible technique and concrete change in revise.reference_use, then render the changed region. "
     "SVG images use asset:RETURNED_ASSET_ID; safe style/class/use/filter/pattern/mask/paint-order; no external URLs, scripts, foreignObject or author data: URIs. "
-    "Bundled Cyrillic SIL OFL fonts: Oswald (narrow), Unbounded (display), Montserrat (grotesk), PT Serif (serif), their package weights and italic; kerning by resvg. Primary dot asset input: vibepublish_visual import with host-supplied file:{download_url,file_id}; begin/chunk/finish only fallback. Use explicit text/tspan lines. "
-    "Render master shows composition; render region or card shows readable detail. Export returns "
+    "Bundled Cyrillic SIL OFL fonts: Bebas Neue (condensed caps), Oswald (narrow), Unbounded (display), Montserrat (grotesk), PT Serif (serif), their package weights and italic; kerning by resvg. Primary dot asset input: vibepublish_visual import with host-supplied file:{download_url,file_id}; begin/chunk/finish only fallback. Use explicit text/tspan lines. "
+    "Render master with scale:0.5 and cutlines:true shows a true half-resolution full canvas and slice boundaries. "
+    "Render master/card/region returns 3–5 advisory questions from the professional review bank, never a quality gate. "
+    "Render region or card shows readable detail. Export returns "
     "ordered private assets for the exact revision; export is not owner selection or permission to publish.",
     obj({"command": {"oneOf": _carousel_commands}, "request_key": KEY}, ("command",)),
     _carousel_output, "visual")

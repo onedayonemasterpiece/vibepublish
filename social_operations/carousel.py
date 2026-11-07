@@ -5,10 +5,11 @@ import hashlib
 import io
 import json
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 
 from .assets import AssetPreview, insert_verified_image, render_asset_full, render_asset_preview, verify_image
 from .carousel_compositor import render_svg, slice_cards, validate_svg
+from .carousel_guide import GuideImages, guide, review_questions
 from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
 
@@ -156,6 +157,16 @@ class CarouselService:
         return scene
 
     def get(self, actor, command):
+        if command.get('scope') == 'guide':
+            with self.store.connection() as db:
+                if command.get('carousel_id'):
+                    self._version(db, actor, command['carousel_id'])
+                else:
+                    self._actor(db, actor)
+            result = guide(command.get('topic'), command.get('section'))
+            if command.get('carousel_id'):
+                (result.metadata if isinstance(result, GuideImages) else result)['carousel_id'] = command['carousel_id']
+            return result
         with self.store.connection() as db:
             row = self._version(db, actor, command['carousel_id'], command.get('revision'))
             latest = self._version(db, actor, row['id'])
@@ -197,7 +208,27 @@ class CarouselService:
         if view == 'master':
             if region is not None:
                 raise DomainError('carousel_region_invalid', 'Use view:region for a crop')
-            preview = render_asset_preview(data, sha, '')
+            if command.get('scale') == 0.5:
+                with Image.open(io.BytesIO(data)) as master:
+                    rgba = master.convert('RGBA')
+                    clean = Image.new('RGB', rgba.size, 'white')
+                    clean.paste(rgba, mask=rgba.getchannel('A'))
+                    half = clean.resize(
+                        (width // 2, height // 2), Image.Resampling.LANCZOS)
+                if command.get('cutlines'):
+                    draw = ImageDraw.Draw(half)
+                    for index in range(1, row['card_count']):
+                        x = round(index * row['card_width'] / 2)
+                        draw.line((x, 0, x, half.height), fill='white', width=3)
+                        draw.line((x, 0, x, half.height), fill='#303030', width=1)
+                output = io.BytesIO()
+                half.save(output, format='JPEG', quality=82, optimize=True)
+                encoded = output.getvalue()
+                preview = AssetPreview({'mime_type': 'image/jpeg', 'width': half.width,
+                    'height': half.height, 'size': 'full', 'reencoded': True,
+                    'bytes': len(encoded), 'source_sha256': sha}, encoded)
+            else:
+                preview = render_asset_preview(data, sha, '')
         elif view == 'region':
             if (not isinstance(region, (list, tuple)) or len(region) != 4
                     or any(type(v) is not int for v in region)):
@@ -217,8 +248,17 @@ class CarouselService:
         with self.store.connection() as db:
             self._version(db, actor, row['id'], row['revision'])
         metadata = {key: value for key, value in preview.metadata.items() if key != 'resource_uri'}
+        review_view = 'card' if 'card' in command else view
+        if view == 'region' and 'card' not in command:
+            x, _, w, _ = region
+            if any(x < i * row['card_width'] < x + w for i in range(1, row['card_count'])):
+                review_view = 'pair'
         metadata.update(carousel_id=row['id'], revision=row['revision'], private=True,
-                        view=view, source_width=width, source_height=height)
+                        view=view, source_width=width, source_height=height,
+                        review_questions=review_questions(review_view))
+        if view == 'master' and command.get('scale') == 0.5:
+            metadata['scale'] = 0.5
+            metadata['cutlines'] = bool(command.get('cutlines'))
         if view == 'region':
             metadata['region'] = list(region)
         return AssetPreview(metadata, preview.data)
