@@ -14,7 +14,7 @@ import tempfile
 from html import unescape
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
@@ -30,7 +30,9 @@ from .domain import DomainError
 _SVG = "http://www.w3.org/2000/svg"
 _XLINK = "http://www.w3.org/1999/xlink"
 _SITE = "https://www.svgrepo.com"
-_ID = re.compile(r"[1-9][0-9]{0,9}\Z")
+_ICONIFY = "https://api.iconify.design"
+_ICONIFY_PAGE = "https://icon-sets.iconify.design"
+_ID = re.compile(r"(?:[1-9][0-9]{0,9}|[a-z0-9-]{1,40}:[a-z0-9-]{1,80})\Z")
 _LINK = re.compile(
     r"""href\s*=\s*["'](?:https://www\.svgrepo\.com)?/svg/([1-9][0-9]{0,9})/([a-z0-9-]{1,100})["']""",
     re.I,
@@ -62,11 +64,30 @@ _STYLE_ALIASES = {
     "тонкие": "outlined", "тонкая": "outlined", "контур": "outlined",
     "bold": "filled", "thick": "filled", "жирные": "filled", "заливка": "filled",
 }
+# Iconify uses ph:dove-fill and mdi:dove-outline as icon names, not set prefixes.
+_ICONIFY_PREFIXES = {
+    "outlined": ("lucide", "tabler", "ph", "mdi", "mdi-light"),
+    "filled": ("mdi", "fa6-solid", "ph"),
+    "illustrative": ("openmoji", "fluent-emoji-flat", "noto"),
+}
+
+
+def _style_matches(ident: str, category: str) -> bool:
+    prefix, name = ident.split(":", 1)
+    if category == "outlined":
+        return (prefix in {"lucide", "tabler", "mdi-light"}
+                or prefix == "ph" and not name.endswith(("-fill", "-bold", "-duotone"))
+                or prefix == "mdi" and name.endswith("-outline"))
+    if category == "filled":
+        return (prefix == "fa6-solid"
+                or prefix == "mdi" and not name.endswith("-outline")
+                or prefix == "ph" and name.endswith("-fill"))
+    return True
 
 
 def _fetch(url: str, limit: int) -> bytes:
     """Bound each SVG Repo response; URL is assembled exclusively by this module."""
-    if not url.startswith(_SITE + "/"):
+    if not url.startswith((_SITE + "/", _ICONIFY + "/")):
         raise ValueError("Unexpected icon host")
     request = Request(url, headers={"User-Agent": "VibePublishCarousel/1.0"})
     with urlopen(request, timeout=10) as response:
@@ -191,7 +212,9 @@ class IconBank:
             metadata = json.loads(info.read_text(encoding="utf-8"))
             if (metadata.get("id") != ident or not isinstance(metadata.get("name"), str)
                     or not isinstance(metadata.get("source"), str)
-                    or not metadata["source"].startswith(_SITE + "/svg/" )
+                    or not (metadata["source"].startswith(_SITE + "/svg/")
+                            or (":" in ident and metadata["source"] ==
+                                _ICONIFY_PAGE + "/" + ident.replace(":", "/") + "/"))
                     or not isinstance(metadata.get("license"), str)
                     or image.stat().st_size > 256 * 1024):
                 return None
@@ -218,6 +241,59 @@ class IconBank:
             if len(matches) == 8:
                 break
         return matches
+
+    def _cache(self, row, svg):
+        _save(self.root / (row["id"] + ".svg"), svg.encode("utf-8"))
+        _save(self.root / (row["id"] + ".json"),
+              json.dumps(row, ensure_ascii=False).encode("utf-8"))
+
+    def _iconify_search(self, query, style, found, seen):
+        """Search Iconify by meaning/style; read the actual icon-set license."""
+        category = _STYLE_ALIASES.get(style.casefold(), style.casefold())
+        parameters = {"query": query, "limit": 64}
+        if category in _ICONIFY_PREFIXES:
+            parameters["prefixes"] = ",".join(_ICONIFY_PREFIXES[category])
+        search = json.loads(_fetch(_ICONIFY + "/search?" + urlencode(parameters), 1024 * 1024))
+        if not isinstance(search, dict) or not isinstance(search.get("icons"), list):
+            raise ValueError("Invalid Iconify search response")
+        candidates = [ident for ident in search["icons"]
+                      if isinstance(ident, str) and _ID.fullmatch(ident)
+                      and ":" in ident and ident not in seen
+                      and _style_matches(ident, category)]
+        if not candidates:
+            return
+        prefixes = sorted({ident.split(":", 1)[0] for ident in candidates[:32]})
+        collections = search.get("collections", {})
+        collections = dict(collections) if isinstance(collections, dict) else {}
+        try:
+            details = json.loads(_fetch(_ICONIFY + "/collections?" +
+                        urlencode({"prefixes": ",".join(prefixes)}), 512 * 1024))
+            if isinstance(details, dict):
+                collections.update(details)
+        except (URLError, OSError, ValueError, TimeoutError):
+            pass  # Search results already include the collection metadata.
+        for ident in candidates[:32]:
+            if len(found) >= 8:
+                break
+            prefix, name = ident.split(":", 1)
+            try:
+                svg = _clean_svg(_fetch(f"{_ICONIFY}/{prefix}/{name}.svg", 256 * 1024))
+                _thumb(svg)
+            except (URLError, OSError, ValueError, DomainError, TimeoutError):
+                continue
+            collection = collections.get(prefix, {})
+            collection = collection if isinstance(collection, dict) else {}
+            license_info = collection.get("license", {})
+            license_info = license_info if isinstance(license_info, dict) else {}
+            license_name = license_info.get("spdx") or license_info.get("title")
+            if not isinstance(license_name, str) or not license_name.strip():
+                license_name = "Unverified — check source"
+            row = {"id": ident, "name": name.replace("-", " ").title(),
+                   "source": f"{_ICONIFY_PAGE}/{prefix}/{name}/",
+                   "license": license_name[:100], "style": style}
+            self._cache(row, svg)
+            found.append((row, svg))
+            seen.add(ident)
 
     def search(self, actor, query: str, style: str = ""):
         self._authorize(actor)
@@ -247,22 +323,25 @@ class IconBank:
                         continue
                     row = {"id": ident, "name": name.replace("-", " ").title(),
                            "source": source, "license": license_name, "style": style}
-                    _save(self.root / (ident + ".svg"), svg.encode("utf-8"))
-                    _save(self.root / (ident + ".json"), json.dumps(
-                        row, ensure_ascii=False).encode("utf-8"))
+                    self._cache(row, svg)
                     found.append((row, svg))
                     if len(found) == 8:
                         break
+            except (URLError, OSError, ValueError, TimeoutError):
+                pass  # SVG Repo may return HTTP 429 for every page.
+        if not found:
+            try:
+                self._iconify_search(query.strip(), style, found, seen)
             except (URLError, OSError, ValueError, TimeoutError) as exc:
-                if not found:
-                    raise DomainError("carousel_icon_search_unavailable",
-                                      "SVG Repo is unavailable and there are no cached matches") from exc
+                raise DomainError("carousel_icon_search_unavailable",
+                                  "SVG Repo and Iconify search are unavailable") from exc
         self._authorize(actor)
         if not found:
             return {"private": True, "icons": []}
         canvas = Image.new("RGB", (800, 480), "white")
         pen = ImageDraw.Draw(canvas)
         font = ImageFont.load_default(size=15)
+        tiny = ImageFont.load_default(size=11)
         for n, (row, svg) in enumerate(found):
             x, y = (n % 4) * 200, (n // 4) * 240
             pen.rectangle((x + 4, y + 4, x + 196, y + 234), outline="#dddddd")
@@ -270,8 +349,11 @@ class IconBank:
             canvas.paste(symbol, (x + 10, y + 12), symbol)
             small = symbol.resize((28, 28), Image.Resampling.LANCZOS)
             canvas.paste(small, (x + 163, y + 130), small)
-            pen.text((x + 12, y + 172), row["id"], font=font, fill="#111111")
-            pen.text((x + 12, y + 194), row["name"][:23], font=font, fill="#444444")
+            pen.text((x + 12, y + 171), row["id"][:29], font=tiny, fill="#111111")
+            pen.text((x + 12, y + 193), row["name"][:23], font=font, fill="#444444")
+            provider = "Iconify" if ":" in row["id"] else "SVG Repo"
+            pen.text((x + 12, y + 215), (provider + " · " + row["license"])[:28],
+                     font=tiny, fill="#666666")
         output = io.BytesIO()
         canvas.save(output, "PNG")
         image = output.getvalue()
@@ -284,7 +366,7 @@ class IconBank:
         self._authorize(actor)
         cached = self._saved(ident)
         if cached is None:
-            raise DomainError("carousel_icon_not_found", "Search icons to cache a SVG Repo icon first")
+            raise DomainError("carousel_icon_not_found", "Search icons to cache an icon first")
         row, svg = cached
         self._authorize(actor)
         return {"private": True, "icon": row, "svg": svg}
