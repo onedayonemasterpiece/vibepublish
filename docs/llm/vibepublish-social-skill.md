@@ -10,9 +10,10 @@ Normal publication is the default. Do not turn delivery into a manual investigat
 только если он ещё не задан. Уже порученные создание, импорт, просмотр,
 правки и экспорт выполняй без повторных согласований. Они ничего не публикуют.
 Генерацию компонентов **dot выполняет своим инструментом**. Основной транспорт —
-`vibepublish_visual` с `command:{"kind":"import"}`, хостовым
-`file:{"download_url":"HOST_SUPPLIED_URL","file_id":"HOST_SUPPLIED_ID","mime_type":"image/png"}`
-и стабильным `request_key`. Не выдумывай URL/ID. Порционный
+`vibepublish_visual` с `command:{"kind":"import"}`, `file` в форме,
+объявленной подключённым клиентом, и стабильным `request_key`. Если клиент
+принимает `file` как строку, передай настоящий file ID, выданный хостом.
+Не собирай descriptor объекта файла вручную и не выдумывай URL/ID. Порционный
 `import_begin/chunk/finish` — только резерв, если file-передача недоступна.
 Если у сгенерированного файла dot **нет download URL**, но его настоящие байты есть
 в workspace, используй три команды **того же** `vibepublish_visual` (пример
