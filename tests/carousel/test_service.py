@@ -1,6 +1,7 @@
 """A real reference-led edit, exact crops and a replayable private card export."""
 import io
 import json
+import random
 import sqlite3
 
 import pytest
@@ -137,6 +138,28 @@ def test_background_fragment_rejects_oversized_exact_crop(runtime):
         service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
             'revision': 1, 'view': 'region', 'region': [0, 0, 2561, 160], 'scale': 1}})
     assert error.value.code == 'carousel_region_exact_limit'
+
+
+def test_exact_large_opaque_fragment_saves_without_changing_pixels(runtime):
+    store, actor, app, service, _ = runtime
+    original = Image.frombytes('RGB', (2560, 2560), random.Random(117).randbytes(2560 * 2560 * 3))
+    encoded = io.BytesIO()
+    original.save(encoded, format='PNG')
+    asset = import_image(store, actor, encoded.getvalue(), 'image/png')
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2560">'
+           f'<image href="asset:{asset}" width="2560" height="2560"/></svg>')
+    ident = service.command(actor, {'command': {'kind': 'create', 'brief': 'Exact background',
+        'card_count': 3, 'card_width': 1280, 'card_height': 2560, 'svg': svg},
+        'request_key': 'large-opaque-background'})['carousel_id']
+    result = service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+        'revision': 1, 'view': 'region', 'region': [0, 0, 2560, 2560],
+        'scale': 1, 'save_asset': True}})
+    assert result.metadata['mime_type'] == 'image/png' and result.metadata['reencoded'] is False
+    with Image.open(io.BytesIO(result.data)) as fragment:
+        assert fragment.mode == 'RGB' and fragment.size == original.size
+        assert fragment.tobytes() == original.tobytes()
+    saved, mime, _ = app.read_asset(actor, result.metadata['asset_ref'])
+    assert mime == 'image/png' and pixels(saved).tobytes() == original.tobytes()
 
 
 def test_reference_edit_renders_exact_seam_and_replayable_private_export(runtime):

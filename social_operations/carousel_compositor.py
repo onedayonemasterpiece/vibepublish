@@ -244,6 +244,11 @@ def _filter_layers(root, layers):
     ids = set(requested)
     if ids - {node.get('id') for node in root.iter()}:
         raise DomainError('carousel_layer_not_found', 'Select existing SVG element ids')
+    if root.get('id') in ids:
+        if mode == 'hide':
+            for child in list(root):
+                root.remove(child)
+        return
     resources = {'defs', 'style', 'symbol', 'linearGradient', 'radialGradient',
                  'clipPath', 'mask', 'pattern', 'filter', 'marker'}
 
@@ -261,6 +266,19 @@ def _filter_layers(root, layers):
     for child in list(root):
         if not retain(child):
             root.remove(child)
+    if mode == 'only':
+        required = set()
+        for node in root.iter():
+            href = node.get('href', '')
+            if href.startswith('#'):
+                required.add(href[1:])
+            for value in node.attrib.values():
+                required.update(match[1] for match in _LOCAL_URL.finditer(value))
+        missing = required - {node.get('id') for node in root.iter()}
+        if missing:
+            raise DomainError('carousel_layer_dependency',
+                              f'Layer selection removes SVG reference #{sorted(missing)[0]}; '
+                              'keep referenced nodes in defs or include their layer')
 
 
 def render_svg(svg, *, card_count, card_width, card_height, read_asset, layers=None) -> bytes:
