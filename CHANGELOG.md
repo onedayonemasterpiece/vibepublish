@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel C3: fallback from SVG Repo HTTP 429 to Iconify style-scoped search, raw SVG and icon-set license metadata without losing the disk cache or SVG sanitizer. Rank private visual references by Russian/English token overlap and include `matched:false` catalog alternatives instead of empty results. Mocked-network regressions; no new dependency, database or publisher.
+
 - Story Carousel: log timed render and linked reference/library reads plus first use of imported assets in the existing scoped operation ledger; expose up to 50 journal events without recording prompts or secrets. VK publish accepts `vk.primary_attachments_mode=carousel` and forwards it to native `wall.post` including frozen scheduled replay. No new tables, states, or deployment. Rendering an older revision keeps that revision in the journal.
 - Story Carousel: restore the complete owner scope in the existing canonical feature and coverage audit (37 channel requirements plus five session decisions). Preserve original creative requirements, the author's intent, finished alternatives, exact publication/edit permission output and current E2E pause; distinguish source tests, deployed capability, observed results and owner acceptance. Keep the five-command architecture without reinstating unnecessary Review/Selection state.
 

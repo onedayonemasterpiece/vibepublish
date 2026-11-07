@@ -133,13 +133,25 @@ class ReferenceBank:
             raise DomainError('carousel_reference_query_invalid')
         with self._directory() as directory:
             entries = [self._metadata(directory, row) for row in self._catalog(directory, actor)]
-        terms = query.casefold().split()
-        matches = [entry for entry in entries if all(term in ' '.join([
-            entry['id'], entry['title'], *entry['tags'], entry['look_for'], entry['transfer']
-        ]).casefold() for term in terms)]
-        page = matches[offset:offset + limit]
-        return {'references': page, 'total': len(matches), 'offset': offset,
-                'next_offset': offset + len(page) if offset + len(page) < len(matches) else None}
+        terms = set(re.findall(r'[^\W_]+', query.casefold()))
+        ranked = []
+        for entry in entries:
+            words = set(re.findall(r'[^\W_]+', ' '.join([
+                entry['id'], entry['title'], *entry['tags'],
+                entry['look_for'], entry['transfer']
+            ]).casefold()))
+            # Exact words first; five-letter prefixes match common RU/EN inflections.
+            score = sum(2 if term in words else
+                        int(len(term) >= 5 and any(word.startswith(term[:5])
+                            for word in words)) for term in terms)
+            ranked.append((score, entry))
+        ranked.sort(key=lambda item: -item[0])  # Catalog order breaks ties.
+        page = ranked[offset:offset + limit]
+        if not page and ranked:
+            page = ranked[:limit]  # Non-empty bank remains usable on oversized offsets.
+        result = [{**entry, 'matched': bool(score or not terms)} for score, entry in page]
+        return {'references': result, 'total': len(ranked), 'offset': offset,
+                'next_offset': offset + len(page) if offset + len(page) < len(ranked) else None}
 
     def describe(self, actor, reference_id):
         """Validate a local reference without reading image bytes or claiming a visual review."""
