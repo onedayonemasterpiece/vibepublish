@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: assess type and contrast at the actual display size with W3C sources; fix section prefixes, source links and obsolete review-command wording; clarify chapter TOCs, actual export card count and the full ST1–ST7 review section. Preserve the step cascade and reference banks.
+
 - Story Carousel model guide `docs/llm/carousel/` (00–99): engineered process, storytelling roles/arcs/hooks, canvas numbers, 24 seam bridges, type scale and pairs, palette procedure, generation prompt templates (segment backgrounds, object on zone colour, lettering), verified SVG montage recipes (masks, cutouts, bbox stripes, scrim, grading, background word, thread), variation axes, infographics, review passes with tagged question bank. Integrates the ChatGPT research (C01–C16, Q/V/R 80 questions, 12 palettes, variation study, E01–E23 observations) that had not reached runtime. Served by `get(scope:guide)` (separate PR).
 - Story Carousel: retain same-owner PNG/WEBP source dependencies of every saved SVG revision during normal asset cleanup, so alpha cutouts and lettering do not silently revert to white derivatives. A 15-day cleanup regression re-renders and re-exports an older revision while unrelated and foreign originals are reclaimed.
 
