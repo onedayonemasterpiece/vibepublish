@@ -152,6 +152,7 @@ class ProviderRequest:
     basic_group_schedule_authorized: bool = field(default=False, repr=False)
     story_link_json: str = "{}"
     story_parent_json: str = "{}"
+    vk_primary_attachments_mode: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
