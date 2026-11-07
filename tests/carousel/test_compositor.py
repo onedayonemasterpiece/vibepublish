@@ -60,6 +60,22 @@ def test_one_image_and_panel_cross_seam_without_independent_rescaling():
     assert image(master).getpixel((150, 20)) == (255, 255, 255)  # rounded corner
 
 
+def test_only_preserves_defs_and_ancestor_transform_while_hide_removes_subtree():
+    source = svg('''
+      <defs><linearGradient id="gradient"><stop stop-color="#114477"/></linearGradient></defs>
+      <g transform="translate(10 0)"><g id="background">
+        <rect width="500" height="200" fill="url(#gradient)"/>
+      </g></g>
+      <g id="foreground"><rect x="15" y="30" width="50" height="50" fill="#ff0000"/></g>
+    ''')
+    only = image(render_svg(source, read_asset=no_asset, layers={'only': ['background']}, **SIZE))
+    hide = image(render_svg(source, read_asset=no_asset, layers={'hide': ['foreground']}, **SIZE))
+    assert only.getpixel((25, 40)) == (17, 68, 119)
+    assert only.getpixel((5, 40)) == (255, 255, 255)
+    assert hide.getpixel((25, 40)) == (17, 68, 119)
+    assert image(render(source)).getpixel((25, 40)) == (255, 0, 0)
+
+
 def test_cyrillic_and_explicit_line_positions_render_with_supported_font():
     source = svg('<text x="18" y="70" font-family="Montserrat" font-weight="700" font-size="38">'
                  'Памятник<tspan x="18" y="130">дружбе</tspan></text>')

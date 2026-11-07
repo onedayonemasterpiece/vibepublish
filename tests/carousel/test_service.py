@@ -4,7 +4,7 @@ import json
 import sqlite3
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from social_operations.assets import import_image, reclaim_asset_bytes, retired_asset_rows
 from social_operations.carousel import CarouselService
@@ -79,6 +79,64 @@ def test_transparent_original_renders_over_background_across_seam(runtime):
     assert pixels(app.read_asset(actor, asset)[0]).getpixel((2, 2)) == (255, 255, 255)
     assert len(service.command(actor, {'command': {'kind': 'export', 'carousel_id': ident,
         'revision': 1}, 'request_key': 'transparent-export'})['cards']) == 3
+
+
+def test_background_fragment_exact_layers_and_private_asset(runtime):
+    store, actor, app, service, _ = runtime
+    svg = ('''<svg xmlns="http://www.w3.org/2000/svg" width="384" height="160">
+      <defs><linearGradient id="ink"><stop stop-color="#d93628"/></linearGradient></defs>
+      <g transform="translate(4 0)"><rect id="bg-pane" x="0" y="0" width="380" height="160"
+        fill="#173957"/></g>
+      <g id="text-zone"><rect x="120" y="20" width="70" height="100"
+        fill="url(#ink)"/></g></svg>''')
+    ident = create(service, actor, svg, key='fragment-scene')['carousel_id']
+    with store.connection() as db:
+        row = service._version(db, actor, ident, 1)
+    master = pixels(service._render(actor, row))
+    region = [110, 30, 80, 70]
+    command = {'kind': 'render', 'carousel_id': ident, 'revision': 1,
+               'view': 'region', 'region': region, 'scale': 1}
+    exact = service.command(actor, {'command': command})
+    assert exact.metadata['mime_type'] == 'image/png' and exact.metadata['reencoded'] is False
+    assert exact.metadata['width'] == 80 and exact.metadata['height'] == 70
+    assert exact.data.startswith(b'\x89PNG\r\n\x1a\n')
+    assert ImageChops.difference(pixels(exact.data), master.crop((110, 30, 190, 100))).getbbox() is None
+
+    only = service.command(actor, {'command': {**command,
+        'layers': {'only': ['bg-pane']}, 'save_asset': True}})
+    assert pixels(only.data).getpixel((30, 20)) == (23, 57, 87)
+    assert pixels(only.data).getpixel((5, 20)) == (23, 57, 87)
+    assert only.metadata['resource_uri'] == 'vibepublish://assets/' + only.metadata['asset_ref']
+    saved, mime, _ = app.read_asset(actor, only.metadata['asset_ref'])
+    assert mime == 'image/png'
+    assert ImageChops.difference(pixels(saved), pixels(only.data)).getbbox() is None
+
+    hide = service.command(actor, {'command': {**command,
+        'layers': {'hide': ['text-zone']}}})
+    assert pixels(hide.data).getpixel((30, 20)) == (23, 57, 87)
+    assert pixels(exact.data).getpixel((30, 20)) == (217, 54, 40)
+    assert pixels(service.command(actor, {'command': {**command,
+        'layers': {'only': ['text-zone']}}}).data).getpixel((5, 20)) == (255, 255, 255)
+    journal = service.command(actor, {'command': {'kind': 'get', 'scope': 'journal',
+        'carousel_id': ident}})['journal']
+    event = next(e for e in journal if e.get('save_asset'))
+    assert event['revision'] == 1 and event['scale'] == 1
+    assert event['region'] == region and event['layers'] == {'only': ['bg-pane']}
+    assert event['asset_ref'] == only.metadata['asset_ref'] and event['duration_ms'] >= 0
+    code('carousel_layer_not_found', lambda: service.command(actor, {'command': {
+        **command, 'layers': {'only': ['nonexistent']}}))
+
+
+def test_background_fragment_rejects_oversized_exact_crop(runtime):
+    _, actor, _, service, _ = runtime
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="2700" height="160"/>'
+    ident = service.command(actor, {'command': {'kind': 'create', 'brief': 'Large canvas',
+        'card_count': 3, 'card_width': 900, 'card_height': 160, 'svg': svg},
+        'request_key': 'large-background'})['carousel_id']
+    with pytest.raises(DomainError, match='split into smaller regions') as error:
+        service.command(actor, {'command': {'kind': 'render', 'carousel_id': ident,
+            'revision': 1, 'view': 'region', 'region': [0, 0, 2561, 160], 'scale': 1}})
+    assert error.value.code == 'carousel_region_exact_limit'
 
 
 def test_reference_edit_renders_exact_seam_and_replayable_private_export(runtime):
