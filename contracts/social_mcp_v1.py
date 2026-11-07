@@ -410,10 +410,11 @@ DEFS["receipt"]["properties"].update(_carousel_receipt_fields)
 _reference = obj({"id": _reference_id, "title": string(1000),
     "tags": array(string(200), 0, 50), "look_for": string(5000), "transfer": string(5000),
     "source": obj({"slack_url": URL, "file_id": string(200)}, ("slack_url", "file_id")),
-    "use_note": string(5000), "duplicate_of": _reference_id, "available": {"type": "boolean"}},
+    "use_note": string(5000), "duplicate_of": _reference_id, "available": {"type": "boolean"},
+    "matched": {"type": "boolean"}},
     ("id", "title", "tags", "look_for", "transfer", "source", "use_note", "available"))
 CAROUSEL_REFERENCE = _reference  # Shared catalog validation at import and read boundaries.
-_icon_id = string(10, pattern=r"^[1-9][0-9]{0,9}$")
+_icon_id = string(128, pattern=r"^(?:[1-9][0-9]{0,9}|[a-z0-9-]{1,40}:[a-z0-9-]{1,80})$")
 _icon = obj({"id": _icon_id, "name": string(120), "source": URL,
     "license": string(100), "style": {**string(60), "minLength": 0}},
     ("id", "name", "source", "license", "style"))
@@ -481,10 +482,10 @@ tool("carousel", "Create, get, revise, render and export private SVG story carou
     "Dot generates components with its own tool and imports them through visual import. "
     "Pass carousel_id when reading references or icons to record the tool use in the private journal. "
     "get(scope:journal,offset?) returns up to 50 events per page and next_offset for older events. "
-    "get(scope:library) lists real owner-bound reference images; get(scope:reference,reference_id) "
+    "get(scope:library) ranks owner-bound references by Russian/English token overlap and marks unmatched fallback entries; get(scope:reference,reference_id) "
     "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
     "record the visible technique and concrete change in revise.reference_use, then render the changed region. "
-    "get(scope:icons,query,style?) searches cached SVG Repo icons then HTTPS and returns one PNG contact sheet of up to eight options (150/28 px) with ID labels and source licenses. Inspect the actual pixels, then get(scope:icon,id) for cleaned inline SVG or a visual hint for dot's own image generator. Inspect the composed card too. "
+    "get(scope:icons,query,style?) searches the local cache, SVG Repo over HTTP, then Iconify on unavailable results (including SVG Repo 429); maps line/filled/illustrative to icon sets and returns one PNG sheet of up to eight options (150/28 px) labeled with source and icon-set license. Inspect the actual pixels, then get(scope:icon,id) for cleaned inline SVG or a visual hint for dot's own image generator. Inspect the composed card too. "
     "SVG images use asset:RETURNED_ASSET_ID; safe style/class/use/filter/pattern/mask/paint-order; no external URLs, scripts, foreignObject or author data: URIs. "
     "Bundled Cyrillic SIL OFL fonts: Oswald (narrow), Unbounded (display), Montserrat (grotesk), PT Serif (serif), their package weights and italic; kerning by resvg. Primary dot asset input: vibepublish_visual import with the host-supplied file in the client-declared shape (the real file ID string when file is declared as a string). Do not construct a download descriptor; the host normalizes the attachment for the server. Begin/chunk/finish is only a fallback. Use explicit text/tspan lines. "
     "Render master shows composition; region with scale:1 returns exact PNG up to 2560 px. "

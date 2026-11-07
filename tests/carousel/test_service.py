@@ -331,7 +331,8 @@ async def test_real_application_validates_all_commands_and_status(runtime):
             'use_note': 'Reference only'}]}))
     library = await call({'kind': 'get', 'scope': 'library', 'carousel_id': ident,
                           'query': 'private-query-must-not-be-logged'})
-    assert library['references'] == []
+    assert [r['id'] for r in library['references']] == ['E02']
+    assert library['references'][0]['matched'] is False  # never empty; unmatched query falls back
     original = await call({'kind': 'get', 'scope': 'reference', 'carousel_id': ident,
                            'reference_id': 'E02'})
     assert pixels(original.data).size == (24, 24)
