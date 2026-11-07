@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1470" viewBox="0 0 1320 1470" role="img" aria-labelledby="title desc">
+<title id="title">Атлас переходов Story Carousel</title>
+<desc id="desc">Шесть авторских схем: панорама, объект-мост, общая панель, нить, совпадение кадра и приближение детали. Пунктир показывает будущие границы карточек; значимый текст остаётся внутри карточки.</desc>
+<defs>
+ <pattern id="grain" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="4" cy="7" r="1" fill="#65756c" opacity=".14"/></pattern>
+</defs>
+<rect width="1320" height="1470" fill="#f3f0e8"/>
+<g font-family="DejaVu Sans,Arial,sans-serif" fill="#172a2b">
+<text x="42" y="53" font-size="32" font-weight="700">Один холст. Шесть способов продолжить историю.</text>
+<text x="42" y="86" font-size="18">Авторские схемы переходов · пунктир = граница карточки · каждая карточка читается отдельно</text>
+<g transform="translate(30,112)"><rect width="630" height="407" rx="18" fill="#fffdf8" stroke="#d6d8ce"/>
+<text x="24" y="37" font-size="22" fill="#172a2b" font-weight="700">01  Панорама</text>
+<text x="24" y="65" font-size="14" fill="#51615a" font-weight="400">Одна фотография или сцена продолжается через стык.</text>
+<g transform="translate(30,86)">
+<rect width="570" height="237.5" fill="#e4e9df"/>
+<defs><clipPath id="scene1"><rect width="570" height="237.5"/></clipPath></defs><g clip-path="url(#scene1)"><rect width="570" height="237.5" fill="#dae6e5"/>
+ <circle cx="462" cy="51" r="26" fill="#e6b06e"/>
+ <path d="M0 150 L105 61 L233 170 L365 74 L470 158 L570 100 V238 H0Z" fill="#8fa898"/>
+ <path d="M0 190 L160 137 L302 204 L447 133 L570 172 V238 H0Z" fill="#476c61"/>
+ <path d="M0 207 C163 176 289 249 570 195" fill="none" stroke="#e8d1a7" stroke-width="14"/>
+ <rect x="22" y="19" width="128" height="30" rx="5" fill="#fffdf8"/>
+ <text x="32" y="40" font-size="14" fill="#172a2b" font-weight="400">Общий план</text></g>
+<path d="M 190 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 190 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 380 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 380 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect width="570" height="237.5" fill="none" stroke="#7c8b7e"/>
+<text x="8" y="258" font-size="12" fill="#65756c" font-weight="400">01</text>
+<text x="198" y="258" font-size="12" fill="#65756c" font-weight="400">02</text>
+<text x="388" y="258" font-size="12" fill="#65756c" font-weight="400">03</text>
+</g>
+<text x="24" y="376" font-size="14" fill="#51615a" font-weight="400">Фокус кадра сохраняется; новый фрагмент раскрывает место.</text>
+</g>
+<g transform="translate(680,112)"><rect width="630" height="407" rx="18" fill="#fffdf8" stroke="#d6d8ce"/>
+<text x="24" y="37" font-size="22" fill="#172a2b" font-weight="700">02  Объект-мост</text>
+<text x="24" y="65" font-size="14" fill="#51615a" font-weight="400">Фигура или предмет на переднем плане связывает карточки.</text>
+<g transform="translate(30,86)">
+<rect width="570" height="237.5" fill="#e4e9df"/>
+<defs><clipPath id="scene2"><rect width="570" height="237.5"/></clipPath></defs><g clip-path="url(#scene2)"><rect width="570" height="237.5" fill="#f0eee4"/>
+ <rect x="14" y="14" width="162" height="91" rx="12" fill="#c6d2c3"/>
+ <rect x="394" y="133" width="162" height="90" rx="12" fill="#c6d2c3"/>
+ <path d="M65 175 L180 93 L287 108 L429 57 L514 110 L362 142 L300 193 L218 154Z" fill="#c56843"/>
+ <path d="M180 93 L287 108 L218 154Z" fill="#e8ab77"/>
+ <path d="M287 108 L429 57 L362 142Z" fill="#efc395"/>
+ <path d="M300 193 L362 142 L514 110" fill="none" stroke="#a84a2f" stroke-width="3"/>
+ <text x="28" y="49" font-size="18" fill="#172a2b" font-weight="700">Тезис</text><text x="408" y="194" font-size="18" fill="#172a2b" font-weight="700">Развитие</text></g>
+<path d="M 190 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 190 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 380 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 380 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect width="570" height="237.5" fill="none" stroke="#7c8b7e"/>
+<text x="8" y="258" font-size="12" fill="#65756c" font-weight="400">01</text>
+<text x="198" y="258" font-size="12" fill="#65756c" font-weight="400">02</text>
+<text x="388" y="258" font-size="12" fill="#65756c" font-weight="400">03</text>
+</g>
+<text x="24" y="376" font-size="14" fill="#51615a" font-weight="400">Лицо, надпись и ключевую деталь помещаем вне линии реза.</text>
+</g>
+<g transform="translate(30,542)"><rect width="630" height="407" rx="18" fill="#fffdf8" stroke="#d6d8ce"/>
+<text x="24" y="37" font-size="22" fill="#172a2b" font-weight="700">03  Общая панель</text>
+<text x="24" y="65" font-size="14" fill="#51615a" font-weight="400">Плашка общая; смысловые текстовые ячейки самостоятельны.</text>
+<g transform="translate(30,86)">
+<rect width="570" height="237.5" fill="#e4e9df"/>
+<defs><clipPath id="scene3"><rect width="570" height="237.5"/></clipPath></defs><g clip-path="url(#scene3)"><rect width="570" height="237.5" fill="#e5e9dd"/>
+ <circle cx="95" cy="67" r="32" fill="#a6bba6"/><rect x="251" y="30" width="68" height="75" rx="12" fill="#c9a57b"/>
+ <path d="M438 99 L474 31 L514 99Z" fill="#90a59a"/>
+ <rect x="18" y="130" width="534" height="86" rx="22" fill="#243e3c"/>
+ <text x="40" y="165" font-size="19" fill="#fffdf8" font-weight="700">Что было</text><text x="218" y="165" font-size="19" fill="#fffdf8" font-weight="700">Что видим</text><text x="411" y="165" font-size="19" fill="#fffdf8" font-weight="700">Что дальше</text><text x="40" y="193" font-size="14" fill="#d7e0d5" font-weight="400">Первый факт</text><text x="218" y="193" font-size="14" fill="#d7e0d5" font-weight="400">Второй факт</text><text x="411" y="193" font-size="14" fill="#d7e0d5" font-weight="400">Один вопрос</text></g>
+<path d="M 190 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 190 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 380 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 380 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect width="570" height="237.5" fill="none" stroke="#7c8b7e"/>
+<text x="8" y="258" font-size="12" fill="#65756c" font-weight="400">01</text>
+<text x="198" y="258" font-size="12" fill="#65756c" font-weight="400">02</text>
+<text x="388" y="258" font-size="12" fill="#65756c" font-weight="400">03</text>
+</g>
+<text x="24" y="376" font-size="14" fill="#51615a" font-weight="400">Скругляем объект до нарезки. Не разрезаем слова и строки.</text>
+</g>
+<g transform="translate(680,542)"><rect width="630" height="407" rx="18" fill="#fffdf8" stroke="#d6d8ce"/>
+<text x="24" y="37" font-size="22" fill="#172a2b" font-weight="700">04  Нить / маршрут</text>
+<text x="24" y="65" font-size="14" fill="#51615a" font-weight="400">Линия задаёт направление, порядок и возвращение внимания.</text>
+<g transform="translate(30,86)">
+<rect width="570" height="237.5" fill="#e4e9df"/>
+<defs><clipPath id="scene4"><rect width="570" height="237.5"/></clipPath></defs><g clip-path="url(#scene4)"><rect width="570" height="237.5" fill="#f0eee4"/>
+ <path d="M-10 163 C70 163 55 61 130 74 S218 226 284 172 S361 36 421 80 S515 167 580 133" fill="none" stroke="#c56843" stroke-width="7"/>
+ <g fill="#fffdf8" stroke="#c56843" stroke-width="4"><circle cx="91" cy="82" r="16"/><circle cx="286" cy="170" r="16"/><circle cx="478" cy="132" r="16"/></g>
+ <text x="85" y="88" font-size="16" fill="#172a2b" font-weight="700">1</text><text x="280" y="176" font-size="16" fill="#172a2b" font-weight="700">2</text><text x="472" y="138" font-size="16" fill="#172a2b" font-weight="700">3</text><text x="27" y="205" font-size="18" fill="#172a2b" font-weight="700">Вопрос</text><text x="223" y="47" font-size="18" fill="#172a2b" font-weight="700">Наблюдение</text><text x="406" y="205" font-size="18" fill="#172a2b" font-weight="700">Вывод</text></g>
+<path d="M 190 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 190 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 380 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 380 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect width="570" height="237.5" fill="none" stroke="#7c8b7e"/>
+<text x="8" y="258" font-size="12" fill="#65756c" font-weight="400">01</text>
+<text x="198" y="258" font-size="12" fill="#65756c" font-weight="400">02</text>
+<text x="388" y="258" font-size="12" fill="#65756c" font-weight="400">03</text>
+</g>
+<text x="24" y="376" font-size="14" fill="#51615a" font-weight="400">Линия поддерживает ход мысли; она не заменяет сам сюжет.</text>
+</g>
+<g transform="translate(30,972)"><rect width="630" height="407" rx="18" fill="#fffdf8" stroke="#d6d8ce"/>
+<text x="24" y="37" font-size="22" fill="#172a2b" font-weight="700">05  Совпадение кадра</text>
+<text x="24" y="65" font-size="14" fill="#51615a" font-weight="400">Положение объекта постоянно; время или состояние меняется.</text>
+<g transform="translate(30,86)">
+<rect width="570" height="237.5" fill="#e4e9df"/>
+<defs><clipPath id="scene5"><rect width="570" height="237.5"/></clipPath></defs><g clip-path="url(#scene5)"><rect width="190" height="237.5" fill="#dcc9ab"/><rect x="190" width="190" height="237.5" fill="#dde3d9"/><rect x="380" width="190" height="237.5" fill="#c9dcd6"/>
+ <path d="M0 189 H570" stroke="#658476" stroke-width="2" stroke-dasharray="4 5"/>
+ <g fill="#6e847b"><path d="M54 189 V98 L95 56 L136 98 V189Z"/><path d="M244 189 V98 L285 56 L326 98 V189Z"/><path d="M434 189 V98 L475 56 L516 98 V189Z"/></g>
+ <g fill="#f7f1e6"><rect x="82" y="119" width="26" height="70"/><rect x="272" y="119" width="26" height="70"/><rect x="462" y="119" width="26" height="70"/></g>
+ <text x="24" y="28" font-size="16" fill="#172a2b" font-weight="700">Тогда</text><text x="214" y="28" font-size="16" fill="#172a2b" font-weight="700">Сейчас</text><text x="404" y="28" font-size="16" fill="#172a2b" font-weight="700">Сопоставление</text></g>
+<path d="M 190 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 190 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 380 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 380 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect width="570" height="237.5" fill="none" stroke="#7c8b7e"/>
+<text x="8" y="258" font-size="12" fill="#65756c" font-weight="400">01</text>
+<text x="198" y="258" font-size="12" fill="#65756c" font-weight="400">02</text>
+<text x="388" y="258" font-size="12" fill="#65756c" font-weight="400">03</text>
+</g>
+<text x="24" y="376" font-size="14" fill="#51615a" font-weight="400">Не деформируем источник ради совмещения. Показываем даты.</text>
+</g>
+<g transform="translate(680,972)"><rect width="630" height="407" rx="18" fill="#fffdf8" stroke="#d6d8ce"/>
+<text x="24" y="37" font-size="22" fill="#172a2b" font-weight="700">06  Приближение детали</text>
+<text x="24" y="65" font-size="14" fill="#51615a" font-weight="400">Общий вид → выделенная область → её значение.</text>
+<g transform="translate(30,86)">
+<rect width="570" height="237.5" fill="#e4e9df"/>
+<defs><clipPath id="scene6"><rect width="570" height="237.5"/></clipPath></defs><g clip-path="url(#scene6)"><rect width="570" height="237.5" fill="#e4e8dc"/><rect width="570" height="237.5" fill="url(#grain)"/>
+ <path d="M39 237 V75 L130 27 L242 68 V237Z" fill="#9caf9e"/>
+ <path d="M130 27 V237 H242 V68Z" fill="#7e9585"/>
+ <rect x="135" y="99" width="40" height="58" fill="#d4b07c"/>
+ <rect x="127" y="91" width="56" height="74" fill="none" stroke="#c56843" stroke-width="3"/>
+ <path d="M183 128 H302 Q333 128 350 107 L402 79" fill="none" stroke="#c56843" stroke-width="3"/>
+ <circle cx="465" cy="111" r="65" fill="#fffdf8" stroke="#c56843" stroke-width="3"/>
+ <rect x="436" y="72" width="58" height="78" fill="#d4b07c"/>
+ <path d="M446 89 H484 M446 105 H484 M446 121 H472" stroke="#8a6b44" stroke-width="4"/>
+ <text x="402" y="210" font-size="15" fill="#172a2b" font-weight="700">Деталь объясняет</text></g>
+<path d="M 190 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 190 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<path d="M 380 0 V 237.5" stroke="#fffdf8" stroke-width="4"/><path d="M 380 0 V 237.5" stroke="#9e4c36" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect width="570" height="237.5" fill="none" stroke="#7c8b7e"/>
+<text x="8" y="258" font-size="12" fill="#65756c" font-weight="400">01</text>
+<text x="198" y="258" font-size="12" fill="#65756c" font-weight="400">02</text>
+<text x="388" y="258" font-size="12" fill="#65756c" font-weight="400">03</text>
+</g>
+<text x="24" y="376" font-size="14" fill="#51615a" font-weight="400">Увеличиваем существующую деталь; не дорисовываем факт.</text>
+</g>
+<text x="42" y="1433" font-size="17" fill="#172a2b" font-weight="700">Переход служит истории. Перед экспортом: целое полотно → отдельные карточки → телефон → стыки.</text>
+</g></svg>

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel model guide `docs/llm/carousel/` (00–99): engineered process, storytelling roles/arcs/hooks, canvas numbers, 24 seam bridges, type scale and pairs, palette procedure, generation prompt templates (segment backgrounds, object on zone colour, lettering), verified SVG montage recipes (masks, cutouts, bbox stripes, scrim, grading, background word, thread), variation axes, infographics, review passes with tagged question bank. Integrates the ChatGPT research (C01–C16, Q/V/R 80 questions, 12 palettes, variation study, E01–E23 observations) that had not reached runtime. Served by `get(scope:guide)` (separate PR).
 - Story Carousel: restore the complete owner scope in the existing canonical feature and coverage audit (37 channel requirements plus five session decisions). Preserve original creative requirements, the author's intent, finished alternatives, exact publication/edit permission output and current E2E pause; distinguish source tests, deployed capability, observed results and owner acceptance. Keep the five-command architecture without reinstating unnecessary Review/Selection state.
 
 - Story Carousel: retain same-owner PNG/WEBP source dependencies of every saved SVG revision during normal asset cleanup, so alpha cutouts and lettering do not silently revert to white derivatives. A 15-day cleanup regression re-renders and re-exports an older revision while unrelated and foreign originals are reclaimed.
