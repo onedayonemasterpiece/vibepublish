@@ -29,6 +29,10 @@ social_operations = ["schema.sql", "visual_schema.sql", "emoji_schema.sql", "res
 
 [tool.setuptools.data-files]
 "share/vibepublish" = ["docs/llm/vibepublish-social-skill.md"]
+"share/vibepublish/carousel" = ["docs/llm/carousel/README.md", "docs/llm/carousel/00-process.md", "docs/llm/carousel/10-storytelling.md", "docs/llm/carousel/20-composition.md", "docs/llm/carousel/30-seams.md", "docs/llm/carousel/40-typography.md", "docs/llm/carousel/50-palettes.md", "docs/llm/carousel/60-generation.md", "docs/llm/carousel/70-montage.md", "docs/llm/carousel/80-variation.md", "docs/llm/carousel/85-style-continuity.md", "docs/llm/carousel/90-review.md", "docs/llm/carousel/95-infographics.md", "docs/llm/carousel/99-platform.md"]
+"share/vibepublish/carousel/img" = ["docs/llm/carousel/img/transition-atlas.svg", "docs/llm/carousel/img/palette-catalog.svg", "docs/llm/carousel/img/variation-study.svg"]
+
+"share/vibepublish/carousel/steps" = ["docs/llm/carousel/steps/s01.md", "docs/llm/carousel/steps/s02.md", "docs/llm/carousel/steps/s03.md", "docs/llm/carousel/steps/s04.md", "docs/llm/carousel/steps/s05.md", "docs/llm/carousel/steps/s06.md", "docs/llm/carousel/steps/s07.md", "docs/llm/carousel/steps/s08.md", "docs/llm/carousel/steps/s09.md", "docs/llm/carousel/steps/s10.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
