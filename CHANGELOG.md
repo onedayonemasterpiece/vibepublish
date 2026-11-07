@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Story Carousel: log timed render and linked reference/library reads plus first use of imported assets in the existing scoped operation ledger; expose up to 50 journal events without recording prompts or secrets. VK publish accepts `vk.primary_attachments_mode=carousel` and forwards it to native `wall.post` including frozen scheduled replay. No new tables, states, or deployment.
+- Story Carousel: log timed render and linked reference/library reads plus first use of imported assets in the existing scoped operation ledger; expose up to 50 journal events without recording prompts or secrets. VK publish accepts `vk.primary_attachments_mode=carousel` and forwards it to native `wall.post` including frozen scheduled replay. No new tables, states, or deployment. Rendering an older revision keeps that revision in the journal.
 
 - Story Carousel P0: render same-principal private PNG/WEBP alpha originals as EXIF-free RGBA PNG over the SVG background, including across card seams; leave the existing white-backed publication derivative unchanged.
 
