@@ -56,7 +56,16 @@ def guide(topic: str | None = None, section: str | None = None) -> dict | GuideI
     source = _read(topic + ".md")
     sources = [_SOURCE + topic + ".md"]
     metadata = {"private": True, "topic": topic, "sources": sources}
-    if topic.startswith("steps/"):
+    question = (_review_bank().get(section.strip().upper())
+                if topic == "90-review" and section else None)
+    if question:
+        metadata["section"] = question["id"]
+        if question["id"].startswith("ST"):
+            sources[:] = [_SOURCE + "85-style-continuity.md"]
+        content = (f"# {question['id']}. {question['question']}\n\n"
+                   f"Что наблюдать: {question['observe']}\n\n"
+                   f"Возможная правка: {question['suggestion']}")
+    elif topic.startswith("steps/"):
         if section:
             raise DomainError("invalid_input", "Step cards do not contain named sections")
         content = source
@@ -66,6 +75,9 @@ def guide(topic: str | None = None, section: str | None = None) -> dict | GuideI
             lines = [f"# {topic} — разделы", "", "Выбери один раздел параметром section.",
                      "", "| Раздел | Знаков |", "|---|---:|"]
             lines += [f"| {title} | {len(text)} |" for title, text in headings]
+            if topic == "90-review":
+                lines += ["", 'Один вопрос: section:"Q01"; также доступны ID V, R, K и ST. '
+                          'Выбирай нужный вопрос, весь банк читать не требуется.']
             content = "\n".join(lines)
         else:
             query = section.strip().casefold()
@@ -94,13 +106,9 @@ def guide(topic: str | None = None, section: str | None = None) -> dict | GuideI
     return metadata
 
 
-def review_questions(view: str) -> list[dict]:
-    """Choose tagged Q/V/R/K questions and ST checks by ID from source tables."""
+def _review_bank() -> dict[str, dict]:
+    """One source-table parser for render hints and individual guide questions."""
     source = _read("90-review.md")
-    line = re.search(r"(?m)^- \[" + re.escape(view) + r"\]\s+(.+)$", source)
-    if not line:
-        raise DomainError("invalid_input", f"Story Carousel review tag missing: {view}")
-    ids = re.findall(r"\b(?:[QVRK]\d{2}|ST[1-7])\b", line.group(1))
     bank = {}
     for row in (source + "\n" + _read("85-style-continuity.md")).splitlines():
         if not row.startswith("|"):
@@ -114,8 +122,15 @@ def review_questions(view: str) -> list[dict]:
         elif len(cells) == 4 and re.fullmatch(r"(?:[QVRK]\d{2}|ST[1-7])", cells[0]):
             bank[cells[0]] = {"id": cells[0], "question": cells[1],
                               "observe": cells[2], "suggestion": cells[3]}
-    questions = [ident for ident in ids if ident.startswith(("Q", "V", "R"))]
-    checks = [ident for ident in ids if ident.startswith("K")]
-    styles = [ident for ident in ids if ident.startswith("ST")]
-    selected = questions[:3 if styles else 4] + checks[:1] + styles[:1]
-    return [bank[ident] for ident in selected[:5]]
+    return bank
+
+
+def review_questions(view: str) -> list[dict]:
+    """Respect the guide author's priorities; other questions remain addressable by ID."""
+    source = _read("90-review.md")
+    line = re.search(r"(?m)^- \[" + re.escape(view) + r"\]\s+(.+)$", source)
+    if not line:
+        raise DomainError("invalid_input", f"Story Carousel review tag missing: {view}")
+    ids = re.findall(r"\b(?:[QVRK]\d{2}|ST[1-7])\b", line.group(1))
+    bank = _review_bank()
+    return [bank[ident] for ident in ids[:5]]
