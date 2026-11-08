@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel review K15 (delivered for master and card): a component on a rectangle of another tone than the card background (pasted white plate) is named as an observable defect; E2E d894 shipped three revisions with such plates unnoticed.
 - MCP guidance: map the latest provider/current read item `ref` explicitly to mutation `item_ref`; clarify that full asset inspection reads the requested stored asset, while component thumbnails flatten transparency onto white. Assess alpha-related montage defects in the exact carousel render/export. No schema, identity, rendering or publication behavior changes; live agent verification remains pending.
 
 - Story Carousel composition: avoid an unused EXIF transpose/copy for opaque PNG/WebP originals while preserving late PNG tRNS, alpha orientation and access/integrity checks. Decoding and JPEG handling are unchanged; no render-latency cause or speedup is claimed.
