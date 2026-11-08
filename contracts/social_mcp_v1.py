@@ -437,6 +437,7 @@ _carousel_output = obj({
         "kind": enum("create", "revise", "export", "render", "get", "asset_import"), "at": DATE,
         "duration_ms": {"type": "integer", "minimum": 0},
         "scope": enum("reference", "library", "guide", "icons", "icon", "components"),
+        "topic": string(80, pattern=r"^(?:[0-9]{2}-[a-z][a-z-]*|steps/s(?:0[1-9]|10))$"), "section": string(160),
         "view": enum("master", "region", "card"), "region": _carousel_region,
         "card": {"type": "integer", "minimum": 1, "maximum": 10},
         "reference_id": _reference_id, "icon_id": _icon_id, "asset_ref": ID, "imported_at": DATE,

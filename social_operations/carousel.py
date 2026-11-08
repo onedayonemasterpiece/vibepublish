@@ -405,7 +405,7 @@ class CarouselService:
                 recorded = json.loads(op['result'])
                 journal.append({'operation_id': op['id'], 'revision': op['revision'], 'kind': entry['kind'],
                     'at': timestamp(op['created']),
-                    **{key: entry[key] for key in ('note', 'reference_use', 'scope', 'view',
+                    **{key: entry[key] for key in ('note', 'reference_use', 'scope', 'topic', 'section', 'view',
                         'region', 'card', 'reference_id', 'icon_id', 'asset_ref', 'imported_at',
                         'scale', 'layers', 'save_asset') if key in entry},
                     **({'duration_ms': recorded['duration_ms']} if 'duration_ms' in recorded else {})})
