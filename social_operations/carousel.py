@@ -22,6 +22,7 @@ from .carousel_compositor import _ASSET, _NUMBER, _XLINK, render_svg, slice_card
 from .carousel_guide import GuideImages, guide, review_questions
 from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
+from .svg_raster import _RASTER_LOCK
 
 
 # Process-local cache of full rendered canvases, bounded by entries and PNG bytes.
@@ -29,6 +30,16 @@ _RENDERED: 'OrderedDict' = OrderedDict()
 _RENDERED_MAX = 12
 _RENDERED_MAX_BYTES = 128 * 1024 * 1024
 _RENDERED_LOCK = threading.Lock()
+
+
+def _cached_canvas(key, timings):
+    with _RENDERED_LOCK:
+        cached = _RENDERED.get(key)
+        if timings is not None:
+            timings['cache_hit'] = int(cached is not None)
+        if cached is not None:
+            _RENDERED.move_to_end(key)
+        return cached
 
 
 @dataclass(frozen=True, slots=True)
@@ -444,22 +455,23 @@ class CarouselService:
             timings['asset_count'] = len(assets)
             timings['source_bytes'] = sum(len(source[0]) for source in assets.values())
             timings['resolved'] = (time.perf_counter(), time.thread_time())
-        with _RENDERED_LOCK:
-            cached = _RENDERED.get(key)
-            if timings is not None:
-                timings['cache_hit'] = int(cached is not None)
+        cached = _cached_canvas(key, timings)
+        if cached is not None:
+            return cached
+        with _RASTER_LOCK:
+            # Another caller may have filled this master while we waited.
+            cached = _cached_canvas(key, timings)
             if cached is not None:
-                _RENDERED.move_to_end(key)
                 return cached
-        data = render_svg(row['svg'], card_count=row['card_count'], card_width=row['card_width'],
-            card_height=row['card_height'], read_asset=read_asset, layers=layers)
-        if len(data) <= _RENDERED_MAX_BYTES:
-            with _RENDERED_LOCK:
-                _RENDERED[key] = data
-                while (len(_RENDERED) > _RENDERED_MAX
-                       or sum(map(len, _RENDERED.values())) > _RENDERED_MAX_BYTES):
-                    _RENDERED.popitem(last=False)
-        return data
+            data = render_svg(row['svg'], card_count=row['card_count'], card_width=row['card_width'],
+                card_height=row['card_height'], read_asset=read_asset, layers=layers)
+            if len(data) <= _RENDERED_MAX_BYTES:
+                with _RENDERED_LOCK:
+                    _RENDERED[key] = data
+                    while (len(_RENDERED) > _RENDERED_MAX
+                           or sum(map(len, _RENDERED.values())) > _RENDERED_MAX_BYTES):
+                        _RENDERED.popitem(last=False)
+            return data
 
     def render(self, actor, command):
         started = time.perf_counter()
