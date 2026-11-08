@@ -1,5 +1,6 @@
 """Canonical guide, real MCP image bytes and view-tagged review questions."""
 import io
+import re
 
 import pytest
 from PIL import Image
@@ -72,6 +73,11 @@ async def test_canonical_guide_and_half_scale_master_are_exposed_by_mcp(tmp_path
                    if entry["kind"] == "get" and entry.get("scope") == "guide"]
     assert len(guide_reads) == 1
     assert isinstance(guide_reads[0]["duration_ms"], int)
+    def expected_questions(view):
+        tag = next(line for line in _read("90-review.md").splitlines()
+                   if line.startswith(f"- [{view}] "))
+        return re.findall(r"\b(?:[QVRK]\d{2}|ST[1-7])\b", tag)[:5]
+
     master = await call({"kind": "render", "carousel_id": carousel_id,
         "revision": 1, "view": "master", "scale": 0.5, "cutlines": True})
     assert isinstance(master, AssetPreview)
@@ -79,8 +85,7 @@ async def test_canonical_guide_and_half_scale_master_are_exposed_by_mcp(tmp_path
     assert master.metadata["size"] == "full"
     assert master.metadata["scale"] == 0.5 and master.metadata["cutlines"]
     assert master.metadata["width"] == 192 and master.metadata["height"] == 80
-    assert [q["id"] for q in master.metadata["review_questions"]] == [
-        "Q23", "Q34", "Q01", "K15", "ST1"]
+    assert [q["id"] for q in master.metadata["review_questions"]] == expected_questions("master")
     with Image.open(io.BytesIO(master.data)) as image:
         image = image.convert("RGB")
         assert image.size == (192, 80)
@@ -89,16 +94,13 @@ async def test_canonical_guide_and_half_scale_master_are_exposed_by_mcp(tmp_path
 
     card = await call({"kind": "render", "carousel_id": carousel_id,
         "revision": 1, "card": 2})
-    assert [q["id"] for q in card.metadata["review_questions"]] == [
-        "Q28", "Q02", "Q04", "Q06", "K15"]
+    assert [q["id"] for q in card.metadata["review_questions"]] == expected_questions("card")
     crop = await call({"kind": "render", "carousel_id": carousel_id,
         "revision": 1, "view": "region", "region": [10, 20, 20, 80]})
-    assert [q["id"] for q in crop.metadata["review_questions"]] == [
-        "Q12", "Q13", "Q19", "Q20", "K11"]
+    assert [q["id"] for q in crop.metadata["review_questions"]] == expected_questions("region")
     pair = await call({"kind": "render", "carousel_id": carousel_id,
         "revision": 1, "view": "region", "region": [118, 20, 20, 80]})
-    assert [q["id"] for q in pair.metadata["review_questions"]] == [
-        "Q19", "Q22", "Q23", "Q26", "K04"]
+    assert [q["id"] for q in pair.metadata["review_questions"]] == expected_questions("pair")
     with store.connection() as db:
         assert db.execute("SELECT count(*) FROM publications").fetchone()[0] == 0
 

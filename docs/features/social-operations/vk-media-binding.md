@@ -98,6 +98,23 @@ change the successful cleanup deadline or receipt. The actual dominant live
 subphase remains unproven until these phases are observed after rollout; the
 source profile alone does not close the live latency incident.
 
+Carousel export diagnosis (2026-11-08): **Not confirmed by user**. A real
+post-rollout export recorded 56.144 seconds, but maintenance/saved-region phase
+logs do not cover export. Each newly committed export now emits one bounded
+`carousel_export_phases` diagnostic after writer release. Wall and calling-thread
+CPU durations separate admission entry/work, source resolution/validation,
+cache/render, slicing, image verification, persistence entry/work and transaction
+exit. Entry intervals include connection/setup and BEGIN acquisition, not only
+lock wait; exit includes commit, close and existing Store diagnostics. Thread CPU
+does not include separate native/other threads. Total time ends before the new
+diagnostic handler, receipt read and transport; the existing journal duration
+boundary is unchanged. The cache flag and aggregate
+unique composition-source/master/slice/verified byte counts use already available
+data, with no extra asset reads. Immediate/late replays and pre-commit failures emit
+no new completion record; observer failures cannot change the receipt. No private
+IDs or payloads are logged. This diagnoses the next real export; it does not
+establish the dominant live phase or claim a speed improvement.
+
 VK feed and queue reads preserve unsupported attachments (poll/link/market and
 unrecognized payloads) as opaque `unsupported:kind:owner_id` identities instead
 of blocking the read. Because `wall.edit` would erase such attachments, edits and
