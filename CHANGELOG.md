@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Story Carousel review delivery: `render` returns every question tagged for its view instead of silently keeping the first five; tag lines are capped at seven (test-enforced) and now hold the owner's priorities — story meaning, beauty next to references, text vs image, cohesion, clean card, one manner per role, brand. Contract `review_questions` maxItems 5 → 7. New K19 «authored text generated, not typeset» is delivered for master and card and carries the SVG `<text>` count (cold E2E Sunny r7 still typeset all narrative). The rest of the bank stays addressable by ID.
+- Story Carousel guide journal: retain the exact requested topic and section on existing carousel-linked guide reads and expose them through the ordinary journal. Keep older events compatible and pre-create, unlinked guide reads read-only; no new events, tables or revisions.
 
 - Publication status: preserve an unknown dispatched outcome and its error in the ordinary read-only snapshot, including after false-identity withdrawal. Report confirmed delivery, unknown outcome and refusal counts separately for mixed destinations; do not turn uncertainty into a no-delivery claim or create cursors/provider effects.
 

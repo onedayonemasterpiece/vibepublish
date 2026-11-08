@@ -480,3 +480,47 @@ def test_saved_story_and_export_survive_cache_expiry_and_asset_reclamation(runti
     for card in exported['cards']:
         raw, _, sha = app.read_asset(actor, card['asset_ref'])
         assert pixels(raw).size == (128, 160) and sha == card['sha256']
+
+@pytest.mark.asyncio
+async def test_guide_journal_preserves_requested_topic_and_section(runtime, monkeypatch):
+    store, actor, app, service, _ = runtime
+    monkeypatch.setattr(store, 'clock', lambda: 1800000000.0)
+
+    async def call(command, key=None):
+        result = await app.call(actor, 'vibepublish_carousel', {
+            'command': command, **({'request_key': key} if key else {})})
+        assert isinstance(result, dict) and 'error' not in result, result
+        return result
+
+    def no_precreate_write():
+        raise AssertionError('unlinked guide reads must remain read-only')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store, 'tx', no_precreate_write)
+        unlinked = await call({'kind': 'get', 'scope': 'guide', 'topic': 'steps/s01'})
+    assert unlinked['private'] and 'carousel_id' not in unlinked
+    created = await call({'kind': 'create', 'brief': 'Guide journal',
+                          'card_count': 3, 'card_width': 128, 'card_height': 160}, 'guide-journal')
+    ident = created['carousel_id']
+    # Existing ledger events need neither new fields nor a rewritten request.
+    service.log_event(actor, ident, 'get', duration_ms=1, scope='guide')
+    prefix = {'kind': 'get', 'scope': 'guide', 'carousel_id': ident,
+              'topic': '00-process', 'section': 'Правила'}
+    result = await call(prefix)
+    assert result['section'] != prefix['section']  # Preserve the request, not the expanded heading.
+    step = {'kind': 'get', 'scope': 'guide', 'carousel_id': ident, 'topic': 'steps/s01'}
+    await call(step)
+    journal = await call({'kind': 'get', 'scope': 'journal', 'carousel_id': ident})
+    reads = [entry for entry in journal['journal'] if entry.get('scope') == 'guide']
+    assert [(entry.get('topic'), entry.get('section')) for entry in reads] == [
+        ('steps/s01', None), ('00-process', 'Правила'), (None, None)]
+    assert all(entry['revision'] == 1 and entry['at'] == '2027-01-15T08:00:00Z'
+               and isinstance(entry['duration_ms'], int) for entry in reads)
+    assert 'section' not in reads[0] and not {'topic', 'section'} & reads[2].keys()
+    with store.connection() as db:
+        for entry, requested in zip(reads[:2], (step, prefix)):
+            saved = json.loads(db.execute('SELECT request FROM operations WHERE id=?',
+                                        (entry['operation_id'],)).fetchone()[0])
+            assert saved['command'] == requested
+        assert db.execute("SELECT count(*) FROM operations WHERE action='carousel'").fetchone()[0] == 4
+        assert db.execute('SELECT count(*) FROM carousel_versions').fetchone()[0] == 1
