@@ -55,6 +55,23 @@ class ContractDesignTests(unittest.TestCase):
             with self.subTest(tool=name):
                 validator(name, "outputSchema").validate(result)
 
+    def test_only_precise_input_refusals_allow_safe_correction(self):
+        result = {"error": {"code": "invalid_input", "field": "request_key", "message": "request_key: required"},
+                  "message": "request_key: required", "next_action": "fix_input", "retry_safe": True}
+        for name in TOOLS:
+            with self.subTest(tool=name):
+                output = validator(name, "outputSchema")
+                output.validate(result)
+                for code in ("access_denied", "outcome_unknown", "store_unavailable"):
+                    invalid = json.loads(json.dumps(result))
+                    invalid["error"]["code"] = code
+                    self.assertTrue(list(output.iter_errors(invalid)))
+                invalid = json.loads(json.dumps(result))
+                del invalid["error"]["field"]
+                self.assertTrue(list(output.iter_errors(invalid)))
+                self.assertTrue(list(output.iter_errors({**result, "operation_id": "op_fabricated"})))
+                self.assertTrue(list(output.iter_errors({**result, "next_action": "review_outcome"})))
+
     def test_mutation_receipt_and_uncertain_result(self):
         result = {"operation_id": "op_1", "resource_id": "pub_1", "revision": 1,
                   "action": "publish", "state": "outcome_unknown", "message": "MAX needs observation",

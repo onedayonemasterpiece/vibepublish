@@ -810,11 +810,15 @@ def output_with_errors(success):
     failure = obj({"error": ref("error"), "message": string(1500),
                    "next_action": NEXT, "retry_safe": {"const": False}},
                   ("error", "message", "next_action", "retry_safe"))
+    input_failure = obj({"error": obj({"code": {"const": "invalid_input"},
+        "message": string(1000), "field": string(200)}, ("code", "message", "field")),
+        "message": string(1500), "next_action": {"const": "fix_input"},
+        "retry_safe": {"const": True}}, ("error", "message", "next_action", "retry_safe"))
     properties = {key: {} for key in (*success.get("properties", {}), *failure["properties"])}
     # Success and failure are disjoint: success-specific required fields are absent
     # from the closed failure branch. The definitions are gathered transitively.
     return {"type": "object", "properties": properties,
-            "additionalProperties": False, "oneOf": [success, failure]}
+            "additionalProperties": False, "oneOf": [success, failure, input_failure]}
 
 
 def catalog():
