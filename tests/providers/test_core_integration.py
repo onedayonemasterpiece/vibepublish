@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -185,3 +186,48 @@ async def test_unknown_native_child_never_erases_other_provider_success(runtime)
     assert [d['state'] for d in done['deliveries']] == ['running', 'verified']
     assert all(t.effects == 1 for t in transports.values())
     assert not await worker.run_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider,action', [('telegram', 'publish'), ('vk', 'publish'), ('vk', 'edit')])
+async def test_worker_materializes_frozen_media_once(runtime, monkeypatch, provider, action):
+    """Trace real SQLite BLOB reads through native prepare and execute."""
+    store, actor, transports, app, worker = runtime
+    media = [{'source': {'kind': 'asset', 'id': import_image(store, actor, asset(i).data, 'image/png')}}
+             for i in (3, 4)]
+    if action == 'edit':
+        original = await call(app, actor, 'publish', {
+            'to': [provider], 'content': {'text': 'Original scheduled post'},
+            'delivery': {'kind': 'at', 'at': timestamp(NOW + 3600)},
+            'request_key': 'media-reuse-original'})
+        assert await worker.run_once()
+        published = result(store, actor, original)
+        assert published['state'] == 'scheduled', published
+        accepted = await call(app, actor, 'publication_update', {
+            'publication_id': published['resource_id'], 'expected_revision': 1,
+            'change': {'kind': 'edit', 'content': {'text': 'Updated album'}, 'media': media},
+            'request_key': 'media-reuse-edit'})
+    else:
+        accepted = await call(app, actor, 'publish', {
+            'to': [provider], 'content': {'text': 'Frozen album'}, 'media': media,
+            'delivery': {'kind': 'at', 'at': timestamp(NOW + 3600)},
+            'request_key': 'media-reuse-publish'})
+
+    blob_reads = []
+    connection = store.connection
+
+    @contextmanager
+    def traced_connection():
+        with connection() as db:
+            db.set_trace_callback(
+                lambda sql: blob_reads.append(sql)
+                if sql.startswith('SELECT bytes,sha256 FROM assets WHERE id=') else None)
+            yield db
+
+    monkeypatch.setattr(store, 'connection', traced_connection)
+    assert await worker.run_once()
+    completed = result(store, actor, accepted)
+    assert completed['state'] == 'scheduled', completed
+    assert completed['deliveries'][0]['media_check'] == 'provider_binding'
+    assert transports[provider].effects == (2 if action == 'edit' else 1)
+    assert len(blob_reads) == len(media), blob_reads
