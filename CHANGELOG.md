@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: lettering is generated on the exact card colour or background fragment (F2/F1); generator output is opaque, so «transparent» lettering on white is a plate; samples from earlier components carry the manner, not their background (E2E d894 r19: 6 new lettering files again on white).
 - Story Carousel step s09: cold-read starts by transcribing the visible text of each rendered card (covered/cut words are defects) and naming every rectangle whose tone differs from the card background; removed «RGB preview does not prove alpha loss», which let a visible white plate be dismissed — E2E 4333 r9 passed review and was scheduled with a white plate under the hero and covered body text on cards 1–2.
 - Story Carousel storytelling restored from the 06.11 research: core starts with audience and the one takeaway; HOOK must be understandable on its own (intrigue does not hide the main fact); CTX becomes orientation for a reader without context (required); GAP «knowledge limit» role removed (bred hedging); every card understandable as a screenshot; s02 now loads §1 core and §3 arcs.
 - Story Carousel guide: removed every example tied to real posts (monument, bird/ship, exhibition, places, years, VK ids) from text, review bank and study images; replaced with neutral placeholders (owner 08.11: the guide may contain no examples related to real posts).
