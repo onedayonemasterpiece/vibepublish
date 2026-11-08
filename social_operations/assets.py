@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hashlib
 import io
+import time
 import warnings
 from dataclasses import dataclass
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -83,11 +84,15 @@ def verify_image(data: bytes, mime: str, *, max_input_bytes: int = INGRESS_IMAGE
     return VerifiedImage(data, mime, verified, derivative_mime, width, height)
 
 
-def insert_verified_image(store, db, actor, image: VerifiedImage) -> str:
+def insert_verified_image(store, db, actor, image: VerifiedImage, *, phase_times=None) -> str:
     data, mime, verified, width, height = image.original, image.original_mime, image.data, image.width, image.height
     store.current(db, actor)
+    started = time.monotonic() if phase_times is not None else 0
     source_hash = hashlib.sha256(data).hexdigest()
     verified_hash = hashlib.sha256(verified).hexdigest()
+    hashed = time.monotonic() if phase_times is not None else 0
+    if phase_times is not None:
+        phase_times['hash_ms'] = round((hashed - started) * 1000)
     existing = db.execute(
         """SELECT id,bytes FROM assets
            WHERE tenant_id=? AND principal_id=? AND source_sha256=? AND sha256=?
@@ -98,9 +103,17 @@ def insert_verified_image(store, db, actor, image: VerifiedImage) -> str:
     for row in existing:
         stored = row['bytes']
         if stored == verified and hashlib.sha256(stored).hexdigest() == verified_hash:
+            if phase_times is not None:
+                phase_times['dedup_ms'] = round((time.monotonic() - hashed) * 1000)
             return row['id']
+    deduped = time.monotonic() if phase_times is not None else 0
+    if phase_times is not None:
+        phase_times['dedup_ms'] = round((deduped - hashed) * 1000)
     used = db.execute('SELECT COALESCE(SUM(length(bytes)),0) FROM assets WHERE tenant_id=?', (actor.tenant_id,)).fetchone()[0]
     quota = db.execute('SELECT storage_limit FROM tenants WHERE id=?', (actor.tenant_id,)).fetchone()[0]
+    quota_checked = time.monotonic() if phase_times is not None else 0
+    if phase_times is not None:
+        phase_times['quota_ms'] = round((quota_checked - deduped) * 1000)
     if used + len(verified) + len(data) > quota:
         raise DomainError('storage_quota_exceeded')
     original = new_id('asset')
@@ -110,6 +123,8 @@ def insert_verified_image(store, db, actor, image: VerifiedImage) -> str:
     db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
                (derivative, actor.tenant_id, actor.principal_id, verified_hash,
                 image.mime, width, height, verified, source_hash, store.clock()))
+    if phase_times is not None:
+        phase_times['insert_bytes_ms'] = round((time.monotonic() - quota_checked) * 1000)
     return derivative
 
 

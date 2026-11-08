@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Asset metadata lookup: add one nonunique owner/hash index for existing original-source and verified-image deduplication queries, avoiding unrelated wide BLOB-row scans without changing ownership, bytes, ordering or quota rules. A real Store VM-work regression distinguishes the old scan; the bounded payload trial preserves exact retained assets and image results. Add best-effort maintenance and saved-asset phase timings only after writer release to locate the remaining live latency; no retries, timeouts, schema-version bump or claim that the production subphase is already proven.
+
 - Worker maintenance: deduplicate owned saved-carousel references before the original-image retention join, avoiding assets × immutable-revisions work while preserving every existing hold and the atomic cleanup transaction. Share the existing successful cleanup deadline across worker lanes on the same Store. Real Store VM-work and lane/failure regressions fail before the fix and pass after it; no new schema, index, timeout or retry. The measured live maintenance writer still requires post-rollout verification.
 - Private publish previews: let an authorized cancellation of a completed, never-dispatched preview finish locally, advance its publication revision once and consume its pending approval decisions. Preserve frozen history, assets, request-key replay and ordinary native item-ref cancellation. Return «Приватный предпросмотр отменён. Публикации не было.» without claiming a native deletion; real Store regressions cover restart, approval races and current cancel rights.
 

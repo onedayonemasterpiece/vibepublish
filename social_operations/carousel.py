@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import math
 import re
 import time
@@ -504,12 +505,34 @@ class CarouselService:
         # The original revision remains private and authorized through the render.
         # A saved fragment and its journal record share one existing store transaction.
         with self.store.tx() as db:
+            acquired = time.monotonic() if prepared is not None else 0
             actor = self._actor(db, actor)
             self._version(db, actor, row['id'], row['revision'])
             if prepared is not None:
-                details['asset_ref'] = insert_verified_image(self.store, db, actor, prepared)
+                authorized = time.monotonic()
+                phase_times = {}
+                details['asset_ref'] = insert_verified_image(
+                    self.store, db, actor, prepared, phase_times=phase_times)
+                inserted = time.monotonic()
             self._log(db, actor, row['id'], row['revision'], 'render',
                       duration_ms=round((time.perf_counter() - started) * 1000), **details)
+            if prepared is not None:
+                journaled = time.monotonic()
+        if prepared is not None:
+            exited = time.monotonic()
+            if exited - acquired >= 1.0:
+                # Emit only after release; absent phases did not run on a dedup hit.
+                try:
+                    logging.getLogger(__name__).warning(
+                        "sqlite_saved_asset_phases elapsed_ms=%d authority_ms=%d asset_total_ms=%d "
+                        "hash_ms=%d dedup_ms=%d quota_ms=%s insert_bytes_ms=%s journal_ms=%d tx_exit_ms=%d",
+                        round((exited - acquired) * 1000), round((authorized - acquired) * 1000),
+                        round((inserted - authorized) * 1000), phase_times['hash_ms'],
+                        phase_times['dedup_ms'], phase_times.get('quota_ms', 'not_run'),
+                        phase_times.get('insert_bytes_ms', 'not_run'),
+                        round((journaled - inserted) * 1000), round((exited - journaled) * 1000))
+                except Exception:
+                    pass
         metadata = {key: value for key, value in preview.metadata.items() if key != 'resource_uri'}
         review_view = 'card' if 'card' in command else view
         if view == 'region' and 'card' not in command:

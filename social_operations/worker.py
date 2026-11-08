@@ -271,12 +271,30 @@ class Worker:
         try:
             if operation_id is None and self.store.clock() >= self.store.next_media_store_purge:
                 with self.store.tx() as db:
+                    acquired = time.monotonic()
                     now = self.store.clock()
                     self.expire_stale_unsent(db, now)
+                    expired = time.monotonic()
                     self.app._purge_media_store_assets(db)
+                    purged = time.monotonic()
                     from .assets import reclaim_asset_bytes, retired_asset_rows
-                    reclaim_asset_bytes(db, retired_asset_rows(db, now, include_sizes=False))
+                    rows = retired_asset_rows(db, now, include_sizes=False)
+                    classified = time.monotonic()
+                    reclaim_asset_bytes(db, rows)
+                    reclaimed = time.monotonic()
+                exited = time.monotonic()
                 self.store.next_media_store_purge = self.store.clock() + 60
+                if exited - acquired >= 1.0:
+                    # Outside the writer; tx_exit also includes close/Store logging.
+                    try:
+                        logging.getLogger(__name__).warning(
+                            "sqlite_maintenance_phases elapsed_ms=%d expire_ms=%d cache_purge_ms=%d "
+                            "retention_ms=%d reclaim_ms=%d tx_exit_ms=%d",
+                            round((exited - acquired) * 1000), round((expired - acquired) * 1000),
+                            round((purged - expired) * 1000), round((classified - purged) * 1000),
+                            round((reclaimed - classified) * 1000), round((exited - reclaimed) * 1000))
+                    except Exception:
+                        pass
             op = self.store.claim(
                 self.id,
                 connection_ids=self.connection_ids,
