@@ -133,7 +133,7 @@ def test_token_wrong_binding_no_consumption(setup,overrides):
     assert exchange(client,cid,code,verifier).status_code==200
 
 
-def test_refresh_rotation_reuse_revokes_family(setup):
+def test_refresh_rotation_reuse_revokes_family(setup, monkeypatch):
     _,_,_,client=setup
     cid,tokens,_,_=grant(setup)
     body={'client_id':cid,'grant_type':'refresh_token','refresh_token':tokens['refresh_token'],'resource':RESOURCE}
@@ -142,6 +142,13 @@ def test_refresh_rotation_reuse_revokes_family(setup):
     new=new.json()
     assert new['refresh_token'] != tokens['refresh_token']
     assert client.get('/v1/bootstrap',headers={'Authorization':'Bearer '+new['access_token']}).status_code==200
+    # Parallel sessions sharing the grant: an immediate replay is the refresh race, not theft.
+    raced=client.post('/token',data=body)
+    assert raced.status_code==200,raced.text
+    assert client.get('/v1/bootstrap',headers={'Authorization':'Bearer '+new['access_token']}).status_code==200
+    assert client.get('/v1/bootstrap',headers={'Authorization':'Bearer '+raced.json()['access_token']}).status_code==200
+    # Replay after the grace window revokes the whole family.
+    monkeypatch.setattr('social_operations.oauth.REFRESH_REUSE_GRACE', -1)
     assert client.post('/token',data=body).status_code==400
     assert client.get('/v1/bootstrap',headers={'Authorization':'Bearer '+new['access_token']}).status_code==401
     assert client.post('/token',data={**body,'refresh_token':new['refresh_token']}).status_code==400
