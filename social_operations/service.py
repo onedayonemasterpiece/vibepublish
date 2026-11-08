@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import secrets
 import sys
 import sqlite3
@@ -21,6 +22,38 @@ FORMATS = FormatChecker()
 SKILL = Path(__file__).resolve().parents[1] / 'docs/llm/vibepublish-social-skill.md'
 if not SKILL.exists():
     SKILL = Path(sys.prefix) / 'share/vibepublish/vibepublish-social-skill.md'
+
+
+def _input_schema_failure(errors):
+    """Describe an existing validator failure without exposing submitted values."""
+    error = min(errors, key=lambda item: len(item.absolute_path))
+    # Report the selected command arm, not a const/required error from another arm.
+    while error.validator in ('oneOf', 'anyOf') and error.context and isinstance(error.instance, dict):
+        matching = [index for index, branch in enumerate(error.schema[error.validator])
+                    if not any('const' in rule and key in error.instance
+                               and error.instance[key] != rule['const']
+                               for key, rule in branch.get('properties', {}).items())]
+        if len(matching) != 1:
+            break
+        candidates = [item for item in error.context if item.schema_path[0] == matching[0]]
+        if not candidates:
+            break
+        error = min(candidates, key=lambda item: len(item.absolute_path))
+    path = list(error.absolute_path)
+    if error.validator == 'required':
+        path.append(next(key for key in error.validator_value if key not in error.instance))
+    elif error.validator == 'additionalProperties' and isinstance(error.instance, dict):
+        extra = next((key for key in error.instance if key not in error.schema.get('properties', {})
+                      and not any(re.search(pattern, key) for pattern in error.schema.get('patternProperties', {}))), None)
+        if extra is not None:
+            path.append(extra)
+    field = ('.'.join(map(str, path)) or '$')[:200]
+    rule = str(error.validator)
+    if isinstance(error.validator_value, (str, int, float, bool)):
+        rule += ' ' + json.dumps(error.validator_value, ensure_ascii=False)
+    message = (field + ': ' + rule)[:1000]
+    return {'error': {'code': 'invalid_input', 'field': field, 'message': message},
+            'message': message, 'next_action': 'fix_input', 'retry_safe': True}
 
 
 class Application:
@@ -49,8 +82,11 @@ class Application:
             tool = next((t for t in self.tools(actor) if t['name'] == name), None)
             if tool is None:
                 raise DomainError('access_denied', 'Tool is not available', 'contact_owner')
-            if list(Draft202012Validator(tool['inputSchema'], format_checker=FORMATS).iter_errors(arguments)):
-                raise DomainError('invalid_input', 'Arguments do not match the scoped tool schema')
+            errors = list(Draft202012Validator(tool['inputSchema'], format_checker=FORMATS).iter_errors(arguments))
+            if errors:
+                failure = _input_schema_failure(errors)
+                logging.getLogger(__name__).info('input_schema_refused tool=%s rule=%s', name, errors[0].validator)
+                return failure  # No handler, operation, request key or provider dispatch has run.
             short = name.removeprefix('vibepublish_')
             if short == 'get_started':
                 result = self.bootstrap(actor, arguments)

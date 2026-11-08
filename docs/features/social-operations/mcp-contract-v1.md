@@ -443,7 +443,9 @@ Request replay/conflicting keys, immutable set snapshot, plan digest, external e
 
 ## 7. Errors and HTTP projection
 
-Before acceptance, return a closed error with code/message/field, next_action and retry_safe=false, without inventing an operation ID. After acceptance, errors/unknown outcomes remain on the durable receipt with progress. MCP transport errors and tool errors remain distinct.
+Before acceptance, return a closed error without inventing an operation ID. Input-schema validation that rejects the request before handler dispatch returns `invalid_input`, the exact failing `error.field`, the violated schema rule in `message`, `next_action=fix_input` and `retry_safe=true`: this attempt created no operation or provider effect, and the caller can correct the input. Diagnostics include field names and schema constraints, never submitted values. Other refusals retain `retry_safe=false`; this exception does not change DomainError, authorization, idempotency conflicts or unknown-outcome handling. After acceptance, errors/unknown outcomes remain on the durable receipt with progress. MCP transport errors and tool errors remain distinct.
+
+Status: **Not confirmed by user** (2026-11-08). The ordinary Dot carousel attempt omitted the required top-level `request_key`; its generic rejection did not identify the missing field and was mistaken for an uncertain effect. The corrected attempt created one scene. Source/regression verification of the diagnostic correction is separate from deployment and ordinary-agent acceptance.
 
 Important repairs: invalid input/time -> fix_input; native scheduling unavailable -> contact_owner with the unsupported destination/capability; expired connection -> reauthorize; stale aliases/revisions/cursors -> refresh; access denied -> contact_owner; awaiting choice/approval -> select_visual/approve; automatic work running -> check_status; ambiguous provider effect -> review_outcome, never blind retry.
 
