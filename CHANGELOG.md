@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: the strong object without background is generated on the cut-out background fragment of its future place (F1, author photo as sample) so it sits seamlessly; tool cutting (alpha / silhouette clipPath, F4, 70-montage §3) stays as a fallback for individual cases (owner, #story-carousel 08.11).
 - Story Carousel review delivery: `render` returns every question tagged for its view instead of silently keeping the first five; tag lines are capped at seven (test-enforced) and now hold the owner's priorities — story meaning, beauty next to references, text vs image, cohesion, clean card, one manner per role, primary generated lettering. Contract `review_questions` maxItems 5 → 7. New K19 «authored text generated, not typeset» is delivered for master and card and carries the SVG `<text>` count (verified cold Sunny f123 r5 typeset narrative). The rest of the bank stays addressable by ID.
 - Story Carousel cache: recheck an initially missing master after acquiring the existing raster lock, then retain that lock through cache insertion. Concurrent card/region views reuse the completed master; a hot master remains available during another cold render. Preserve source checks, cache key/LRU/byte budget, native process behavior and raster parity; a deterministic child-stub regression reproduces the duplicate work before the fix. This source change does not establish the cause of live timeouts or claim a host performance improvement.
 
