@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- VK local receipt correction: an owner can withdraw a contradicted legacy scheduled identity using a fresh exact native reference and positive prior same-owner publication evidence. Preserve dispatched intent, original checkpoint and false observation as audit; invalidate only false private handles, leave old facts/refs intact, and block all re-admission or mutation through the withdrawn identity. No provider call or no-effect claim; live correction remains separately verified.
+
 - VK scheduled recovery: treat explicit add-post error 214 as a terminal access refusal, retain its fixed redacted diagnostic, and adopt a queued post only from unique ordered saved photo IDs plus frozen text/time. Remove newest-ID guessing; copied-photo binding still trusts a known response ID and same-guid recovery remains available. This prevents an older same-time post from becoming a false receipt for new media; existing erroneous receipts remain audit evidence pending separately reviewed correction.
 
 - Story Carousel guide: remove the default F8 typesetting instruction for body text, captions and long copy. Component generation includes explanatory mini-paragraphs; typesetting remains a targeted alternative with exact text and readability checks. Add an MCP guide regression; no renderer, storage or publication changes.
