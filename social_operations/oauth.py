@@ -33,7 +33,14 @@ from .server import create_app
 CALLBACK = 'https://chatgpt.com/connector_platform_oauth_redirect'
 SCOPE = 'vibepublish'
 COOKIE = '__Host-vibepublish-consent'
-ACCESS_TTL, REFRESH_TTL, PENDING_TTL, CODE_TTL = 600, 30*86400, 300, 120
+ACCESS_TTL, REFRESH_TTL, PENDING_TTL, CODE_TTL = 3600, 30*86400, 300, 120
+# Parallel ChatGPT sessions share one grant and refresh concurrently; a refresh
+# token replayed this soon after rotation is that race, not theft.
+REFRESH_REUSE_GRACE = 120
+
+
+def _late_reuse(used):
+    return bool(used) and time.time() - used > REFRESH_REUSE_GRACE
 
 
 def digest(value):
@@ -194,7 +201,7 @@ class OAuthProvider:
                 return None
             if client_id and data['client_id'] != client_id:
                 return None
-            if row['used']:
+            if row['used'] and (kind != 'refresh' or _late_reuse(row['used'])):
                 if kind == 'refresh':
                     db.execute('UPDATE families SET revoked=1 WHERE id=?',(row['family'],))
                 return None
@@ -255,7 +262,7 @@ class OAuthProvider:
             if row:
                 family = db.execute('SELECT * FROM families WHERE id=?',(row['family'],)).fetchone()
                 if family and family['client'] == client.client_id:
-                    if row['used']:
+                    if _late_reuse(row['used']):
                         db.execute('UPDATE families SET revoked=1 WHERE id=?',(family['id'],))
                     elif not family['revoked'] and min(row['expires'],family['expires']) >= time.time() and scopes == [SCOPE]:
                         actor = json.loads(family['actor'])
@@ -264,7 +271,8 @@ class OAuthProvider:
                         except DomainError:
                             pass
                         else:
-                            db.execute('UPDATE credentials SET used=1 WHERE hash=?',(digest(refresh_token.token),))
+                            if not row['used']:
+                                db.execute('UPDATE credentials SET used=? WHERE hash=?',(int(time.time()),digest(refresh_token.token)))
                             result = self.issue(db,family['id'],client.client_id,actor,family['expires'])
         if result is None:
             raise TokenError('invalid_grant')
