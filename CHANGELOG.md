@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: keep the required hook and interesting turn; replace the shorter-carousel fallback with source research before storyboard and a concrete owner question only as a last resort. Ground the turn in material and replace unsupported audience-ignorance examples. Record the owner's clarification in the canonical feature; no runtime or workflow-state change.
+
 - Story Carousel review delivery: `render` returns every question tagged for its view instead of silently keeping the first five; tag lines are capped at seven (test-enforced) and now hold the owner's priorities — story meaning, beauty next to references, text vs image, cohesion, clean card, one manner per role, primary generated lettering. Contract `review_questions` maxItems 5 → 7. New K19 «authored text generated, not typeset» is delivered for master and card and carries the SVG `<text>` count (verified cold Sunny f123 r5 typeset narrative). The rest of the bank stays addressable by ID.
 - Story Carousel cache: recheck an initially missing master after acquiring the existing raster lock, then retain that lock through cache insertion. Concurrent card/region views reuse the completed master; a hot master remains available during another cold render. Preserve source checks, cache key/LRU/byte budget, native process behavior and raster parity; a deterministic child-stub regression reproduces the duplicate work before the fix. This source change does not establish the cause of live timeouts or claim a host performance improvement.
 
