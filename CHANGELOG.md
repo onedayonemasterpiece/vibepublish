@@ -4,6 +4,8 @@
 
 - Story Carousel guide: keep the required hook and interesting turn; replace the shorter-carousel fallback with source research before storyboard and a concrete owner question only as a last resort. Ground the turn in material and replace unsupported audience-ignorance examples. Record the owner's clarification in the canonical feature; no runtime or workflow-state change.
 
+- Story Carousel guide: wording — the strong object is never pre-cut with a tool before generation; the generator receives the whole author photo and returns the object on the card colour (F2) or on the card background fragment (F1).
+- Story Carousel guide: the author photo is the source, not a sample — the background-free object is a high-fidelity reproduction of the same photo with only the background changed to the card background; the real photo with its own background is also shown so the post stays believable (owner 08.11).
 - Story Carousel guide: F1 object prompt no longer speaks only of letters; F4 tool cutting is chosen directly when the object must stay documentary-exact (real damage, inscriptions, faces), without a mandatory F1 attempt.
 - Story Carousel step s03: open every reference in the catalog (library pages without query), not a sample of three, before choosing the target reference (owner 08.11).
 - Story Carousel guide: the strong object without background is generated on the cut-out background fragment of its future place (F1, author photo as sample) so it sits seamlessly; tool cutting (alpha / silhouette clipPath, F4, 70-montage §3) stays as a fallback for individual cases (owner, #story-carousel 08.11).
