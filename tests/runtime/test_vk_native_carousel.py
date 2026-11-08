@@ -177,6 +177,8 @@ async def test_exact_vk_photo_read_downloads_bytes_and_keeps_native_edit_cas(tmp
     with pytest.raises(DomainError) as expired:
         env.app.read_asset(env.actor, asset_id)
     assert expired.value.code == 'asset_not_available'
+    # Reads enforce expiry; the existing worker tick owns physical cleanup.
+    await env.worker.run_once()
     with env.store.connection() as db:
         assert db.execute('SELECT count(*) FROM assets WHERE id=?', (asset_id,)).fetchone()[0] == 0
         assert db.execute('SELECT count(*) FROM media_store_assets WHERE asset_id=?', (asset_id,)).fetchone()[0] == 0

@@ -23,6 +23,21 @@ if not SKILL.exists():
     SKILL = Path(sys.prefix) / 'share/vibepublish/vibepublish-social-skill.md'
 
 
+# Shared by logical read expiry and the existing physical cleanup owner.
+_EXPIRED_MEDIA_STORE_ASSET = """m.expires<?
+    AND NOT EXISTS (
+        SELECT 1 FROM attempts a JOIN operations o ON o.id=a.operation_id,
+                     json_each(a.plan,'$.assets') j
+        WHERE o.work_state!='done' AND json_extract(j.value,'$.ref')=m.asset_id
+    ) AND NOT EXISTS (
+        SELECT 1 FROM carousel_versions c, json_each(c.asset_refs) j
+        WHERE j.value=m.asset_id
+    ) AND NOT EXISTS (
+        SELECT 1 FROM operations o, json_each(o.result,'$.cards') j
+        WHERE o.action='carousel' AND json_extract(j.value,'$.asset_ref')=m.asset_id
+    )"""
+
+
 class Application:
     def __init__(self, store, *, visual_dispatch_proof=None):
         self.store = store
@@ -131,15 +146,16 @@ class Application:
             return DomainError("store_unavailable", "No receipt could be returned. Recover using status or the same request key, never a new send", "contact_owner").output()
 
     def read_asset(self, actor, ident):
-        with self.store.tx() as db:
-            self._purge_media_store_assets(db)
         with self.store.connection() as db:
             actor = self.store.current(db, actor)
             if not actor.scopes.intersection({'visual', 'publish', 'media.store'}):
                 raise DomainError('access_denied', next_action='contact_owner')
             row = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
                              (ident, actor.tenant_id, actor.principal_id)).fetchone()
-            if not row:
+            if not row or db.execute(
+                f'SELECT 1 FROM media_store_assets m WHERE m.asset_id=? AND {_EXPIRED_MEDIA_STORE_ASSET}',
+                (ident, self.store.clock()),
+            ).fetchone():
                 raise DomainError('asset_not_available', next_action='refresh')
             cache_binding = None
             shared_cache = db.execute(
@@ -296,18 +312,8 @@ class Application:
 
     def _purge_media_store_assets(self, db):
         expired = [row['asset_id'] for row in db.execute(
-            """SELECT m.asset_id FROM media_store_assets m WHERE m.expires<?
-               AND NOT EXISTS (
-                   SELECT 1 FROM attempts a JOIN operations o ON o.id=a.operation_id,
-                                json_each(a.plan,'$.assets') j
-                   WHERE o.work_state!='done' AND json_extract(j.value,'$.ref')=m.asset_id
-               ) AND NOT EXISTS (
-                   SELECT 1 FROM carousel_versions c, json_each(c.asset_refs) j
-                   WHERE j.value=m.asset_id
-               ) AND NOT EXISTS (
-                   SELECT 1 FROM operations o, json_each(o.result,'$.cards') j
-                   WHERE o.action='carousel' AND json_extract(j.value,'$.asset_ref')=m.asset_id
-               )""", (self.store.clock(),))]
+            f'SELECT m.asset_id FROM media_store_assets m WHERE {_EXPIRED_MEDIA_STORE_ASSET}',
+            (self.store.clock(),))]
         db.executemany('DELETE FROM assets WHERE id=?', [(ident,) for ident in expired])
 
     def _media_store_items(self, db, actor, *, publication_id=None, binding=None, topic=None, text=''):
