@@ -15,26 +15,49 @@ from social_operations.storage import Store
 def test_render_question_selection_keeps_composition_and_reference_priorities():
     questions = review_questions("master")
     assert {"K14", "K16"} <= {question["id"] for question in questions}
+    assert questions[0]["id"] == "Q01"
+    assert {"Q01", "Q07", "Q04", "K16"} <= {question["id"] for question in review_questions("card")}
     assert len(questions) <= 5
 
 
 @pytest.mark.asyncio
-async def test_master_render_exposes_composition_and_reference_questions(tmp_path):
+@pytest.mark.parametrize("view", ["master", "card"])
+async def test_render_exposes_priority_questions_and_document_text_fact(tmp_path, view):
     store = Store(tmp_path / "review.sqlite")
     actor = store.authenticate(store.create_principal("tenant", "owner", owner=True))
     app = Application(store)
     created = await app.call(actor, "vibepublish_carousel", {
         "command": {"kind": "create", "brief": "Composition review", "card_count": 3,
                     "card_width": 128, "card_height": 160,
-                    "svg": '<svg xmlns="http://www.w3.org/2000/svg"><rect width="384" height="160" fill="#fff"/></svg>'},
+                    "svg": '<svg xmlns="http://www.w3.org/2000/svg"><rect width="384" height="160" fill="#fff"/>'
+                           '<text x="270" y="40" font-family="Montserrat" font-size="20">Текст</text></svg>'},
         "request_key": "review-create"})
     rendered = await app.call(actor, "vibepublish_carousel", {
         "command": {"kind": "render", "carousel_id": created["carousel_id"],
-                    "revision": 1, "view": "master"}})
+                    "revision": 1, **({"view": "master"} if view == "master" else {"card": 1})}})
     assert isinstance(rendered, AssetPreview)
     questions = rendered.metadata["review_questions"]
-    assert {"K14", "K16"} <= {question["id"] for question in questions}
+    assert questions[0]["id"] == ("Q01" if view == "master" else "Q07")
+    # The text is on card 3, outside the card-1 crop: the fact remains document-scoped.
+    assert "1 узлов <text> (scope=document" in questions[0]["observe"]
     assert len(questions) <= 5
+
+
+@pytest.mark.parametrize("namespace", ["", ' xmlns="http://www.w3.org/2000/svg"'])
+def test_text_fact_counts_source_nodes_not_visibility_size_or_use_clones(namespace):
+    svg = (f'<svg{namespace} xmlns:other="urn:other">'
+           '<defs><text id="word">Один</text></defs>'
+           '<style>.hidden { display: none; font-size: 400px }</style>'
+           '<g transform="translate(2160 0) scale(4)"><text class="hidden">Два<tspan>три</tspan></text></g>'
+           '<use href="#word"/><use href="#word"/>'
+           '<path d="M0 0 L1 1"/><image href="asset:raster"/>'
+           '<desc>&lt;text&gt; is not a node</desc><!-- <text/> -->'
+           '<other:text>Not SVG text</other:text></svg>')
+    for view in ("master", "card", "pair", "region"):
+        question = review_questions(view, source_svg=svg)[0]
+        assert "2 узлов <text> (scope=document" in question["observe"]
+        assert "не число видимых или крупных" in question["observe"]
+        assert "scope=document" not in review_questions(view)[0]["observe"]
 
 
 QUESTION_IDS = ([f"{prefix}{number:02d}" for prefix, count in

@@ -285,8 +285,13 @@ def test_reference_edit_renders_exact_seam_and_replayable_private_export(runtime
 
 
 def test_brief_first_revision_fence_and_key_conflict(runtime):
-    _, actor, _, service, svg = runtime
-    first = create(service, actor)
+    store, actor, _, service, svg = runtime
+    brief = ('Автор дословно/намерение: «Сохранить память» — https://example.org/author\n'
+             'Факт → источник/цитата: дата — https://example.org/archive\n'
+             'Гипотезы: версия автора, причина не установлена\n'
+             'Цельная история: предмет, изменение и авторский вывод.')
+    first = service.command(actor, {'command': {'kind': 'create', 'brief': brief,
+        'card_count': 3, 'card_width': 128, 'card_height': 160}, 'request_key': 'create'})
     ident = first['carousel_id']
     assert not first['scene_ready']
     code('carousel_scene_missing', lambda: service.command(actor, {'command': {
@@ -295,12 +300,21 @@ def test_brief_first_revision_fence_and_key_conflict(runtime):
                          'expected_revision': 1, 'svg': svg}, 'request_key': 'compose'}
     ready = service.command(actor, change)
     assert ready['revision'] == 2 and ready['scene_ready']
+    assert service.get(actor, {'carousel_id': ident})['brief'] == brief
     code('carousel_revision_conflict', lambda: service.command(actor, {**change, 'request_key': 'stale'}))
     code('idempotency_conflict', lambda: create(service, actor, svg))
     code('carousel_request_key_required', lambda: service.command(actor, {'command': change['command']}))
     bad = {**change, 'command': {**change['command'], 'expected_revision': 2,
         'reference_use': {'reference_id': 'unknown', 'observation': 'claim', 'change': 'claim'}}, 'request_key': 'missing-bank'}
     code('carousel_reference_unavailable', lambda: service.command(actor, bad))
+    storyboard = brief + '\nРаскадровка: зачин → архивная деталь → вывод.'
+    service.command(actor, {'command': {'kind': 'revise', 'carousel_id': ident,
+        'expected_revision': 2, 'brief': storyboard}, 'request_key': 'storyboard'})
+    restarted = CarouselService(Application(Store(store.path)))
+    assert restarted.get(actor, {'carousel_id': ident, 'revision': 1})['brief'] == brief
+    assert restarted.get(actor, {'carousel_id': ident})['brief'] == storyboard
+    assert restarted.command(actor, change)['revision'] == 2
+    assert restarted.get(actor, {'carousel_id': ident})['brief'] == storyboard
 
 
 def test_render_journal_records_requested_historical_revision(runtime):

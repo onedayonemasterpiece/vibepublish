@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel authoring: preserve author words/intention, sourced facts/quotes, hypotheses and a complete story in the existing versioned brief before storyboard. Clarify full-brief replacement on revise; replace empty labels, visible-image paraphrases and literal swipe instructions with narrative and visual guidance. Prioritize Q01/Q07/Q04 and reference/beauty review in render hints; include an exact document-scope SVG text-node count in the existing observation, without per-card/font-size claims, new schema or an aesthetic gate. Focused regressions verify persistence and delivery, not creative acceptance.
+
 - VK scheduled recovery: treat explicit add-post error 214 as a terminal access refusal, retain its fixed redacted diagnostic, and adopt a queued post only from unique ordered saved photo IDs plus frozen text/time. Remove newest-ID guessing; copied-photo binding still trusts a known response ID and same-guid recovery remains available. This prevents an older same-time post from becoming a false receipt for new media; existing erroneous receipts remain audit evidence pending separately reviewed correction.
 
 - Story Carousel guide: remove the default F8 typesetting instruction for body text, captions and long copy. Component generation includes explanatory mini-paragraphs; typesetting remains a targeted alternative with exact text and readability checks. Add an MCP guide regression; no renderer, storage or publication changes.
