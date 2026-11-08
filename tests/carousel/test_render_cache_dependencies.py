@@ -91,6 +91,44 @@ def test_cached_canvas_tracks_the_current_alpha_source(tmp_path):
         assert rendered.convert('RGB').getpixel((111, 1)) == (255, 255, 255)
 
 
+def test_expired_cached_original_does_not_shadow_durable_alpha_source(tmp_path):
+    now = [1_800_000_000]
+    store = Store(tmp_path / "original-expiry.sqlite", clock=lambda: now[0])
+    actor = store.authenticate(store.create_principal("tenant", "owner", owner=True))
+    app = Application(store)
+    service = CarouselService(app)
+    image = Image.new("RGBA", (80, 80), (255, 255, 255, 0))
+    image.paste((240, 45, 25, 255), (20, 20, 60, 60))
+    source = io.BytesIO()
+    image.save(source, "PNG")
+    raw = source.getvalue()
+    source_sha = hashlib.sha256(raw).hexdigest()
+
+    # Native reads can cache the raw PNG before a later ordinary import creates
+    # its durable original and its distinct white-backed derivative.
+    cached = "asset_early_cache"
+    with store.tx() as db:
+        db.execute("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (cached, actor.tenant_id, actor.principal_id, source_sha,
+             "image/png", 80, 80, raw, source_sha, now[0]))
+        db.execute("INSERT INTO media_store_assets VALUES(?,?,?,?)",
+                   (cached, None, "download_cache", now[0] + 1))
+    asset = import_image(store, actor, raw, "image/png")
+    row = _saved_scene(store, actor, service,
+        '<rect width="384" height="160" fill="#173957"/>'
+        f'<image href="asset:{asset}" x="110" width="80" height="80"/>', "expiry")
+    expected = service._render(actor, row)
+    with store.connection() as db:
+        originals = [r[0] for r in db.execute(
+            "SELECT id FROM assets WHERE sha256=? ORDER BY rowid", (source_sha,))]
+        assert originals[0] == cached and len(originals) == 2
+
+    now[0] += 2  # Logical expiry, before the worker's physical cleanup.
+    assert service._render(actor, row) == expected
+    with Image.open(io.BytesIO(expected)) as rendered:
+        assert rendered.convert("RGB").getpixel((111, 1)) == (23, 57, 87)
+
+
 def test_render_cache_evicts_to_byte_budget_and_skips_oversized_png(tmp_path, monkeypatch):
     import resvg_py
 

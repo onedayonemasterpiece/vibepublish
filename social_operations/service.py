@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
 from contracts.social_mcp_v1 import VERSION, catalog, project_catalog
-from .assets import AssetPreview, render_asset_full, render_asset_preview
+from .assets import EXPIRED_MEDIA_STORE_ASSET, AssetPreview, render_asset_full, render_asset_preview
 from .carousel import ComponentImages
 from .carousel_guide import GuideImages
 from .domain import DomainError, canonical, digest, new_id, normalize_intent, parse_source, parse_time, timestamp
@@ -21,21 +21,6 @@ FORMATS = FormatChecker()
 SKILL = Path(__file__).resolve().parents[1] / 'docs/llm/vibepublish-social-skill.md'
 if not SKILL.exists():
     SKILL = Path(sys.prefix) / 'share/vibepublish/vibepublish-social-skill.md'
-
-
-# Shared by logical read expiry and the existing physical cleanup owner.
-_EXPIRED_MEDIA_STORE_ASSET = """m.expires<?
-    AND NOT EXISTS (
-        SELECT 1 FROM attempts a JOIN operations o ON o.id=a.operation_id,
-                     json_each(a.plan,'$.assets') j
-        WHERE o.work_state!='done' AND json_extract(j.value,'$.ref')=m.asset_id
-    ) AND NOT EXISTS (
-        SELECT 1 FROM carousel_versions c, json_each(c.asset_refs) j
-        WHERE j.value=m.asset_id
-    ) AND NOT EXISTS (
-        SELECT 1 FROM operations o, json_each(o.result,'$.cards') j
-        WHERE o.action='carousel' AND json_extract(j.value,'$.asset_ref')=m.asset_id
-    )"""
 
 
 class Application:
@@ -153,7 +138,7 @@ class Application:
             row = db.execute(
                 f"""SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?
                     AND NOT EXISTS (SELECT 1 FROM media_store_assets m
-                                    WHERE m.asset_id=assets.id AND {_EXPIRED_MEDIA_STORE_ASSET})""",
+                                    WHERE m.asset_id=assets.id AND {EXPIRED_MEDIA_STORE_ASSET})""",
                 (ident, actor.tenant_id, actor.principal_id, self.store.clock())).fetchone()
             if not row:
                 raise DomainError('asset_not_available', next_action='refresh')
@@ -312,7 +297,7 @@ class Application:
 
     def _purge_media_store_assets(self, db):
         expired = [row['asset_id'] for row in db.execute(
-            f'SELECT m.asset_id FROM media_store_assets m WHERE {_EXPIRED_MEDIA_STORE_ASSET}',
+            f'SELECT m.asset_id FROM media_store_assets m WHERE {EXPIRED_MEDIA_STORE_ASSET}',
             (self.store.clock(),))]
         db.executemany('DELETE FROM assets WHERE id=?', [(ident,) for ident in expired])
 

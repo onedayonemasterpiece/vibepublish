@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Asset reads: remove global cleanup's SQLite writer acquisition after observed carousel `SQLITE_BUSY` failures. Check the requested asset's expiry with the same existing operation/carousel/export holds used by physical cleanup; keep ACL and integrity checks unchanged. Expired unheld bytes are immediately unavailable while the existing worker owns deletion. A real SQLite contention regression fails before the change and passes after it, without new retries, states or journal changes.
+- Asset reads: remove global cleanup's SQLite writer acquisition after observed carousel `SQLITE_BUSY` failures. Select owned bytes and expiry eligibility atomically, sharing the existing operation/carousel/export holds with physical cleanup and carousel original selection. Expired cache copies cannot shadow durable alpha sources; expired unheld bytes remain unavailable while the existing worker owns deletion. Real SQLite regressions cover writer contention, concurrent cleanup and duplicate originals. ACL, integrity and journal checks remain unchanged; no new retries or states.
 
 - Story Carousel: preserve the November 8 owner correction across the canonical scope and coverage: use the relevant historical photo on cards, keep whole-card cleanliness and visual strength explicit, and continue already authorized postponed VK variants after the prior pause was lifted. Guidance selects media and style deliberately, without importing every search result or imposing a replacement default style. Reconcile the deployed K15/K16 review questions with Q23/Q28; avoid unnecessary repeated source brands when primary visual evidence is available, while retaining required attribution.
 
