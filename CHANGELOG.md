@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Story Carousel: preserve the November 8 owner correction across the canonical scope and coverage: use the relevant historical photo on cards, keep whole-card cleanliness and visual strength explicit, and continue already authorized postponed VK variants after the prior pause was lifted. Guidance selects media and style deliberately, without importing every search result or imposing a replacement default style. Reconcile the deployed K15/K16 review questions with Q23/Q28; avoid unnecessary repeated source brands when primary visual evidence is available, while retaining required attribution.
+
+- Story Carousel guide: turn owner feedback on a dirty, low-contrast result into concrete palette and visual-review guidance. Compare actual reference images, cover and strip at the same display size; judge the whole card (background, composition, typography, photos, textures and visual noise), not merely clean source images. Remove interfering layers and muddy styling without suppressing documentary archive images or deliberate material choices. No runtime gate or universal style is added.
+
 - Story Carousel: keep component pages focused on their images, placements and pagination instead of repeating the full story and journal. Align generation guidance with the author's visual intent: lettering manners follow their roles, generated dates/numbers require an exact visual check, and repeated defects call for a targeted change within the task's budget rather than an automatic reduction of the design.
 
 - Story Carousel guide: preserve the author's intended question in the existing brief, finish and compare distinct requested variants, and reuse the final visual review for unchanged cards. Keep private export separate from authorized publication. Clarify client-declared host-file inputs and the existing programmatic byte-import fallback without fabricated file handles.

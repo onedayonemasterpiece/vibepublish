@@ -80,7 +80,7 @@ async def test_canonical_guide_and_half_scale_master_are_exposed_by_mcp(tmp_path
     assert master.metadata["scale"] == 0.5 and master.metadata["cutlines"]
     assert master.metadata["width"] == 192 and master.metadata["height"] == 80
     assert [q["id"] for q in master.metadata["review_questions"]] == [
-        "Q01", "Q03", "Q08", "K15", "ST1"]
+        "Q23", "Q34", "Q01", "K15", "ST1"]
     with Image.open(io.BytesIO(master.data)) as image:
         image = image.convert("RGB")
         assert image.size == (192, 80)
@@ -90,7 +90,7 @@ async def test_canonical_guide_and_half_scale_master_are_exposed_by_mcp(tmp_path
     card = await call({"kind": "render", "carousel_id": carousel_id,
         "revision": 1, "card": 2})
     assert [q["id"] for q in card.metadata["review_questions"]] == [
-        "Q02", "Q04", "Q06", "Q07", "K15"]
+        "Q28", "Q02", "Q04", "Q06", "K15"]
     crop = await call({"kind": "render", "carousel_id": carousel_id,
         "revision": 1, "view": "region", "region": [10, 20, 20, 80]})
     assert [q["id"] for q in crop.metadata["review_questions"]] == [

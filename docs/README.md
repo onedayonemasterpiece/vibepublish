@@ -40,9 +40,11 @@ Supporting material:
 Status: requirements and implementation authorized (**Fixed**); full product
 **Not done / Not confirmed by user**. Code tests, deployed MCP availability,
 observed images and owner acceptance are separate evidence. The canonical feature
-and matrix record their actual scope, dates and remaining owners. The existing
-third dot E2E is paused; its single live operator continues the same story after
-the required capabilities are ready. The earlier
+and matrix record their actual scope, dates and remaining owners. The [owner renewed permission on November 8](https://mira-projects.slack.com/archives/C0CFP01K292/p1794095323239609)
+for the same dot story and postponed VK variants; [Opus removed his earlier pause](https://mira-projects.slack.com/archives/C0CFP01K292/p1794095559732019).
+Continue the saved materials with one operator per publication, without asking for
+the same permission again. Whole-card cleanliness, visual strength and the actual
+historical photo remain explicit acceptance requirements, not a prescribed style. The earlier
 [full-channel audit and Opus reconciliation](reports/story-carousel-reconciliation-2026-11-06.md)
 remain research and decision history, not authority to delete owner requirements.
 
