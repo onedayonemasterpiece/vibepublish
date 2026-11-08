@@ -399,7 +399,7 @@ Normal publication status:
 {"ids":["op_1"],"wait_final":true,"wait_seconds":40}
 ```
 
-`wait_final` returns when **all** destination attempts reach an operation-final state, or after the bounded wait (maximum 40 seconds), whichever comes first. A timeout still returns already successful Telegram/VK/MAX deliveries alongside pending networks. No `after_event` is needed for the normal recipe; another status call uses the same operation ID. The wait belongs to the observation request, not to the worker's publication budget.
+`wait_final` returns when **all** destination attempts reach an operation-final state, or after the bounded wait (maximum 40 seconds), whichever comes first. An already complete operation returns immediately; one that completes during the wait returns on the next observation without consuming the remaining wait budget. A timeout still returns already successful Telegram/VK/MAX deliveries alongside pending networks. No `after_event` is needed for the normal recipe; another status call uses the same operation ID. The wait belongs to the observation request, not to the worker's publication budget.
 
 Detailed event consumers may pass `after_event` and `wait_seconds` (up to 40) to get the next event page as before. `wait_final` cannot be combined with `after_event`. Exactly one `ids` entry is required when waiting or using event cursors; list pagination cannot be combined with a wait.
 

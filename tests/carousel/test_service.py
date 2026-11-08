@@ -1,8 +1,11 @@
 """A real reference-led edit, exact crops and a replayable private card export."""
+import asyncio
+import concurrent.futures
 import io
 import json
 import random
 import sqlite3
+import threading
 
 import pytest
 from PIL import Image, ImageChops
@@ -126,6 +129,62 @@ def test_background_fragment_exact_layers_and_private_asset(runtime):
     assert event['asset_ref'] == only.metadata['asset_ref'] and event['duration_ms'] >= 0
     code('carousel_layer_not_found', lambda: service.command(actor, {'command': {
         **command, 'layers': {'only': ['nonexistent']}}}))
+
+
+@pytest.mark.parametrize('revoke_during_verification', [False, True])
+def test_saved_fragment_verification_allows_read_admission(runtime, monkeypatch, revoke_during_verification):
+    store, actor, app, service, svg = runtime
+    store.add_connection(actor, 'conn_vk', 'vk', account_type='fake', shared=True)
+    store.bind(actor, 'owner', 'vk', 'conn_vk', 'target_vk')
+    ident = create(service, actor, svg, key='concurrent-fragment')['carousel_id']
+    with store.connection() as db:
+        before_assets = db.execute('SELECT count(*) FROM assets').fetchone()[0]
+        before_operations = db.execute('SELECT count(*) FROM operations').fetchone()[0]
+
+    entered = threading.Event()
+    release = threading.Event()
+    from social_operations.carousel import verify_image as real_verify
+
+    def paused_verify(data, mime):
+        entered.set()
+        assert release.wait(10), 'test did not release image verification'
+        return real_verify(data, mime)
+
+    monkeypatch.setattr('social_operations.carousel.verify_image', paused_verify)
+    command = {'command': {'kind': 'render', 'carousel_id': ident, 'revision': 1,
+        'view': 'region', 'region': [10, 20, 80, 70], 'scale': 1, 'save_asset': True}}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        saved = pool.submit(service.command, actor, command)
+        try:
+            assert entered.wait(5), 'saved-fragment verification was not reached'
+            admission = pool.submit(asyncio.run, app.call(actor, 'vibepublish_read', {
+                'query': {'kind': 'scheduled', 'destination': 'vk'}}))
+            accepted = admission.result(timeout=2)
+            assert accepted['state'] == 'accepted', accepted
+            assert not saved.done()
+            if revoke_during_verification:
+                with store.tx() as db:
+                    db.execute('UPDATE principals SET epoch=epoch+1 WHERE id=?', (actor.principal_id,))
+        finally:
+            release.set()
+        if revoke_during_verification:
+            with pytest.raises(DomainError) as error:
+                saved.result(timeout=5)
+            assert error.value.code == 'access_revoked'
+            with store.connection() as db:
+                assert db.execute('SELECT count(*) FROM assets').fetchone()[0] == before_assets
+                # Only the independent read was accepted; no fragment/journal was committed.
+                assert db.execute('SELECT count(*) FROM operations').fetchone()[0] == before_operations + 1
+        else:
+            preview = saved.result(timeout=5)
+            actual, mime, _ = app.read_asset(actor, preview.metadata['asset_ref'])
+            assert mime == 'image/png'
+            assert pixels(actual).tobytes() == pixels(preview.data).tobytes()
+            journal = service.command(actor, {'command': {'kind': 'get', 'scope': 'journal',
+                'carousel_id': ident}})['journal']
+            event = next(row for row in journal if row.get('save_asset'))
+            assert event['asset_ref'] == preview.metadata['asset_ref']
+            assert event['revision'] == 1 and event['region'] == [10, 20, 80, 70]
 
 
 def test_background_fragment_rejects_oversized_exact_crop(runtime):
