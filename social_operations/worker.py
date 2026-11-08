@@ -190,7 +190,7 @@ class Worker:
                 self.store.event(db, op['id'], 'submitting', 'started', 'Durable dispatch marker committed before external effect', child['alias'])
         return Hooks(emit, checkpoint, before_effect)
 
-    def request(self, op, child, actor):
+    def request(self, op, child, actor, *, prepared=None):
         plan = json.loads(child['plan'])
         assets = []
         with self.store.connection() as db:
@@ -199,6 +199,9 @@ class Worker:
                 if (source_binding['epoch'] != plan['story_link_binding_epoch']
                         or 'publish' not in json.loads(source_binding['rights'])):
                     raise DomainError('source_access_revoked', next_action='reauthorize')
+            if prepared is not None:
+                # Recheck source grants, but retain the already verified immutable bytes.
+                return prepared.request
             for a in plan['assets']:
                 if child['dispatched'] and plan['provider'] == 'max' and plan['account_type'] == 'max_web':
                     assets.append(Asset(**a))
@@ -490,7 +493,7 @@ class Worker:
 
     async def _run_child(self, op, child, actor, prepared):
         try:
-            request = self.request(op, child, actor)
+            request = self.request(op, child, actor, prepared=prepared)
             hooks = self.hooks(op, child, prepared.capability.min_lead_seconds if prepared else 60)
             adapter = self.adapter(child['provider'], request.connection_id)
             remaining = self.deadline(op, child, min_lead=prepared.capability.min_lead_seconds if prepared else 60) - self.store.clock()
