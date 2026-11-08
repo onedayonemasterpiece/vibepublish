@@ -3,9 +3,15 @@ on:
   push:
     branches: [main, work/vibepublish-core-20260904]
   pull_request:
+    # Guide-text-only PRs use the fast guide.yml check; main pushes still run everything.
+    paths-ignore: ['docs/llm/**', 'CHANGELOG.md']
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  # A newer push to the same PR makes the older run obsolete.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -65,7 +71,9 @@ jobs:
       - name: Real SDK and complete runtime regression - mandatory
         run: |
           "$VERIFY_PYTHON" scripts/verify/telegram_sdk.py > artifacts/verification/core-sdk.json
-          "$VERIFY_PYTHON" -m pytest tests -q --junitxml=artifacts/verification/full-tests.xml
+          # Parallel by test file (CI-only tool, not in the runtime lock): 11.5 min -> a few minutes.
+          "$VERIFY_PYTHON" -m pip install --disable-pip-version-check pytest-xdist==3.6.1
+          "$VERIFY_PYTHON" -m pytest tests -q -n auto --dist loadfile --junitxml=artifacts/verification/full-tests.xml
       - name: Compile delivered implementation
         run: '"$VERIFY_PYTHON" -m compileall -q social_operations adapters scripts/verify'
       - name: Source and environment receipt

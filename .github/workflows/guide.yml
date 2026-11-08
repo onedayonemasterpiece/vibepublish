@@ -1,0 +1,20 @@
+name: Story Carousel guide
+on:
+  pull_request:
+    paths: ['docs/llm/**', 'CHANGELOG.md']
+permissions:
+  contents: read
+jobs:
+  guide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - run: python -m pip install --disable-pip-version-check -r requirements.lock
+      - run: git fetch -q --depth=50 origin ${{ github.base_ref }} && git diff --check FETCH_HEAD HEAD -- docs CHANGELOG.md
+      - run: python -m pytest -q tests/carousel/test_guide.py tests/carousel/test_review_delivery.py tests/contracts/test_skill_examples.py
