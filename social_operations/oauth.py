@@ -36,7 +36,7 @@ COOKIE = '__Host-vibepublish-consent'
 ACCESS_TTL, REFRESH_TTL, PENDING_TTL, CODE_TTL = 3600, 30*86400, 300, 120
 # Parallel ChatGPT sessions share one grant and refresh concurrently; a refresh
 # token replayed this soon after rotation is that race, not theft.
-REFRESH_REUSE_GRACE = 120
+REFRESH_REUSE_GRACE = 30  # same order as Okta default grace, Auth0 "reuse interval"
 
 
 def _late_reuse(used):
