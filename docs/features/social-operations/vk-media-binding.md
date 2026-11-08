@@ -152,6 +152,19 @@ change the successful cleanup deadline or receipt. The actual dominant live
 subphase remains unproven until these phases are observed after rollout; the
 source profile alone does not close the live latency incident.
 
+Retention subphases (2026-11-08): **Not confirmed by user**. The same slow
+maintenance warning reports wall and calling-thread CPU milliseconds for
+`attempt_refs` (including stale attempts), `other_refs` (transfer, Stories,
+visuals and emoji), `carousel_refs`, `classify` (asset inventory and decisions)
+and `lineage` (visual-pair propagation), as `<phase>_ms` and
+`<phase>_cpu_ms`. Aggregate `asset_rows`, `visual_pairs` and `lineage_passes`
+come from existing collections and loop work, without extra queries. Wall time
+with little thread CPU distinguishes waiting/descheduling from CPU work in that
+thread; it does not identify the resource or include other threads' CPU. These
+optional measurements preserve the same classifier result, atomic transaction,
+warning threshold and successful-cleanup cadence. Logging remains after release;
+the next real maintenance record is needed to locate the residual cost.
+
 Carousel export diagnosis (2026-11-08): **Not confirmed by user**. A real
 post-rollout export recorded 56.144 seconds, but maintenance/saved-region phase
 logs do not cover export. Each newly committed export now emits one bounded

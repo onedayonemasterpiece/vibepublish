@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retention diagnostics: add wall and calling-thread CPU durations for five existing classification stages plus aggregate row/pair/pass counts to the existing after-release slow-maintenance warning. Preserve SQL, hold/expiry decisions, transaction boundaries and cadence; this measures residual latency without claiming a speedup or completed incident resolution.
+
 - Story Carousel review: master includes ST7 for variety; ST3 checks a consistent manner within each role, without treating repeated size, position or block shape as an automatic defect. The s09 master pass includes ST7 and consults K19 on lettering when needed.
 - Story Carousel review keeps cohesion: s09 treats media crossing into the neighbouring card as intent (no shrinking an object to its card window, no removing the crossing; only accidental touches and covered text are fixed); the chosen s03 composition sketch is imported so s08 montage and s09 review compare against it. Evidence: E2E d894 redo notes «no bird cut at C2|C3», «connector stub removed», «C3 reduced to window width».
 - Story Carousel cascade keeps cohesion end to end: s02 plans media for a whole canvas with meaningful transitions between cards; s08 mounts by the chosen s03 composition and keeps shared media across both cards.

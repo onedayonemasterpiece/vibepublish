@@ -234,8 +234,19 @@ def stale_unsent_attempts(db, now):
     return found
 
 
-def retired_asset_rows(db, now, *, include_sizes=True):
+def retired_asset_rows(db, now, *, include_sizes=True, phase_times=None):
     """One transaction's local-byte retention decision; native media is canonical."""
+    phase_started = time.monotonic() if phase_times is not None else 0
+    cpu_started = time.thread_time() if phase_times is not None else 0
+
+    def record_phase(name):
+        nonlocal phase_started, cpu_started
+        if phase_times is not None:
+            finished, cpu_finished = time.monotonic(), time.thread_time()
+            phase_times[name + '_ms'] = round((finished - phase_started) * 1000)
+            phase_times[name + '_cpu_ms'] = round((cpu_finished - cpu_started) * 1000)
+            phase_started, cpu_started = finished, cpu_finished
+
     stale = {row['attempt_id'] for row in stale_unsent_attempts(db, now)}
     refs, pending, uncertain, failed = set(), set(), set(), set()
     # Private edit inspection is not native use; new inputs keep their ordinary 14-day TTL.
@@ -263,6 +274,7 @@ def retired_asset_rows(db, now, *, include_sizes=True):
                 uncertain.add(ref)
             elif attempt_state in {'blocked', 'failed'} and attempt_id not in stale:
                 failed.add(ref)
+    record_phase('attempt_refs')
 
     def refset(sql, params=()):
         return {row[0] for row in db.execute(sql, params) if row[0]}
@@ -285,6 +297,7 @@ def retired_asset_rows(db, now, *, include_sizes=True):
                        UNION SELECT art_ref FROM visual_candidates
                        UNION SELECT asset_id FROM visual_asset_origins""")
     emoji = refset("SELECT asset_id FROM emoji_asset_origins")
+    record_phase('other_refs')
     # Saved SVGs may render the alpha source behind their imported derivative.
     # Keep that same-owner dependency for every immutable revision.
     carousel = refset("""SELECT j.value FROM carousel_versions c, json_each(c.asset_refs) j
@@ -302,6 +315,7 @@ def retired_asset_rows(db, now, *, include_sizes=True):
                          UNION SELECT json_extract(j.value,'$.asset_ref')
                          FROM operations o, json_each(o.result,'$.cards') j
                          WHERE o.action='carousel'""")
+    record_phase('carousel_refs')
     rows = []
     source = ("SELECT id,length(bytes),created FROM assets" if include_sizes else
               "SELECT id,0,created FROM assets INDEXED BY assets_retention_lookup")
@@ -327,12 +341,13 @@ def retired_asset_rows(db, now, *, include_sizes=True):
         else:
             reason = 'reclaim'
         rows.append({'id': ident, 'size_bytes': size, 'reason': reason, 'created': created})
+    record_phase('classify')
 
     # One candidate may reference two asset rows, sometimes shared with others.
     # Never delete one while a retained candidate still has a foreign key to it.
     by_id = {row['id']: row for row in rows}
     pairs = list(db.execute("SELECT asset_ref,art_ref FROM visual_candidates"))
-    for _ in range(len(pairs) + 1):
+    for pass_index in range(len(pairs) + 1):
         changed = False
         for left, right in pairs:
             if (left in by_id and right in by_id
@@ -343,6 +358,9 @@ def retired_asset_rows(db, now, *, include_sizes=True):
                         changed = True
         if not changed:
             break
+    record_phase('lineage')
+    if phase_times is not None:
+        phase_times.update(asset_rows=len(rows), visual_pairs=len(pairs), lineage_passes=pass_index + 1)
     return rows
 
 

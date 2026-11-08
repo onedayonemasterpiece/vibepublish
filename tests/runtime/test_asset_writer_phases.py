@@ -100,8 +100,14 @@ def test_phase_warning_is_after_release_private_and_cannot_change_commit(tmp_pat
     if path == "maintenance":
         assert event == "sqlite_maintenance_phases"
         assert set(fields) == {"elapsed_ms", "expire_ms", "cache_purge_ms",
-                              "retention_ms", "reclaim_ms", "tx_exit_ms"}
+                              "retention_ms", "reclaim_ms", "tx_exit_ms",
+                              "attempt_refs_ms", "attempt_refs_cpu_ms", "other_refs_ms", "other_refs_cpu_ms",
+                              "carousel_refs_ms", "carousel_refs_cpu_ms", "classify_ms", "classify_cpu_ms",
+                              "lineage_ms", "lineage_cpu_ms", "asset_rows", "visual_pairs", "lineage_passes"}
         assert int(fields["retention_ms"]) >= 1000
+        assert int(fields["classify_ms"]) >= 1000
+        assert int(fields["classify_cpu_ms"]) < int(fields["classify_ms"])
+        assert int(fields["asset_rows"]) == before_assets
     else:
         assert event == "sqlite_saved_asset_phases"
         assert set(fields) == {"elapsed_ms", "authority_ms", "asset_total_ms", "hash_ms",
