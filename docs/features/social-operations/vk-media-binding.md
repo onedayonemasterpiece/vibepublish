@@ -10,6 +10,20 @@ Persist ordered saved IDs immediately after each `photos.saveWallPhoto`, includi
 
 Earlier native lifecycle checks demonstrated VK copy remapping and the need to retain attachments on wall.edit. Their historical SHA/CDN proofs do **not** remain a requirement for new publications. Live acceptance and ordinary native authorization, CAS and no-duplicate guards remain separate.
 
+## Prepared worker media reuse (2026-11-08)
+
+Status: **Not confirmed by user** until worker rollout and live verification.
+A successful preflight freezes its verified media bytes in the existing immutable
+`Prepared.request`. Execution reuses that request after the existing source-link
+binding/epoch/right check, avoiding a second full BLOB load and hash of every
+attachment. The asset-update trigger and pending-operation retention protect the
+saved inputs. First preparation, reconciliation without a prepared request and
+finalization retain their existing reads and integrity checks. Actor/binding
+authority, revision admission, lease/fence, deadlines and before-effect dispatch
+CAS remain unchanged. Real Store/native-adapter regressions distinguish duplicate
+reads and check source-grant revocation after prepare, before upload. This source
+fix does not establish the cause of the observed worker OOM or a live memory bound.
+
 ## Missing scheduled response correction (2026-11-08)
 
 Status: **Not done** until rollout and live verification. Night r6 received explicit
