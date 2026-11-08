@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel: cohesion is the first selection criterion in s03 and a named K14 defect (any card reading as a standalone slide); removed «each card understandable as a separate screenshot» from #217, which pushed self-contained cards (E2E d894 r19–r21 regressed from connected r11); transitions motivated by media shared between adjacent cards; the strongest shot whole and large; several cut-out objects from different shots of the series.
 - Story Carousel guide: reverted the lettering/background change and restored the s09 note «RGB preview does not prove alpha loss» — the «white plates» evidence came from an auditor render that read RGB derivatives instead of the retained alpha originals; production renders were clean.
 - Story Carousel guide: lettering is generated on the exact card colour or background fragment (F2/F1); generator output is opaque, so «transparent» lettering on white is a plate; samples from earlier components carry the manner, not their background (E2E d894 r19: 6 new lettering files again on white).
 - Story Carousel step s09: cold-read starts by transcribing the visible text of each rendered card (covered/cut words are defects) and naming every rectangle whose tone differs from the card background; removed «RGB preview does not prove alpha loss», which let a visible white plate be dismissed — E2E 4333 r9 passed review and was scheduled with a white plate under the hero and covered body text on cards 1–2.
