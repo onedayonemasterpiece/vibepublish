@@ -51,7 +51,7 @@ def test_phase_warning_is_after_release_private_and_cannot_change_commit(tmp_pat
             yield db
     monkeypatch.setattr(store, "connection", traced_connection)
 
-    records, acquired = [], []
+    records, acquired, observed_deadlines = [], [], []
     class Observer(logging.Handler):
         def emit(self, record):
             records.append(record)
@@ -62,7 +62,7 @@ def test_phase_warning_is_after_release_private_and_cannot_change_commit(tmp_pat
                 observer.commit()
                 acquired.append(True)
                 if path == "maintenance":
-                    assert store.next_media_store_purge == now + 60
+                    observed_deadlines.append(store.next_media_store_purge)
             finally:
                 observer.close()
             raise RuntimeError("private failing observer")
@@ -90,6 +90,8 @@ def test_phase_warning_is_after_release_private_and_cannot_change_commit(tmp_pat
         logger.setLevel(previous_level)
 
     assert delays == [True] and acquired == [True] and len(records) == 1
+    if path == "maintenance":
+        assert observed_deadlines == [now + 60]
     record = records[0]
     assert record.levelno == logging.WARNING and record.exc_info is None
     event, *parts = record.getMessage().split()
