@@ -79,7 +79,7 @@ def withdraw(app, actor, args):
             _fresh_read(db, actor, source, binding, fresh, store.clock())
             # Positive older publication ownership, not absence in best-effort logs.
             prior = list(db.execute(
-                "SELECT o.id,o.publication_id,a.id AS attempt_id,a.checkpoint,a.result FROM facts f "
+                "SELECT o.id,o.publication_id,a.id AS attempt_id,a.checkpoint,a.result,a.plan,a.plan_digest FROM facts f "
                 "JOIN operations o ON o.publication_id=f.publication_id JOIN attempts a ON a.operation_id=o.id "
                 "WHERE f.destination_id=? AND f.native_id=? AND f.namespace='scheduled' AND f.initiator=? "
                 "AND o.tenant_id=? AND o.principal_id=? AND o.actor_epoch=? AND o.publication_id!=? "
@@ -90,7 +90,10 @@ def withdraw(app, actor, args):
                  actor.principal_id, actor.epoch, op["publication_id"], op["created"],
                  child["binding_id"], child["binding_epoch"])))
             old = json.loads(prior[0]["checkpoint"]).get("remote", {}) if len(prior) == 1 else {}
-            if (not old or not parse_time(old["observed_at"]) < op["created"]
+            old_plan = json.loads(prior[0]["plan"]) if old else {}
+            if (not old or digest(old_plan) != prior[0]["plan_digest"]
+                    or [a["sha256"] for a in old_plan["assets"]] == [a["sha256"] for a in plan["assets"]]
+                    or not parse_time(old["observed_at"]) < op["created"]
                     or any(old.get(k) != fresh.get(k) for k in
                            ("native_id", "native_target", "namespace", "provider_media", "member_ids"))):
                 raise DomainError("observation_withdrawal_prior_publication_required")

@@ -33,7 +33,8 @@ old). For this narrow legacy case, the scheduled VK publish must retain an
 unresolved-ID `vk_prepared` origin and a final copied-photo observation. A
 same-owner, same-binding/epoch publication must have verified that same native
 post and ordered attachments before the newer intent existed; its existing fact
-must still identify the older publication. Text, schedule, count and missing
+must still identify the older publication. The two immutable plans must have
+different ordered source asset hashes; no CDN bytes are compared. Text, schedule, count and missing
 diagnostic events are not sufficient evidence.
 
 The correction performs no provider call. In one local transaction it withdraws

@@ -65,7 +65,9 @@ async def scenario(tmp_path, *, prior_kind="owned"):
         adapter.false_remote = RemoteItem(**json.loads(row["checkpoint"])["remote"])
     if prior_kind != "same_time":
         now[0] += 10
-    new = await app.call(actor, "vibepublish_publish", {**intent, "media": media[2:], "request_key": "new"})
+    repeated = {"repeat_of": old["operation_id"]} if prior_kind == "same_media" else {}
+    inputs = media[:2] if prior_kind == "same_media" else media[2:]
+    new = await app.call(actor, "vibepublish_publish", {**intent, "media": inputs, **repeated, "request_key": "new"})
     await worker.run_once()
     assert store.receipt(actor, new["operation_id"])["state"] == "running"
     now[0] += 6
@@ -185,7 +187,7 @@ async def test_withdrawal_never_re_admits_provider_work(tmp_path, route):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("evidence", ["expired", "same_time", "cross_owner", "wrong_post", "false_ref",
+@pytest.mark.parametrize("evidence", ["expired", "same_time", "same_media", "cross_owner", "wrong_post", "false_ref",
                                      "no_prior_fact", "wrong_fact_owner", "not_exact_read"])
 async def test_withdrawal_requires_fresh_private_read_and_positive_prior_ownership(tmp_path, evidence):
     store, actor, app, worker, transport, old, new, args, now, old_ref, false_ref, fresh = await scenario(
