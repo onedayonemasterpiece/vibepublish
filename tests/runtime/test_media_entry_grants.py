@@ -213,16 +213,30 @@ async def test_entry_get_without_key_keeps_grant_fence(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_entry_revoke_during_download_cannot_publish_cache(tmp_path):
+@pytest.mark.parametrize('stage', ['download', 'verification'])
+async def test_entry_revoke_during_download_cannot_publish_cache(tmp_path, monkeypatch, stage):
     store, owner, service, provider, app, worker, proof, grant = await setup_grant(tmp_path)
     read = await app.call(service, 'vibepublish_media_store', get_args(proof['entry_ref'], 'in-flight'))
-    original = provider.read
-    async def revoked(request, hooks):
-        page = await original(request, hooks)
+
+    def revoke():
         with store.tx() as db:
             revoke_entry_grant(store, db, owner, grant)
-        return page
-    provider.read = revoked
+
+    if stage == 'download':
+        original = provider.read
+        async def revoked(request, hooks):
+            page = await original(request, hooks)
+            revoke()
+            return page
+        provider.read = revoked
+    else:
+        from social_operations import assets
+        original = assets.verify_image
+        def revoked(data, mime, **kwargs):
+            image = original(data, mime, **kwargs)
+            revoke()
+            return image
+        monkeypatch.setattr(assets, 'verify_image', revoked)
     await worker.run_once()
     with store.connection() as db:
         assert db.execute("SELECT COUNT(*) FROM media_store_assets WHERE purpose='download_cache'").fetchone()[0] == 0

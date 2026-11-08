@@ -4,9 +4,11 @@ import asyncio
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import secrets
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -917,6 +919,37 @@ class Worker:
         if request.kind=='reactions' and (len(page.items)!=1 or not page.items[0].own_reactions_observed
                 or page.items[0].native_id!=request.native_item or page.items[0].namespace!='published'):
             raise DomainError('reaction_read_unverified')
+        # Decode and sanitize immutable provider bytes before taking the writer.
+        prepared_downloads = []
+        if page.downloads:
+            prepared_at = time.perf_counter()
+            from types import SimpleNamespace
+            from social_operations.assets import insert_verified_image, verify_image
+            remote_by_id = {remote.native_id: remote for remote in page.items}
+            for media in page.downloads:
+                remote = remote_by_id.get(media.item_native_id)
+                if remote is None or media.slot >= len(remote.observed_media):
+                    raise DomainError('download_media_binding_invalid')
+                evidence = remote.observed_media[media.slot]
+                if (media.provider_ref not in remote.provider_media
+                        or evidence.slot != media.slot or evidence.sha256 != hashlib.sha256(media.data).hexdigest()
+                        or evidence.mime != media.mime or evidence.size != len(media.data)):
+                    raise DomainError('download_media_binding_invalid')
+                if media.mime in {'application/pdf','image/vnd.djvu'}:
+                    if not args.get('_media_store_get'):
+                        raise DomainError('document_download_private_store_only')
+                    verified=SimpleNamespace(width=0,height=0)
+                else:
+                    verified = verify_image(media.data, media.mime)
+                if args.get('_media_store_get') or (b['provider'] == 'vk' and request.kind == 'item'):
+                    # Source caches retain original bytes and need only image dimensions.
+                    verified = SimpleNamespace(width=verified.width, height=verified.height)
+                prepared_downloads.append((media, evidence, verified))
+            logging.getLogger(__name__).info(canonical({
+                'event': 'native_read_media_prepared', 'operation_id': op['id'],
+                'download_count': len(prepared_downloads),
+                'duration_ms': round((time.perf_counter() - prepared_at) * 1000),
+            }))
         with self.store.tx() as db:
             self.store.fence(db, op['id'], self.id, op['fence'])
             self.store.current(db, actor)
@@ -928,50 +961,32 @@ class Worker:
                     grant_id=entry_grant['id'], binding_id=b['id'])
                 check_download(json.loads(current_grant['proof']), page)
             downloads = {}
-            if page.downloads:
-                from social_operations.assets import insert_verified_image, verify_image
-                remote_by_id = {remote.native_id: remote for remote in page.items}
-                for media in page.downloads:
-                    remote = remote_by_id.get(media.item_native_id)
-                    if remote is None or media.slot >= len(remote.observed_media):
-                        raise DomainError('download_media_binding_invalid')
-                    evidence = remote.observed_media[media.slot]
-                    if (media.provider_ref not in remote.provider_media
-                            or evidence.slot != media.slot or evidence.sha256 != hashlib.sha256(media.data).hexdigest()
-                            or evidence.mime != media.mime or evidence.size != len(media.data)):
-                        raise DomainError('download_media_binding_invalid')
-                    if media.mime in {'application/pdf','image/vnd.djvu'}:
-                        if not args.get('_media_store_get'):
-                            raise DomainError('document_download_private_store_only')
-                        from types import SimpleNamespace
-                        verified=SimpleNamespace(width=0,height=0)
-                    else:
-                        verified = verify_image(media.data, media.mime)
-                    # VK exact-item photos are short-lived source reads, not
-                    # retained uploads. Reuse the existing single-byte cache
-                    # path, rather than insert_verified_image's two asset rows.
-                    if args.get('_media_store_get') or (b['provider'] == 'vk' and request.kind == 'item'):
-                        asset_ref = new_id('asset')
-                        db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
-                                   (asset_ref, actor.tenant_id, actor.principal_id, evidence.sha256,
-                                    media.mime, verified.width, verified.height, media.data,
-                                    evidence.sha256, self.store.clock()))
-                        db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
-                                   (asset_ref, args.get('_media_store_entry_ref'), 'download_cache', self.store.clock()+3600))
-                        if entry_grant:
-                            db.execute('INSERT INTO media_service_entry_assets VALUES(?,?)',
-                                       (asset_ref, entry_grant['id']))
-                    else:
-                        sanitized_sha = hashlib.sha256(verified.data).hexdigest()
-                        existing_asset = db.execute(
-                            'SELECT id FROM assets WHERE tenant_id=? AND principal_id=? AND sha256=? AND source_sha256=? AND mime=\'image/png\' LIMIT 1',
-                            (actor.tenant_id, actor.principal_id, sanitized_sha, evidence.sha256)).fetchone()
-                        asset_ref = existing_asset['id'] if existing_asset else insert_verified_image(
-                            self.store, db, actor, verified)
-                    media_entry = {'slot': media.slot, 'asset_ref': asset_ref, 'media_kind': media.media_kind}
-                    if b['provider'] == 'vk' and request.kind == 'item' and media.media_kind == 'photo':
-                        media_entry.update(width=verified.width, height=verified.height)
-                    downloads.setdefault(media.item_native_id, []).append(media_entry)
+            for media, evidence, verified in prepared_downloads:
+                # VK exact-item photos are short-lived source reads, not
+                # retained uploads. Reuse the existing single-byte cache
+                # path, rather than insert_verified_image's two asset rows.
+                if args.get('_media_store_get') or (b['provider'] == 'vk' and request.kind == 'item'):
+                    asset_ref = new_id('asset')
+                    db.execute('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?,?,?)',
+                               (asset_ref, actor.tenant_id, actor.principal_id, evidence.sha256,
+                                media.mime, verified.width, verified.height, media.data,
+                                evidence.sha256, self.store.clock()))
+                    db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
+                               (asset_ref, args.get('_media_store_entry_ref'), 'download_cache', self.store.clock()+3600))
+                    if entry_grant:
+                        db.execute('INSERT INTO media_service_entry_assets VALUES(?,?)',
+                                   (asset_ref, entry_grant['id']))
+                else:
+                    sanitized_sha = hashlib.sha256(verified.data).hexdigest()
+                    existing_asset = db.execute(
+                        'SELECT id FROM assets WHERE tenant_id=? AND principal_id=? AND sha256=? AND source_sha256=? AND mime=\'image/png\' LIMIT 1',
+                        (actor.tenant_id, actor.principal_id, sanitized_sha, evidence.sha256)).fetchone()
+                    asset_ref = existing_asset['id'] if existing_asset else insert_verified_image(
+                        self.store, db, actor, verified)
+                media_entry = {'slot': media.slot, 'asset_ref': asset_ref, 'media_kind': media.media_kind}
+                if b['provider'] == 'vk' and request.kind == 'item' and media.media_kind == 'photo':
+                    media_entry.update(width=verified.width, height=verified.height)
+                downloads.setdefault(media.item_native_id, []).append(media_entry)
             items = []
             for remote in page.items:
                 if remote.native_target != b['native_id']:
