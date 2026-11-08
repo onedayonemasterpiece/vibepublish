@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel cascade keeps cohesion end to end: s02 plans media per card boundary (what spans k|k+1) instead of per card, s08 mounts by the chosen s03 composition and keeps shared media across both cards (cohesion was planned in s03 but lost when per-card components were assembled).
 - Story Carousel: cohesion is the first selection criterion in s03 and a named K14 defect (any card reading as a standalone slide); removed «each card understandable as a separate screenshot» from #217, which pushed self-contained cards (E2E d894 r19–r21 regressed from connected r11); transitions motivated by media shared between adjacent cards; the strongest shot whole and large; several cut-out objects from different shots of the series.
 - Story Carousel guide: reverted the lettering/background change and restored the s09 note «RGB preview does not prove alpha loss» — the «white plates» evidence came from an auditor render that read RGB derivatives instead of the retained alpha originals; production renders were clean.
 - Story Carousel guide: lettering is generated on the exact card colour or background fragment (F2/F1); generator output is opaque, so «transparent» lettering on white is a plate; samples from earlier components carry the manner, not their background (E2E d894 r19: 6 new lettering files again on white).
