@@ -137,11 +137,12 @@ def review_questions(view: str, *, source_svg: str | None = None) -> list[dict]:
         raise DomainError("invalid_input", f"Story Carousel review tag missing: {view}")
     ids = re.findall(r"\b(?:[QVRK]\d{2}|ST[1-7])\b", line.group(1))
     bank = _review_bank()
-    questions = [bank[ident] for ident in ids[:5]]
-    if source_svg is not None and questions:
+    questions = [bank[ident] for ident in ids]
+    target = next((q for q in questions if q["id"] == "K19"), questions[0] if questions else None)
+    if source_svg is not None and target is not None:
         text_nodes = sum(node.tag in ("text", "{http://www.w3.org/2000/svg}text")
                          for node in ET.fromstring(source_svg).iter())
-        questions[0]["observe"] += (
+        target["observe"] += (
             f" Факт исходного SVG: {text_nodes} узлов <text> (scope=document, включая defs/скрытые)."
             " Это не число видимых или крупных надписей выбранной карточки; tspan, копии use,"
             " растры и контуры не считаются, происхождение растров не определяется.")

@@ -17,7 +17,7 @@ def test_render_question_selection_keeps_composition_and_reference_priorities():
     assert {"K14", "K16"} <= {question["id"] for question in questions}
     assert questions[0]["id"] == "Q01"
     assert {"Q01", "Q07", "Q04", "K16"} <= {question["id"] for question in review_questions("card")}
-    assert len(questions) <= 5
+    assert len(questions) <= 7
 
 
 @pytest.mark.asyncio
@@ -39,8 +39,9 @@ async def test_render_exposes_priority_questions_and_document_text_fact(tmp_path
     questions = rendered.metadata["review_questions"]
     assert questions[0]["id"] == ("Q01" if view == "master" else "Q07")
     # The text is on card 3, outside the card-1 crop: the fact remains document-scoped.
-    assert "1 узлов <text> (scope=document" in questions[0]["observe"]
-    assert len(questions) <= 5
+    fact = next((q for q in questions if q["id"] == "K19"), questions[0])
+    assert "1 узлов <text> (scope=document" in fact["observe"]
+    assert len(questions) <= 7
 
 
 @pytest.mark.parametrize("namespace", ["", ' xmlns="http://www.w3.org/2000/svg"'])
@@ -54,14 +55,15 @@ def test_text_fact_counts_source_nodes_not_visibility_size_or_use_clones(namespa
            '<desc>&lt;text&gt; is not a node</desc><!-- <text/> -->'
            '<other:text>Not SVG text</other:text></svg>')
     for view in ("master", "card", "pair", "region"):
-        question = review_questions(view, source_svg=svg)[0]
+        delivered = review_questions(view, source_svg=svg)
+        question = next((q for q in delivered if q["id"] == "K19"), delivered[0])
         assert "2 узлов <text> (scope=document" in question["observe"]
         assert "не число видимых или крупных" in question["observe"]
-        assert "scope=document" not in review_questions(view)[0]["observe"]
+        assert all("scope=document" not in q["observe"] for q in review_questions(view))
 
 
 QUESTION_IDS = ([f"{prefix}{number:02d}" for prefix, count in
-                 (("Q", 35), ("V", 30), ("R", 15), ("K", 17))
+                 (("Q", 35), ("V", 30), ("R", 15), ("K", 19))
                  for number in range(1, count + 1)]
                 + [f"ST{number}" for number in range(1, 8)])
 
@@ -100,7 +102,7 @@ def test_review_priority_is_source_order_not_a_fixed_category_mix(monkeypatch):
         return text
 
     monkeypatch.setattr(module, "_read", read)
-    assert [item["id"] for item in review_questions("master")] == priority[:5]
+    assert [item["id"] for item in review_questions("master")] == priority
 
 
 def test_review_index_explains_existing_section_lookup_and_old_sections_survive():

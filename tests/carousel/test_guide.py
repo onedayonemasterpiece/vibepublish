@@ -76,7 +76,10 @@ async def test_canonical_guide_and_half_scale_master_are_exposed_by_mcp(tmp_path
     def expected_questions(view):
         tag = next(line for line in _read("90-review.md").splitlines()
                    if line.startswith(f"- [{view}] "))
-        return re.findall(r"\b(?:[QVRK]\d{2}|ST[1-7])\b", tag)[:5]
+        ids = re.findall(r"\b(?:[QVRK]\d{2}|ST[1-7])\b", tag)
+        # Every tagged question is delivered; more than seven would overload render.
+        assert 1 <= len(ids) <= 7, (view, ids)
+        return ids
 
     master = await call({"kind": "render", "carousel_id": carousel_id,
         "revision": 1, "view": "master", "scale": 0.5, "cutlines": True})
