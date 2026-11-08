@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: reconcile the November 8 creative feedback across the existing steps and canonical scope. Preserve explanatory mini-paragraphs, strong varied generated lettering, meaningful image continuity and quiet backgrounds or shared scenes over 2/3/4 cards. Remove universal seam/background/brand quotas and the automatic body-font default; retain documentary originals and F1/alpha. Match every final card to an opened reference with direct source links. Record native VK/S03 evidence separately from rejected creative acceptance; O34/O36 and performance remain open.
+
 - Worker maintenance: deduplicate owned saved-carousel references before the original-image retention join, avoiding assets × immutable-revisions work while preserving every existing hold and the atomic cleanup transaction. Share the existing successful cleanup deadline across worker lanes on the same Store. Real Store VM-work and lane/failure regressions fail before the fix and pass after it; no new schema, index, timeout or retry. The measured live maintenance writer still requires post-rollout verification.
 - Private publish previews: let an authorized cancellation of a completed, never-dispatched preview finish locally, advance its publication revision once and consume its pending approval decisions. Preserve frozen history, assets, request-key replay and ordinary native item-ref cancellation. Return «Приватный предпросмотр отменён. Публикации не было.» without claiming a native deletion; real Store regressions cover restart, approval races and current cancel rights.
 
