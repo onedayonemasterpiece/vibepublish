@@ -8,6 +8,21 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from .domain import DomainError, new_id
 
 
+# Shared by asset reads, renderer source selection and physical cleanup.
+EXPIRED_MEDIA_STORE_ASSET = """m.expires<?
+    AND NOT EXISTS (
+        SELECT 1 FROM attempts a JOIN operations o ON o.id=a.operation_id,
+                     json_each(a.plan,'$.assets') j
+        WHERE o.work_state!='done' AND json_extract(j.value,'$.ref')=m.asset_id
+    ) AND NOT EXISTS (
+        SELECT 1 FROM carousel_versions c, json_each(c.asset_refs) j
+        WHERE j.value=m.asset_id
+    ) AND NOT EXISTS (
+        SELECT 1 FROM operations o, json_each(o.result,'$.cards') j
+        WHERE o.action='carousel' AND json_extract(j.value,'$.asset_ref')=m.asset_id
+    )"""
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedImage:
     original: bytes

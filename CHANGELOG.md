@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Asset reads: remove global cleanup's SQLite writer acquisition after observed carousel `SQLITE_BUSY` failures. Select owned bytes and expiry eligibility atomically, sharing the existing operation/carousel/export holds with physical cleanup and carousel original selection. Expired cache copies cannot shadow durable alpha sources; expired unheld bytes remain unavailable while the existing worker owns deletion. Real SQLite regressions cover writer contention, concurrent cleanup and duplicate originals. ACL, integrity and journal checks remain unchanged; no new retries or states.
+
 - Story Carousel: preserve the November 8 owner correction across the canonical scope and coverage: use the relevant historical photo on cards, keep whole-card cleanliness and visual strength explicit, and continue already authorized postponed VK variants after the prior pause was lifted. Guidance selects media and style deliberately, without importing every search result or imposing a replacement default style. Reconcile the deployed K15/K16 review questions with Q23/Q28; avoid unnecessary repeated source brands when primary visual evidence is available, while retaining required attribution.
 
 - Story Carousel guide: turn owner feedback on a dirty, low-contrast result into concrete palette and visual-review guidance. Compare actual reference images, cover and strip at the same display size; judge the whole card (background, composition, typography, photos, textures and visual noise), not merely clean source images. Remove interfering layers and muddy styling without suppressing documentary archive images or deliberate material choices. No runtime gate or universal style is added.

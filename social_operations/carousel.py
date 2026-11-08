@@ -15,7 +15,8 @@ from xml.etree import ElementTree as ET
 from fontTools.misc.transform import Identity
 from PIL import Image, ImageDraw, ImageOps
 
-from .assets import AssetPreview, FULL_MAX_EDGE, insert_verified_image, render_asset_full, render_asset_preview, verify_image
+from .assets import (EXPIRED_MEDIA_STORE_ASSET, AssetPreview, FULL_MAX_EDGE, insert_verified_image,
+                     render_asset_full, render_asset_preview, verify_image)
 from .carousel_compositor import _ASSET, _NUMBER, _XLINK, render_svg, slice_cards, validate_svg
 from .carousel_guide import GuideImages, guide, review_questions
 from .carousel_references import ReferenceBank
@@ -261,15 +262,17 @@ class CarouselService:
         with self.store.connection() as db:
             actor = self._actor(db, actor)
             original = db.execute(
-                """SELECT source.id FROM assets AS derived
+                f"""SELECT source.id FROM assets AS derived
                    JOIN assets AS source
                      ON source.tenant_id=derived.tenant_id
                     AND source.principal_id=derived.principal_id
                     AND source.sha256=derived.source_sha256
                    WHERE derived.id=? AND derived.tenant_id=? AND derived.principal_id=?
                      AND source.id!=derived.id AND source.mime IN ('image/png','image/webp')
+                     AND NOT EXISTS (SELECT 1 FROM media_store_assets m
+                                     WHERE m.asset_id=source.id AND {EXPIRED_MEDIA_STORE_ASSET})
                    ORDER BY source.rowid LIMIT 1""",
-                (ident, actor.tenant_id, actor.principal_id)).fetchone()
+                (ident, actor.tenant_id, actor.principal_id, self.store.clock())).fetchone()
         if not original:
             return derivative
         original_bytes, _, _ = self.app.read_asset(actor, original['id'])

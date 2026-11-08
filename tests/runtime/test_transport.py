@@ -162,6 +162,8 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(expired.status_code, 404)
                     with self.assertRaises(Exception):
                         await session.read_resource('vibepublish://assets/' + asset)
+        # HTTP and MCP refuse expiry before the normal worker cleanup tick.
+        await Worker(self.store, {}).run_once()
         with self.store.connection() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM assets').fetchone()[0], 0)
             self.assertEqual(db.execute('SELECT count(*) FROM media_store_assets').fetchone()[0], 0)
