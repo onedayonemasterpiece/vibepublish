@@ -233,6 +233,8 @@ async def test_get_downloads_exact_telegram_bytes_into_expiring_cache(tmp_path):
     store.clock=lambda: expiry+1
     with pytest.raises(Exception) as error: app.read_asset(actor,downloaded)
     assert getattr(error.value,'code',None)=='asset_not_available'
+    # Reads enforce expiry; the normal worker tick owns physical deletion.
+    await worker.run_once()
     with store.connection() as db: assert db.execute('select count(*) from assets').fetchone()[0]==baseline
 
 
