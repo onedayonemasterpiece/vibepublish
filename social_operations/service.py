@@ -613,6 +613,20 @@ class Application:
         if scheduled and parse_time(scheduled) < self.store.clock()+60:
             raise DomainError('native_lead_time', 'Choose a later native publication time')
         story_link = self._story_link(db, actor, binding, target) if target.get('story_link') else None
+        vk_mode = target.get('vk', {}).get('primary_attachments_mode') if binding['provider'] == 'vk' else None
+        if (binding['provider'] == 'vk' and vk_mode is None and action == 'publish'
+                and target.get('surface', 'post') == 'post' and assets
+                and all(asset['role'] == 'image' for asset in assets)):
+            media = [{'source': {'kind': 'asset', 'id': asset['ref']}} for asset in assets]
+            # Reuse the completed export's ordered media; do not decode create/revise SVG requests.
+            exported = db.execute("""SELECT 1 FROM operations
+                WHERE tenant_id=? AND principal_id=? AND action='carousel'
+                    AND complete=1 AND state='verified'
+                    AND CASE WHEN json_extract(result,'$.media')=?
+                        THEN json_extract(request,'$.command.kind')='export' ELSE 0 END
+                LIMIT 1""", (actor.tenant_id, actor.principal_id, canonical(media))).fetchone()
+            if exported:
+                vk_mode = 'carousel'
         return {'binding_id': binding['id'], 'binding_epoch': binding['epoch'], 'alias': binding['alias'],
                 'provider': binding['provider'], 'connection_id': binding['connection_id'], 'account_type': binding['account_type'],
                 'secret_ref': binding['secret_ref'], 'destination_id': binding['destination_id'], 'native_target': binding['native_id'],
@@ -620,8 +634,7 @@ class Application:
                 'scheduled_at': scheduled, 'mode': target.get('mode', 'execute'), 'existing': existing,
                 'selection': target.get('selection', 'post'), 'source': None, 'source_authorized': False,
                 'basic_group_schedule_authorized': 'basic_group_schedule' in binding_rights,
-                **({'vk_primary_attachments_mode': target['vk']['primary_attachments_mode']}
-                   if binding['provider'] == 'vk' and target.get('vk') else {}),
+                **({'vk_primary_attachments_mode': vk_mode} if vk_mode is not None else {}),
                 **(story_link or {}),
                 **({'topic_root_id': topic_root_id} if topic_root_id else {}),
                 **({'admission_error': admission_error} if admission_error else {})}
@@ -970,6 +983,8 @@ class Application:
             b = self.store.binding(db, actor, binding_id=child['binding_id'])
             target = {'content': json.loads(old['content_json']),
                       'surface': old['surface'], 'delivery': {'kind': 'at', 'at': old['scheduled_at']} if old['scheduled_at'] else {'kind': 'now'}, 'mode': 'execute'}
+            if 'vk_primary_attachments_mode' in old:
+                target['vk'] = {'primary_attachments_mode': old['vk_primary_attachments_mode']}
             if kind == 'approve':
                 target['media'] = [{'source': {'kind': 'asset', 'id': a['ref']}, 'role': a.get('role', 'image'), 'caption': a['caption'], 'alt_text': a['alt_text']} for a in old['assets']]
             if kind == 'edit':
