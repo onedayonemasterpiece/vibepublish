@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel guide (owner review of VK Sunny post 08.11): card 1 self-explanatory with exposition (species, place, event; author thesis by card 1–2), every new participant introduced, reader chain see→means→do→whom; author hypothesis stated plainly as a hypothesis, no «пока не / не подтверждено / не доказано» hedging (removed the guide lines that induced it and the ready-made hook example); F4 cutting only after generation visibly distorted the object (removed the documentary shortcut).
 - Story Carousel review K15: inspect unintended pasted plates in the exact render/export; preserve intentional composition and do not infer alpha loss from RGB previews. No rendering or publication behavior changes.
 - MCP guidance: map the latest provider/current read item `ref` explicitly to mutation `item_ref`; clarify that full asset inspection reads the requested stored asset, while component thumbnails flatten transparency onto white. Assess alpha-related montage defects in the exact carousel render/export. No schema, identity, rendering or publication behavior changes; live agent verification remains pending.
 
