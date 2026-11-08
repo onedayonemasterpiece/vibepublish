@@ -279,6 +279,8 @@ class VKHTTPTransport:
             diagnostic['provider_code'] = code
             if isinstance(response, dict) and isinstance(response.get('error'), dict):
                 diagnostic.update(provider_error_metadata(response['error'].get('error_msg')))
+            if code == 214:
+                raise DomainError('provider_access_denied', next_action='contact_owner')
             raise DomainError('vk_captcha_needs_human' if code == 14 else 'vk_cooldown' if code in {6, 9, 29} else 'vk_api_failed', next_action='contact_owner')
         return response['response']
 

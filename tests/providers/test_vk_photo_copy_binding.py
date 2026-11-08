@@ -272,8 +272,44 @@ async def test_exact_queue_item_needs_no_later_page_but_absence_needs_complete_s
 
 
 @pytest.mark.asyncio
-async def test_lost_scheduled_id_queue_match_chooses_newest_numeric_post_without_post():
+@pytest.mark.parametrize('candidate_photos', [(901, 902), (901, 900), (900, 901)])
+async def test_lost_scheduled_id_requires_unique_ordered_saved_photo_ids(candidate_photos):
     from adapters.native import saved_checkpoint
+    from social_operations.domain import digest
+
+    a, t, j, r = setup_copy()
+    # A pre-existing post has the same text, time and attachment count.
+    t.posts[(-101, 9)] = {
+        'id': 9, 'owner_id': -101, 'text': 'Fixture',
+        'date': NOW + 3600, 'post_type': 'postpone',
+        'attachments': [
+            {'type': 'photo', 'photo': {'owner_id': -101, 'id': ident}}
+            for ident in candidate_photos
+        ],
+    }
+    old_post = copy.deepcopy(t.posts[(-101, 9)])
+    checkpoint = saved_checkpoint(
+        r, id=None, media=['photo-101_900', 'photo-101_901'],
+        retryable_wall_post=True,
+    )
+    await j.before(r.attempt_id, r.plan_digest)
+    result = await a.reconcile(r, checkpoint, j.hooks)
+    exact = candidate_photos == (900, 901)
+    assert result.observed == 'provider_scheduled'
+    assert result.items[0].native_id == ('9' if exact else '11')
+    assert result.items[0].provider_media == ('photo-101_900', 'photo-101_901')
+    assert t.posts[(-101, 9)] == old_post
+    posts = [params for name, _, params in t.calls if name == 'wall.post']
+    assert t.effects == len(posts) == (0 if exact else 1)
+    if posts:
+        assert posts[0]['guid'] == digest([r.operation_id, r.attempt_id])
+    assert not t.uploads
+
+
+@pytest.mark.asyncio
+async def test_lost_scheduled_id_does_not_choose_newest_ambiguous_exact_media_match():
+    from adapters.native import saved_checkpoint
+    from social_operations.domain import digest
 
     a, t, j, r = setup_copy()
     for ident in (9, 10):
@@ -281,19 +317,23 @@ async def test_lost_scheduled_id_queue_match_chooses_newest_numeric_post_without
             'id': ident, 'owner_id': -101, 'text': 'Fixture',
             'date': NOW + 3600, 'post_type': 'postpone',
             'attachments': [
-                {'type': 'photo', 'photo': {'owner_id': -101, 'id': ident * 100 + 1}},
-                {'type': 'photo', 'photo': {'owner_id': -101, 'id': ident * 100 + 2}},
+                {'type': 'photo', 'photo': {'owner_id': -101, 'id': photo}}
+                for photo in (900, 901)
             ],
         }
+    old_posts = copy.deepcopy(t.posts)
     checkpoint = saved_checkpoint(
         r, id=None, media=['photo-101_900', 'photo-101_901'],
         retryable_wall_post=True,
     )
+    await j.before(r.attempt_id, r.plan_digest)
     result = await a.reconcile(r, checkpoint, j.hooks)
-    assert result.observed == 'provider_scheduled'
-    assert result.items[0].native_id == '10'
-    assert t.effects == 0
-    assert not any(call[0] == 'wall.post' for call in t.calls)
+    assert result.items[0].native_id == '11'
+    assert all(t.posts[key] == value for key, value in old_posts.items())
+    posts = [params for name, _, params in t.calls if name == 'wall.post']
+    assert len(posts) == t.effects == 1
+    assert posts[0]['guid'] == digest([r.operation_id, r.attempt_id])
+    assert not t.uploads
 
 
 @pytest.mark.asyncio
