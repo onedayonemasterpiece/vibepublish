@@ -149,9 +149,11 @@ async def test_vk_same_guid_recovers_lost_wall_post_response_without_duplicate_e
 
 
 @pytest.mark.asyncio
-async def test_vk_restart_reconcile_reads_complete_queue_before_same_guid_replay():
+@pytest.mark.parametrize('images', [0, 2])
+async def test_vk_restart_reconcile_reads_complete_queue_before_same_guid_replay(images):
     adapter, transport, journal = setup('vk')
-    r = request('vk', scheduled_at=timestamp(NOW+3600))
+    r = request('vk', scheduled_at=timestamp(NOW+3600),
+                assets=tuple(asset(i+1) for i in range(images)))
     prepared = await adapter.prepare(r, journal.hooks)
     def always_drop(method):
         if method == 'wall.post':
@@ -168,7 +170,8 @@ async def test_vk_restart_reconcile_reads_complete_queue_before_same_guid_replay
     observed = await restarted.reconcile(r, journal.checkpoint_json, journal.hooks)
     assert observed.observed == 'provider_scheduled'
     assert transport.effects == 1
-    assert len([call for call in transport.calls if call[0] == 'wall.post']) == before_calls
+    # Empty attachments cannot identify a text-only post; its same guid returns the ID.
+    assert len([call for call in transport.calls if call[0] == 'wall.post']) == before_calls + (images == 0)
 
 
 @pytest.mark.asyncio

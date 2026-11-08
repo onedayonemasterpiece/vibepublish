@@ -830,11 +830,11 @@ class VKAdapter:
             item for item in await self._queue(request.native_target)
             if item.text == text
             and item.scheduled_at == request.scheduled_at
-            and len(item.provider_media) == len(expected_media)
+            and expected_media
+            and item.provider_media == expected_media
         ]
-        if len(candidates) >= 1:
-            # Take the newest by time/ID when multiple matches
-            candidates.sort(key=lambda i: (i.scheduled_at or '', int(i.native_id)), reverse=True)
+        # A similar older post is not a receipt; only unique saved IDs identify it.
+        if len(candidates) == 1:
             checkpoint['id'] = candidates[0].native_id
             checkpoint['identity_source'] = 'queue_match'
             await hooks.checkpoint('vk_response', saved_checkpoint(request, **checkpoint))
