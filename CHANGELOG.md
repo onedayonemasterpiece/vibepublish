@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel cache: recheck an initially missing master after acquiring the existing raster lock, then retain that lock through cache insertion. Concurrent card/region views reuse the completed master; a hot master remains available during another cold render. Preserve source checks, cache key/LRU/byte budget, native process behavior and raster parity; a deterministic child-stub regression reproduces the duplicate work before the fix. This source change does not establish the cause of live timeouts or claim a host performance improvement.
+
 - Story Carousel guide journal: retain the exact requested topic and section on existing carousel-linked guide reads and expose them through the ordinary journal. Keep older events compatible and pre-create, unlinked guide reads read-only; no new events, tables or revisions.
 
 - Publication status: preserve an unknown dispatched outcome and its error in the ordinary read-only snapshot, including after false-identity withdrawal. Report confirmed delivery, unknown outcome and refusal counts separately for mixed destinations; do not turn uncertainty into a no-delivery claim or create cursors/provider effects.

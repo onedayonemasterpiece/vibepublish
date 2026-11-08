@@ -12,7 +12,8 @@ import threading
 # shortening that observed working path. This is not a raster speed target.
 _RENDER_TIMEOUT_SECONDS = 300
 # Native resvg previously serialized on this process's GIL. Keep that bound.
-_RASTER_LOCK = threading.Lock()
+# A cold master holds this same lock across its cache recheck and insertion.
+_RASTER_LOCK = threading.RLock()
 
 
 def svg_to_bytes(**options) -> bytes:
