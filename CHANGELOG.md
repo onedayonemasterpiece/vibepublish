@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel typography: apply the owner's November 8 clarification—keep the same lettering manner for the same roles within one story, distinguish headings, accents, narrative, quotes and other roles purposefully, and allow a new story its own character. Update the existing composition, typography, style, review and step guidance without a style quota or runtime gate.
+
 - Story Carousel review: return the first five questions in the source-authored view order and expose every question through the existing guide section:"question:ID" read. Preserve legacy heading prefixes; keep K17 advisory, without a reference-count quota or a blanket background-effect ban.
 - Story Carousel brand readability: prefer the complete «Полюбить Калининград» name in one card; a single inscription may span at most two adjacent cards, checked during sequential viewing. This does not limit purposeful repetitions or add an automatic publication gate.
 
