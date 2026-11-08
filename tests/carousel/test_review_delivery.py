@@ -17,7 +17,7 @@ def test_render_question_selection_keeps_composition_and_reference_priorities():
     assert {"K14", "K16"} <= {question["id"] for question in questions}
     assert questions[0]["id"] == "Q01"
     assert {"Q01", "Q07", "Q04", "K16"} <= {question["id"] for question in review_questions("card")}
-    assert len(questions) <= 5
+    assert len(questions) <= 7
 
 
 @pytest.mark.asyncio
@@ -40,7 +40,7 @@ async def test_render_exposes_priority_questions_and_document_text_fact(tmp_path
     assert questions[0]["id"] == ("Q01" if view == "master" else "Q07")
     # The text is on card 3, outside the card-1 crop: the fact remains document-scoped.
     assert "1 узлов <text> (scope=document" in questions[0]["observe"]
-    assert len(questions) <= 5
+    assert len(questions) <= 7
 
 
 @pytest.mark.parametrize("namespace", ["", ' xmlns="http://www.w3.org/2000/svg"'])
@@ -100,7 +100,7 @@ def test_review_priority_is_source_order_not_a_fixed_category_mix(monkeypatch):
         return text
 
     monkeypatch.setattr(module, "_read", read)
-    assert [item["id"] for item in review_questions("master")] == priority[:5]
+    assert [item["id"] for item in review_questions("master")] == priority
 
 
 def test_review_index_explains_existing_section_lookup_and_old_sections_survive():

@@ -477,7 +477,7 @@ _carousel_output = obj({
         ("path", "mime_type", "width", "height")), 0, 8),
     "review_questions": array(obj({"id": string(6), "question": string(2000),
         "observe": string(5000), "suggestion": string(5000)},
-        ("id", "question", "observe", "suggestion")), 0, 5),
+        ("id", "question", "observe", "suggestion")), 0, 7),
 }, ("private",))
 _carousel_commands = [
     arm("create", _carousel_scene, ("brief",)),

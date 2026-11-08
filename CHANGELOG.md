@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel review delivery: `render` returns every question tagged for its view instead of silently keeping the first five; tag lines are capped at seven (test-enforced) and now hold the owner's priorities — story meaning, beauty next to references, text vs image, cohesion, clean card, one manner per role, brand. Contract `review_questions` maxItems 5 → 7. The rest of the bank stays addressable by ID.
+
 - Publication status: preserve an unknown dispatched outcome and its error in the ordinary read-only snapshot, including after false-identity withdrawal. Report confirmed delivery, unknown outcome and refusal counts separately for mixed destinations; do not turn uncertainty into a no-delivery claim or create cursors/provider effects.
 
 - VK local receipt correction: an owner can withdraw a contradicted legacy scheduled identity using a fresh exact native reference and positive prior same-owner publication evidence. Preserve dispatched intent, original checkpoint and false observation as audit; invalidate only false private handles, leave old facts/refs intact, and block all re-admission or mutation through the withdrawn identity. No provider call or no-effect claim; live correction remains separately verified.

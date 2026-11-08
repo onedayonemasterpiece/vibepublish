@@ -137,7 +137,7 @@ def review_questions(view: str, *, source_svg: str | None = None) -> list[dict]:
         raise DomainError("invalid_input", f"Story Carousel review tag missing: {view}")
     ids = re.findall(r"\b(?:[QVRK]\d{2}|ST[1-7])\b", line.group(1))
     bank = _review_bank()
-    questions = [bank[ident] for ident in ids[:5]]
+    questions = [bank[ident] for ident in ids]
     if source_svg is not None and questions:
         text_nodes = sum(node.tag in ("text", "{http://www.w3.org/2000/svg}text")
                          for node in ET.fromstring(source_svg).iter())
