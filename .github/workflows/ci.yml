@@ -3,6 +3,8 @@ on:
   push:
     branches: [main, work/vibepublish-core-20260904]
   pull_request:
+    # Guide-text-only PRs use the fast guide.yml check; main pushes still run everything.
+    paths-ignore: ['docs/llm/**', 'CHANGELOG.md']
   workflow_dispatch:
 permissions:
   contents: read
