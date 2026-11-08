@@ -172,7 +172,7 @@ def test_validation_can_preserve_private_refs_without_reading_pixels():
 
 
 def test_large_reused_asset_stays_out_of_svg_and_fetches_only_from_validated_map(monkeypatch):
-    import resvg_py
+    from social_operations import svg_raster
     out = io.BytesIO()
     Image.new('RGB', (1536, 1536), '#123456').save(out, 'PNG', compress_level=0)
     data = out.getvalue()
@@ -187,14 +187,14 @@ def test_large_reused_asset_stays_out_of_svg_and_fetches_only_from_validated_map
     normalized = validate_svg(source, read_asset=resolve, **size)
     assert len(normalized) < 2000 and b'data:' not in normalized and reads == ['photo']
     reads.clear()
-    convert = resvg_py.svg_to_bytes
+    convert = svg_raster.svg_to_bytes
     def guarded(**kwargs):
         assert kwargs['skip_system_fonts'] is True
         assert len(kwargs['font_files']) == 10
         assert kwargs['svg_string'].count('data:image/png;base64,') == 1
         assert 'asset:photo' not in kwargs['svg_string']
         return convert(**kwargs)
-    monkeypatch.setattr(resvg_py, 'svg_to_bytes', guarded)
+    monkeypatch.setattr(svg_raster, 'svg_to_bytes', guarded)
     monkeypatch.setattr('social_operations.carousel_compositor.MAX_COMPOSITION_ASSET_BYTES', len(data))
     pixels = image(render_svg(source, read_asset=resolve, **size))
     assert reads == ['photo'] and pixels.size == (896, 128)

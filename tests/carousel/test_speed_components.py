@@ -12,7 +12,7 @@ from social_operations.carousel_compositor import render_svg
 
 @pytest.mark.parametrize('mode', ['RGB', 'RGBA'])
 def test_repeated_source_is_embedded_once_without_resizing_or_reencoding(mode, monkeypatch):
-    import resvg_py
+    from social_operations import svg_raster
 
     source = Image.new(mode, (320, 240), (18, 52, 86, 0) if mode == 'RGBA' else (18, 52, 86))
     source.paste((200, 0, 0, 255) if mode == 'RGBA' else (200, 0, 0), (80, 60, 240, 180))
@@ -25,7 +25,7 @@ def test_repeated_source_is_embedded_once_without_resizing_or_reencoding(mode, m
         reads.append(ident)
         return data, 'image/png', hashlib.sha256(data).hexdigest()
 
-    rasterize = resvg_py.svg_to_bytes
+    rasterize = svg_raster.svg_to_bytes
 
     def inspect_embedding(**kwargs):
         images = [node.get('href') for node in ET.fromstring(kwargs['svg_string']).iter()
@@ -34,7 +34,7 @@ def test_repeated_source_is_embedded_once_without_resizing_or_reencoding(mode, m
         assert base64.b64decode(images[0].split(',', 1)[1]) == data
         return rasterize(**kwargs)
 
-    monkeypatch.setattr(resvg_py, 'svg_to_bytes', inspect_embedding)
+    monkeypatch.setattr(svg_raster, 'svg_to_bytes', inspect_embedding)
     png = render_svg('<svg width="384" height="160">'
         '<rect width="384" height="160" fill="#173957"/>'
         '<image href="asset:photo" x="90" y="20" width="80" height="60"/>'

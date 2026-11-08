@@ -18,13 +18,13 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
-import resvg_py
 from defusedxml.ElementTree import fromstring
 from defusedxml.common import DefusedXmlException
 from PIL import Image, ImageDraw, ImageFont
 
 from .assets import AssetPreview, render_asset_full
 from .carousel_references import ReferenceBank
+from . import svg_raster
 from .domain import DomainError
 
 _SVG = "http://www.w3.org/2000/svg"
@@ -175,7 +175,7 @@ def _safe_value(value: str) -> bool:
 
 def _thumb(svg: str) -> Image.Image:
     try:
-        png = resvg_py.svg_to_bytes(svg_string=svg, width=150, height=150,
+        png = svg_raster.svg_to_bytes(svg_string=svg, width=150, height=150,
                                     skip_system_fonts=True)
         with Image.open(io.BytesIO(png)) as source:
             return source.convert("RGBA")
