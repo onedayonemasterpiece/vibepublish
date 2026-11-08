@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel review delivers variety: master render now carries ST7 (all cards one scheme) instead of K19, and ST3 «one manner per role» also names identical size/position/shape of text blocks on every card as a template defect. Previously the master review delivered only consistency (ST3) and never the existing variety check (E2E d894 r24: one template on all cards).
 - Story Carousel review keeps cohesion: s09 treats media crossing into the neighbouring card as intent (no shrinking an object to its card window, no removing the crossing; only accidental touches and covered text are fixed); the chosen s03 composition sketch is imported so s08 montage and s09 review compare against it. Evidence: E2E d894 redo notes «no bird cut at C2|C3», «connector stub removed», «C3 reduced to window width».
 - Story Carousel cascade keeps cohesion end to end: s02 plans media per card boundary (what spans k|k+1) instead of per card, s08 mounts by the chosen s03 composition and keeps shared media across both cards (cohesion was planned in s03 but lost when per-card components were assembled).
 - Story Carousel: cohesion is the first selection criterion in s03 and a named K14 defect (any card reading as a standalone slide); removed «each card understandable as a separate screenshot» from #217, which pushed self-contained cards (E2E d894 r19–r21 regressed from connected r11); transitions motivated by media shared between adjacent cards; the strongest shot whole and large; several cut-out objects from different shots of the series.
