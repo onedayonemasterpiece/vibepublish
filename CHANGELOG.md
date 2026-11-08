@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- VK scheduled recovery: treat explicit add-post error 214 as a terminal access refusal, retain its fixed redacted diagnostic, and adopt a queued post only from unique ordered saved photo IDs plus frozen text/time. Remove newest-ID guessing; copied-photo binding still trusts a known response ID and same-guid recovery remains available. This prevents an older same-time post from becoming a false receipt for new media; existing erroneous receipts remain audit evidence pending separately reviewed correction.
+
 - VK carousel publication: default the existing native `carousel` mode when a new post's complete ordered image list matches one verified export owned by the caller. Freeze the choice in the existing plan, preserve explicit values and known modes through publication edits/rescheduling, and leave ordinary, partial, reordered or mixed media unchanged. No new `wall.edit` parameter, public mode value or worker change; native UI acceptance remains separate.
 
 - Story Carousel render guidance: include the required carousel ID and numeric revision from `get(scope:story)`, with one complete JSON example in s09 and a pointer from the short instruction. Render does not require a top-level request key; the MCP schema is unchanged.
