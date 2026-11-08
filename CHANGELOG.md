@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: a component sits seamlessly — a rectangle of another tone around it (white plate on beige) is a montage defect unless the plate is a deliberate composition element (seen in E2E d894 r11).
 - MCP input validation: return the failing field and sanitized schema rule with `retry_safe=true` only for rejection before handler dispatch. Keep authorization/domain/unknown-outcome failures non-retryable and never fabricate an operation ID. Add a complete s01 create example with its required top-level request key; record the step note on the first revise. Regression checks cover missing keys, overlong briefs, unknown fields, no durable/dispatch effects and the valid example. Align the canonical composition stage with merged s03: 2–3 generated sketches, then one selected final direction by default; multiple finished variants remain appropriate when requested or when a substantive alternative warrants comparison.
 
 - Story Carousel step s03: references are hints that widen composition and techniques, not a template — own composition, techniques may be combined, level must hold up; 2–3 generated composition variants with selection of the best restored (lost in #201) (owner 08.11).
