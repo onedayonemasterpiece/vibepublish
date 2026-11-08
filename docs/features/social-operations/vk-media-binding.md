@@ -24,6 +24,32 @@ cannot establish identity. Otherwise the existing same-`guid` path obtains the
 authoritative post ID before any copied-photo binding. Known response-ID
 acceptance stays unchanged; no CDN or source/output byte comparison is added.
 
+### Withdraw a contradicted local receipt
+
+An owner may use the existing `publication_update(change.kind=reconcile)` with
+the original publication/revision, operation/attempt IDs, a request key and
+`native_reference` from a fresh exact provider item read (at most 300 seconds
+old). For this narrow legacy case, the scheduled VK publish must retain an
+unresolved-ID `vk_prepared` origin and a final copied-photo observation. A
+same-owner, same-binding/epoch publication must have verified that same native
+post and ordered attachments before the newer intent existed; its existing fact
+must still identify the older publication. The two immutable plans must have
+different ordered source asset hashes; no CDN bytes are compared. Text, schedule, count and missing
+diagnostic events are not sufficient evidence.
+
+The correction performs no provider call. In one local transaction it withdraws
+only the newer attempt's false item/queue references and current delivery
+identity, retaining the former observation, original checkpoint, immutable
+intent/plan and dispatch marker as audit. The original operation becomes
+`outcome_unknown`, `retry_safe:false`, with `next_action:review_outcome`.
+Existing facts and the older publication and fresh read references are unchanged.
+The same correction key only replays its receipt. A durable withdrawal marker
+blocks subsequent reconcile admission; retry/supersede/repeat, selected edits
+and removal resolution cannot use the withdrawn identity to produce an effect.
+This does not establish that the newer publish had no effect or authorize
+deleting the older post. Status: **Not confirmed by user** until rollout and
+the exact incident correction are verified separately.
+
 ## VK exact item photo source reads (2026-10-31)
 
 Status: **Not confirmed by user** until Opus review and rollout. Published and postponed `read(kind=item)` may return photo downloads through the existing verified-asset read pipeline (`item.media[*].source` and full-resolution MCP/HTTP asset reads). Use the response's `orig_photo` URL where available, otherwise the largest `sizes` rendition; no signed URL/access key is stored or logged. This is an editing source, **not** publisher upload/proof data. A CDN error leaves the item's text, schedule and fresh `item_ref` readable with one `media_download_unavailable` code; `existing.position` continues to refer to original native VK attachment IDs. A postponed ID no longer in the native queue resolves to no item (never to the next queued post); a subsequent edit refuses with `remote_item_missing`. Scheduled/feed list scans never download images. Exact VK photo reads use the existing single-copy, one-hour `media_store_assets.download_cache` and its normal cleanup, **not** the 14-day unlinked upload retention. Asset reads enforce expiry for the requested asset without acquiring a SQLite writer or purging unrelated assets; unfinished operations, saved carousel revisions and exported cards retain their existing holds. The same expiry rule governs the existing worker's physical cleanup and carousel original selection, so expired unheld bytes remain unavailable while cleanup is pending and an expired cache copy cannot shadow a durable same-owner alpha source. The 14-day retention remains unchanged for other assets.

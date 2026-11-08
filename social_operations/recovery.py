@@ -13,6 +13,10 @@ def admit(app, actor, args):
             or args.get('item_ref') or change.get('kind') != 'reconcile' or set(change) != {'kind', 'operation_id', 'attempt_id'}):
         raise DomainError('access_denied', next_action='contact_owner')
     if str(change.get('native_reference', '')).startswith('item_'):
+        from .vk_observation_withdrawal import withdraw
+        receipt = withdraw(app, actor, args)
+        if receipt is not None:
+            return receipt
         from .baseline_rebase import rebase
         return rebase(app, actor, args)
     if args.get('item_ref') or ('native_reference' in change and 'attempt_id' not in change):
@@ -52,6 +56,11 @@ def admit(app, actor, args):
             if change.get('attempt_id') and not any(c['id'] == change['attempt_id'] for c in children):
                 raise DomainError('recovery_operation_mismatch')
             from . import vk_allocation_recovery
+            from .vk_observation_withdrawal import MARKER
+            for child in children:
+                saved = db.execute('SELECT hint FROM attempt_recovery WHERE attempt_id=?', (child['id'],)).fetchone()
+                if saved and MARKER in json.loads(saved['hint']):
+                    raise DomainError('recovery_not_available', next_action='review_outcome')
             unknown = [c for c in children if c['dispatched'] and (c['state'] == 'outcome_unknown'
                        or c['provider'] == 'max' and c['state'] == 'blocked' and c['observed'] == 'unknown')]
             pending = db.execute("SELECT 1 FROM attempt_recovery r JOIN attempts a ON a.id=r.attempt_id WHERE a.operation_id=? AND r.finalize_state='pending'", (op['id'],)).fetchone()
