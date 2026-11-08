@@ -163,6 +163,8 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     with self.assertRaises(Exception):
                         await session.read_resource('vibepublish://assets/' + asset)
         # HTTP and MCP refuse expiry before the normal worker cleanup tick.
+        cleanup_at = self.store.clock() + 61
+        self.store.clock = lambda: cleanup_at
         await Worker(self.store, {}).run_once()
         with self.store.connection() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM assets').fetchone()[0], 0)
