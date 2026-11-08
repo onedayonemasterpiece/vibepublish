@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: trust photo clarified — from a series, one shot (not necessarily the cut-out one) keeps its real background; the same photo is not shown both with and without background (owner 08.11).
 - Story Carousel guide: keep the required hook and interesting turn; replace the shorter-carousel fallback with source research before storyboard and a concrete owner question only as a last resort. Ground the turn in material and replace unsupported audience-ignorance examples. Clarify narrative voice versus compact photo/source credit; require research for before photos and use a before/after pair when a relevant documentary image is available and the comparison serves the story, without inventing the past or waiting on an unavailable archive. Remove the unconditional 2–3 composition-variant quota: generate a connected composition, compare it beside the opened target reference and repeat when weak; note the actual work. Add a complete card-render example using the numeric card field. Record the owner's clarification in the canonical feature; no runtime or workflow-state change.
 
 - Story Carousel guide: wording — the strong object is never pre-cut with a tool before generation; the generator receives the whole author photo and returns the object on the card colour (F2) or on the card background fragment (F1).
