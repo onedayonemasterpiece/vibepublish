@@ -76,6 +76,28 @@ or processes. Real Store regressions bound SQL work and preserve source/alpha,
 expiry and failure behavior; rollout and live contention verification remain
 separate.
 
+Residual writer latency (2026-11-08): **Not confirmed by user**. Post-rollout
+maintenance still held the writer for 8–10 seconds, and one saved-region writer
+held it for 3.5 seconds. A bounded disposable image fixture showed that the
+owner/hash lookup traversed wide asset rows; a nonunique metadata-only index
+now serves the existing source join and deduplication predicates without changing
+owner, hash, MIME, dimension, newest-created ordering or quota rules. Store
+initialization creates it additively and idempotently at the existing schema
+version. Its first build scans existing metadata and takes a writer; the small
+fixture's build time is not a production startup bound.
+
+Successful slow maintenance and saved-region transactions also emit fixed phase
+durations after connection release. Maintenance reports expiry, cache purge,
+retention classification and reclamation. Saved regions report authority,
+hashing, deduplication, quota, byte insertion and journal work; quota/insertion
+are marked not run on a deduplication hit. Timers start after writer acquisition.
+The separate `tx_exit_ms` includes commit, connection close and the existing
+Store diagnostic handler, so it is not pure commit time or exact writer hold.
+Diagnostics are best effort, contain no SQL, identifiers or payloads, and do not
+change the successful cleanup deadline or receipt. The actual dominant live
+subphase remains unproven until these phases are observed after rollout; the
+source profile alone does not close the live latency incident.
+
 VK feed and queue reads preserve unsupported attachments (poll/link/market and
 unrecognized payloads) as opaque `unsupported:kind:owner_id` identities instead
 of blocking the read. Because `wall.edit` would erase such attachments, edits and

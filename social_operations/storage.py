@@ -87,6 +87,10 @@ class Store:
                 db.executescript(Path(__file__).with_name("carousel_schema.sql").read_text())
             # Cover retention scans without traversing multi-GB BLOB table pages.
             db.execute("CREATE INDEX IF NOT EXISTS assets_retention_lookup ON assets(created,id)")
+            # Share metadata lookup between owned originals and image deduplication.
+            db.execute("""CREATE INDEX IF NOT EXISTS assets_owner_hash_lookup
+                          ON assets(tenant_id,principal_id,sha256,source_sha256,mime,width,height,
+                                    created DESC,id)""")
 
     @staticmethod
     def _enable_wal(db: sqlite3.Connection) -> None:
