@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel guide: wording — the strong object is never pre-cut with a tool before generation; the generator receives the whole author photo and returns the object on the card colour (F2) or on the card background fragment (F1).
 - Story Carousel guide: the author photo is the source, not a sample — the background-free object is a high-fidelity reproduction of the same photo with only the background changed to the card background; the real photo with its own background is also shown so the post stays believable (owner 08.11).
 - Story Carousel guide: F1 object prompt no longer speaks only of letters; F4 tool cutting is chosen directly when the object must stay documentary-exact (real damage, inscriptions, faces), without a mandatory F1 attempt.
 - Story Carousel step s03: open every reference in the catalog (library pages without query), not a sample of three, before choosing the target reference (owner 08.11).
