@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel cover (owner, November 8): the first card must invite swiping — e.g. the next card's inscription or object peeking from the right edge, a word split by the seam, or another motivator.
+
 - Story Carousel brand presence and attribution (owner, November 8): «Полюбить Калининград» is a mandatory storytelling element of every story — at least once, as a background word/inscription in the canvas or unobtrusively on the CTA (K18, s08). Each complete inscription reads on one card or two adjacent cards; purposeful repetitions remain allowed. Compact photo-author/source credits may stay on the card; full attribution and license information belongs in the post caption. No count limit, fixed font-size quota or automatic gate.
 
 - Story Carousel public text: name the exhibition/event on the first card immediately after the hook; omit AI-design commentary from post captions and mark documentary reconstruction on the card. Replace service phrases and promises of continuation with a complete account of known facts and missing information; label hypotheses, state their author or basis and distinguish them from established facts.
