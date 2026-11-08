@@ -12,7 +12,7 @@ from social_operations.assets import import_image, retired_asset_rows
 from social_operations.service import Application
 from social_operations.storage import Store
 from social_operations.worker import Worker
-from social_operations.domain import DomainError, canonical, digest, timestamp
+from social_operations.domain import DomainError, timestamp
 from tests.providers.scripted import VKTransport
 
 
@@ -158,16 +158,15 @@ async def test_only_owned_verified_export_proves_vk_carousel(tmp_path, provenanc
         foreign = env.store.authenticate(env.store.create_principal(
             'other_tenant' if provenance == 'foreign_tenant' else 'tenant', 'other_owner', owner=True))
     with env.store.tx() as db:
-        if foreign:
-            db.execute('UPDATE operations SET tenant_id=?,principal_id=? WHERE id=?',
-                       (foreign.tenant_id, foreign.principal_id, exported['operation_id']))
-        elif provenance == 'not_export':
-            db.execute('UPDATE operations SET request=? WHERE id=?',
-                       (canonical({'command': {'kind': 'create'}}), exported['operation_id']))
-        elif provenance == 'failed':
-            db.execute("UPDATE operations SET state='failed' WHERE id=?", (exported['operation_id'],))
-        else:
+        if provenance == 'incomplete':
             db.execute('UPDATE operations SET complete=0 WHERE id=?', (exported['operation_id'],))
+        else:
+            db.execute("UPDATE operations SET state='failed' WHERE id=?", (exported['operation_id'],))
+            if provenance != 'failed':
+                # Insert provenance in its original scope; requests and keyed owners are immutable.
+                env.app._new_operation(db, foreign or env.actor, 'carousel',
+                    {'command': {'kind': 'create' if provenance == 'not_export' else 'export'}},
+                    complete=True, result={'media': exported['media']})
     admitted = await env.app.call(env.actor, 'vibepublish_publish', {
         'to': ['lovekenig_vk'], 'media': exported['media'], 'request_key': 'unproven-publication'})
     assert 'error' not in admitted, admitted
@@ -182,18 +181,13 @@ async def test_vk_edit_and_reschedule_preserve_known_mode_without_setting_wall_e
     command = {'to': ['lovekenig_vk'], 'content': {'text': 'Before edit'},
                'media': [{'source': {'kind': 'asset', 'id': env.new_asset}}],
                'delivery': {'kind': 'at', 'at': timestamp(NOW + 3600)}, 'request_key': 'managed-mode'}
-    if known_mode == 'carousel':
+    if known_mode is not None:
         command['vk'] = {'primary_attachments_mode': known_mode}
-    started = await env.app.call(env.actor, 'vibepublish_publish', command)
+    # Seed a legacy/internal mode before the immutable plan is inserted. Public input still rejects grid.
+    started = (env.app.accept(env.actor, 'publish', command) if known_mode == 'grid'
+               else await env.app.call(env.actor, 'vibepublish_publish', command))
     assert 'error' not in started, started
     assert await env.worker.run_once()
-    if known_mode == 'grid':
-        # A legacy/internal saved value is preserved; public input still rejects grid below.
-        plan = frozen_plan(env, started['operation_id'])
-        plan['vk_primary_attachments_mode'] = known_mode
-        with env.store.tx() as db:
-            db.execute('UPDATE attempts SET plan=?,plan_digest=? WHERE operation_id=?',
-                       (canonical(plan), digest(plan), started['operation_id']))
     for revision, change in enumerate([
         {'kind': 'edit', 'content': {'text': 'After edit'}, 'media': exported['media']},
         {'kind': 'reschedule', 'delivery': {'kind': 'at', 'at': timestamp(NOW + 7200)}},
