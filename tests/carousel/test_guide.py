@@ -105,6 +105,21 @@ async def test_canonical_guide_and_half_scale_master_are_exposed_by_mcp(tmp_path
         assert db.execute("SELECT count(*) FROM publications").fetchone()[0] == 0
 
 
+@pytest.mark.asyncio
+async def test_generation_guide_does_not_default_body_to_typesetting(tmp_path):
+    store = Store(tmp_path / "generation-guide.sqlite")
+    actor = store.authenticate(store.create_principal("tenant", "owner", owner=True))
+    result = await Application(store).call(actor, "vibepublish_carousel", {
+        "command": {"kind": "get", "scope": "guide", "topic": "60-generation", "section": "§0"}})
+    content = result["content"]
+    assert "основной способ — генерация компонентов, включая читаемые поясняющие мини-абзацы" in content
+    assert "автоматического перехода тела, подписей и длинных формулировок на F8 нет" in content
+    assert "обычно набирай F8" not in content
+    assert "F8 остаётся осмысленной адресной альтернативой для конкретного блока" in content
+    assert "проверяй каждую букву, число и факт на готовом изображении" in content
+    assert "для одинаковых ролей (все заголовки) — один" in content
+
+
 def test_each_model_guide_reply_is_bounded_and_sections_are_complete():
     """No guide reply may be long enough to truncate in the model's context."""
     index = guide()
