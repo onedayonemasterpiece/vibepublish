@@ -120,12 +120,24 @@ async def test_failed_and_unknown_retain_three_days_but_not_forever(tmp_path, st
                    (status, 1 if status == "outcome_unknown" else 0, accepted["operation_id"]))
         db.execute("UPDATE operations SET state=?,work_state='done',complete=1,worker_seen=? WHERE id=?",
                    (status, clock[0], accepted["operation_id"]))
+    def retention_reasons():
+        with store.connection() as db:
+            expected = retired_asset_rows(db, clock[0], include_sizes=False)
+            phases = {}
+            rows = retired_asset_rows(db, clock[0], include_sizes=False, phase_times=phases)
+        assert rows == expected
+        assert set(phases) == {
+            phase + suffix for phase in ("attempt_refs", "other_refs", "carousel_refs", "classify", "lineage")
+            for suffix in ("_ms", "_cpu_ms")
+        } | {"asset_rows", "visual_pairs", "lineage_passes"}
+        assert all(type(value) is int and value >= 0 for value in phases.values())
+        assert phases["asset_rows"] == len(rows)
+        return {row["id"]: row["reason"] for row in rows}
+
     clock[0] += 2 * 86400
-    with store.connection() as db:
-        assert {r["id"]: r["reason"] for r in retired_asset_rows(db, clock[0])}[asset] == reason
+    assert retention_reasons()[asset] == reason
     clock[0] += 86401
-    with store.connection() as db:
-        assert {r["id"]: r["reason"] for r in retired_asset_rows(db, clock[0])}[asset] == "reclaim"
+    assert retention_reasons()[asset] == "reclaim"
     assert not await worker.run_once()
     with store.connection() as db:
         assert db.execute("SELECT 1 FROM assets WHERE id=?", (asset,)).fetchone() is None

@@ -281,7 +281,8 @@ class Worker:
                     self.app._purge_media_store_assets(db)
                     purged = time.monotonic()
                     from .assets import reclaim_asset_bytes, retired_asset_rows
-                    rows = retired_asset_rows(db, now, include_sizes=False)
+                    retention_times = {}
+                    rows = retired_asset_rows(db, now, include_sizes=False, phase_times=retention_times)
                     classified = time.monotonic()
                     reclaim_asset_bytes(db, rows)
                     reclaimed = time.monotonic()
@@ -292,10 +293,20 @@ class Worker:
                     try:
                         logging.getLogger(__name__).warning(
                             "sqlite_maintenance_phases elapsed_ms=%d expire_ms=%d cache_purge_ms=%d "
-                            "retention_ms=%d reclaim_ms=%d tx_exit_ms=%d",
+                            "retention_ms=%d reclaim_ms=%d tx_exit_ms=%d "
+                            "attempt_refs_ms=%d attempt_refs_cpu_ms=%d other_refs_ms=%d other_refs_cpu_ms=%d "
+                            "carousel_refs_ms=%d carousel_refs_cpu_ms=%d classify_ms=%d classify_cpu_ms=%d "
+                            "lineage_ms=%d lineage_cpu_ms=%d asset_rows=%d visual_pairs=%d lineage_passes=%d",
                             round((exited - acquired) * 1000), round((expired - acquired) * 1000),
                             round((purged - expired) * 1000), round((classified - purged) * 1000),
-                            round((reclaimed - classified) * 1000), round((exited - reclaimed) * 1000))
+                            round((reclaimed - classified) * 1000), round((exited - reclaimed) * 1000),
+                            retention_times['attempt_refs_ms'], retention_times['attempt_refs_cpu_ms'],
+                            retention_times['other_refs_ms'], retention_times['other_refs_cpu_ms'],
+                            retention_times['carousel_refs_ms'], retention_times['carousel_refs_cpu_ms'],
+                            retention_times['classify_ms'], retention_times['classify_cpu_ms'],
+                            retention_times['lineage_ms'], retention_times['lineage_cpu_ms'],
+                            retention_times['asset_rows'], retention_times['visual_pairs'],
+                            retention_times['lineage_passes'])
                     except Exception:
                         pass
             op = self.store.claim(
