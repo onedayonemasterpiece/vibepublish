@@ -198,3 +198,109 @@ Keep this as a recurrence observation under related VK-media incident
 inc_b4ce8452c3997f4c35ffd141 / PR139; do not attach it as a cause or verification
 of the unrelated SQLite/performance incident inc_247a251746662872b81bffbc.
 Net production-code changes for this investigation: **0**.
+
+## 2026-11-08, 10:15–10:38 UTC: content changes and post 261 photo 4
+
+Status: **Not done; not fixed**. This follow-up records current attachment
+availability and the limits of normal delivery/read verification. It does not
+establish the cause of the owner's native-viewer failures.
+
+### Separate content states and receipts
+
+The subsequent content updates below are separate from the earlier read-only
+259 diagnostic windows. Do not compare their different photo bytes as if no
+provider mutation had occurred.
+
+- Dot reported an authorized in-place update of published post 259 at
+  10:15:59 UTC: update receipt `op_a36938d4465742468905b3ecd5f72dc0`,
+  read receipt `op_142277b0aef24377a21277e197ad4260`.
+  Independent exact read `op_cd1b4e68ae9f44d1a14909a8a93e637c`, observed
+  at 10:17:37 UTC, downloaded seven JPEGs. The new last-photo source was
+  1080x1350, 502154 bytes, SHA-256
+  `81e21d46a12efd3276210e3613c3d38a2761acfc1a71b4b8195689a6fd0e4184`.
+  That is a changed attachment source, not a repair claim for old
+  photo-241261191_457239313 or proof of native-viewer availability.
+- At 10:20:47 UTC, the [owner reported another failure](https://mira-projects.slack.com/archives/C0CFP01K292/p1794133247654269):
+  photo 4 of postponed post 261 did not open in the VK app. A delayed
+  verification was suggested as a hypothesis, not demonstrated as a fix.
+- The [independent exact-read report](https://mira-projects.slack.com/archives/C0CFP01K292/p1794133432340659)
+  for `op_4ac4f94fd4aa4f92acf9378c2f82491d`, observed at 10:23:16 UTC,
+  records six decodable 1080x1350 JPEG sources. Photo 4's selected source was
+  330503 bytes, SHA-256
+  `5081b2c244c0e50cd98f5cf3581994f92a146ee241b192c4a2734add817ee6b4`.
+  This ordinary read did not enumerate every advertised rendition.
+- Root executed one separately reviewed, fixed-target diagnostic in
+  `op_b5f7c31025397462e3af463b`, operation window
+  **10:38:29.489–10:38:40.562 UTC**; process duration 10982 ms,
+  exit 0, no truncation. One existing scheduled metadata read resolved
+  current post 261 with six attachments and current photo 4
+  `photo-241261191_457239335`. Its nine unique advertised URLs were each
+  fetched once, without retry, through the existing guarded VK transport.
+
+All nine current variants returned HTTP 200, `image/jpeg`, and passed full
+JPEG decoding. Every effective response URL hash equalled the requested URL
+hash. Descriptors sharing an identical URL were deduplicated:
+
+| Advertised descriptor(s) | Decoded dimensions | Bytes |
+| --- | --- | ---: |
+| orig_photo / base | 1080x1350 | 276668 |
+| y / z | 1080x1350 | 276668 |
+| x | 640x800 | 134071 |
+| r | 540x675 | 108504 |
+| q | 360x450 | 52973 |
+| p | 240x300 | 26960 |
+| m | 160x200 | 14098 |
+| o | 108x135 | 8074 |
+| s | 72x90 | 4597 |
+
+Current original/base SHA-256:
+`8cf4c8ad06a8fd7e531bc6cd41c34dccfc0e377dd613661f7ce182f37b02b3cb`.
+Current r SHA-256:
+`26abf221f0684214347c2d42eff85633bee7bb7c7013736f5b0979006807798a`.
+The durable receipt retains the per-variant hashes and whitelisted metadata;
+no signed URL, query, access key, token or response body is logged.
+
+**The photo-4 bytes changed between the 10:23 and 10:38 observations.**
+The exact intervening mutation receipt is not established in this evidence
+set. The 9/9 result describes the current attachment; it is not evidence that
+the same previously reported file or URL healed without mutation. Nor does it
+show that the VK app loaded the replacement, or that a fixed delay would
+prevent recurrence. No 261 rendition failure was reproduced by this probe.
+
+### What the existing verification actually establishes
+
+These source findings are pinned to worker release
+`dfe3ec00076a6ca9055487cbfa39cfe22f38a8c3`:
+
+- [`_stage_images`](https://github.com/onedayonemasterpiece/vibepublish/blob/dfe3ec00076a6ca9055487cbfa39cfe22f38a8c3/adapters/vk.py#L485-L533)
+  validates upload/save receipts and checkpoints native photo identities.
+  It does not fetch original or derived CDN renditions after save.
+- [`bind_media`](https://github.com/onedayonemasterpiece/vibepublish/blob/dfe3ec00076a6ca9055487cbfa39cfe22f38a8c3/adapters/native.py#L99-L111)
+  compares ordered provider identities. Its `media_check="provider_binding"`
+  and `media_hashes` associate those identities with request asset hashes;
+  they are not independent downloads or hashes of every remote rendition.
+  The accepted delivery semantics are unchanged.
+- [`_photo_urls` / `_exact_photo_page`](https://github.com/onedayonemasterpiece/vibepublish/blob/dfe3ec00076a6ca9055487cbfa39cfe22f38a8c3/adapters/vk.py#L897-L956)
+  try the original first, then sizes by descending area, and stop at the
+  first successful download for each photo. Alternate URLs are fallback
+  candidates after `vk_photo_http_failed`; they are not all tested when the
+  original succeeds. The worker fully decodes the selected downloaded
+  source, but an original HTTP 200 therefore does not detect an unrequested
+  size:r HTTP 404.
+- The same exact-read path can return an item marked
+  `media_download_unavailable:<code>` when download fails. A completed
+  `verified` read operation means the read finished; inspecting the returned
+  item evidence/error remains necessary. It does not establish all-rendition
+  or native-viewer availability.
+
+This is a concrete coverage gap for detecting the earlier 259 rendition
+symptom, not proof that the application caused that provider response.
+Any targeted rendition observation must use the actual post's ordered
+attachments after native ID remapping; presave IDs or a later replacement
+cannot stand in for the failed object. A successful selected original and
+a failed alternate rendition must remain distinguishable evidence.
+
+No normal-path code, publication gate, fixed-delay retry, automatic reupload,
+credential behavior or delivery-state semantics were changed by this work.
+The bounded probe has ended. PR139 remains draft/open and the existing
+VK-media incident remains open with root cause and resolution unestablished.
