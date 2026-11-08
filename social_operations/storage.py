@@ -505,7 +505,7 @@ class Store:
                 deliveries.append(result)
             if brief:
                 outcomes = []
-                delivered = 0
+                delivered = unknown = 0
                 operation_result = json.loads(op["result"])
                 for item in deliveries:
                     success = item["observed"] in ("published", "provider_scheduled", "edited", "reacted")
@@ -522,6 +522,10 @@ class Store:
                             view["url"] = item["navigate_hint"]
                         if not any(key in view for key in ("url", "queue_ref", "item_ref")):
                             view["reason"] = "Сеть подтвердила публикацию без прямой ссылки"
+                    elif item["state"] == "outcome_unknown":
+                        unknown += 1
+                        view["status"] = "исход неизвестен"
+                        view["reason"] = "Исход отправки не установлен"
                     elif state == "выполняется":
                         next_at = (item.get("next_attempt_at") or item.get("media_budget_retry_at")
                                    or (operation_result.get("vk_completion_retry_at") if item["provider"] == "vk" else None))
@@ -550,6 +554,9 @@ class Store:
                     overall = "Предпросмотр готов; отправки не было"
                 elif not op["complete"]:
                     overall = "выполняется"
+                elif unknown:
+                    overall = (f"доставка подтверждена в {delivered} из {count}; исход не установлен в {unknown}; "
+                               f"отказ в {count - delivered - unknown}")
                 elif count and delivered == count:
                     overall = "доставлено во все сети"
                 elif delivered:
@@ -557,7 +564,7 @@ class Store:
                 else:
                     overall = "не доставлено"
                 snapshot = {"operation_id": op["id"], "revision": op["revision"],
-                            "action": op["action"], "state": op["state"] if op["state"] != "outcome_unknown" else "blocked",
+                            "action": op["action"], "state": op["state"],
                             "operation_complete": bool(op["complete"]), "deliveries": deliveries,
                             "summary": {"result": overall, "networks": outcomes}}
                 if op["publication_id"]:
@@ -572,7 +579,7 @@ class Store:
                 ).fetchone()
                 if dependency:
                     snapshot["linked_story"] = dict(dependency)
-                if op["error"] and op["state"] != "outcome_unknown":
+                if op["error"]:
                     snapshot["error"] = json.loads(op["error"])["error"]
                 return snapshot
             state = op["state"]

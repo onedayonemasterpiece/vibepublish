@@ -617,7 +617,7 @@ tool("asset_preview", "Preview (default) is for inspection and selection; reques
     "visual", True)
 
 DEFS["status_network"] = obj({"destination": ALIAS, "provider": PROVIDER,
-    "status": enum("готово", "выполняется", "отказ"), "url": URL,
+    "status": enum("готово", "выполняется", "отказ", "исход неизвестен"), "url": URL,
     "queue_ref": ID, "item_ref": ID, "reason": string(200), "next_attempt_at": DATE,
     "next_attempt_time": string(5, pattern=r"^[0-2][0-9]:[0-5][0-9]$")},
     ("destination", "provider", "status"))

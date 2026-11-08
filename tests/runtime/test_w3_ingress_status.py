@@ -196,7 +196,8 @@ async def test_status_returns_when_pending_operation_completes(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_terminal_vk_refusal_preserves_telegram_success(tmp_path):
+@pytest.mark.parametrize("unknown", [False, True])
+async def test_terminal_vk_refusal_preserves_telegram_success(tmp_path, unknown):
     store, actor = setup(tmp_path)
     class RefusingVK(FakeProvider):
         async def execute(self, prepared, hooks):
@@ -208,22 +209,38 @@ async def test_terminal_vk_refusal_preserves_telegram_success(tmp_path):
         "vk": RefusingVK(tmp_path / "remote.sqlite", "vk"),
     }
     app = IngressApplication(store)
+    if unknown:
+        store.bind(actor, "owner", "vk_refused", "conn_vk", "target_refused")
     accepted = await app.call(actor, "vibepublish_publish", {
-        "to": ["telegram", "vk"], "content": {"text": "Delivery is independent"},
+        "to": ["telegram", "vk"] + (["vk_refused"] if unknown else []),
+        "content": {"text": "Delivery is independent"},
         "request_key": "refusal-no-rollback",
     })
     await Worker(store, providers).run_once()
+    if unknown:
+        # Retained terminal facts for brief projection; the withdrawal test covers
+        # the real transition. Immutable intent and provider evidence stay intact.
+        with store.tx() as db:
+            db.execute("UPDATE attempts SET state='outcome_unknown',stage='finished',"
+                       "observed='unknown',result='{}' WHERE operation_id=? AND alias='vk'",
+                       (accepted["operation_id"],))
     snapshot = (await app.call(actor, "vibepublish_status", {
-        "ids": [accepted["operation_id"]], "wait_final": True, "wait_seconds": 1,
+        "ids": [accepted["operation_id"]],
     }))["receipts"][0]
-    statuses = {n["provider"]: n for n in snapshot["summary"]["networks"]}
+    statuses = {n["destination"]: n for n in snapshot["summary"]["networks"]}
+    assert snapshot["operation_complete"]
     assert statuses["telegram"]["status"] == "готово"
-    assert statuses["vk"]["status"] == "отказ"
-    assert statuses["vk"]["reason"] == "Нет действующей авторизации сети"
-    assert snapshot["summary"]["result"] == "доставлено в 1 из 2"
+    refused = statuses["vk_refused" if unknown else "vk"]
+    assert refused["status"] == "отказ"
+    assert refused["reason"] == "Нет действующей авторизации сети"
+    if unknown:
+        assert statuses["vk"]["status"] == "исход неизвестен"
+        assert statuses["vk"]["reason"] == "Исход отправки не установлен"
+        assert snapshot["summary"]["result"] == "доставка подтверждена в 1 из 3; исход не установлен в 1; отказ в 1"
+    else:
+        assert snapshot["summary"]["result"] == "доставлено в 1 из 2"
     assert providers["telegram"].count("effect") == 1
     assert providers["vk"].count("effect") == 0
-
 
 @pytest.mark.asyncio
 async def test_status_formats_next_attempt_in_tenant_time_without_cursor(tmp_path):
