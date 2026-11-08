@@ -111,6 +111,7 @@ class Application:
             if (short == 'carousel' and command['kind'] == 'get' and command.get('carousel_id')
                     and command.get('scope') in {'reference', 'library', 'guide', 'icons', 'icon', 'components'}):
                 details = {'scope': command['scope']}
+                details.update({key: command[key] for key in ('topic', 'section') if key in command})
                 if command.get('reference_id'):
                     details['reference_id'] = command['reference_id']
                 if command.get('scope') == 'icon':

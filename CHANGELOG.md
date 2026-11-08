@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel guide journal: retain the exact requested topic and section on existing carousel-linked guide reads and expose them through the ordinary journal. Keep older events compatible and pre-create, unlinked guide reads read-only; no new events, tables or revisions.
+
 - Publication status: preserve an unknown dispatched outcome and its error in the ordinary read-only snapshot, including after false-identity withdrawal. Report confirmed delivery, unknown outcome and refusal counts separately for mixed destinations; do not turn uncertainty into a no-delivery claim or create cursors/provider effects.
 
 - VK local receipt correction: an owner can withdraw a contradicted legacy scheduled identity using a fresh exact native reference and positive prior same-owner publication evidence. Preserve dispatched intent, original checkpoint and false observation as audit; invalidate only false private handles, leave old facts/refs intact, and block all re-admission or mutation through the withdrawn identity. No provider call or no-effect claim; live correction remains separately verified.
