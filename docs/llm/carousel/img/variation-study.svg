@@ -14,7 +14,7 @@
 <line x1="798.00" y1="154.00" x2="798.00" y2="179.00" stroke="#BE5938" stroke-width="2" stroke-dasharray="5 4"/>
 <text x="812.00" y="171.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Рез окна 4:5</text>
 <text x="100.00" y="212.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="20" font-weight="700" text-anchor="start">A. Одна история, пять решений · семь ролей и авторский замысел остаются одинаковыми</text>
-<text x="100.00" y="238.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="13" font-weight="400" text-anchor="start">Памятник: имя и 1977 → архив 1983 → видимая разница → предел знания → предложение вернуть имя в пространство города.</text>
+<text x="100.00" y="238.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="13" font-weight="400" text-anchor="start">Условный объект: имя и дата → архив → нынешний вид → чего не хватает → позиция → действие</text>
 <text x="100.00" y="279.00" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">A1  Панорамное фотоэссе</text>
 <text x="100.00" y="305.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Доминанта: фото · мосты: панорама и общая зона · плотность: широкие медиа и короткие опоры</text>
 <g id="A1" transform="translate(100,322)">
@@ -34,11 +34,11 @@
 <rect x="15.00" y="18.75" width="95.04" height="6.00" rx="1" fill="#263943"/>
 <rect x="15.00" y="32.75" width="102.60" height="3.00" rx="1" fill="#546A76"/>
 <rect x="15.00" y="41.75" width="88.56" height="3.00" rx="1" fill="#546A76"/>
-<text x="171.00" y="58.12" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="32" font-weight="700" text-anchor="start">1977</text>
+<text x="171.00" y="58.12" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="32" font-weight="700" text-anchor="start">Дата</text>
 <rect x="360.00" y="33.75" width="108.00" height="112.50" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
 <line x1="365.00" y1="38.75" x2="463.00" y2="141.25" stroke="#C6D4DC" stroke-width="1"/>
 <line x1="463.00" y1="38.75" x2="365.00" y2="141.25" stroke="#C6D4DC" stroke-width="1"/>
-<text x="367.50" y="157.50" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="18" font-weight="700" text-anchor="start">1983</text>
+<text x="367.50" y="157.50" fill="#FFFFFF" font-family="DejaVu Sans,sans-serif" font-size="18" font-weight="700" text-anchor="start">Архив</text>
 <rect x="537.00" y="63.75" width="108.00" height="103.13" rx="0" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="2"/>
 <line x1="542.00" y1="68.75" x2="640.00" y2="161.88" stroke="#C6D4DC" stroke-width="1"/>
 <line x1="640.00" y1="68.75" x2="542.00" y2="161.88" stroke="#C6D4DC" stroke-width="1"/>
@@ -62,12 +62,12 @@
 <line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
 <rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
 <text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
-<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
-<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · дата</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив</text>
 <text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
-<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Чего не хватает</text>
 <text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
-<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Действие</text>
 <text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Крупности: общий / деталь</text>
 <text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: широкие прямоугольники</text>
 <text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Типографика: подписи поверх фото</text>
@@ -83,8 +83,8 @@
 <rect x="810.00" y="0.00" width="240.00" height="187.50" rx="0" fill="#D6E0E5"/>
 <rect x="22.50" y="133.12" width="1005.00" height="24.38" rx="0" fill="#4B6B7B"/>
 <text x="12.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="32" font-weight="700" text-anchor="start">ИМЯ?</text>
-<text x="165.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="38" font-weight="700" text-anchor="start">1977</text>
-<text x="318.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="32" font-weight="700" text-anchor="start">1983</text>
+<text x="165.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="38" font-weight="700" text-anchor="start">Дата</text>
+<text x="318.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="32" font-weight="700" text-anchor="start">Архив</text>
 <text x="465.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="24" font-weight="700" text-anchor="start">СЕЙЧАС</text>
 <text x="651.00" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="64" font-weight="700" text-anchor="start">?</text>
 <text x="760.50" y="73.12" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="26" font-weight="700" text-anchor="start">ПАМЯТЬ</text>
@@ -114,12 +114,12 @@
 <line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
 <rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
 <text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
-<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
-<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · дата</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив</text>
 <text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
-<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Чего не хватает</text>
 <text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
-<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Действие</text>
 <text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Мотив: слово и горизонт</text>
 <text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: большие буквенные массы</text>
 <text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Медиа: две маленькие опоры</text>
@@ -156,8 +156,8 @@
 <rect x="765.00" y="26.25" width="157.50" height="101.25" rx="0" fill="#718D9B" stroke="#FFFFFF" stroke-width="2"/>
 <line x1="770.00" y1="31.25" x2="917.50" y2="122.50" stroke="#C6D4DC" stroke-width="1"/>
 <line x1="917.50" y1="31.25" x2="770.00" y2="122.50" stroke="#C6D4DC" stroke-width="1"/>
-<text x="172.50" y="127.50" fill="#263943" font-family="DejaVu Serif,sans-serif" font-size="28" font-weight="700" text-anchor="start">1977</text>
-<text x="319.50" y="43.12" fill="#263943" font-family="DejaVu Serif,sans-serif" font-size="26" font-weight="700" text-anchor="start">1983</text>
+<text x="172.50" y="127.50" fill="#263943" font-family="DejaVu Serif,sans-serif" font-size="28" font-weight="700" text-anchor="start">Дата</text>
+<text x="319.50" y="43.12" fill="#263943" font-family="DejaVu Serif,sans-serif" font-size="26" font-weight="700" text-anchor="start">Архив</text>
 <rect x="18.00" y="16.88" width="83.16" height="6.00" rx="1" fill="#263943"/>
 <rect x="18.00" y="30.88" width="89.77" height="3.00" rx="1" fill="#546A76"/>
 <rect x="618.00" y="18.75" width="81.84" height="6.00" rx="1" fill="#263943"/>
@@ -178,12 +178,12 @@
 <line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
 <rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
 <text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
-<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
-<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · дата</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив</text>
 <text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
-<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Чего не хватает</text>
 <text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
-<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Действие</text>
 <text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Мотив: бумажный носитель</text>
 <text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: вложенные рамки</text>
 <text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Типографика: индекс и антиква</text>
@@ -198,8 +198,8 @@
 <circle cx="382.50" cy="97.50" r="60.00" fill="#4B6B7B" stroke="#FFFFFF" stroke-width="3"/>
 <circle cx="547.50" cy="97.50" r="94.50" fill="#718D9B" stroke="#FFFFFF" stroke-width="3"/>
 <path d="M 165.0 97.5 L 255.0 142.5 L 367.5 97.5 L 690.0 97.5 L 795.0 144.375 L 967.5 144.375" fill="none" stroke="#4B6B7B" stroke-width="3"/>
-<text x="177.00" y="56.25" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="27" font-weight="700" text-anchor="start">1977</text>
-<text x="324.00" y="31.88" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="23" font-weight="700" text-anchor="start">1983</text>
+<text x="177.00" y="56.25" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="27" font-weight="700" text-anchor="start">Дата</text>
+<text x="324.00" y="31.88" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="23" font-weight="700" text-anchor="start">Архив</text>
 <rect x="12.00" y="18.75" width="87.12" height="6.00" rx="1" fill="#263943"/>
 <rect x="12.00" y="32.75" width="94.05" height="3.00" rx="1" fill="#546A76"/>
 <rect x="472.50" y="18.75" width="80.52" height="6.00" rx="1" fill="#263943"/>
@@ -221,12 +221,12 @@
 <line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
 <rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
 <text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
-<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
-<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · дата</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив</text>
 <text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
-<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Чего не хватает</text>
 <text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
-<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Действие</text>
 <text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Мотив: фокус и объяснение</text>
 <text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: круги и выноски</text>
 <text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Медиа: контекст → увеличение</text>
@@ -245,8 +245,8 @@
 <rect x="555.00" y="30.00" width="64.50" height="157.50" rx="15" fill="#718D9B"/>
 <rect x="873.00" y="30.00" width="85.50" height="157.50" rx="15" fill="#718D9B"/>
 <path d="M 0 155.625 C 150 120.0 240.0 178.125 375.0 148.125 S 690.0 120.0 810.0 150.0 S 975.0 176.25 1050 144.375" fill="none" stroke="#4B6B7B" stroke-width="4"/>
-<text x="169.50" y="54.37" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="29" font-weight="700" text-anchor="start">1977</text>
-<text x="382.50" y="50.62" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="23" font-weight="700" text-anchor="start">1983</text>
+<text x="169.50" y="54.37" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="29" font-weight="700" text-anchor="start">Дата</text>
+<text x="382.50" y="50.62" fill="#263943" font-family="DejaVu Sans,sans-serif" font-size="23" font-weight="700" text-anchor="start">Архив</text>
 <rect x="15.00" y="18.75" width="63.36" height="6.00" rx="1" fill="#263943"/>
 <rect x="15.00" y="32.75" width="68.40" height="3.00" rx="1" fill="#546A76"/>
 <rect x="15.00" y="41.75" width="59.04" height="3.00" rx="1" fill="#546A76"/>
@@ -274,12 +274,12 @@
 <line x1="900.00" y1="0.00" x2="900.00" y2="187.50" stroke="#BE5938" stroke-width="1.7" stroke-dasharray="5 4"/>
 <rect x="0.00" y="0.00" width="1050.00" height="187.50" rx="0" fill="none" stroke="#A6B7C0" stroke-width="2"/>
 <text x="75.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">1 · Вопрос</text>
-<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · 1977</text>
-<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив · 1983</text>
+<text x="225.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">2 · Имя · дата</text>
+<text x="375.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">3 · Архив</text>
 <text x="525.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">4 · Сейчас</text>
-<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Неизвестное</text>
+<text x="675.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">5 · Чего не хватает</text>
 <text x="825.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">6 · Позиция</text>
-<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Вернуть имя?</text>
+<text x="975.00" y="210.50" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="11.3" font-weight="400" text-anchor="middle">7 · Действие</text>
 <text x="1087.00" y="40.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Мотив: объект возвращается</text>
 <text x="1087.00" y="70.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Формы: вертикали и кривая</text>
 <text x="1087.00" y="100.00" fill="#546A76" font-family="DejaVu Sans,sans-serif" font-size="14" font-weight="400" text-anchor="start">Типографика: короткие метки</text>
