@@ -189,11 +189,14 @@ class CarouselService:
         if kind not in {'create', 'revise', 'export'}:
             raise DomainError('invalid_input')
         started = time.perf_counter()
+        export_times = {'started': (started, time.thread_time())} if kind == 'export' else None
         if not args.get('request_key'):
             raise DomainError('carousel_request_key_required')
         # Both admission and commit reuse the existing key. Pure rendering happens
         # outside the write transaction; concurrent retries cannot double-commit.
         with self.store.tx() as db:
+            if export_times is not None:
+                export_times['admitted'] = (time.perf_counter(), time.thread_time())
             actor = self._actor(db, actor)
             op = self.app._replay(db, actor, 'carousel', intent, args, implicit=False)
             row = None if op or kind == 'create' else self._version(
@@ -203,12 +206,19 @@ class CarouselService:
         if op:
             return self.store.receipt(actor, op)
         if kind == 'export':
-            png = self._render(actor, row)
-            images = [verify_image(data, 'image/png') for data in slice_cards(png,
-                card_count=row['card_count'], card_width=row['card_width'], card_height=row['card_height'])]
+            export_times['admission_done'] = (time.perf_counter(), time.thread_time())
+            png = self._render(actor, row, timings=export_times)
+            export_times['rendered'] = (time.perf_counter(), time.thread_time())
+            slices = slice_cards(png, card_count=row['card_count'],
+                card_width=row['card_width'], card_height=row['card_height'])
+            export_times['sliced'] = (time.perf_counter(), time.thread_time())
+            images = [verify_image(data, 'image/png') for data in slices]
+            export_times['verified'] = (time.perf_counter(), time.thread_time())
         else:
             scene = self._prepare(actor, command, row)
         with self.store.tx() as db:
+            if export_times is not None:
+                export_times['persist_acquired'] = (time.perf_counter(), time.thread_time())
             actor = self._actor(db, actor)
             op = self.app._replay(db, actor, 'carousel', intent, args, implicit=False)
             if not op:
@@ -255,6 +265,35 @@ class CarouselService:
                             self._log(db, actor, ident, revision, 'asset_import',
                                       asset_ref=ref, imported_at=timestamp(asset['created']))
                 self.app._key(db, actor, args['request_key'], digest(['carousel', intent]), op)
+                if export_times is not None:
+                    export_times['persisted'] = (time.perf_counter(), time.thread_time())
+        if export_times is not None and 'persisted' in export_times:
+            # Success only, after commit/connection release. Replays emit no second completion.
+            try:
+                export_times['finished'] = (time.perf_counter(), time.thread_time())
+                fields = {'cache_hit': export_times['cache_hit'],
+                          'asset_count': export_times['asset_count'], 'card_count': len(images),
+                          'source_bytes': export_times['source_bytes'], 'master_bytes': len(png),
+                          'slice_bytes': sum(len(data) for data in slices),
+                          'verified_bytes': sum(len(image.data) for image in images)}
+                for phase, begin, end in (
+                    ('admission_wait', 'started', 'admitted'),
+                    ('admission', 'admitted', 'admission_done'),
+                    ('resolve_validate', 'admission_done', 'resolved'),
+                    ('cache_render', 'resolved', 'rendered'),
+                    ('slice', 'rendered', 'sliced'), ('verify', 'sliced', 'verified'),
+                    ('persist_wait', 'verified', 'persist_acquired'),
+                    ('persist', 'persist_acquired', 'persisted'),
+                    ('tx_exit', 'persisted', 'finished'), ('total', 'started', 'finished'),
+                ):
+                    before, after = export_times[begin], export_times[end]
+                    fields[phase + '_ms'] = round((after[0] - before[0]) * 1000)
+                    fields[phase + '_thread_cpu_ms'] = round((after[1] - before[1]) * 1000)
+                logging.getLogger(__name__).warning(
+                    "carousel_export_phases %s",
+                    ' '.join(f'{key}={value}' for key, value in fields.items()))
+            except Exception:
+                pass
         return self.store.receipt(actor, op)
 
     def _composition_asset(self, actor, ident):
@@ -384,7 +423,7 @@ class CarouselService:
             result['svg'] = row['svg']
         return result
 
-    def _render(self, actor, row, layers=None):
+    def _render(self, actor, row, layers=None, *, timings=None):
         if not row['svg']:
             raise DomainError('carousel_scene_missing', 'Save an SVG composition with revise before rendering or exporting')
         assets = {}
@@ -401,8 +440,14 @@ class CarouselService:
         key = (actor.tenant_id, actor.principal_id, hashlib.sha256(row['svg'].encode()).hexdigest(),
                row['card_count'], row['card_width'], row['card_height'], canonical(layers or {}),
                tuple((ident, source[2]) for ident, source in assets.items()))
+        if timings is not None:
+            timings['asset_count'] = len(assets)
+            timings['source_bytes'] = sum(len(source[0]) for source in assets.values())
+            timings['resolved'] = (time.perf_counter(), time.thread_time())
         with _RENDERED_LOCK:
             cached = _RENDERED.get(key)
+            if timings is not None:
+                timings['cache_hit'] = int(cached is not None)
             if cached is not None:
                 _RENDERED.move_to_end(key)
                 return cached
