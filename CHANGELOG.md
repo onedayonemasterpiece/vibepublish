@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- VK carousel publication: default the existing native `carousel` mode when a new post's complete ordered image list matches one verified export owned by the caller. Freeze the choice in the existing plan, preserve explicit values and known modes through publication edits/rescheduling, and leave ordinary, partial, reordered or mixed media unchanged. No new `wall.edit` parameter, public mode value or worker change; native UI acceptance remains separate.
+
 - Story Carousel render guidance: include the required carousel ID and numeric revision from `get(scope:story)`, with one complete JSON example in s09 and a pointer from the short instruction. Render does not require a top-level request key; the MCP schema is unchanged.
 
 - CI: pull requests that change only `docs/llm/**` and/or `CHANGELOG.md` run the fast `Story Carousel guide` check (guide/review-delivery/skill tests, ~1–2 min) instead of the full verification; pushes to main and any PR touching code still run the full suite.
