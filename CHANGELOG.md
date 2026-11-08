@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Story Carousel typography: apply the owner's November 8 clarification—keep the same lettering manner for the same roles within one story, distinguish headings, accents, narrative, quotes and other roles purposefully, and allow a new story its own character. Update the existing composition, typography, style, review and step guidance without a style quota or runtime gate.
+
+- Story Carousel review: return the first five questions in the source-authored view order and expose every question through the existing guide section:"question:ID" read. Preserve legacy heading prefixes; keep K17 advisory, without a reference-count quota or a blanket background-effect ban.
+- Story Carousel brand readability: prefer the complete «Полюбить Калининград» name in one card; a single inscription may span at most two adjacent cards, checked during sequential viewing. This does not limit purposeful repetitions or add an automatic publication gate.
+
+- Story Carousel guide: reconcile the November 8 creative feedback across the existing steps and canonical scope. Preserve explanatory mini-paragraphs, strong varied generated lettering, meaningful image continuity and quiet backgrounds or shared scenes over 2/3/4 cards. Remove universal seam/background/brand quotas and the automatic body-font default; retain documentary originals and F1/alpha. Match every final card to an opened reference with direct source links. Record native VK/S03 evidence separately from rejected creative acceptance; O34/O36 and performance remain open.
+
+- Carousel export diagnostics: record one bounded wall/calling-thread CPU phase summary after a newly committed export releases its writer, including cache reuse and existing aggregate byte counts. Immediate/late replays, errors, pixels, receipts and the MCP contract are unchanged; this enables diagnosis of the observed slow export without claiming a performance fix.
+
 - Asset metadata lookup: add one nonunique owner/hash index for existing original-source and verified-image deduplication queries, avoiding unrelated wide BLOB-row scans without changing ownership, bytes, ordering or quota rules. A real Store VM-work regression distinguishes the old scan; the bounded payload trial preserves exact retained assets and image results. Add best-effort maintenance and saved-asset phase timings only after writer release to locate the remaining live latency; no retries, timeouts, schema-version bump or claim that the production subphase is already proven.
 
 - Worker maintenance: deduplicate owned saved-carousel references before the original-image retention join, avoiding assets × immutable-revisions work while preserving every existing hold and the atomic cleanup transaction. Share the existing successful cleanup deadline across worker lanes on the same Store. Real Store VM-work and lane/failure regressions fail before the fix and pass after it; no new schema, index, timeout or retry. The measured live maintenance writer still requires post-rollout verification.
