@@ -1,6 +1,7 @@
 """A real reference-led edit, exact crops and a replayable private card export."""
 import asyncio
 import concurrent.futures
+import hashlib
 import io
 import json
 import random
@@ -83,6 +84,64 @@ def test_transparent_original_renders_over_background_across_seam(runtime):
     assert pixels(app.read_asset(actor, asset)[0]).getpixel((2, 2)) == (255, 255, 255)
     assert len(service.command(actor, {'command': {'kind': 'export', 'carousel_id': ident,
         'revision': 1}, 'request_key': 'transparent-export'})['cards']) == 3
+
+
+def test_opaque_original_reuses_oriented_derivative_without_transpose(runtime, monkeypatch):
+    store, actor, app, service, _ = runtime
+    original = Image.new('RGB', (3, 2), (240, 45, 25))
+    original.paste((25, 45, 240), (0, 1, 3, 2))
+    exif = Image.Exif()
+    exif[274] = 6
+    exif[270] = 'Original private metadata'
+    data = io.BytesIO()
+    original.save(data, format='PNG', exif=exif)
+    asset = import_image(store, actor, data.getvalue(), 'image/png')
+    derivative = app.read_asset(actor, asset)
+    with Image.open(io.BytesIO(derivative[0])) as image:
+        assert image.size == (2, 3) and 'exif' not in image.info
+        assert image.getpixel((0, 0)) == (25, 45, 240)
+        assert image.getpixel((1, 0)) == (240, 45, 25)
+
+    def unexpected_transpose(_):
+        pytest.fail('The already oriented opaque derivative needs no original EXIF copy')
+
+    monkeypatch.setattr('social_operations.carousel.ImageOps.exif_transpose', unexpected_transpose)
+    assert service._composition_asset(actor, asset) == derivative
+
+
+def test_late_png_trns_index_zero_preserves_alpha_and_orientation(runtime):
+    store, actor, app, service, _ = runtime
+    original = Image.new('P', (3, 2), 1)
+    original.putpalette([5, 10, 15, 240, 45, 25] + [0] * 762)
+    original.putpixel((0, 0), 0)
+    exif = Image.Exif()
+    exif[274] = 6
+    exif[270] = 'Original private metadata'
+    data = io.BytesIO()
+    original.save(data, format='PNG', transparency=0, exif=exif)
+    encoded = data.getvalue()
+    chunks, offset = [], 8
+    while offset < len(encoded):
+        end = offset + int.from_bytes(encoded[offset:offset + 4], 'big') + 12
+        chunks.append(encoded[offset:end])
+        offset = end
+    trns, = (chunk for chunk in chunks if chunk[4:8] == b'tRNS')
+    chunks = [chunk for chunk in chunks if chunk[4:8] != b'tRNS']
+    assert chunks[-1][4:8] == b'IEND'
+    late_trns = encoded[:8] + b''.join(chunks[:-1]) + trns + chunks[-1]
+    with Image.open(io.BytesIO(late_trns)) as header:
+        assert 'transparency' not in header.info
+
+    asset = import_image(store, actor, late_trns, 'image/png')
+    derivative = app.read_asset(actor, asset)
+    rgba, mime, digest = service._composition_asset(actor, asset)
+    assert mime == 'image/png' and digest == hashlib.sha256(rgba).hexdigest()
+    with Image.open(io.BytesIO(rgba)) as image:
+        assert image.mode == 'RGBA' and image.size == (2, 3)
+        assert 'exif' not in image.info
+        assert image.getpixel((1, 0))[3] == 0
+        assert image.getpixel((0, 0)) == (240, 45, 25, 255)
+    assert app.read_asset(actor, asset) == derivative
 
 
 def test_background_fragment_exact_layers_and_private_asset(runtime):

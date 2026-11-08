@@ -328,9 +328,10 @@ class CarouselService:
             return derivative
         original_bytes, _, _ = self.app.read_asset(actor, original['id'])
         with Image.open(io.BytesIO(original_bytes)) as source:
-            oriented = ImageOps.exif_transpose(source)
-            if 'A' not in oriented.getbands() and 'transparency' not in oriented.info:
+            source.load()  # Preserve transparency from late PNG tRNS chunks.
+            if 'A' not in source.getbands() and 'transparency' not in source.info:
                 return derivative
+            oriented = ImageOps.exif_transpose(source)
             clean = Image.new('RGBA', oriented.size)
             clean.paste(oriented.convert('RGBA'))
             output = io.BytesIO()
