@@ -468,8 +468,11 @@ Official progress semantics checked: https://modelcontextprotocol.io/specificati
 ## Runtime extension 1.3: existing native items
 
 `publication_update` selects exactly one identity: `publication_id` with
-`expected_revision`, or `item_ref` from an authorized provider read. The read ref
-binds native target, namespace, content/media fingerprint and principal epoch.
+`expected_revision`, or `item_ref` from an authorized provider read. For the latter,
+pass the selected `items[].ref` from the latest read with `source:provider` and
+`freshness:current` as `item_ref`; a scheduled item's `queue_ref` repeats that
+snapshot handle. These are alternative identity forms, not fields to combine.
+The read ref binds native target, namespace, content/media fingerprint and principal epoch.
 It is the CAS for an externally created item. No synthetic provider revision is
 required and no other author's private publication is exposed. HTTP equivalent:
 POST `/v1/items/{item_ref}/commands`; the canonical tool count remains eight.
@@ -550,13 +553,18 @@ before selection or transfer. The returned metadata binds the preview SHA-256 to
 the authorized source SHA-256.
 
 For dot-owned VK colourization, the **optional** `size:"full"` uses the same
-authorized tool to return an MCP `ImageContent` from `read_asset`: byte-exact
-source up to 2 MiB and 2560 px on the longest side, otherwise metadata-free
+authorized tool to return an MCP `ImageContent` from `read_asset`: byte-exact stored
+bytes of the requested asset up to 2 MiB and 2560 px on the longest side, otherwise metadata-free
 JPEG quality 92 with bounded dimensions/bytes and `reencoded:true`. Its
 `structuredContent` reports `source_sha256`, actual MIME/dimensions/byte size,
 `size:"full"`, `reencoded`, and `full_data_url` with the same bounded image bytes
 as `ImageContent`. Default and explicit `size:"preview"` retain the previous
 WebP bytes and `preview_data_url`.
+`source_sha256` identifies those requested stored bytes, which may already be a
+derivative; `full` does not select the uploaded original. Preview and reencoded
+full images flatten transparency onto white. A component preview's RGB mode or
+white background alone does not prove missing original alpha: inspect the exact
+carousel revision's render/export to judge the montage.
 Preview metadata also reports `source_width/source_height` beside
 `width/height`. The **first text block is JSON-only** (so Wonderful Lections can
 parse it if `structuredContent` is unavailable); a **second TextContent** advises

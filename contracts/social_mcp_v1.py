@@ -349,7 +349,9 @@ change = {"oneOf": [
 change["oneOf"][1]["anyOf"] = [{"required": [p]} for p in ("content", "media", "renderings")]
 change["oneOf"][1]["allOf"] = [{"if": {"required": ["preview_operation_id"]},
     "then": {"properties": {"mode": {"const": "execute"}}}}]
-tool("publication_update", "Change an existing publication at an exact revision. An edit with change.mode=preview privately prepares an exact permission request without changing a native post or publication revision; it performs no provider preflight. The preview returns execute_args bound to its private operation; execute refuses a changed payload. Omitting mode and preview_operation_id preserves normal execution. Use preview only when existing authorization does not cover the exact payload. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication. Reconcile observes the original uncertain operation without repeating its effect. For a scheduled VK publish whose recovered identity is proven to belong to an older same-owner publication, an owner may pass a fresh exact item ref as native_reference to withdraw that local receipt to outcome_unknown; this makes no provider call and never permits retry or removal resolution. For a never-dispatched tracked VK edit conflict, an owner may pass a fresh same-post item ref as native_reference to accept a new local baseline revision; this performs no provider write and requires a separate edit. A fresh exact Telegram item_ref may replace one image/video only on a provably managed same-principal published message; it creates a new revision of that same publication, edits the existing message, and retains unselected sibling receipts. VK edits can order new assets and existing attachment positions from the same freshly read post, including postponed posts; Telegram retains its single managed replacement rule. An edit may select existing publication destinations by alias with a request key; only verified selected targets execute. Unselected target evidence remains visible with desired/applied revision and synchronization status.",
+tool("publication_update", "Change an existing publication at an exact revision. "
+    "Select exactly one identity: publication_id with expected_revision, or the selected items[].ref from the latest authorized provider read (source=provider, freshness=current) as item_ref. "
+    "An edit with change.mode=preview privately prepares an exact permission request without changing a native post or publication revision; it performs no provider preflight. The preview returns execute_args bound to its private operation; execute refuses a changed payload. Omitting mode and preview_operation_id preserves normal execution. Use preview only when existing authorization does not cover the exact payload. Cancel unsent work; delete published work; retry only proven safe failures. Owner-only reconcile_removed reads a checkpoint-bound uncertain VK scheduled object without any write; verified absence resolves only its quarantine, never retries publication. Reconcile observes the original uncertain operation without repeating its effect. For a scheduled VK publish whose recovered identity is proven to belong to an older same-owner publication, an owner may pass a fresh exact item ref as native_reference to withdraw that local receipt to outcome_unknown; this makes no provider call and never permits retry or removal resolution. For a never-dispatched tracked VK edit conflict, an owner may pass a fresh same-post item ref as native_reference to accept a new local baseline revision; this performs no provider write and requires a separate edit. A fresh exact Telegram item_ref may replace one image/video only on a provably managed same-principal published message; it creates a new revision of that same publication, edits the existing message, and retains unselected sibling receipts. VK edits can order new assets and existing attachment positions from the same freshly read post, including postponed posts; Telegram retains its single managed replacement rule. An edit may select existing publication destinations by alias with a request key; only verified selected targets execute. Unselected target evidence remains visible with desired/applied revision and synchronization status.",
     obj({"publication_id": ID, "expected_revision": REV, "item_ref": ID, "change": change, "request_key": KEY},
         ("change",)), ref("receipt"), "publication.manage")
 # Existing private publication CAS or one exact immutable observed native item.
@@ -519,6 +521,7 @@ tool("carousel", "Create, get, revise, render and export private SVG story carou
     "Dot generates components with its own tool and imports them through visual import. "
     "Pass carousel_id when reading references or icons to record the tool use in the private journal. "
     "get(scope:journal,offset?) returns up to 50 events per page and next_offset for older events. "
+    "get(scope:components) returns inspection thumbnails flattened onto white; their RGB mode does not establish missing alpha in the original. Judge montage in render/export of the exact revision. "
     "get(scope:library) ranks owner-bound references by Russian/English token overlap and marks unmatched fallback entries; get(scope:reference,reference_id) "
     "returns one actual image or original-resolution pixel crop. Look at a useful reference, "
     "record the visible technique and concrete change in revise.reference_use, then render the changed region. "
@@ -607,7 +610,10 @@ _asset_full_fields = {
     "size": {"const": "full"},
     "reencoded": {"type": "boolean"},
 }
-tool("asset_preview", "Preview (default) is for inspection and selection; request size='full' for generation, colourization or image editing. Authorized full ImageContent contains original bytes if <=2 MiB and <=2560 px, otherwise a bounded reencoded JPEG. Both modes include a structured data URL for clients without ImageContent.",
+tool("asset_preview", "Preview (default) is for inspection and selection; request size='full' for generation, colourization or image editing. Authorized full ImageContent returns the stored bytes of the requested asset if <=2 MiB and <=2560 px, otherwise a bounded reencoded JPEG. "
+    "It does not select the uploaded original; source_sha256 identifies the requested stored bytes. Preview and reencoded full images flatten transparency onto white. "
+    "RGB or white in a component preview alone does not prove missing original alpha; judge montage in the exact carousel render/export. "
+    "Both modes include a structured data URL for clients without ImageContent.",
     obj({"resource_uri": _asset_preview_uri, "size": enum("preview", "full")},
         ("resource_uri",)),
     {"type": "object", "properties": {key: {} for key in (*_asset_preview_fields, *_asset_full_fields)},
@@ -664,7 +670,8 @@ queries += [arm("search", {"destination": ALIAS, "text": string(1000)}, ("destin
 queries[-1]["oneOf"] = [
     {"required": ["destination", "from", "to"], "not": {"required": ["publication_ids"]}},
     {"required": ["publication_ids"], "not": {"anyOf": [{"required": [k]} for k in ("destination", "from", "to")]}}]
-tool("read", "Read bound publishing channels in full, including native queues, or search local history/statistics. Only owners can read arbitrary provider-visible resources. Returns incremental receipts.",
+tool("read", "Read bound publishing channels in full, including native queues, or search local history/statistics. Only owners can read arbitrary provider-visible resources. Returns incremental receipts. "
+    "Returned items[].ref is the snapshot handle to pass as item_ref. For a mutation, select it from the latest provider/current read of the intended item; a scheduled item's queue_ref repeats that snapshot handle.",
     obj({"query": {"oneOf": queries}, "limit": LIMIT, "cursor": string(512)}, ("query",)),
     ref("receipt"), "social.read", True)
 
