@@ -43,6 +43,7 @@ _PROVIDER_ERROR_TEXT = {
 }
 _PROVIDER_ERROR_PREFIXES = (
     ("access denied", "access_denied"),
+    ("access to adding post denied", "access_denied"),
     ("permission to perform this action is denied", "access_denied"),
     ("user authorization failed", "authorization_failed"),
     ("too many requests per second", "rate_limited"),

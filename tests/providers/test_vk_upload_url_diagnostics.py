@@ -151,6 +151,32 @@ class ProviderErrorRedactionTests(unittest.TestCase):
 
 
 class APIErrorTransportIntegrationTests(unittest.TestCase):
+
+    def test_explicit_add_post_denial_never_retries_and_is_not_worker_transient(self):
+        from adapters.vk import VKAdapter
+        from adapters.vk_transport import VKToken
+        from social_operations.worker import Worker
+        from .test_native_adapters import Journal, request
+
+        transport = VKHTTPTransport(tokens={"editor": VKToken("fixture-private", kind="user")})
+        transport._post = AsyncMock(return_value={"error": {"error_code": 214,
+            "error_msg": "Access to adding post denied: PRIVATE",
+            "request_params": [{"key": "access_token", "value": "PRIVATE"}]}})
+        adapter = VKAdapter(transport, connection_id="connection")
+        journal, events = Journal(), []
+        params = {"owner_id": -101, "message": "Fixture", "from_group": 1,
+                  "signed": 0, "guid": "same-frozen-guid"}
+        with diagnostic_scope(events.append), self.assertRaises(DomainError) as raised:
+            asyncio.run(adapter._wall_post_same_guid(request("vk"), params, journal.hooks))
+        self.assertEqual(raised.exception.code, "provider_access_denied")
+        self.assertFalse(Worker.transient(raised.exception.code))
+        transport._post.assert_awaited_once()
+        self.assertEqual(events[-1]["provider_code"], 214)
+        self.assertEqual(events[-1]["provider_error_class"], "access_denied")
+        self.assertFalse(any("Retrying" in event[2] for event in journal.events))
+        self.assertNotIn("PRIVATE", json.dumps(events))
+        self.assertNotIn("fixture-private", json.dumps(events))
+
     def test_error_metadata_does_not_change_exception_or_add_requests(self):
         from adapters.vk_transport import VKHTTPTransport, VKToken
         transport = VKHTTPTransport(tokens={"reader": VKToken("fixture-private", kind="user")})

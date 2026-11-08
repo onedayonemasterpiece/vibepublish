@@ -10,6 +10,20 @@ Persist ordered saved IDs immediately after each `photos.saveWallPhoto`, includi
 
 Earlier native lifecycle checks demonstrated VK copy remapping and the need to retain attachments on wall.edit. Their historical SHA/CDN proofs do **not** remain a requirement for new publications. Live acceptance and ordinary native authorization, CAS and no-duplicate guards remain separate.
 
+## Missing scheduled response correction (2026-11-08)
+
+Status: **Not done** until rollout and live verification. Night r6 received explicit
+VK 214 refusals, then an older post with the same text, time and photo count was
+mistaken for the new publication. That receipt is not delivery evidence.
+
+An explicit VK 214 add-post refusal uses the existing `provider_access_denied`
+outcome and must not repeat `wall.post`. When its response ID is missing, a queue
+candidate must uniquely match the nonempty, ordered saved native photo IDs as
+well as the frozen text/time. Text/time/count or the newest numeric post ID alone
+cannot establish identity. Otherwise the existing same-`guid` path obtains the
+authoritative post ID before any copied-photo binding. Known response-ID
+acceptance stays unchanged; no CDN or source/output byte comparison is added.
+
 ## VK exact item photo source reads (2026-10-31)
 
 Status: **Not confirmed by user** until Opus review and rollout. Published and postponed `read(kind=item)` may return photo downloads through the existing verified-asset read pipeline (`item.media[*].source` and full-resolution MCP/HTTP asset reads). Use the response's `orig_photo` URL where available, otherwise the largest `sizes` rendition; no signed URL/access key is stored or logged. This is an editing source, **not** publisher upload/proof data. A CDN error leaves the item's text, schedule and fresh `item_ref` readable with one `media_download_unavailable` code; `existing.position` continues to refer to original native VK attachment IDs. A postponed ID no longer in the native queue resolves to no item (never to the next queued post); a subsequent edit refuses with `remote_item_missing`. Scheduled/feed list scans never download images. Exact VK photo reads use the existing single-copy, one-hour `media_store_assets.download_cache` and its normal cleanup, **not** the 14-day unlinked upload retention. Asset reads enforce expiry for the requested asset without acquiring a SQLite writer or purging unrelated assets; unfinished operations, saved carousel revisions and exported cards retain their existing holds. The same expiry rule governs the existing worker's physical cleanup and carousel original selection, so expired unheld bytes remain unavailable while cleanup is pending and an expired cache copy cannot shadow a durable same-owner alpha source. The 14-day retention remains unchanged for other assets.
