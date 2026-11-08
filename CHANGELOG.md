@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel brand presence (owner, November 8): «Полюбить Калининград» is a mandatory storytelling element of every story — at least once, as a background word/inscription in the canvas or unobtrusively on the CTA (K18, s08). No count limit and no automatic gate.
+
 - Story Carousel public text: name the exhibition/event on the first card immediately after the hook; omit AI-design commentary from post captions and mark documentary reconstruction on the card. Replace service phrases and promises of continuation with a complete account of known facts and missing information; label hypotheses, state their author or basis and distinguish them from established facts.
 
 - Story Carousel typography: apply the owner's November 8 clarification—keep the same lettering manner for the same roles within one story, distinguish headings, accents, narrative, quotes and other roles purposefully, and allow a new story its own character. Update the existing composition, typography, style, review and step guidance without a style quota or runtime gate.
