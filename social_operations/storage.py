@@ -49,6 +49,7 @@ class Store:
         self.path = Path(path).absolute()
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.clock = clock
+        self.next_media_store_purge = 0  # Shared by worker lanes using this Store.
         fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600)
         os.close(fd)
         os.chmod(self.path, 0o600)

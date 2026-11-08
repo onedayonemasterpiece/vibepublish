@@ -273,9 +273,13 @@ def retired_asset_rows(db, now, *, include_sizes=True):
     # Saved SVGs may render the alpha source behind their imported derivative.
     # Keep that same-owner dependency for every immutable revision.
     carousel = refset("""SELECT j.value FROM carousel_versions c, json_each(c.asset_refs) j
-                         UNION SELECT source.id FROM carousel_versions c, json_each(c.asset_refs) j
-                         JOIN assets derived ON derived.id=j.value
-                           AND derived.tenant_id=c.tenant_id AND derived.principal_id=c.principal_id
+                         UNION SELECT source.id FROM (
+                             SELECT DISTINCT c.tenant_id,c.principal_id,j.value AS asset_ref
+                             FROM carousel_versions c, json_each(c.asset_refs) j
+                         ) saved
+                         JOIN assets derived ON derived.id=saved.asset_ref
+                           AND derived.tenant_id=saved.tenant_id
+                           AND derived.principal_id=saved.principal_id
                          JOIN assets source ON source.tenant_id=derived.tenant_id
                            AND source.principal_id=derived.principal_id
                            AND source.sha256=derived.source_sha256

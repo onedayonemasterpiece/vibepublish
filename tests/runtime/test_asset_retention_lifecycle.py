@@ -239,3 +239,101 @@ async def test_imagegen_14_day_cleanup_preserves_visual_job_and_media_facts(tmp_
         assert tuple(db.execute("SELECT snapshot,text FROM facts").fetchone()) == before
         assert db.execute("SELECT COUNT(*) FROM fact_search").fetchone()[0] == fact_search
         assert db.execute("SELECT 1 FROM assets WHERE id=?", (candidate["asset_ref"],)).fetchone() is None
+
+
+@pytest.mark.asyncio
+async def test_maintenance_saved_revision_work_does_not_multiply_all_assets(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    from social_operations.assets import insert_verified_image, verify_image
+    from social_operations.carousel import CarouselService
+
+    store, actor, app, worker, clock, asset = pending(tmp_path)
+    prepared = []
+    for index in range(1500):
+        output = io.BytesIO()
+        Image.new("RGB", (1, 1), (index % 256, index // 256, 71)).save(output, "PNG")
+        prepared.append(verify_image(output.getvalue(), "image/png"))
+    with store.tx() as db:
+        for image in prepared:
+            insert_verified_image(store, db, actor, image)
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="384" height="160">'
+           f'<image href="asset:{asset}" width="384" height="160"/></svg>')
+    ident = CarouselService(app).command(actor, {"command": {"kind": "create",
+        "brief": "Retained revisions", "card_count": 3, "card_width": 128,
+        "card_height": 160, "svg": svg}, "request_key": "retention-history"})["carousel_id"]
+    with store.tx() as db:
+        for revision in range(2, 1001):
+            op = app._new_operation(db, actor, "carousel", {"command": {"kind": "revise",
+                "carousel_id": ident, "expected_revision": revision - 1}},
+                revision=revision, complete=True, result={"carousel_id": ident})
+            db.execute("""INSERT INTO carousel_versions
+                SELECT id,?,tenant_id,principal_id,?,brief,svg,card_count,card_width,
+                       card_height,caption,asset_refs,created
+                FROM carousel_versions WHERE id=? AND revision=1""", (revision, op, ident))
+        before = db.execute("SELECT count(*) FROM assets").fetchone()[0]
+
+    # The measured old join uses ~60 million VM instructions on this shape.
+    # This loose work bound avoids a machine-speed timing assertion and does
+    # not depend on a particular query plan or index name.
+    steps = [0]
+    def progress():
+        steps[0] += 1000
+        return int(steps[0] > 2_000_000)
+
+    connect = store.connection
+    @contextmanager
+    def bounded_connection():
+        with connect() as db:
+            db.set_progress_handler(progress, 1000)
+            try:
+                yield db
+            finally:
+                db.set_progress_handler(None, 0)
+
+    monkeypatch.setattr(store, "connection", bounded_connection)
+    assert not await worker.run_once()
+    assert steps[0] <= 2_000_000
+    with connect() as db:
+        assert db.execute("SELECT count(*) FROM assets").fetchone()[0] == before
+        assert db.execute("SELECT count(*) FROM carousel_versions").fetchone()[0] == 1000
+        assert not db.execute("PRAGMA foreign_key_check").fetchall()
+
+
+@pytest.mark.asyncio
+async def test_workers_share_successful_maintenance_deadline_without_hiding_failure(tmp_path, monkeypatch):
+    store, actor, app, worker, clock, asset = pending(tmp_path)
+    workers = [worker, Worker(store), Worker(store)]
+    real_retention = retired_asset_rows
+    completed = []
+    fail_next = [False]
+
+    def record_retention(db, now, **options):
+        if fail_next[0]:
+            fail_next[0] = False
+            raise RuntimeError("fixture maintenance failure")
+        result = real_retention(db, now, **options)
+        completed.append(now)
+        return result
+
+    monkeypatch.setattr("social_operations.assets.retired_asset_rows", record_retention)
+    for lane in workers:
+        assert not await lane.run_once()
+    assert len(completed) == 1
+    assert not await Worker(store).run_once()  # Recreated lane must not reset shared cadence.
+    assert len(completed) == 1
+
+    clock[0] += 61
+    assert not await workers[1].run_once(operation_id="op_missing")
+    assert len(completed) == 1
+    for lane in reversed(workers):
+        assert not await lane.run_once()
+    assert len(completed) == 2
+
+    clock[0] += 61
+    fail_next[0] = True
+    with pytest.raises(RuntimeError, match="fixture maintenance failure"):
+        await workers[0].run_once()
+    assert len(completed) == 2
+    assert not await workers[1].run_once()  # Failed transaction did not postpone maintenance.
+    assert not await workers[2].run_once()
+    assert len(completed) == 3

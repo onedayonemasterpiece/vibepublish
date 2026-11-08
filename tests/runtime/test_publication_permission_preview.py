@@ -1,7 +1,10 @@
 """Permission text is the frozen payload; preparing it never edits a native post."""
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import io
+import threading
 import json
 import tempfile
 import unittest
@@ -61,6 +64,184 @@ class PublicationPermissionPreviewTests(unittest.IsolatedAsyncioTestCase):
         image = io.BytesIO()
         Image.new('RGB', (3, 3), color).save(image, format='PNG')
         return import_image(self.store, self.actor, image.getvalue(), 'image/png')
+
+
+    async def ready_preview_to_cancel(self, **options):
+        accepted = await self.call('publish', {
+            'to': ['vk'], 'content': {'text': 'Private preview; do not publish'},
+            'delivery': {'kind': 'at', 'at': '2030-07-04T14:30:00+03:00'},
+            'mode': 'preview', **options})
+        self.assertEqual(accepted['state'], 'accepted', accepted)
+        self.assertTrue(await self.worker.run_once(operation_id=accepted['operation_id']))
+        preview = self.store.receipt(self.actor, accepted['operation_id'])
+        self.assertEqual(preview['state'], 'needs_approval', preview)
+        self.assertEqual(self.providers['vk'].count('effect'), 0)
+        return accepted, preview
+
+    async def test_private_preview_cancel_is_durable_terminal_and_not_approvable(self):
+        assets = [self.asset(color) for color in
+                  ('red', 'orange', 'yellow', 'green', 'blue', 'purple', 'black')]
+        accepted, preview = await self.ready_preview_to_cancel(
+            vk={'primary_attachments_mode': 'carousel'},
+            media=[{'source': {'kind': 'asset', 'id': asset}} for asset in reversed(assets)])
+        with self.store.connection() as db:
+            before_assets = [tuple(row) for row in db.execute(
+                'SELECT id,sha256,length(bytes) FROM assets ORDER BY id')]
+        args = {'publication_id': accepted['resource_id'], 'expected_revision': 1,
+                'change': {'kind': 'cancel'}, 'request_key': 'cancel-private-preview'}
+        cancelled = await self.call('publication_update', args)
+        self.assertNotIn('error', cancelled, cancelled)
+        self.assertEqual(cancelled['state'], 'cancelled', cancelled)
+        self.assertEqual(cancelled['revision'], 2)
+        self.assertTrue(cancelled['operation_complete'])
+        self.assertEqual(cancelled['next_action'], 'none')
+        self.assertNotIn('review_token', cancelled)
+        self.assertNotIn('permission_request', cancelled)
+
+        reopened = Store(self.store.path)
+        app = Application(reopened)
+        status = await app.call(self.actor, 'vibepublish_status',
+                                {'ids': [accepted['resource_id']]})
+        current, = status['receipts']
+        self.assertEqual(current['operation_id'], cancelled['operation_id'])
+        self.assertEqual(current['state'], 'cancelled')
+        self.assertTrue(current['operation_complete'])
+        delivery, = current['deliveries']
+        self.assertEqual(delivery['state'], 'cancelled')
+        self.assertEqual(delivery['observed'], 'not_attempted')
+        self.assertEqual(delivery['sync_status'], 'current')
+        self.assertIsNone(delivery['applied_revision'])
+        self.assertEqual(delivery['desired_revision'], 2)
+        self.assertNotIn('item_ref', delivery)
+        self.assertNotIn('queue_ref', delivery)
+        self.assertFalse(await Worker(reopened, self.providers).run_once(
+            operation_id=cancelled['operation_id']))
+
+        replay = await app.call(self.actor, 'vibepublish_publication_update', args)
+        self.assertEqual(replay['operation_id'], cancelled['operation_id'])
+        self.assertEqual(replay['revision'], 2)
+        conflict = await app.call(self.actor, 'vibepublish_publication_update',
+                                  {**args, 'change': {'kind': 'delete'}})
+        self.assertEqual(conflict['error']['code'], 'idempotency_conflict')
+        stale = await app.call(self.actor, 'vibepublish_publication_update',
+                               {**args, 'request_key': 'different-cancel-key'})
+        self.assertEqual(stale['error']['code'], 'revision_conflict')
+        for revision, code in ((1, 'revision_conflict'), (2, 'approval_invalid')):
+            approval = await app.call(self.actor, 'vibepublish_publication_update', {
+                'publication_id': accepted['resource_id'], 'expected_revision': revision,
+                'change': {'kind': 'approve', 'token': preview['review_token']}})
+            self.assertEqual(approval['error']['code'], code, approval)
+        with reopened.connection() as db:
+            self.assertEqual(db.execute(
+                'SELECT revision FROM publications WHERE id=?',
+                (accepted['resource_id'],)).fetchone()[0], 2)
+            self.assertEqual(db.execute(
+                'SELECT count(*) FROM operations WHERE publication_id=?',
+                (accepted['resource_id'],)).fetchone()[0], 2)
+            decision, = db.execute(
+                'SELECT consumed_by FROM decisions WHERE publication_id=?',
+                (accepted['resource_id'],)).fetchall()
+            self.assertEqual(decision['consumed_by'], cancelled['operation_id'])
+            attempt, = db.execute(
+                'SELECT dispatched,checkpoint FROM attempts WHERE operation_id=?',
+                (cancelled['operation_id'],)).fetchall()
+            self.assertEqual(attempt['dispatched'], 0)
+            self.assertEqual(json.loads(attempt['checkpoint']), {})
+            self.assertEqual([tuple(row) for row in db.execute(
+                'SELECT id,sha256,length(bytes) FROM assets ORDER BY id')], before_assets)
+        self.assertEqual(self.providers['vk'].count('execute'), 0)
+        self.assertEqual(self.providers['vk'].count('effect'), 0)
+
+    async def test_private_preview_cancel_and_approve_serialize_on_real_store(self):
+        accepted, preview = await self.ready_preview_to_cancel()
+        barrier = threading.Barrier(2)
+
+        def submit(change, key):
+            store = Store(self.store.path)
+            app = Application(store)
+            barrier.wait(timeout=10)
+            return asyncio.run(app.call(self.actor, 'vibepublish_publication_update', {
+                'publication_id': accepted['resource_id'], 'expected_revision': 1,
+                'change': change, 'request_key': key}))
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            cancel_future = pool.submit(submit, {'kind': 'cancel'}, 'race-cancel')
+            approve_future = pool.submit(
+                submit, {'kind': 'approve', 'token': preview['review_token']}, 'race-approve')
+            results = [cancel_future.result(), approve_future.result()]
+        winners = [result for result in results if 'error' not in result]
+        losers = [result for result in results if 'error' in result]
+        self.assertEqual(len(winners), 1, results)
+        self.assertEqual(len(losers), 1, results)
+        self.assertEqual(losers[0]['error']['code'], 'revision_conflict', results)
+        winner, = winners
+        self.assertEqual(winner['revision'], 2)
+        worked = await self.worker.run_once(operation_id=winner['operation_id'])
+        cancelled = winner['state'] == 'cancelled'
+        self.assertEqual(worked, not cancelled)
+        self.assertEqual(self.providers['vk'].count('effect'), 0 if cancelled else 1)
+
+    async def test_private_preview_cancel_rechecks_cancel_right(self):
+        accepted, preview = await self.ready_preview_to_cancel()
+        with self.store.tx() as db:
+            rights = json.loads(db.execute(
+                'SELECT rights FROM bindings WHERE id=?', (self.bindings['vk'],)).fetchone()[0])
+            db.execute('UPDATE bindings SET rights=? WHERE id=?',
+                       (canonical([right for right in rights if right != 'cancel']),
+                        self.bindings['vk']))
+        denied = await self.call('publication_update', {
+            'publication_id': accepted['resource_id'], 'expected_revision': 1,
+            'change': {'kind': 'cancel'}, 'request_key': 'cancel-without-right'})
+        self.assertEqual(denied['error']['code'], 'access_denied', denied)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute('SELECT revision FROM publications WHERE id=?',
+                                        (accepted['resource_id'],)).fetchone()[0], 1)
+            self.assertIsNone(db.execute('SELECT consumed_by FROM decisions WHERE publication_id=?',
+                                        (accepted['resource_id'],)).fetchone()[0])
+            self.assertEqual(db.execute('SELECT count(*) FROM operations WHERE publication_id=?',
+                                        (accepted['resource_id'],)).fetchone()[0], 1)
+        self.assertEqual(self.providers['vk'].count('effect'), 0)
+
+    async def test_private_preview_cancel_cannot_win_after_approval_admission(self):
+        accepted, preview = await self.ready_preview_to_cancel()
+        approved = await self.call('publication_update', {
+            'publication_id': accepted['resource_id'], 'expected_revision': 1,
+            'change': {'kind': 'approve', 'token': preview['review_token']},
+            'request_key': 'approve-before-cancel'})
+        self.assertEqual(approved['state'], 'accepted', approved)
+        cancelled = await self.call('publication_update', {
+            'publication_id': accepted['resource_id'], 'expected_revision': 1,
+            'change': {'kind': 'cancel'}, 'request_key': 'cancel-after-approve'})
+        self.assertEqual(cancelled['error']['code'], 'revision_conflict', cancelled)
+        self.assertTrue(await self.worker.run_once(operation_id=approved['operation_id']))
+        self.assertEqual(self.providers['vk'].count('effect'), 1)
+
+
+    async def test_private_preview_cancel_hook_preserves_native_item_ref_cancel(self):
+        native = self.providers['vk'].seed(
+            '-101', 'Scheduled outside this publication',
+            scheduled_at='2030-07-04T14:30:00+03:00')
+        read = await self.call('read', {
+            'query': {'kind': 'scheduled', 'destination': 'vk'}})
+        self.assertTrue(await self.worker.run_once(operation_id=read['operation_id']))
+        current = self.store.receipt(self.actor, read['operation_id'])
+        item, = current['items']
+        self.assertEqual(item['source'], 'provider')
+        accepted = await self.call('publication_update', {
+            'item_ref': item['ref'], 'change': {'kind': 'cancel'},
+            'request_key': 'native-item-ref-cancel'})
+        self.assertEqual(accepted['state'], 'accepted', accepted)
+        self.assertTrue(await self.worker.run_once(operation_id=accepted['operation_id']))
+        cancelled = self.store.receipt(self.actor, accepted['operation_id'])
+        self.assertEqual(cancelled['state'], 'cancelled', cancelled)
+        delivery, = cancelled['deliveries']
+        self.assertEqual(delivery['observed'], 'cancelled')
+        self.assertEqual(self.providers['vk'].count('effect'), 1)
+        with self.providers['vk'].db() as db:
+            rows = db.execute('SELECT id,snapshot FROM items').fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['id'], native.native_id)
+        self.assertEqual(json.loads(rows[0]['snapshot'])['namespace'], 'cancelled')
 
     async def test_async_brief_status_returns_exact_frozen_publish_permission(self):
         assets = [self.asset(color) for color in ('blue', 'red', 'green')]

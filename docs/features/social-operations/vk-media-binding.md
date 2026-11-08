@@ -62,6 +62,20 @@ retain their input bytes until a terminal outcome; an absent required copy is
 reported as `asset_expired` with an instruction to reupload, separately from
 `asset_integrity` for corrupted bytes.
 
+Maintenance cost and cadence (2026-11-08): **Not confirmed by user**. Global
+cleanup deduplicates saved `(tenant, principal, asset)` references before joining
+same-owner original PNG/WEBP dependencies. Every immutable carousel revision,
+direct asset reference and exported card remains a hold; expiry classification
+and deletion stay in the existing atomic transaction. This prevents asset count
+and repeated revision references from multiplying the source lookup work.
+Worker lanes using the same Store share the existing 60-second deadline after
+successful cleanup. Constructing another lane does not reset it; a failed
+transaction and an explicit single-operation tick do not advance it. This is
+in-process cadence sharing, not coordination between separate Store instances
+or processes. Real Store regressions bound SQL work and preserve source/alpha,
+expiry and failure behavior; rollout and live contention verification remain
+separate.
+
 VK feed and queue reads preserve unsupported attachments (poll/link/market and
 unrecognized payloads) as opaque `unsupported:kind:owner_id` identities instead
 of blocking the read. Because `wall.edit` would erase such attachments, edits and

@@ -48,7 +48,6 @@ class Worker:
         self.app = Application(store)
         self.imagegen = imagegen
         self.connection_ids=connection_ids;self.include_unrouted=include_unrouted
-        self.next_media_store_purge = 0
         self.lock_root = store.path.parent / (store.path.name+'.locks')
         self.lock_root.mkdir(mode=0o700, exist_ok=True)
 
@@ -270,14 +269,14 @@ class Worker:
 
     async def run_once(self, *, operation_id=None):
         try:
-            if operation_id is None and self.store.clock() >= self.next_media_store_purge:
+            if operation_id is None and self.store.clock() >= self.store.next_media_store_purge:
                 with self.store.tx() as db:
                     now = self.store.clock()
                     self.expire_stale_unsent(db, now)
                     self.app._purge_media_store_assets(db)
                     from .assets import reclaim_asset_bytes, retired_asset_rows
                     reclaim_asset_bytes(db, retired_asset_rows(db, now, include_sizes=False))
-                self.next_media_store_purge = self.store.clock() + 60
+                self.store.next_media_store_purge = self.store.clock() + 60
             op = self.store.claim(
                 self.id,
                 connection_ids=self.connection_ids,

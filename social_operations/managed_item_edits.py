@@ -32,8 +32,11 @@ def latest_attempts(db, op):
     for binding_id, head in heads.items():
         verified_revision = applied.get(binding_id)
         successful = head['state'] in {'verified', 'scheduled', 'cancelled'}
+        local_cancel = (head['state'] == 'cancelled' and not head['dispatched']
+                        and head['observed'] == 'not_attempted'
+                        and json.loads(head['result']).get('reason') == 'preview_cancelled_without_effect')
         sync = ('unknown' if head['state'] == 'outcome_unknown' or head['observed'] == 'unknown'
-                else 'current' if successful and verified_revision == op['revision']
+                else 'current' if local_cancel or (successful and verified_revision == op['revision'])
                 else 'outdated' if successful and head['target_revision'] < op['revision']
                 else 'pending')
         head.update(applied_revision=verified_revision, desired_revision=op['revision'], sync_status=sync)
