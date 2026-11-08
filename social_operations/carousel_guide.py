@@ -129,7 +129,7 @@ def _review_bank() -> dict[str, dict]:
     return bank
 
 
-def review_questions(view: str) -> list[dict]:
+def review_questions(view: str, *, source_svg: str | None = None) -> list[dict]:
     """Respect the guide author's priorities; other questions remain addressable by ID."""
     source = _read("90-review.md")
     line = re.search(r"(?m)^- \[" + re.escape(view) + r"\]\s+(.+)$", source)
@@ -137,4 +137,12 @@ def review_questions(view: str) -> list[dict]:
         raise DomainError("invalid_input", f"Story Carousel review tag missing: {view}")
     ids = re.findall(r"\b(?:[QVRK]\d{2}|ST[1-7])\b", line.group(1))
     bank = _review_bank()
-    return [bank[ident] for ident in ids[:5]]
+    questions = [bank[ident] for ident in ids[:5]]
+    if source_svg is not None and questions:
+        text_nodes = sum(node.tag in ("text", "{http://www.w3.org/2000/svg}text")
+                         for node in ET.fromstring(source_svg).iter())
+        questions[0]["observe"] += (
+            f" Факт исходного SVG: {text_nodes} узлов <text> (scope=document, включая defs/скрытые)."
+            " Это не число видимых или крупных надписей выбранной карточки; tspan, копии use,"
+            " растры и контуры не считаются, происхождение растров не определяется.")
+    return questions
