@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel cache: recheck an initially missing master after acquiring the existing raster lock, then retain that lock through cache insertion. Concurrent card/region views reuse the completed master; a hot master remains available during another cold render. Preserve source checks, cache key/LRU/byte budget, native process behavior and raster parity; a deterministic child-stub regression reproduces the duplicate work before the fix. This source change does not establish the cause of live timeouts or claim a host performance improvement.
+
 - Publication status: preserve an unknown dispatched outcome and its error in the ordinary read-only snapshot, including after false-identity withdrawal. Report confirmed delivery, unknown outcome and refusal counts separately for mixed destinations; do not turn uncertainty into a no-delivery claim or create cursors/provider effects.
 
 - VK local receipt correction: an owner can withdraw a contradicted legacy scheduled identity using a fresh exact native reference and positive prior same-owner publication evidence. Preserve dispatched intent, original checkpoint and false observation as audit; invalidate only false private handles, leave old facts/refs intact, and block all re-admission or mutation through the withdrawn identity. No provider call or no-effect claim; live correction remains separately verified.
