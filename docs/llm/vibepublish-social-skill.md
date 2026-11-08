@@ -36,9 +36,11 @@ F1 — генерация по фрагменту фона: `render(view:"region
    If still running, repeat **status for that same ID**, never another publish.
 9. Read `summary.networks`: each destination is **готово** (with native post URL
    or queue reference), **выполняется** (and next automatic attempt if known),
-   or **отказ** (one clear reason). Report every ready link immediately.
+   **отказ** (one clear reason), or **исход неизвестен** (effect not established).
+   Report every ready link immediately.
 10. Finish with the actual result: **доставлено во все сети**,
-    **доставлено в N из M**, or **не доставлено**.
+    **доставлено в N из M**, or **не доставлено** when the outcomes are established.
+    Preserve the summary's separate delivery, unknown and refusal counts; an unknown outcome does not prove no effect.
     Partial delivery is a normal finished result: Telegram, VK and MAX are independent.
     Telegram channel stories use `surface:"story"` like VK stories, with optional `story_link:{"url":"https://…"}` (any HTTPS URL); VK keeps `story_link.item_ref` for an authorized wall post. One photo/MP4, optional caption, no scheduling.
 11. Never ask the user to inspect a provider manually. Never invoke recovery or

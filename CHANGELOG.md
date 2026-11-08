@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Publication status: preserve an unknown dispatched outcome and its error in the ordinary read-only snapshot, including after false-identity withdrawal. Report confirmed delivery, unknown outcome and refusal counts separately for mixed destinations; do not turn uncertainty into a no-delivery claim or create cursors/provider effects.
+
 - VK local receipt correction: an owner can withdraw a contradicted legacy scheduled identity using a fresh exact native reference and positive prior same-owner publication evidence. Preserve dispatched intent, original checkpoint and false observation as audit; invalidate only false private handles, leave old facts/refs intact, and block all re-admission or mutation through the withdrawn identity. No provider call or no-effect claim; live correction remains separately verified.
 
 - Story Carousel authoring: preserve author words/intention, sourced facts/quotes, hypotheses and a complete story in the existing versioned brief before storyboard. Clarify full-brief replacement on revise; replace empty labels, visible-image paraphrases and literal swipe instructions with narrative and visual guidance. Prioritize Q01/Q07/Q04 and reference/beauty review in render hints; include an exact document-scope SVG text-node count in the existing observation, without per-card/font-size claims, new schema or an aesthetic gate. Focused regressions verify persistence and delivery, not creative acceptance.

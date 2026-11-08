@@ -98,7 +98,7 @@ def saved(store, operation, attempt):
 
 
 @pytest.mark.asyncio
-async def test_withdraw_false_identity_preserves_dispatch_audit_and_old_post(tmp_path):
+async def test_withdraw_false_identity_preserves_dispatch_audit_and_old_post(tmp_path, monkeypatch):
     store, actor, app, worker, transport, old, new, args, now, old_ref, false_ref, fresh = await scenario(tmp_path)
     attempt = args["change"]["attempt_id"]
     before = saved(store, new["operation_id"], attempt)
@@ -114,6 +114,23 @@ async def test_withdraw_false_identity_preserves_dispatch_audit_and_old_post(tmp
     assert not {"item_ref", "queue_ref", "effective_at", "url"} & delivery.keys()
     assert result["next_action"] == "review_outcome"
     after = saved(store, new["operation_id"], attempt)
+    def no_status_write():
+        raise AssertionError("ordinary status must not acquire a writer")
+    with monkeypatch.context() as patch:
+        patch.setattr(store, "tx", no_status_write)
+        status = (await app.call(actor, "vibepublish_status", {
+            "ids": [new["operation_id"]],
+        }))["receipts"][0]
+    assert status["state"] == "outcome_unknown" and status["operation_complete"], status
+    assert status["error"] == result["error"]
+    assert status["deliveries"] == result["deliveries"]
+    assert not {"progress", "next_action"} & status.keys()
+    assert status["summary"]["result"] == "доставка подтверждена в 0 из 1; исход не установлен в 1; отказ в 0"
+    network = status["summary"]["networks"][0]
+    assert network["status"] == "исход неизвестен"
+    assert network["reason"] == "Исход отправки не установлен"
+    assert not {"item_ref", "queue_ref", "url"} & network.keys()
+    assert saved(store, new["operation_id"], attempt) == after
     for field in ("request", "request_digest", "revision", "created", "publication_id"):
         assert after["operation"][field] == before["operation"][field]
     for field in ("plan", "plan_digest", "dispatched", "dispatch_at"):
