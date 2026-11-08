@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Worker maintenance: deduplicate owned saved-carousel references before the original-image retention join, avoiding assets × immutable-revisions work while preserving every existing hold and the atomic cleanup transaction. Share the existing successful cleanup deadline across worker lanes on the same Store. Real Store VM-work and lane/failure regressions fail before the fix and pass after it; no new schema, index, timeout or retry. The measured live maintenance writer still requires post-rollout verification.
+- Private publish previews: let an authorized cancellation of a completed, never-dispatched preview finish locally, advance its publication revision once and consume its pending approval decisions. Preserve frozen history, assets, request-key replay and ordinary native item-ref cancellation. Return «Приватный предпросмотр отменён. Публикации не было.» without claiming a native deletion; real Store regressions cover restart, approval races and current cancel rights.
+
 - Saved carousel fragments: verify/encode the immutable PNG before taking SQLite's writer. Retain final actor/revision checks and atomic asset/journal persistence. A real Store barrier regression exposes blocked independent read admission before the fix, passes after it, and verifies that revocation during image processing leaves neither saved bytes nor a render journal.
 - SQLite diagnosis: log writer holds of at least one second after connection release, with monotonic duration and safe process/thread/source location only. Preserve existing acquisition, commit/rollback and exception behavior; a failing diagnostic handler cannot turn a committed write into failure or mask the original error. No retry, timeout or schema changes; the separate historical lock owner remains unproven.
 

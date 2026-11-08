@@ -163,3 +163,60 @@ def require_edit_preview(app, db, actor, args, plans):
             != [{**plan, 'mode': 'execute'} for plan in frozen]):
         raise DomainError('permission_preview_changed',
                           'Подготовленный payload изменился; нужен актуальный предпросмотр этой правки', 'refresh')
+
+
+def cancel_preview(app, db, actor, args, intent):
+    """Cancel a completed unsent preview in the admission transaction."""
+    pub = db.execute(
+        'SELECT * FROM publications WHERE id=? AND tenant_id=? AND principal_id=?',
+        (args['publication_id'], actor.tenant_id, actor.principal_id)).fetchone()
+    if not pub or pub['revision'] != args['expected_revision']:
+        raise DomainError('revision_conflict', 'Refresh the exact publication revision', 'refresh')
+    previous = app.store.private_operation(db, actor, pub['id'])
+    if (previous['action'] != 'publish' or previous['state'] != 'needs_approval'
+            or not previous['complete'] or previous['work_state'] != 'done'
+            or json.loads(previous['request']).get('mode') != 'preview'):
+        return None
+    children = db.execute(
+        'SELECT * FROM attempts WHERE operation_id=? ORDER BY rowid',
+        (previous['id'],)).fetchall()
+    if not children or any(
+            child['dispatched'] or child['observed'] != 'not_attempted'
+            or json.loads(child['checkpoint']).get('remote') for child in children):
+        raise DomainError('remote_item_not_bound')
+    plans = []
+    for child in children:
+        binding = app.store.binding(db, actor, binding_id=child['binding_id'])
+        if 'cancel' not in json.loads(binding['rights']):
+            raise DomainError('access_denied', 'Binding does not allow this command', 'contact_owner')
+        plans.append({**json.loads(child['plan']), 'action': 'cancel', 'mode': 'execute',
+                      'assets': [], 'scheduled_at': None})
+    publication, revision = pub['id'], pub['revision'] + 1
+    changed = db.execute(
+        'UPDATE publications SET revision=? WHERE id=? AND revision=?',
+        (revision, publication, args['expected_revision'])).rowcount
+    if changed != 1:
+        raise DomainError('revision_conflict', 'Refresh the exact publication revision', 'refresh')
+    db.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?)',
+               (actor.tenant_id, actor.principal_id, publication, revision,
+                canonical(intent), canonical(plans), digest(plans)))
+    op = app._new_operation(
+        db, actor, 'publication_update', intent, publication=publication,
+        revision=revision, complete=True,
+        result={'message': 'Приватный предпросмотр отменён. Публикации не было.'})
+    db.execute("UPDATE operations SET state='cancelled' WHERE id=?", (op,))
+    for child, plan in zip(children, plans):
+        db.execute(
+            "INSERT INTO attempts(id,operation_id,binding_id,binding_epoch,alias,provider,"
+            "plan,plan_digest,state,stage,observed,result) "
+            "VALUES(?,?,?,?,?,?,?,?,'cancelled','finished','not_attempted',?)",
+            (new_id('attempt'), op, child['binding_id'], child['binding_epoch'],
+             child['alias'], child['provider'], canonical(plan), digest(plan),
+             canonical({'compensation': 'intent_cancelled_without_effect',
+                        'reason': 'preview_cancelled_without_effect'})))
+    db.execute(
+        'UPDATE decisions SET consumed_by=? WHERE publication_id=? AND revision=? AND consumed_by IS NULL',
+        (op, publication, previous['revision']))
+    if args.get('request_key'):
+        app._key(db, actor, args['request_key'], digest(['publication_update', intent]), op)
+    return op

@@ -737,6 +737,10 @@ class Application:
         with self.store.tx() as db:
             actor = self.store.current(db, actor)
             op = self._replay(db, actor, action, intent, args)
+            if (not op and action == 'publication_update' and args.get('publication_id')
+                    and args['change']['kind'] == 'cancel'):
+                from .permission_preview import cancel_preview
+                op = cancel_preview(self, db, actor, args, intent)
             if not op:
                 active = db.execute("SELECT count(*) FROM operations WHERE tenant_id=? AND work_state!='done'", (actor.tenant_id,)).fetchone()[0]
                 maximum = db.execute('SELECT command_limit FROM tenants WHERE id=?', (actor.tenant_id,)).fetchone()[0]
