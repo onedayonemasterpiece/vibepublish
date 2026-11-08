@@ -1,6 +1,11 @@
 """Warm and cold renders must respect current source-asset availability."""
 import hashlib
 import io
+import json
+import threading
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -170,3 +175,67 @@ def test_render_cache_evicts_to_byte_budget_and_skips_oversized_png(tmp_path, mo
     monkeypatch.setattr(carousel, '_RENDERED_MAX_BYTES', len(first) - 1)
     assert service._render(actor, rows[0]) == first
     assert not carousel._RENDERED
+
+
+def test_concurrent_cold_card_and_region_reuse_master_without_blocking_hot_cache(tmp_path, monkeypatch):
+    from social_operations import svg_raster
+
+    store = Store(tmp_path / "concurrent-cache.sqlite")
+    actor = store.authenticate(store.create_principal("tenant", "owner", owner=True))
+    service = CarouselService(Application(store))
+    rows = {name: _saved_scene(store, actor, service,
+        f'<rect id="{name}" width="384" height="160" fill="#173957"/>', name)
+        for name in ("hot", "cold")}
+    entered, release, region_missed = threading.Event(), threading.Event(), threading.Event()
+    region_thread = None
+    cold_rasters = []
+
+    class ObservedCache(OrderedDict):
+        def get(self, key, default=None):
+            value = super().get(key, default)
+            if value is None and threading.get_ident() == region_thread:
+                region_missed.set()
+            return value
+
+    def child(*args, **kwargs):
+        options = json.loads(kwargs["input"])
+        if 'id="cold"' in options["svg_string"]:
+            cold_rasters.append(1)
+            entered.set()
+            assert release.wait(10), "test did not release the cold raster"
+        Image.new("RGB", (options["width"], options["height"]), "#173957").save(
+            kwargs["stdout"], "PNG")
+        return SimpleNamespace(returncode=0)
+
+    def request(name, **view):
+        nonlocal region_thread
+        if "region" in view:
+            region_thread = threading.get_ident()
+        return service.command(actor, {"command": {
+            "kind": "render", "carousel_id": rows[name]["id"], "revision": 1,
+            "scale": 1, **view,
+        }})
+
+    monkeypatch.setattr(carousel, "_RENDERED", ObservedCache())
+    # Keep the actual native lock and child I/O wrapper; only replace its costly child.
+    monkeypatch.setattr(svg_raster.subprocess, "run", child)
+    hot = request("hot", card=1)
+    with ThreadPoolExecutor(max_workers=3) as workers:
+        card = workers.submit(request, "cold", card=1)
+        try:
+            assert entered.wait(5), "cold card did not reach rasterization"
+            region = workers.submit(request, "cold", view="region", region=[128, 0, 128, 160])
+            # Observe the second caller's genuine initial miss while the first raster is held.
+            assert region_missed.wait(5), "cold region did not inspect the master cache"
+            ready = workers.submit(request, "hot", card=1).result(timeout=2)
+            assert ready.data == hot.data
+            assert not card.done() and not region.done()
+        finally:
+            release.set()
+        results = [card.result(timeout=5), region.result(timeout=5)]
+
+    assert len(cold_rasters) == 1, "same cold master was rasterized more than once"
+    for result in results:
+        with Image.open(io.BytesIO(result.data)) as image:
+            assert image.size == (128, 160)
+            assert image.getpixel((0, 0)) == (23, 57, 87)
