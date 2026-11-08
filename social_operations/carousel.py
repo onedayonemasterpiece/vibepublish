@@ -586,7 +586,7 @@ class CarouselService:
                 review_view = 'pair'
         metadata.update(carousel_id=row['id'], revision=row['revision'], private=True,
                         view=view, source_width=width, source_height=height,
-                        review_questions=review_questions(review_view))
+                        review_questions=review_questions(review_view, source_svg=row['svg']))
         if view == 'master' and command.get('scale') == 0.5:
             metadata['scale'] = 0.5
             metadata['cutlines'] = bool(command.get('cutlines'))
