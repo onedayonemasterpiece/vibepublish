@@ -993,7 +993,7 @@ class Application:
             ids = args.get('ids') or [r[0] for r in db.execute('SELECT id FROM operations WHERE tenant_id=? AND principal_id=? ORDER BY created DESC LIMIT ?', (actor.tenant_id, actor.principal_id, args.get('limit', 20)))]
         deadline = asyncio.get_running_loop().time() + args.get('wait_seconds', 0)
         while True:
-            ready = not ids if args.get('wait_final') else True
+            ready = True
             kinds = {}
             with self.store.connection() as db:
                 for ident in ids:

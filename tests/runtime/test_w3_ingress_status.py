@@ -145,13 +145,53 @@ async def test_status_waits_for_slow_second_network_without_new_cursor(tmp_path)
     finally:
         providers["vk"].gate.set()
         await running
-    final = await app.call(actor, "vibepublish_status", {
-        "ids": [accepted["operation_id"]], "wait_final": True, "wait_seconds": 1,
-    })
+    # A completed operation must return before the optional wait budget expires.
+    final = await asyncio.wait_for(app.call(actor, "vibepublish_status", {
+        "ids": [accepted["operation_id"]], "wait_final": True, "wait_seconds": 5,
+    }), timeout=2)
     receipt = final["receipts"][0]
     assert receipt["operation_complete"]
     assert receipt["summary"]["result"] == "доставлено во все сети"
     assert all(row["status"] == "готово" for row in receipt["summary"]["networks"])
+    assert providers["telegram"].count("effect") == providers["vk"].count("effect") == 1
+
+
+@pytest.mark.asyncio
+async def test_status_returns_when_pending_operation_completes(tmp_path):
+    store, actor = setup(tmp_path)
+    app = IngressApplication(store)
+    providers = {name: FakeProvider(tmp_path / "remote.sqlite", name) for name in ("telegram", "vk")}
+    complete = await app.call(actor, "vibepublish_publish", {
+        "to": ["telegram"], "content": {"text": "Already complete"},
+        "request_key": "status-complete",
+    })
+    worker = Worker(store, providers)
+    await worker.run_once()
+    pending = await app.call(actor, "vibepublish_publish", {
+        "to": ["vk"], "content": {"text": "Complete while status waits"},
+        "request_key": "status-pending",
+    })
+    ids = [complete["operation_id"], pending["operation_id"]]
+    snapshot = await app.call(actor, "vibepublish_status", {"ids": ids})
+    assert [receipt["operation_complete"] for receipt in snapshot["receipts"]] == [True, False]
+    invalid = await app.call(actor, "vibepublish_status", {"ids": ids, "wait_final": True})
+    assert invalid["error"]["code"] == "invalid_input"
+
+    waiting = asyncio.create_task(app.call(actor, "vibepublish_status", {
+        "ids": [pending["operation_id"]], "wait_final": True, "wait_seconds": 5,
+    }))
+    try:
+        # The worker is deliberately not running: completion cannot precede this
+        # barrier, and waiting must yield so the worker can make progress.
+        finished, _ = await asyncio.wait({waiting}, timeout=0.15)
+        assert not finished, "status returned before durable completion"
+        await worker.run_once()
+        final = await asyncio.wait_for(waiting, timeout=2)
+    finally:
+        waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+    assert final["receipts"][0]["operation_complete"]
+    assert final["receipts"][0]["summary"]["result"] == "доставлено во все сети"
     assert providers["telegram"].count("effect") == providers["vk"].count("effect") == 1
 
 

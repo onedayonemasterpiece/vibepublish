@@ -2,10 +2,15 @@
 import concurrent.futures
 import hashlib
 import io
+import logging
+import os
 import sqlite3
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
+import pytest
 from PIL import Image
 from social_operations.assets import import_image
 from social_operations.domain import DomainError, canonical, parse_source
@@ -110,6 +115,78 @@ class StorageTests(unittest.TestCase):
                     'https://user:pass@t.me/venue/1', 'https://vk.ru/wall-1_2?reply=3', 'http://t.me/venue/1'):
             with self.subTest(url=url), self.assertRaises(DomainError):
                 parse_source(url)
+
+
+@pytest.mark.parametrize('rollback', [False, True])
+@pytest.mark.parametrize('handler_fails', [False, True])
+def test_slow_writer_diagnostic_runs_after_release_without_changing_outcome(tmp_path, rollback, handler_fails):
+    store = Store(tmp_path / 'ledger.sqlite')
+    with store.connection() as db:
+        db.execute('CREATE TABLE private_sql_probe(value TEXT)')
+    records = []
+    writer_acquired = []
+
+    class ProbeHandler(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+            # A handler invoked under the original writer fails immediately.
+            observer = sqlite3.connect(store.path, timeout=0, isolation_level=None)
+            try:
+                observer.execute('BEGIN IMMEDIATE')
+                observer.execute("INSERT INTO private_sql_probe VALUES('observer')")
+                observer.commit()
+                writer_acquired.append(True)
+            finally:
+                observer.close()
+            if handler_fails:
+                raise RuntimeError('private handler failure')
+
+    logger = logging.getLogger('social_operations.storage')
+    handler = ProbeHandler()
+    previous_level = logger.level
+    logger.setLevel(logging.WARNING)
+    logger.addHandler(handler)
+    original_error = ValueError('private rollback exception')
+    private_value = 'private SQL argument'
+
+    def perform():
+        with store.tx() as db:
+            db.execute('INSERT INTO private_sql_probe VALUES(?)', (private_value,))
+            time.sleep(1.02)  # An actual hold beyond the diagnostic's one-second threshold.
+            if rollback:
+                raise original_error
+
+    try:
+        with store.tx() as db:
+            assert db.execute('SELECT 1').fetchone()[0] == 1
+        assert not records
+        if rollback:
+            with pytest.raises(ValueError) as error:
+                perform()
+            assert error.value is original_error
+        else:
+            perform()  # A broken logging handler must not turn a committed write into failure.
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous_level)
+
+    assert writer_acquired == [True]
+    assert len(records) == 1 and records[0].levelno == logging.WARNING
+    message = records[0].getMessage()
+    event, *fields = message.split()
+    assert event == 'sqlite_writer_slow_hold'
+    details = dict(field.split('=', 1) for field in fields)
+    assert set(details) == {'duration_ms', 'pid', 'thread', 'source', 'function', 'lineno'}
+    assert int(details['duration_ms']) >= 1000
+    assert int(details['pid']) == os.getpid()
+    assert int(details['thread']) == threading.get_ident()
+    assert details['source'] == 'test_storage.py' and details['function'] == 'perform'
+    assert int(details['lineno']) > 0 and records[0].exc_info is None
+    for private in ('private_sql_probe', private_value, str(original_error), 'private handler failure', str(tmp_path)):
+        assert private not in message
+    with store.connection() as db:
+        values = [row[0] for row in db.execute('SELECT value FROM private_sql_probe ORDER BY value')]
+    assert values == (['observer'] if rollback else ['observer', private_value])
 
 
 if __name__ == '__main__':

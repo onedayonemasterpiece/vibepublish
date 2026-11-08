@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import sqlite3
+import sys
+import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime
@@ -15,6 +18,8 @@ from zoneinfo import ZoneInfo
 
 from .domain import Actor, DomainError, canonical, new_id, timestamp
 from contracts.social_mcp_v1 import STAGE
+
+_LOG = logging.getLogger(__name__)
 
 ALL_SCOPES = frozenset({"bootstrap", "publish", "publication.manage", "visual", "status",
                         "engage", "destinations", "forward", "destination.profile"})
@@ -112,26 +117,45 @@ class Store:
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
-        with self.connection() as db:
-            # busy_timeout handles ordinary short contention. If another local
-            # VibePublish process still owns the writer lock after that wait,
-            # retry only BEGIN IMMEDIATE. No transaction/provider effect exists
-            # yet, so this is safe and prevents the worker process from dying.
-            deadline = time.monotonic() + 15.0
-            while True:
+        held_for = 0.0
+        try:
+            with self.connection() as db:
+                # busy_timeout handles ordinary short contention. If another local
+                # VibePublish process still owns the writer lock after that wait,
+                # retry only BEGIN IMMEDIATE. No transaction/provider effect exists
+                # yet, so this is safe and prevents the worker process from dying.
+                deadline = time.monotonic() + 15.0
+                while True:
+                    try:
+                        db.execute("BEGIN IMMEDIATE")
+                        break
+                    except sqlite3.OperationalError as exc:
+                        if "locked" not in str(exc).lower() or time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.05)
+                acquired = time.monotonic()
                 try:
-                    db.execute("BEGIN IMMEDIATE")
-                    break
-                except sqlite3.OperationalError as exc:
-                    if "locked" not in str(exc).lower() or time.monotonic() >= deadline:
-                        raise
-                    time.sleep(0.05)
-            try:
-                yield db
-                db.commit()
-            except BaseException:
-                db.rollback()
-                raise
+                    yield db
+                    db.commit()
+                except BaseException:
+                    db.rollback()
+                    raise
+                finally:
+                    held_for = time.monotonic() - acquired
+        finally:
+            if held_for >= 1.0:
+                # The connection is closed. Diagnostics cannot hold the writer or
+                # change a committed result / the original transaction exception.
+                try:
+                    caller = sys._getframe(2)
+                    source = (Path(caller.f_code.co_filename).name,
+                              caller.f_code.co_name, caller.f_lineno)
+                    del caller
+                    _LOG.warning(
+                        "sqlite_writer_slow_hold duration_ms=%d pid=%d thread=%d source=%s function=%s lineno=%d",
+                        round(held_for * 1000), os.getpid(), threading.get_ident(), *source)
+                except Exception:
+                    pass
 
     def create_principal(self, tenant: str, principal: str, *, owner=False,
                          scopes=ALL_SCOPES, timezone="Europe/Kaliningrad") -> str:

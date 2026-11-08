@@ -500,14 +500,14 @@ class CarouselService:
         for name in ('scale', 'layers', 'save_asset'):
             if name in command:
                 details[name] = command[name]
+        prepared = verify_image(preview.data, 'image/png') if command.get('save_asset') else None
         # The original revision remains private and authorized through the render.
         # A saved fragment and its journal record share one existing store transaction.
         with self.store.tx() as db:
             actor = self._actor(db, actor)
             self._version(db, actor, row['id'], row['revision'])
-            if command.get('save_asset'):
-                details['asset_ref'] = insert_verified_image(self.store, db, actor,
-                                                             verify_image(preview.data, 'image/png'))
+            if prepared is not None:
+                details['asset_ref'] = insert_verified_image(self.store, db, actor, prepared)
             self._log(db, actor, row['id'], row['revision'], 'render',
                       duration_ms=round((time.perf_counter() - started) * 1000), **details)
         metadata = {key: value for key, value in preview.metadata.items() if key != 'resource_uri'}
