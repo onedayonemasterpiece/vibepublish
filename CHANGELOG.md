@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MCP guidance: map the latest provider/current read item `ref` explicitly to mutation `item_ref`; clarify that full asset inspection reads the requested stored asset, while component thumbnails flatten transparency onto white. Assess alpha-related montage defects in the exact carousel render/export. No schema, identity, rendering or publication behavior changes; live agent verification remains pending.
+
 - Story Carousel composition: avoid an unused EXIF transpose/copy for opaque PNG/WebP originals while preserving late PNG tRNS, alpha orientation and access/integrity checks. Decoding and JPEG handling are unchanged; no render-latency cause or speedup is claimed.
 
 - Story Carousel guide: a component sits seamlessly — a rectangle of another tone around it (white plate on beige) is a montage defect unless the plate is a deliberate composition element (seen in E2E d894 r11).
