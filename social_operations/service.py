@@ -150,12 +150,12 @@ class Application:
             actor = self.store.current(db, actor)
             if not actor.scopes.intersection({'visual', 'publish', 'media.store'}):
                 raise DomainError('access_denied', next_action='contact_owner')
-            row = db.execute('SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?',
-                             (ident, actor.tenant_id, actor.principal_id)).fetchone()
-            if not row or db.execute(
-                f'SELECT 1 FROM media_store_assets m WHERE m.asset_id=? AND {_EXPIRED_MEDIA_STORE_ASSET}',
-                (ident, self.store.clock()),
-            ).fetchone():
+            row = db.execute(
+                f"""SELECT * FROM assets WHERE id=? AND tenant_id=? AND principal_id=?
+                    AND NOT EXISTS (SELECT 1 FROM media_store_assets m
+                                    WHERE m.asset_id=assets.id AND {_EXPIRED_MEDIA_STORE_ASSET})""",
+                (ident, actor.tenant_id, actor.principal_id, self.store.clock())).fetchone()
+            if not row:
                 raise DomainError('asset_not_available', next_action='refresh')
             cache_binding = None
             shared_cache = db.execute(

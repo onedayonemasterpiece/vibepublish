@@ -1,8 +1,11 @@
 """Real SQLite writer contention must not turn asset reads into cleanup writes."""
 import io
+import sqlite3
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, wait
 from threading import Barrier
 
+import pytest
 from PIL import Image
 
 from social_operations.assets import import_image
@@ -66,3 +69,40 @@ def test_carousel_asset_reads_do_not_wait_for_unrelated_writer(tmp_path):
         app._purge_media_store_assets(db)
         assert db.execute('SELECT 1 FROM assets WHERE id=?', (expired,)).fetchone() is None
         assert db.execute('SELECT 1 FROM assets WHERE id=?', (retained,)).fetchone()
+
+
+def test_cleanup_cannot_make_expired_asset_bytes_readable(tmp_path, monkeypatch):
+    now = 1_800_000_000
+    store = Store(tmp_path / 'ledger.sqlite', clock=lambda: now)
+    actor = store.authenticate(store.create_principal('tenant', 'owner', owner=True))
+    app = Application(store)
+    image = io.BytesIO()
+    Image.new('RGB', (32, 32), 'red').save(image, format='PNG')
+    expired = import_image(store, actor, image.getvalue(), 'image/png')
+    with store.tx() as db:
+        db.execute('INSERT INTO media_store_assets VALUES(?,?,?,?)',
+                   (expired, None, 'download_cache', now - 1))
+
+    connection = store.connection
+
+    @contextmanager
+    def cleanup_before_delivering_asset_row():
+        with connection() as db:
+            def deliver(cursor, values):
+                row = sqlite3.Row(cursor, values)
+                if 'bytes' in row.keys() and row['id'] == expired:
+                    # A real separate WAL writer commits after the reader has
+                    # loaded bytes. Do not mock the query or its result.
+                    with connection() as cleaner:
+                        cleaner.execute('BEGIN IMMEDIATE')
+                        app._purge_media_store_assets(cleaner)
+                        cleaner.commit()
+                return row
+
+            db.row_factory = deliver
+            yield db
+
+    monkeypatch.setattr(store, 'connection', cleanup_before_delivering_asset_row)
+    with pytest.raises(DomainError) as error:
+        app.read_asset(actor, expired)
+    assert error.value.code == 'asset_not_available'
