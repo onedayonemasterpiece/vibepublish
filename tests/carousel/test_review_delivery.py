@@ -45,10 +45,11 @@ QUESTION_IDS = ([f"{prefix}{number:02d}" for prefix, count in
 
 @pytest.mark.parametrize("question_id", QUESTION_IDS)
 def test_every_review_question_is_addressable_without_rendering(question_id):
-    result = guide("90-review", section=question_id)
+    section = f"question:{question_id}"
+    result = guide("90-review", section=section)
     tool = CATALOG["vibepublish_carousel"]
     Draft202012Validator(tool["inputSchema"]).validate({"command": {
-        "kind": "get", "scope": "guide", "topic": "90-review", "section": question_id}})
+        "kind": "get", "scope": "guide", "topic": "90-review", "section": section}})
     Draft202012Validator(tool["outputSchema"]).validate(result)
     source = "85-style-continuity.md" if question_id.startswith("ST") else "90-review.md"
     row = next(line for line in _read(source).splitlines()
@@ -60,6 +61,8 @@ def test_every_review_question_is_addressable_without_rendering(question_id):
     assert "images" not in result
     for cell in cells:
         assert cell in result["content"]
+    if question_id not in ("K01", "R01"):
+        assert guide("90-review", section=question_id) == result
 
 
 def test_review_priority_is_source_order_not_a_fixed_category_mix(monkeypatch):
@@ -78,9 +81,12 @@ def test_review_priority_is_source_order_not_a_fixed_category_mix(monkeypatch):
 
 
 def test_review_index_explains_existing_section_lookup_and_old_sections_survive():
-    assert 'section:"Q01"' in guide("90-review")["content"]
+    assert 'section:"question:Q01"' in guide("90-review")["content"]
     assert guide("90-review", section=" k14 ")["section"] == "K14"
     assert guide("90-review", section="K01–K16")["section"].startswith("K01–K16:")
+    for prefix, heading in (("K01", "K01–K16"), ("R01", "R01–R15")):
+        assert guide("90-review", section=prefix) == guide("90-review", section=heading)
+    assert guide("90-review", section=" Question:k01 ")["section"] == "K01"
     for question_id in ("Q99", "ST8", "K14,K16"):
         with pytest.raises(DomainError):
             guide("90-review", section=question_id)
@@ -91,10 +97,10 @@ async def test_individual_review_questions_use_unchanged_mcp_guide_contract(tmp_
     store = Store(tmp_path / "review-guide.sqlite")
     actor = store.authenticate(store.create_principal("tenant", "owner", owner=True))
     app = Application(store)
-    for ident in ("K14", "K16", "Q35", "V30", "R15", "ST7"):
+    for ident in ("K14", "K16", "Q35", "V30", "R15", "ST7", "question:K01", "question:R01"):
         result = await app.call(actor, "vibepublish_carousel", {
             "command": {"kind": "get", "scope": "guide", "topic": "90-review", "section": ident}})
-        assert result["section"] == ident
+        assert result["section"] == ident.removeprefix("question:")
         assert result["private"] and "images" not in result
     with store.connection() as db:
         assert db.execute("SELECT count(*) FROM operations").fetchone()[0] == 0

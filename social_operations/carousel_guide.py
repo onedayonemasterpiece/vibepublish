@@ -56,8 +56,12 @@ def guide(topic: str | None = None, section: str | None = None) -> dict | GuideI
     source = _read(topic + ".md")
     sources = [_SOURCE + topic + ".md"]
     metadata = {"private": True, "topic": topic, "sources": sources}
-    question = (_review_bank().get(section.strip().upper())
-                if topic == "90-review" and section else None)
+    question_id = section.strip().upper() if topic == "90-review" and section else ""
+    question = _review_bank().get(question_id.removeprefix("QUESTION:")) if question_id else None
+    # Keep existing heading prefixes (notably K01 and R01) unambiguous.
+    if question and not question_id.startswith("QUESTION:"):
+        if any(title.upper().startswith(question_id) for title, _ in _sections(source)):
+            question = None
     if question:
         metadata["section"] = question["id"]
         if question["id"].startswith("ST"):
@@ -76,7 +80,7 @@ def guide(topic: str | None = None, section: str | None = None) -> dict | GuideI
                      "", "| Раздел | Знаков |", "|---|---:|"]
             lines += [f"| {title} | {len(text)} |" for title, text in headings]
             if topic == "90-review":
-                lines += ["", 'Один вопрос: section:"Q01"; также доступны ID V, R, K и ST. '
+                lines += ["", 'Один вопрос: section:"question:Q01"; также доступны ID V, R, K и ST. '
                           'Выбирай нужный вопрос, весь банк читать не требуется.']
             content = "\n".join(lines)
         else:
