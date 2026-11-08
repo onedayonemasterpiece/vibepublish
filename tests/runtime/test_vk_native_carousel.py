@@ -74,6 +74,141 @@ def edit(fresh, asset):
                                  {"source": {"kind": "existing", "position": 0}}]}}
 
 
+def export_cards(env, *, key="cards", colors=("#173957", "#ecb84f", "#784238")):
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="384" height="160">'
+           + ''.join(f'<rect x="{index * 128}" width="128" height="160" fill="{color}"/>'
+                     for index, color in enumerate(colors)) + '</svg>')
+    created = env.app.carousels.command(env.actor, {
+        'command': {'kind': 'create', 'brief': 'Three connected cards', 'svg': svg,
+                    'card_count': 3, 'card_width': 128, 'card_height': 160},
+        'request_key': key + '-create'})
+    return env.app.carousels.command(env.actor, {
+        'command': {'kind': 'export', 'carousel_id': created['carousel_id'], 'revision': 1},
+        'request_key': key + '-export'})
+
+
+def frozen_plan(env, operation_id):
+    with env.store.connection() as db:
+        return json.loads(db.execute('SELECT plan FROM attempts WHERE operation_id=?',
+                                     (operation_id,)).fetchone()[0])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scheduled', [False, True])
+async def test_complete_export_defaults_vk_carousel_and_freezes_before_dispatch(tmp_path, scheduled):
+    env = setup(tmp_path)
+    exported = export_cards(env)
+    command = {'to': ['lovekenig_vk'], 'content': {'text': 'Three connected cards'},
+               'media': exported['media'], 'request_key': 'export-publication'}
+    if scheduled:
+        command['delivery'] = {'kind': 'at', 'at': timestamp(NOW + 3600)}
+    admitted = await env.app.call(env.actor, 'vibepublish_publish', command)
+    assert 'error' not in admitted, admitted
+    plan = frozen_plan(env, admitted['operation_id'])
+    assert plan['vk_primary_attachments_mode'] == 'carousel'
+    assert [a['ref'] for a in plan['assets']] == [m['source']['id'] for m in exported['media']]
+    assert 'vk' not in command
+    # Provenance changing after admission must not change the frozen provider effect.
+    with env.store.tx() as db:
+        db.execute("UPDATE operations SET state='failed' WHERE id=?", (exported['operation_id'],))
+    replay = await env.app.call(env.actor, 'vibepublish_publish', command)
+    assert replay['operation_id'] == admitted['operation_id']
+    assert frozen_plan(env, admitted['operation_id']) == plan
+    assert await env.worker.run_once()
+    calls = [params for name, _, params in env.transport.calls if name == 'wall.post']
+    assert len(calls) == 1
+    assert calls[0]['primary_attachments_mode'] == 'carousel'
+    assert calls[0]['attachments'].split(',') == [f'photo{OWNER}_{i}' for i in (1001, 1002, 1003)]
+    assert ('publish_date' in calls[0]) is scheduled
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('selection', ['ordinary', 'partial', 'reordered', 'mixed', 'two_exports'])
+async def test_nonmatching_media_keeps_vk_default(tmp_path, selection):
+    env = setup(tmp_path)
+    exported = export_cards(env)['media']
+    ordinary = {'source': {'kind': 'asset', 'id': env.new_asset}}
+    if selection == 'ordinary':
+        media = [ordinary]
+    elif selection == 'partial':
+        media = exported[:2]
+    elif selection == 'reordered':
+        media = list(reversed(exported))
+    elif selection == 'mixed':
+        media = [*exported[:2], ordinary]
+    else:
+        other = export_cards(env, key='other', colors=('#111111', '#222222', '#333333'))['media']
+        media = [exported[0], other[1], exported[2]]
+    admitted = await env.app.call(env.actor, 'vibepublish_publish', {
+        'to': ['lovekenig_vk'], 'media': media, 'request_key': 'ordinary-publication'})
+    assert 'error' not in admitted, admitted
+    assert 'vk_primary_attachments_mode' not in frozen_plan(env, admitted['operation_id'])
+    assert await env.worker.run_once()
+    call, = [params for name, _, params in env.transport.calls if name == 'wall.post']
+    assert 'primary_attachments_mode' not in call
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provenance', ['foreign_owner', 'foreign_tenant', 'not_export', 'failed', 'incomplete'])
+async def test_only_owned_verified_export_proves_vk_carousel(tmp_path, provenance):
+    env = setup(tmp_path)
+    exported = export_cards(env)
+    foreign = None
+    if provenance.startswith('foreign'):
+        foreign = env.store.authenticate(env.store.create_principal(
+            'other_tenant' if provenance == 'foreign_tenant' else 'tenant', 'other_owner', owner=True))
+    with env.store.tx() as db:
+        if provenance == 'incomplete':
+            db.execute('UPDATE operations SET complete=0 WHERE id=?', (exported['operation_id'],))
+        else:
+            db.execute("UPDATE operations SET state='failed' WHERE id=?", (exported['operation_id'],))
+            if provenance != 'failed':
+                # Insert provenance in its original scope; requests and keyed owners are immutable.
+                env.app._new_operation(db, foreign or env.actor, 'carousel',
+                    {'command': {'kind': 'create' if provenance == 'not_export' else 'export'}},
+                    complete=True, result={'media': exported['media']})
+    admitted = await env.app.call(env.actor, 'vibepublish_publish', {
+        'to': ['lovekenig_vk'], 'media': exported['media'], 'request_key': 'unproven-publication'})
+    assert 'error' not in admitted, admitted
+    assert 'vk_primary_attachments_mode' not in frozen_plan(env, admitted['operation_id'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('known_mode', [None, 'carousel', 'grid'])
+async def test_vk_edit_and_reschedule_preserve_known_mode_without_setting_wall_edit_mode(tmp_path, known_mode):
+    env = setup(tmp_path)
+    exported = export_cards(env)
+    command = {'to': ['lovekenig_vk'], 'content': {'text': 'Before edit'},
+               'media': [{'source': {'kind': 'asset', 'id': env.new_asset}}],
+               'delivery': {'kind': 'at', 'at': timestamp(NOW + 3600)}, 'request_key': 'managed-mode'}
+    if known_mode is not None:
+        command['vk'] = {'primary_attachments_mode': known_mode}
+    # Seed a legacy/internal mode before the immutable plan is inserted. Public input still rejects grid.
+    started = (env.app.accept(env.actor, 'publish', command) if known_mode == 'grid'
+               else await env.app.call(env.actor, 'vibepublish_publish', command))
+    assert 'error' not in started, started
+    assert await env.worker.run_once()
+    for revision, change in enumerate([
+        {'kind': 'edit', 'content': {'text': 'After edit'}, 'media': exported['media']},
+        {'kind': 'reschedule', 'delivery': {'kind': 'at', 'at': timestamp(NOW + 7200)}},
+    ], 1):
+        changed = await env.app.call(env.actor, 'vibepublish_publication_update', {
+            'publication_id': started['resource_id'], 'expected_revision': revision,
+            'change': change, 'request_key': 'managed-mode-' + change['kind']})
+        assert 'error' not in changed, changed
+        # An edit with a complete export must not infer a mode for an older unknown post.
+        assert frozen_plan(env, changed['operation_id']).get('vk_primary_attachments_mode') == known_mode
+        assert await env.worker.run_once()
+        assert env.store.receipt(env.actor, changed['operation_id'])['state'] == 'scheduled'
+    edits = [params for name, _, params in env.transport.calls if name == 'wall.edit']
+    assert len(edits) == 2 and edits[0]['post_id'] == edits[1]['post_id']
+    assert all('primary_attachments_mode' not in params for params in edits)
+    assert edits[0]['attachments'] == edits[1]['attachments']
+    assert len(edits[1]['attachments'].split(',')) == 3
+    assert edits[0]['message'] == edits[1]['message'] == 'After edit'
+    assert edits[0]['publish_date'] == NOW + 3600 and edits[1]['publish_date'] == NOW + 7200
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scheduled", [False, True])
 async def test_native_vk_carousel_mode_reaches_wall_post(tmp_path, scheduled):

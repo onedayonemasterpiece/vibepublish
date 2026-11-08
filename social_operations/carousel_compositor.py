@@ -20,6 +20,7 @@ from fontTools.ttLib import TTFont
 from PIL import Image, UnidentifiedImageError
 
 from .domain import DomainError
+from . import svg_raster
 
 MAX_SVG_BYTES = 256 * 1024
 MAX_COMPOSITION_ASSET_BYTES = 44 * 1024 * 1024
@@ -285,7 +286,6 @@ def _filter_layers(root, layers):
 
 def render_svg(svg, *, card_count, card_width, card_height, read_asset, layers=None) -> bytes:
     """Standard resvg shaping/kerning with no system fonts or external resources."""
-    import resvg_py
     width, height = _dimensions(card_count, card_width, card_height)
     assets = {}
 
@@ -337,9 +337,8 @@ def render_svg(svg, *, card_count, card_width, card_height, read_asset, layers=N
 
 def render_document_svg(svg: str, *, width: int, height: int) -> bytes:
     """Rasterize checked-in guide illustrations using the production resvg/fonts."""
-    import resvg_py
     try:
-        return resvg_py.svg_to_bytes(svg_string=svg, width=width, height=height,
+        return svg_raster.svg_to_bytes(svg_string=svg, width=width, height=height,
                                      background='#ffffff', skip_system_fonts=True,
                                      font_files=list(_RENDER_FONT_FILES),
                                      font_family='Montserrat', serif_family='PT Serif',

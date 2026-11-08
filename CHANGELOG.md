@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- VK carousel publication: default the existing native `carousel` mode when a new post's complete ordered image list matches one verified export owned by the caller. Freeze the choice in the existing plan, preserve explicit values and known modes through publication edits/rescheduling, and leave ordinary, partial, reordered or mixed media unchanged. No new `wall.edit` parameter, public mode value or worker change; native UI acceptance remains separate.
+
 - Story Carousel render guidance: include the required carousel ID and numeric revision from `get(scope:story)`, with one complete JSON example in s09 and a pointer from the short instruction. Render does not require a top-level request key; the MCP schema is unchanged.
 
 - CI: pull requests that change only `docs/llm/**` and/or `CHANGELOG.md` run the fast `Story Carousel guide` check (guide/review-delivery/skill tests, ~1–2 min) instead of the full verification; pushes to main and any PR touching code still run the full suite.
@@ -20,6 +22,8 @@
 - Story Carousel guide: reconcile the November 8 creative feedback across the existing steps and canonical scope. Preserve explanatory mini-paragraphs, strong varied generated lettering, meaningful image continuity and quiet backgrounds or shared scenes over 2/3/4 cards. Remove universal seam/background/brand quotas and the automatic body-font default; retain documentary originals and F1/alpha. Match every final card to an opened reference with direct source links. Record native VK/S03 evidence separately from rejected creative acceptance; O34/O36 and performance remain open.
 
 - Carousel export diagnostics: record one bounded wall/calling-thread CPU phase summary after a newly committed export releases its writer, including cache reuse and existing aggregate byte counts. Immediate/late replays, errors, pixels, receipts and the MCP contract are unchanged; this enables diagnosis of the observed slow export without claiming a performance fix.
+
+- Carousel raster isolation: run resvg in one child process per raster with the same interpreter, fonts, dimensions and alpha, preventing its native GIL hold from stopping the API loop. Preserve the previous one-raster-per-process concurrency, existing master/export caches and domain errors; bound the child to 300 seconds and PNG reads to the RGBA size plus encoding overhead. A native GIL regression distinguishes the old path; this does not claim faster rendering or resolve the separate host-pressure incident.
 
 - Asset metadata lookup: add one nonunique owner/hash index for existing original-source and verified-image deduplication queries, avoiding unrelated wide BLOB-row scans without changing ownership, bytes, ordering or quota rules. A real Store VM-work regression distinguishes the old scan; the bounded payload trial preserves exact retained assets and image results. Add best-effort maintenance and saved-asset phase timings only after writer release to locate the remaining live latency; no retries, timeouts, schema-version bump or claim that the production subphase is already proven.
 

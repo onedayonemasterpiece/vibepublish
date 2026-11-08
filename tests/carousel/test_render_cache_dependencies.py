@@ -130,7 +130,7 @@ def test_expired_cached_original_does_not_shadow_durable_alpha_source(tmp_path):
 
 
 def test_render_cache_evicts_to_byte_budget_and_skips_oversized_png(tmp_path, monkeypatch):
-    import resvg_py
+    from social_operations import svg_raster
 
     store = Store(tmp_path / "cache-budget.sqlite")
     actor = store.authenticate(store.create_principal("tenant", "owner", owner=True))
@@ -139,13 +139,13 @@ def test_render_cache_evicts_to_byte_budget_and_skips_oversized_png(tmp_path, mo
         f'<rect id="shape{i}" width="384" height="160" fill="#173957"/>', f"scene{i}")
         for i in range(3)]
     calls = []
-    rasterize = resvg_py.svg_to_bytes
+    rasterize = svg_raster.svg_to_bytes
 
     def counted(**kwargs):
         calls.append(1)
         return rasterize(**kwargs)
 
-    monkeypatch.setattr(resvg_py, 'svg_to_bytes', counted)
+    monkeypatch.setattr(svg_raster, 'svg_to_bytes', counted)
     with carousel._RENDERED_LOCK:
         carousel._RENDERED.clear()
     first = service._render(actor, rows[0])
