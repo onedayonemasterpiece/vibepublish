@@ -1,5 +1,6 @@
 """VK Story links: exact scoped wall identity, frozen request and safe recovery."""
 import copy
+from contextlib import contextmanager
 import hashlib
 import json
 from dataclasses import replace
@@ -305,3 +306,45 @@ async def test_save_link_projection_does_not_lose_known_story_identity():
     assert result.observed == 'published'
     assert journal.checkpoints[-1][1]['id'] == result.items[0].native_id
     assert transport.effects == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['epoch', 'rights'])
+async def test_prepared_request_rechecks_source_grant_before_upload(tmp_path, monkeypatch, change):
+    store, actor, app, worker, transport, args = runtime(tmp_path)
+    store.bind(actor, 'owner', 'vk-source', 'vk-connection', '-202')
+    transport.posts[(-202, 42)] = {**transport.posts[(-101, 42)], 'owner_id': -202}
+    args['story_link']['item_ref'] = 'https://vk.com/wall-202_42'
+    accepted = await app.call(actor, 'vibepublish_publish', args)
+    assert accepted['state'] == 'accepted', accepted
+    adapter = worker.adapters['vk-connection']
+    prepare = adapter.prepare
+
+    async def revoke_after_prepare(request, hooks):
+        prepared = await prepare(request, hooks)
+        with store.tx() as db:
+            if change == 'epoch':
+                db.execute("UPDATE bindings SET epoch=epoch+1 WHERE alias='vk-source'")
+            else:
+                db.execute("UPDATE bindings SET rights=? WHERE alias='vk-source'", (json.dumps(['read']),))
+        return prepared
+
+    blob_reads = []
+    connection = store.connection
+
+    @contextmanager
+    def traced_connection():
+        with connection() as db:
+            db.set_trace_callback(
+                lambda sql: blob_reads.append(sql)
+                if sql.startswith('SELECT bytes,sha256 FROM assets WHERE id=') else None)
+            yield db
+
+    monkeypatch.setattr(adapter, 'prepare', revoke_after_prepare)
+    monkeypatch.setattr(store, 'connection', traced_connection)
+    assert await worker.run_once()
+    receipt = store.receipt(actor, accepted['operation_id'])
+    assert receipt['state'] == 'blocked', receipt
+    assert receipt['error']['code'] == 'source_access_revoked'
+    assert len(blob_reads) == 1
+    assert not transport.uploads and not transport.stories and transport.effects == 0
