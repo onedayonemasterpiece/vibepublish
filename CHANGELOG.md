@@ -1,5 +1,11 @@
 # Changelog
 
+### Telegram-first media persistence: consumer preservation contract — 2026-10-20
+
+- Record the owner's fixed requirement to remove permanent binary-image storage from the VibePublish SQLite ledger only through a verified Telegram-backed migration, not by deleting existing BLOBs. **Implementation Not done.**
+- Preserve the existing MCP preview WebP envelope (768 px / 384 KiB), stable authorized asset URIs and HTTP bytes/SHA-256, plus Wonderful Lections and Regional Knowledge Base exact-source consumers, visual/emoji/draft references, metadata-only media search, and the shared rolling 20-media/60-second upload budget.
+- Define dual-read, no-loss queued staging, provider readback and integration/live canary gates before enabling migration or garbage collection. No runtime behavior is modified by this documentation change.
+
 ## [Unreleased]
 
 - Story Carousel process chapter now follows existing s03: generate and compare the overall composition before transferring it into an SVG sketch, then generate finished components for their chosen positions. Remove the contradictory instruction to postpone every generation until after a manually assembled sketch; position and style-sample rules concern finished components. Model behavior remains subject to dot's E2E verification.

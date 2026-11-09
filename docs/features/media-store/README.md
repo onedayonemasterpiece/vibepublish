@@ -16,6 +16,32 @@ media store while VibePublish keeps only searchable metadata and temporary stagi
 bytes. Public Telegram/VK/MAX publishing keeps its separate editorial,
 rights, approval, scheduling and unknown-outcome policy.
 
+## Telegram-first persistence and consumer compatibility — 2026-10-20
+
+**Owner requirement: Fixed. Implementation: Not done. No deletion or production migration is implied by this documentation change.**
+
+VibePublish is a Telegram-backed media provider and social-publication orchestrator, **not a permanent local image archive**. Current original/PNG-derivative BLOB storage in assets.bytes is a legacy implementation to retire only after independently verified migration. SQLite retains identities, SHA-256 hashes, rights, immutable intents, Telegram chat/topic/message references, receipts, publication history, and bounded staging state. Neither a thumbnail nor a later provider read may silently substitute for the exact stored source requested by a consumer.
+
+### No-regression requirements
+
+1. **Small model preview:** Preserve vibepublish_asset_preview with the existing vibepublish://assets/{asset_id} URI. Return the same standard MCP image block, metadata-free image/webp, maximum 768 px on either edge and 384 KiB, with both authorized source and preview SHA-256 evidence. Keep tenant/principal/scope, visual-candidate and emoji-catalog revocation checks. On-demand preview may use a bounded, expiring small cache. Preserve also the same preview_data_url data:image/webp;base64 fallback for clients which omit MCP ImageContent; hash, MIME, access checks and pixel bounds are identical. No permanent thumbnail BLOB, Telegram file upload, or upload quota consumption solely for preview.
+2. **Exact source reads:** Preserve MCP resource reads and authenticated GET /v1/assets/{asset_id}, with identical asset ID, MIME, resource bytes, SHA-256, no-store policy and authorization semantics. Some existing asset IDs refer to sanitized PNG derivatives of JPEG/WebP uploads; retain the **exact bytes originally associated with each ID**, not a visually equivalent recompression. Maintain previously documented expiration rules for short-lived download refs. Never redirect clients to unprotected Telegram URLs or disclose provider credentials.
+3. **Telegram media store:** Preserve owner-only vibepublish_media_store put/list/search/get, exact DOCUMENT and chat/topic/message/album membership, caption index and verified provider SHA-256. List/search must remain local text-only operations during Telegram outages; get downloads and validates the complete original, never a lower-resolution preview. Preserve one-hour download cache TTL, verified staging purge, durable unverified staging, idempotent retries and observation-only reconciliation of uncertain sends.
+4. **Consumer contract:** Wonderful Lections uses an authorized /v1/assets/{id} resolver with MIME and SHA-256 validation, maximum 32 MiB and a 10-second timeout; keep it compatible. Regional Knowledge Base retrieves source PDFs/images and illustration evidence via media_store get; retain exact bytes, provenance and SHA-256. Publishing, scheduled updates, visual job candidates, emoji previews, unpublished drafts and historical authorized assets must remain retrievable while needed.
+5. **One upload budget:** Apply the existing durable rolling budget of 20 media uploads per 60 seconds across all Telegram uploads from VibePublish and its consumers. Do not create independent per-client upload counters; previews and provider reads are not new uploads. Preserve queued work across provider outages and rate limits.
+6. **Safe legacy conversion:** Inventory **all** local BLOB holders, including assets.bytes, workspace_uploads.bytes and resumable import_begin/import_chunk/import_finish workspace sessions, visual/emoji sources, drafts, pending publication inputs and references embedded in immutable JSON. Not every original or derivative is currently backed by Telegram. Archive byte-exact assets with confirmed provider readback, or retain their protected local bytes until a safe provider store exists. Keep existing asset IDs through a compatible dual-read layer (legacy SQLite / verified Telegram), with rights enforcement, integrity validation, explicit archival status and tested rollback. Never delete bytes merely because their publication is completed.
+7. **Bounded disk footprint:** Persistent SQLite must not become a photo store again. Limit transient staging and preview caches by bytes, age and safe eviction policy without losing admitted pending work. Audit live table sizes and remote reference coverage before promising space savings. No destructive live VACUUM/GC, and do not discard migration rollback backups before an independent verified recovery path exists.
+
+### Migration release gates — Not done
+
+- Existing preview tests in tests/runtime/test_transport.py continue to assert MCP image, WebP, maximum size/dimensions, structured preview SHA-256, source authorization and exact-resource compatibility.
+- Existing tests/runtime/test_media_store.py cover put/list/search/get, SHA-256, TTL, provider outage, verified staging cleanup, replays and unknown-outcome recovery. Preserve visual/emoji candidate and scheduled publication tests.
+- Wonderful Lections tests/vibepublish-asset-resolver.test.mjs and actual tenant-bound importer; Regional Knowledge Base source archive and illustration mirror via the deployed MCP, all verify exact original bytes and access rights.
+- Exercise both legacy and migrated refs, provider unavailable/rate-limited, missing or modified provider attachments, wrong tenant, revocation and repeated previews. A preview may be a low-resolution representation, **but full get must never silently substitute it for the original**.
+- Before deleting a live BLOB, validate real Telegram DOCUMENT readback and consumer canaries; reconcile archived/unarchived/unreachable counts and bytes; verify deterministic rollback and zero regression. A green source-only test is not live acceptance.
+
+See the original image ingress contract in docs/operations/asset-ingress.md and the existing model-visible preview contract in docs/features/social-operations/mcp-contract-v1.md.
+
 ## Contract
 
 - `vibepublish_media_store put` accepts one or more verified image or exact PDF/DjVu assets,
