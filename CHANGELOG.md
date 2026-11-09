@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel coverage audit: record the November 9 live guide/reference/icon checks and the observed Building96 copy defect; track existing PR 230 and dot's pending behavior verification separately from source delivery and historical manual QA.
+
 - Story Carousel guide per owner voice notes 08.11: every author thesis/observation reaches the cards with its meaning (s01, checked in s09); author photos are what the author wants, best chosen, internet additions with source; heroes are not cropped without intent and may span two or three cards, landscapes may be cropped; the composition sketch is a block-level layout of all elements (headline, subheadline, text, quote, wide/small image, CTA).
 - Retention diagnostics: add wall and calling-thread CPU durations for five existing classification stages plus aggregate row/pair/pass counts to the existing after-release slow-maintenance warning. Preserve SQL, hold/expiry decisions, transaction boundaries and cadence; this measures residual latency without claiming a speedup or completed incident resolution.
 
