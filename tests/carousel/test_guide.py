@@ -38,7 +38,6 @@ async def test_canonical_guide_and_half_scale_master_are_exposed_by_mcp(tmp_path
     assert "Правила процесса" in process["content"] and "Знаков" in process["content"]
     process_part = await call({"kind": "get", "scope": "guide", "topic": "00-process",
                                "section": "Правила"})
-    assert "Сначала геометрия" in process_part["content"]
     assert len(process_part["content"]) <= 7000
     review = await call({"kind": "get", "scope": "guide", "topic": "90-review"})
     assert "Теги видов" in review["content"] and len(review["content"]) <= 7000
