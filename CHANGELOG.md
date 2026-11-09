@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- VK carousel sharing investigation: correct the incomplete permission diagnosis using `likes.can_publish` and `likes.repost_disabled`, record the affected/control reads and separate SQLite resource evidence, and keep the native-client sharing failure open. Documentation only; no format, publishing or runtime change.
 - Story Carousel coverage audit: record the November 9 live guide/reference/icon checks and the observed Building96 copy defect; track existing PR 230 and dot's pending behavior verification separately from source delivery and historical manual QA.
 - Story Carousel editorial guidance: remove empty personification, generic praise, invented drama and redundant wording from cards and captions; retain concrete observations, grounded author meaning and useful expressive language. Apply the existing editorial rule at storyboard s02, final review s09/Q09 and caption preparation, without a real-post denylist, new gate or runtime behavior change. Source checks do not establish deployed model behavior or owner acceptance.
 
