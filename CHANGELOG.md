@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel guide per owner voice notes 08.11: every author thesis/observation reaches the cards with its meaning (s01, checked in s09); author photos are what the author wants, best chosen, internet additions with source; heroes are not cropped without intent and may span two or three cards, landscapes may be cropped; the composition sketch is a block-level layout of all elements (headline, subheadline, text, quote, wide/small image, CTA).
 - Retention diagnostics: add wall and calling-thread CPU durations for five existing classification stages plus aggregate row/pair/pass counts to the existing after-release slow-maintenance warning. Preserve SQL, hold/expiry decisions, transaction boundaries and cadence; this measures residual latency without claiming a speedup or completed incident resolution.
 
 - Story Carousel review: master includes ST7 for variety; ST3 checks a consistent manner within each role, without treating repeated size, position or block shape as an automatic defect. The s09 master pass includes ST7 and consults K19 on lettering when needed.
