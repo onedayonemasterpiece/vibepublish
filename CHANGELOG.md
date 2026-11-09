@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Story Carousel guide: remove the unconditional ±96 px seam-text failure in 30-seams and the hard-coded seven-card replay in 99-platform; reuse the existing Q31, s09/s10 and actual card count. Keep historical r9 distinct from the text-only r14 coverage update; dot E2E and visual acceptance remain open.
+- Story Carousel guide: remove the unconditional ±96 px seam-text failure in 30-seams and the hard-coded seven-card replay in 99-platform; reuse the existing Q31, s09/s10 and actual card count. Keep historical r9 distinct from the text-only r14/r15 coverage update; dot E2E and visual acceptance remain open.
 - Story Carousel process chapter now follows existing s03: generate and compare the overall composition before transferring it into an SVG sketch, then generate finished components for their chosen positions. Remove the contradictory instruction to postpone every generation until after a manually assembled sketch; position and style-sample rules concern finished components. Model behavior remains subject to dot's E2E verification.
 
 - Story Carousel coverage audit: record the November 9 live guide/reference/icon checks and the observed Building96 copy defect; track existing PR 230 and dot's pending behavior verification separately from source delivery and historical manual QA.
