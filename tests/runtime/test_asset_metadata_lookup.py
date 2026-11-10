@@ -57,7 +57,7 @@ def test_owned_image_reuse_does_not_scan_unrelated_asset_inventory(tmp_path):
     for _ in range(2):
         reopened = Store(store.path, clock=store.clock)
         with reopened.connection() as db:
-            assert db.execute("PRAGMA user_version").fetchone()[0] == 12
+            assert db.execute("PRAGMA user_version").fetchone()[0] == 13
             assert not db.execute("PRAGMA foreign_key_check").fetchall()
             assert tuple(db.execute("SELECT count(*),SUM(length(bytes)) FROM assets").fetchone()) == tuple(before)
         with reopened.tx() as db:

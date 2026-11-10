@@ -279,8 +279,10 @@ async def test_maintenance_saved_revision_work_does_not_multiply_all_assets(tmp_
                 "carousel_id": ident, "expected_revision": revision - 1}},
                 revision=revision, complete=True, result={"carousel_id": ident})
             db.execute("""INSERT INTO carousel_versions
+                (id,revision,tenant_id,principal_id,operation_id,brief,svg,card_count,card_width,
+                 card_height,caption,asset_refs,created,story_json)
                 SELECT id,?,tenant_id,principal_id,?,brief,svg,card_count,card_width,
-                       card_height,caption,asset_refs,created
+                       card_height,caption,asset_refs,created,story_json
                 FROM carousel_versions WHERE id=? AND revision=1""", (revision, op, ident))
         before = db.execute("SELECT count(*) FROM assets").fetchone()[0]
 

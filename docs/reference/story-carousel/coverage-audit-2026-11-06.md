@@ -1,5 +1,9 @@
 # Независимая сверка полноты требований Story Carousel
 
+## Issue239: первичка и адресные изменения, 10 ноября 2026
+
+Прямое [поручение issue239](https://github.com/onedayonemasterpiece/vibepublish/issues/239) заменяет прежнее хранение всех редакционных разделов только в монолитном brief: [feature §5](../../features/story-carousel/README.md#5-что-сохраняется). Срез 1 сохраняет один structured payload в immutable ревизии, typed partial patch, явное supersedes/continuation и owner-bound retention материалов вне SVG. Legacy SVG-only наследование brief не считалось дефектом и сохраняется; успешный старый replay после перехода возвращает старую операцию. Инженерные проверки: `tests/carousel/test_editorial.py`, existing carousel/export, schema upgrade и retention regressions. **Not done / Not confirmed by user:** live API/worker, work_context (срез 2), устранение противоречий инструкций (срез 3), два холодных входа и реакция владельца; JSON-сохранность не доказывает интересную историю или понятность карточек. VK Share остаётся отдельным инцидентом.
+
 ## Проверенный срез редактора Crew, 9 ноября 2026
 
 Дополнение к матрице, не полная повторная приёмка. Исходники: main `d6be7f7`; доступный MCP и изображения проверены отдельно.

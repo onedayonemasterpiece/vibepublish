@@ -391,11 +391,38 @@ workspace_import_commands = [
 ]
 
 # Private carousel authoring. Generation remains with the calling model (dot).
+# Raw editorial text is bounded by the existing HTTP request budget, not brief's limit.
+_editorial_text = {"type": "string"}
+_material = obj({"id": ID, "text": _editorial_text, "asset_ref": ID,
+    "source": _editorial_text, "supersedes": ID, "continuation_of": ID}, ("id",))
+_material["anyOf"] = [{"required": [key]} for key in ("text", "asset_ref", "source")]
+_point_fields = {"id": ID, "text": _editorial_text,
+    "material_ids": {"type": "array", "items": ID, "uniqueItems": True},
+    "modality": enum("observation", "source", "hypothesis", "position")}
+_card_fields = {"id": ID, "text": _editorial_text,
+    "point_ids": {"type": "array", "items": ID, "uniqueItems": True}}
+CAROUSEL_STORY = obj({
+    "materials": {"type": "array", "items": _material},
+    "points": {"type": "array", "items": obj(_point_fields, tuple(_point_fields))},
+    "narrative": _editorial_text,
+    "cards": {"type": "array", "items": obj(_card_fields, tuple(_card_fields))}},
+    ("materials", "points", "narrative", "cards"))
+_story_changes = {"type": "array", "minItems": 1, "items": {"oneOf": [
+    arm("material_add", {"material": _material}, ("material",)),
+    arm("material_remove", {"id": ID}, ("id",)),
+    arm("point_patch", _point_fields, ("id",)),
+    arm("point_remove", {"id": ID}, ("id",)),
+    arm("card_patch", _card_fields, ("id",)),
+    arm("card_remove", {"id": ID}, ("id",)),
+    arm("narrative_set", {"text": _editorial_text}, ("text",)),
+    arm("cards_order", {"ids": {"type": "array", "items": ID, "uniqueItems": True}}, ("ids",)),
+]}}
+
 _carousel_region = array({"type": "integer", "minimum": 0, "maximum": 25600}, 4, 4)
 _reference_id = string(80, pattern=r"^[A-Za-z0-9_-]+$")
 _reference_use = obj({"reference_id": _reference_id, "observation": string(2000),
     "change": string(2000)}, ("reference_id", "observation", "change"))
-_carousel_scene = {"brief": string(12000), "svg": string(262144),
+_carousel_scene = {"story": CAROUSEL_STORY, "brief": string(12000), "svg": string(262144),
     "card_count": {"type": "integer", "minimum": 3, "maximum": 10},
     "card_width": {"type": "integer", "minimum": 128, "maximum": 2560},
     "card_height": {"type": "integer", "minimum": 128, "maximum": 2560},
@@ -434,7 +461,10 @@ _component_placement = obj({**_component_bounds, "element_id": string(128),
 _carousel_output = obj({
     **DEFS["receipt"]["properties"], **_carousel_scene,
     "svg": {**string(262144), "minLength": 0},
-    "latest_revision": REV, "asset_refs": array(ID, 0, 100),
+    "brief": {**string(12000), "minLength": 0},
+    "latest_revision": REV, "asset_refs": {"type": "array", "items": ID},
+    "editorial_format": enum("legacy", "structured"), "brief_historical": {"type": "boolean"},
+    "declared_unlinked_point_ids": {"type": "array", "items": ID},
     "journal": array(obj({"operation_id": ID, "revision": REV,
         "kind": enum("create", "revise", "export", "render", "get", "asset_import"), "at": DATE,
         "duration_ms": {"type": "integer", "minimum": 0},
@@ -483,7 +513,7 @@ _carousel_output = obj({
         ("id", "question", "observe", "suggestion")), 0, 7),
 }, ("private",))
 _carousel_commands = [
-    arm("create", _carousel_scene, ("brief",)),
+    arm("create", _carousel_scene),
     arm("get", {"scope": {"const": "guide"}, "carousel_id": ID,
         "topic": string(80, pattern=r"^(?:[0-9]{2}-[a-z][a-z-]*|steps/s(?:0[1-9]|10))$"),
         "section": string(160)},
@@ -506,7 +536,7 @@ _carousel_commands = [
     arm("get", {"scope": {"const": "icons"}, "carousel_id": ID, "query": string(100),
         "style": {**string(60), "minLength": 0}}, ("scope", "query")),
     arm("get", {"scope": {"const": "icon"}, "carousel_id": ID, "id": _icon_id}, ("scope", "id")),
-    arm("revise", {**_carousel_scene, "carousel_id": ID, "expected_revision": REV,
+    arm("revise", {**_carousel_scene, "story_changes": _story_changes, "carousel_id": ID, "expected_revision": REV,
         "note": string(2000), "reference_use": _reference_use}, ("carousel_id", "expected_revision")),
     arm("render", {"carousel_id": ID, "revision": REV, "view": enum("master", "region"),
         "region": _carousel_region, "card": {"type": "integer", "minimum": 1, "maximum": 10},
@@ -515,6 +545,12 @@ _carousel_commands = [
         ("carousel_id", "revision")),
     arm("export", {"carousel_id": ID, "revision": REV}, ("carousel_id", "revision")),
 ]
+_carousel_commands[0]["oneOf"] = [{"required": ["brief"]}, {"required": ["story"]}]
+for _command in _carousel_commands:
+    if _command["properties"]["kind"]["const"] == "revise":
+        _command["allOf"] = [{"not": {"required": list(pair)}} for pair in
+            (("brief", "story"), ("brief", "story_changes"), ("story", "story_changes"))]
+
 tool("carousel", "Create, get, revise, render and export private SVG story carousels. "
     "Work step-by-step: begin with get(scope:guide,topic:steps/s01); do not load the full library. Chapters return heading/size indexes; request one section by its heading/prefix. "
     "These commands never publish, edit a social post, send a message or dispatch image generation. "
