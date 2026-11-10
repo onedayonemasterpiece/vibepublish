@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Story Carousel (issue239, slices 2–3): return one revision-bound work_context through normal MCP text/structured replies and stored operation receipts, with exact guide digest, observed/declared/reviewed limits and one advisory get address. Reconcile typed authoring guidance, word/card-count heuristics and intentional split; preserve the generative plan after a local component failure and remove repeated applied/skipped reports. Live, cold reader evidence and owner acceptance remain open.
+
+- Story Carousel (issue239, slice 1): preserve literal source materials, modality, narrative and stable card/point links in one nullable structured payload on immutable revisions; add typed partial edits and explicit legacy migration with unchanged CAS/request-key replay. Retain material image assets and same-owner originals through the existing dependency closure even outside SVG. Update the RKB archive provision preflight to require active schema13 without silently upgrading an old ledger; preserve its identity, ACL/topics and dry-run/apply/replay. Package additive schema13; API and worker require a coordinated upgrade, with no automatic downgrade to schema12. Work context, instruction reconciliation, live and cold creative acceptance remain separate.
+
 - Story Carousel: preserve the source’s central event and author emphasis in the visible card narrative, review the whole retelling as well as individual phrases, and prefer sans-serif generated body paragraphs without banning serif roles.
 
 - Story Carousel guide: remove the unconditional ±96 px seam-text failure in 30-seams and the hard-coded seven-card replay in 99-platform; reuse the existing Q31, s09/s10 and actual card count. Keep historical r9 distinct from the text-only r14/r15 coverage update; dot E2E and visual acceptance remain open.

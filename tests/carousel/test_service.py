@@ -499,7 +499,7 @@ async def test_real_application_validates_all_commands_and_status(runtime):
     status = await app.call(actor, 'vibepublish_status', {'ids': [exported['operation_id']]})
     assert status['receipts'][0]['cards'] == exported['cards']
     with store.connection() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 12
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 13
 
 
 def test_saved_story_and_export_survive_cache_expiry_and_asset_reclamation(runtime):

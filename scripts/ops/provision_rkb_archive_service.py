@@ -40,11 +40,11 @@ def _check_file(path: Path) -> dict:
 
 def _preflight(grant: dict) -> tuple[str, bool]:
     # Read-only PRAGMA first: opening Store must not silently upgrade an old
-    # ledger before its server and worker are deployed to version 12.
+    # ledger before its server and worker are deployed to version 13.
     with sqlite3.connect(f"file:{DB}?mode=ro", uri=True) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version != 12:
-            raise RuntimeError("VibePublish schema v12 not active; do not provision")
+        if version != 13:
+            raise RuntimeError("VibePublish schema v13 not active; do not provision")
         row = db.execute(
             "SELECT p.tenant_id,p.active,t.active "
             "FROM principals p JOIN tenants t ON t.id=p.tenant_id "

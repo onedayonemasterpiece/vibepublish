@@ -19,7 +19,8 @@ from PIL import Image, ImageDraw, ImageOps
 from .assets import (EXPIRED_MEDIA_STORE_ASSET, AssetPreview, FULL_MAX_EDGE, insert_verified_image,
                      render_asset_full, render_asset_preview, verify_image)
 from .carousel_compositor import _ASSET, _NUMBER, _XLINK, render_svg, slice_cards, validate_svg
-from .carousel_guide import GuideImages, guide, review_questions
+from .carousel_guide import GuideImages, guide, review_questions, guide_digest, work_context
+from .carousel_editorial import prepare_story
 from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
 from .svg_raster import _RASTER_LOCK
@@ -216,6 +217,7 @@ class CarouselService:
                 raise DomainError('carousel_revision_conflict', next_action='refresh')
         if op:
             return self.store.receipt(actor, op)
+        context_guide = guide_digest()
         if kind == 'export':
             export_times['admission_done'] = (time.perf_counter(), time.thread_time())
             png = self._render(actor, row, timings=export_times)
@@ -239,6 +241,17 @@ class CarouselService:
                         raise DomainError('carousel_revision_conflict', next_action='refresh')
                 elif kind == 'export':
                     self._version(db, actor, row['id'], row['revision'])
+                if kind != 'export':
+                    # Cleanup may run after preparation; retain only still-available
+                    # owner-bound dependencies, without hashing BLOBs under this lock.
+                    for ref in scene['material_refs']:
+                        available = db.execute(f"""SELECT id FROM assets
+                            WHERE id=? AND tenant_id=? AND principal_id=? AND length(bytes)>0
+                              AND NOT EXISTS (SELECT 1 FROM media_store_assets m
+                                WHERE m.asset_id=assets.id AND {EXPIRED_MEDIA_STORE_ASSET})""",
+                            (ref, actor.tenant_id, actor.principal_id, self.store.clock())).fetchone()
+                        if not available:
+                            raise DomainError('asset_not_available', next_action='refresh')
                 ident = new_id('carousel') if kind == 'create' else row['id']
                 revision = 1 if kind == 'create' else row['revision'] + (kind == 'revise')
                 result = {'resource_id': ident, 'carousel_id': ident, 'revision': revision,
@@ -255,6 +268,8 @@ class CarouselService:
                         media=[{'source': {'kind': 'asset', 'id': card['asset_ref']}} for card in cards])
                 else:
                     result['scene_ready'] = bool(scene['svg'])
+                context_row = row if kind == 'export' else {**scene, 'id': ident, 'revision': revision}
+                result['work_context'] = work_context(context_row, kind, context_guide)
                 result['duration_ms'] = round((time.perf_counter() - started) * 1000)
                 op = self.app._new_operation(db, actor, 'carousel', intent,
                     revision=revision, complete=True, result=result)
@@ -264,10 +279,14 @@ class CarouselService:
                         "SELECT DISTINCT j.value FROM carousel_versions v, json_each(v.asset_refs) j "
                         "WHERE v.id=? AND v.tenant_id=? AND v.principal_id=?",
                         (ident, actor.tenant_id, actor.principal_id))}
-                    db.execute('INSERT INTO carousel_versions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    db.execute('''INSERT INTO carousel_versions
+                        (id,revision,tenant_id,principal_id,operation_id,brief,svg,card_count,
+                         card_width,card_height,caption,asset_refs,created,story_json)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                         (ident, revision, actor.tenant_id, actor.principal_id, op,
                          scene['brief'], scene['svg'], scene['card_count'], scene['card_width'],
-                         scene['card_height'], scene['caption'], canonical(scene['asset_refs']), self.store.clock()))
+                         scene['card_height'], scene['caption'], canonical(scene['asset_refs']), self.store.clock(),
+                         canonical(scene['story']) if scene['story'] is not None else None))
                     for ref in scene['asset_refs']:
                         if ref not in previously_used:
                             asset = db.execute(
@@ -353,16 +372,40 @@ class CarouselService:
             self._log(db, actor, row['id'], row['revision'], kind,
                       duration_ms=duration_ms, **details)
 
+    def _material_assets(self, actor, story):
+        """Persist materials and originals through the existing asset_refs closure."""
+        refs = set()
+        for material in story['materials'] if story else ():
+            if 'asset_ref' not in material:
+                continue
+            ident = material['asset_ref']
+            data, mime, _ = self.app.read_asset(actor, ident)
+            if not data or mime not in {'image/png', 'image/jpeg', 'image/webp'}:
+                raise DomainError('carousel_material_asset_unsupported', 'Material assets currently support verified images')
+            refs.add(ident)
+            with self.store.connection() as db:
+                originals = db.execute("""SELECT source.id FROM assets derived JOIN assets source
+                    ON source.tenant_id=derived.tenant_id AND source.principal_id=derived.principal_id
+                      AND source.sha256=derived.source_sha256
+                    WHERE derived.id=? AND derived.tenant_id=? AND derived.principal_id=?
+                      AND source.mime IN ('image/png','image/jpeg','image/webp')""",
+                    (ident, actor.tenant_id, actor.principal_id)).fetchall()
+            for original in originals:
+                self.app.read_asset(actor, original['id'])
+                refs.add(original['id'])
+        return sorted(refs)
+
     def _prepare(self, actor, command, previous):
         defaults = {'brief': '', 'svg': '', 'card_count': 7, 'card_width': 1080,
                     'card_height': 1350, 'caption': ''}
         scene = {key: command.get(key, previous[key] if previous else default)
                  for key, default in defaults.items()}
+        scene['story'] = prepare_story(command, previous)
         count, width, height = (scene[key] for key in ('card_count', 'card_width', 'card_height'))
         if (any(type(v) is not int for v in (count, width, height)) or not 3 <= count <= 10
                 or not 128 <= width <= 2560 or not 128 <= height <= 2560 or count*width*height > 20_000_000):
             raise DomainError('carousel_dimensions_invalid')
-        if previous and not any(key in command for key in (*defaults, 'note', 'reference_use')):
+        if previous and not any(key in command for key in (*defaults, 'note', 'reference_use', 'story', 'story_changes')):
             raise DomainError('carousel_revision_empty')
         if command.get('reference_use'):
             ReferenceBank(self.store).describe(actor, command['reference_use']['reference_id'])
@@ -374,7 +417,8 @@ class CarouselService:
         if scene['svg']:
             validate_svg(scene['svg'], card_count=count, card_width=width,
                          card_height=height, read_asset=read_asset)
-        scene['asset_refs'] = list(assets)
+        scene['material_refs'] = self._material_assets(actor, scene['story'])
+        scene['asset_refs'] = list(dict.fromkeys([*assets, *scene['material_refs']]))
         return scene
 
     def get(self, actor, command):
@@ -429,6 +473,15 @@ class CarouselService:
             return ComponentImages(result, tuple(images))
         result.update(brief=row['brief'], caption=row['caption'], scene_ready=bool(row['svg']),
             asset_refs=json.loads(row['asset_refs']), journal=journal)
+        if command.get('scope', 'story') == 'story':
+            story = json.loads(row['story_json']) if row['story_json'] else None
+            result['work_context'] = work_context(row, 'get(story)')
+            result.update(editorial_format='structured' if story is not None else 'legacy',
+                          brief_historical=story is not None)
+            if story is not None:
+                linked = {ident for card in story['cards'] for ident in card['point_ids']}
+                result.update(story=story, declared_unlinked_point_ids=[
+                    point['id'] for point in story['points'] if point['id'] not in linked])
         if full_journal:
             result.update(offset=offset, next_offset=offset + limit if len(operations) > limit else None)
         if command.get('include_svg'):
@@ -599,7 +652,8 @@ class CarouselService:
                 review_view = 'pair'
         metadata.update(carousel_id=row['id'], revision=row['revision'], private=True,
                         view=view, source_width=width, source_height=height,
-                        review_questions=review_questions(review_view, source_svg=row['svg']))
+                        review_questions=review_questions(review_view, source_svg=row['svg']),
+                        work_context=work_context(row, 'render'))
         if view == 'master' and command.get('scale') == 0.5:
             metadata['scale'] = 0.5
             metadata['cutlines'] = bool(command.get('cutlines'))
