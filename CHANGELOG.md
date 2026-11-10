@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Story Carousel: system analysis after four days of E2E (run facts, systemic causes, proposals and questions for an independent second analysis) in `docs/reports/story-carousel-system-analysis-2026-11-10.md`. Documentation only.
 - Story Carousel: preserve the source’s central event and author emphasis in the visible card narrative, review the whole retelling as well as individual phrases, and prefer sans-serif generated body paragraphs without banning serif roles.
 
 - Story Carousel guide: remove the unconditional ±96 px seam-text failure in 30-seams and the hard-coded seven-card replay in 99-platform; reuse the existing Q31, s09/s10 and actual card count. Keep historical r9 distinct from the text-only r14/r15 coverage update; dot E2E and visual acceptance remain open.
