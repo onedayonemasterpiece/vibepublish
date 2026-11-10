@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel: document the exact existing point/card shape and all four modality values in ordinary author steps; distinguish editorial roles/headings from JSON fields and complete new entities from partial patches. No schema/API change.
+
 - Story Carousel: make VK caption a useful standalone narrative that complements cards and preserves substantial source context; replace the fixed short-caption formula and mandatory CTA with readable, purpose-driven length and an appropriate ending. Route ordinary skill and export/review steps to the canonical guidance. Separate documented VK recommendation signals from unproven reach/length/timing benchmarks; preserve required attribution and avoid automatic comment-link moves or new analytics/publishing mechanisms. Live delivery and creative acceptance remain separate.
 
 - Story Carousel (issue239, slices 2–3): return one revision-bound work_context through normal MCP text/structured replies and stored operation receipts, with exact guide digest, observed/declared/reviewed limits and one advisory get address. Reconcile typed authoring guidance, word/card-count heuristics and intentional split; preserve the generative plan after a local component failure and remove repeated applied/skipped reports. Live, cold reader evidence and owner acceptance remain open.
