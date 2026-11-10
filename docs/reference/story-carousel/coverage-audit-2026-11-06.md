@@ -211,3 +211,7 @@
 [src-publish]: https://github.com/onedayonemasterpiece/vibepublish/blob/ab95c33041b125379df6927a5acd54303a455647/social_operations/service.py
 [src-worker]: https://github.com/onedayonemasterpiece/vibepublish/blob/ab95c33041b125379df6927a5acd54303a455647/social_operations/worker.py
 [src-storage]: https://github.com/onedayonemasterpiece/vibepublish/blob/ab95c33041b125379df6927a5acd54303a455647/social_operations/storage.py
+
+## Дельта прямых замечаний 10 ноября 2026
+
+Статус: требования Fixed; поведенческий результат Not done / Not confirmed by user. Источники: [связность](https://mira-projects.slack.com/archives/C0CFP01K292/p1794296603227469), [акценты и дата](https://mira-projects.slack.com/archives/C0CFP01K292/p1794296079707819), [абзацы без засечек](https://mira-projects.slack.com/archives/C0CFP01K292/p1794296691849219). `10-storytelling`, s02 и Q09 дополнены проверкой центрального факта и связного пересказа по самим карточкам; глава 40 — предпочтением sans-serif для генерируемых абзацев без запрета антиквы. s09 уже адресует эти разделы, повтор не добавлен. Обычная MCP Q09 до правки проверяет отдельные фразы, но не потерю центрального события между ними. Независимое ревью подтвердило смысл дельты; технические тесты проверяют доставку, а фактическая проверка новой истории остаётся у dot и существующего автора Night4333. Сцену или публикацию редактор не подменяет.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Story Carousel: preserve the source’s central event and author emphasis in the visible card narrative, review the whole retelling as well as individual phrases, and prefer sans-serif generated body paragraphs without banning serif roles.
+
 - Story Carousel guide: remove the unconditional ±96 px seam-text failure in 30-seams and the hard-coded seven-card replay in 99-platform; reuse the existing Q31, s09/s10 and actual card count. Keep historical r9 distinct from the text-only r14/r15 coverage update; dot E2E and visual acceptance remain open.
 - Story Carousel guide 85: scope the style passport and same-role samples to finished components after generated composition sketches, remove the false first-revision note in the process map, and reconcile the existing coverage audit with full transcript provenance and unresolved Slack-ID mapping; dot E2E/visual acceptance remains open.
 - Story Carousel process chapter now follows existing s03: generate and compare the overall composition before transferring it into an SVG sketch, then generate finished components for their chosen positions. Remove the contradictory instruction to postpone every generation until after a manually assembled sketch; position and style-sample rules concern finished components. Model behavior remains subject to dot's E2E verification.
