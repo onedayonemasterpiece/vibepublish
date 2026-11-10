@@ -432,7 +432,15 @@ _carousel_card = obj({"index": {"type": "integer", "minimum": 1, "maximum": 10},
     "width": {"type": "integer"}, "height": {"type": "integer"},
     "mime_type": enum("image/png", "image/jpeg")},
     ("index", "asset_ref", "resource_uri", "sha256", "width", "height", "mime_type"))
-_carousel_receipt_fields = {"carousel_id": ID, "private": {"const": True},
+_work_context = obj({"revision": REV, "guide_sha256": string(64),
+    "facts": array(obj({"basis": enum("observed", "model_declared", "reviewed"),
+        "status": enum("recorded", "not_registered", "unknown"), "text": string(2000)},
+        ("basis", "status", "text")), 2, 4),
+    "recommendation": obj({"suggested_focus": string(80), "text": string(2000),
+        "get": arm("get", {"scope": {"const": "guide"}, "carousel_id": ID,
+            "topic": string(80), "section": string(160)}, ("scope", "carousel_id", "topic"))},
+        ("suggested_focus", "text", "get"))}, ("revision", "guide_sha256", "facts", "recommendation"))
+_carousel_receipt_fields = {"work_context": _work_context, "carousel_id": ID, "private": {"const": True},
     "scene_ready": {"type": "boolean"}, "cards": array(_carousel_card, 3, 10),
     "media": array(ref("media"), 3, 10), "caption": {**string(), "minLength": 0}}
 DEFS["receipt"]["properties"].update(_carousel_receipt_fields)

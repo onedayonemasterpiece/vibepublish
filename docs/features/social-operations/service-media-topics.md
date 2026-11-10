@@ -16,7 +16,10 @@ One-time LOCAL owner administration of the existing VibePublish ledger:
 For the current DevCoveer KB archive, use the guarded one-shot operator
 `python scripts/ops/provision_rkb_archive_service.py` (read-only preflight)
 and `python scripts/ops/provision_rkb_archive_service.py --apply`
-only AFTER both VibePublish service processes are running the v10 code.
+only AFTER both VibePublish service processes are running schema13-compatible code.
+The preflight requires active schema13 before opening `Store`: accepting schema12
+would otherwise silently upgrade it before the coordinated API/worker release.
+Older and unknown future versions are rejected read-only.
 This writes the generated service secret straight to RKB's private mode-0600
 grant file, prints no secret, and is idempotent on replay. No user browser,
 OAuth redirect or owner-service-token copying is involved. Do not manually

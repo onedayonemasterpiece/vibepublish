@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageOps
 from .assets import (EXPIRED_MEDIA_STORE_ASSET, AssetPreview, FULL_MAX_EDGE, insert_verified_image,
                      render_asset_full, render_asset_preview, verify_image)
 from .carousel_compositor import _ASSET, _NUMBER, _XLINK, render_svg, slice_cards, validate_svg
-from .carousel_guide import GuideImages, guide, review_questions
+from .carousel_guide import GuideImages, guide, review_questions, guide_digest, work_context
 from .carousel_editorial import prepare_story
 from .carousel_references import ReferenceBank
 from .domain import DomainError, canonical, digest, new_id, timestamp
@@ -217,6 +217,7 @@ class CarouselService:
                 raise DomainError('carousel_revision_conflict', next_action='refresh')
         if op:
             return self.store.receipt(actor, op)
+        context_guide = guide_digest()
         if kind == 'export':
             export_times['admission_done'] = (time.perf_counter(), time.thread_time())
             png = self._render(actor, row, timings=export_times)
@@ -267,6 +268,8 @@ class CarouselService:
                         media=[{'source': {'kind': 'asset', 'id': card['asset_ref']}} for card in cards])
                 else:
                     result['scene_ready'] = bool(scene['svg'])
+                context_row = row if kind == 'export' else {**scene, 'id': ident, 'revision': revision}
+                result['work_context'] = work_context(context_row, kind, context_guide)
                 result['duration_ms'] = round((time.perf_counter() - started) * 1000)
                 op = self.app._new_operation(db, actor, 'carousel', intent,
                     revision=revision, complete=True, result=result)
@@ -472,6 +475,7 @@ class CarouselService:
             asset_refs=json.loads(row['asset_refs']), journal=journal)
         if command.get('scope', 'story') == 'story':
             story = json.loads(row['story_json']) if row['story_json'] else None
+            result['work_context'] = work_context(row, 'get(story)')
             result.update(editorial_format='structured' if story is not None else 'legacy',
                           brief_historical=story is not None)
             if story is not None:
@@ -648,7 +652,8 @@ class CarouselService:
                 review_view = 'pair'
         metadata.update(carousel_id=row['id'], revision=row['revision'], private=True,
                         view=view, source_width=width, source_height=height,
-                        review_questions=review_questions(review_view, source_svg=row['svg']))
+                        review_questions=review_questions(review_view, source_svg=row['svg']),
+                        work_context=work_context(row, 'render'))
         if view == 'master' and command.get('scale') == 0.5:
             metadata['scale'] = 0.5
             metadata['cutlines'] = bool(command.get('cutlines'))

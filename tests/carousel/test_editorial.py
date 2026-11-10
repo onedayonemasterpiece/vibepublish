@@ -185,6 +185,15 @@ def test_material_outside_svg_and_its_original_survive_cleanup_and_reopen(runtim
         {'kind': 'material_add', 'material': {'id': 'm2', 'asset_ref': replacement, 'supersedes': 'm1'}},
         {'kind': 'point_patch', 'id': 'p1', 'material_ids': ['m2']},
         {'kind': 'card_patch', 'id': 'c1', 'text': 'Уточнение'}])
+    # Remove both versions from the current payload: only immutable history can hold them.
+    revise(app, actor, ident, 2, [
+        {'kind': 'material_add', 'material': {'id': 'm3', 'text': 'Новый самостоятельный источник'}},
+        {'kind': 'point_patch', 'id': 'p1', 'material_ids': ['m3']},
+        {'kind': 'point_patch', 'id': 'p2', 'material_ids': ['m3']},
+        {'kind': 'material_remove', 'id': 'm2'},
+        {'kind': 'material_remove', 'id': 'm1'}], 'historical-only')
+    assert asset not in get(app, actor, ident)['asset_refs']
+    assert replacement not in get(app, actor, ident)['asset_refs']
     now[0] += 15 * 86400
     with store.tx() as db:
         rows = retired_asset_rows(db, now[0])
@@ -196,7 +205,8 @@ def test_material_outside_svg_and_its_original_survive_cleanup_and_reopen(runtim
     assert reopened.read_asset(actor, original_id)[0] == original_raw
     assert reopened.read_asset(actor, replacement)[0]
     assert get(reopened, actor, ident, 1)['story'] == story
-    assert get(reopened, actor, ident)['story']['materials'][1]['supersedes'] == 'm1'
+    assert get(reopened, actor, ident, 2)['story']['materials'][1]['supersedes'] == 'm1'
+    assert get(reopened, actor, ident)['story']['materials'] == [{'id': 'm3', 'text': 'Новый самостоятельный источник'}]
     # Material references are dependencies, never automatically rendered SVG images.
     assert call(reopened, actor, {'kind': 'get', 'scope': 'components', 'carousel_id': ident}).metadata['components'] == []
 
@@ -278,3 +288,21 @@ def test_missing_and_unsupported_material_assets_leave_no_durable_effect(runtime
         with pytest.raises(DomainError) as failure:
             call(app, actor, {'kind': 'create', 'story': story}, ref)
         assert failure.value.code == code and counts(store) == before
+
+
+@pytest.mark.asyncio
+async def test_empty_editorial_artifacts_recommend_source_work_without_blocking_export(runtime):
+    _, actor, app, _ = runtime
+    empty = {'materials': [], 'points': [], 'narrative': '', 'cards': []}
+    first = await app.call(actor, 'vibepublish_carousel', {'command': {
+        'kind': 'create', 'story': empty, 'card_count': 3, 'card_width': 128, 'card_height': 160,
+        'svg': '<svg xmlns="http://www.w3.org/2000/svg" width="384" height="160"/>'},
+        'request_key': 'empty-editorial'})
+    assert 'error' not in first, first
+    assert first['work_context']['recommendation']['get']['topic'] == 'steps/s01'
+    assert first['work_context']['recommendation']['suggested_focus'] == 'source_material'
+    exported = await app.call(actor, 'vibepublish_carousel', {'command': {
+        'kind': 'export', 'carousel_id': first['carousel_id'], 'revision': 1},
+        'request_key': 'empty-export'})
+    assert 'error' not in exported and len(exported['cards']) == 3
+    assert exported['work_context']['recommendation']['suggested_focus'] == 'source_material'

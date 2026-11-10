@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import json
+import hashlib
 import sysconfig
 from dataclasses import dataclass
 from pathlib import Path
@@ -108,6 +110,46 @@ def guide(topic: str | None = None, section: str | None = None) -> dict | GuideI
         metadata["images"] = image_meta
         return GuideImages(metadata, tuple(images))
     return metadata
+
+
+def guide_digest():
+    root = _DOC_DIR if _DOC_DIR.is_dir() else _INSTALL_DIR
+    files = sorted(path for path in root.rglob('*') if path.suffix in {'.md', '.svg'})
+    return hashlib.sha256(json.dumps({str(path.relative_to(root)): path.read_text(encoding='utf-8')
+        for path in files}, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+def work_context(row, action, guide_sha=None):
+    """Recorded facts and one advisory address, never a semantic or visual gate."""
+    story = row.get('story')
+    if 'story' not in row:
+        story = json.loads(row['story_json']) if row['story_json'] else None
+    facts = [{'basis': 'observed', 'status': 'recorded', 'text':
+        f"{action}: ревизия {row['revision']}; " + (f"сохранено материалов: {len(story['materials'])}."
+        if story is not None else 'legacy brief сохранён; structured материалы не зарегистрированы.')}]
+    unlinked = [] if story is None else [point for point in story['points']
+        if not any(point['id'] in card['point_ids'] for card in story['cards'])]
+    declared = 'Связи point→card не зарегистрированы; понимание неизвестно.'
+    if story is not None:
+        declared = (f"Нет заявленной привязки {unlinked[0]['id']}; фрагмент пункта: {unlinked[0]['text'][:160]}"
+                    if unlinked else f"Зарегистрировано пунктов: {len(story['points'])}; без заявленной привязки: 0. Понимание не проверено.")
+    facts += [{'basis': 'model_declared', 'status': 'recorded' if story is not None else 'not_registered',
+               'text': declared}, {'basis': 'reviewed', 'status': 'not_registered',
+               'text': 'Независимое понимание читателем в этом контракте не зарегистрировано; качество unknown.'}]
+    if story is None or not story['materials'] or not story['points'] or not story['narrative'].strip():
+        focus, topic, text = 'source_material', 'steps/s01', 'Уточни сохранённые источники, смысловые пункты и цельный рассказ; первичку не сокращай.'
+    elif unlinked:
+        focus, topic, text = 'declared_coverage', 'steps/s02', f"Проверь, как карточки раскрывают пункт {unlinked[0]['id']}; связь сама по себе не доказывает понимание."
+    elif action == 'export':
+        focus, topic, text = 'publication', '99-platform', 'Перед порученной публикацией проверь точный экспорт и параметры назначения.'
+    else:
+        focus, topic, text = ('visual_review', 'steps/s09', 'Прочитай реальные изображения этой ревизии, отдельно карточки и всю историю.') if row['svg'] else (
+            'composition', 'steps/s03', 'Сопоставь разные генеративные эскизы общей композиции с историей.')
+    address = {'kind': 'get', 'scope': 'guide', 'carousel_id': row['id'], 'topic': topic}
+    if topic == '99-platform':
+        address['section'] = 'Перед публикацией'
+    return {'revision': row['revision'], 'guide_sha256': guide_sha or guide_digest(), 'facts': facts,
+            'recommendation': {'suggested_focus': focus, 'text': text, 'get': address}}
 
 
 def _review_bank() -> dict[str, dict]:
