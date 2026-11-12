@@ -1,5 +1,17 @@
 # Production runtime
 
+## Fatal worker SQLite failure — 2026-11-12
+
+Status: `Fixed` requirement; live verification `Not done`. Incidents
+`inc_442f198e894653160efd35f8` and `inc_aa58e4b11278cbe2a6717a87`
+record disk-full/I/O failure and a worker remaining alive after its loop failed.
+An SQLite error escaping `Worker.run_once` must terminate the production worker
+without awaiting provider cleanup. Existing systemd `Restart=on-failure`
+restarts the process; durable UNKNOWN, claims and fencing remain authoritative.
+No operation is reset or resent by this boundary. Ordinary claim lock contention
+still returns to the existing worker loop. This does not fix disk exhaustion or
+prove that a later stalled worker has the same cause.
+
 ## DevCoveer2 provider recovery — 2026-09-19
 
 Status: Telegram and VK reads `Not confirmed by user` (public MCP reads verified);

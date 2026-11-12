@@ -16,6 +16,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import sqlite3
 import stat
 
 from dotenv import dotenv_values
@@ -217,7 +218,16 @@ async def run(
                 workers.append(Worker(store,wiring,connection_ids=[selected['knowledge_base']],include_unrouted=False))
             async def loop(worker):
                 while True:
-                    worked=await worker.run_once()
+                    try:
+                        worked=await worker.run_once()
+                    except sqlite3.Error as exc:
+                        logging.getLogger(__name__).critical(
+                            "production_worker_sqlite_fatal pid=%s code=%s name=%s",
+                            os.getpid(), getattr(exc, "sqlite_errorcode", None),
+                            getattr(exc, "sqlite_errorname", None))
+                        # Fatal ledger failure must not wait for provider cleanup.
+                        # systemd restarts us; durable claims remain authoritative.
+                        os._exit(1)
                     if once:return
                     if not worked:await asyncio.sleep(0.25)
 
