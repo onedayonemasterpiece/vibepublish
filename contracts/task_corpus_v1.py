@@ -28,6 +28,16 @@ def update(text, change, expect="accept_after_runtime_checks"):
 
 job("Покажи инструкцию и доступные каналы", "get_started", {})
 job("Покажи примеры вызовов", "get_started", {"section": "examples"})
+job("Предпросмотр карусели для предложки VK без отправки", "vk_proposals",
+    {"command": {"kind": "preview", "source_item_ref": "item_1",
+                 "target_screen_name": "eto_koenig"}},
+    "owner_only_local_preview_no_post")
+job("Предложи опубликованную карусель в чужой открытый паблик VK", "vk_proposals",
+    {"command": {"kind": "submit", "source_item_ref": "item_1",
+                 "target_screen_name": "eto_koenig"}, "request_key": "suggest-vk-1"},
+    "owner_only_user_token_target_preflight_durable_once")
+job("Покажи историю моих предложений в чужие паблики VK", "vk_proposals",
+    {"command": {"kind": "list"}}, "owner_only_outgoing_ledger_not_admin_inbox")
 job("Покажи возможности работы с картинками", "get_started", {"section": "visuals"})
 job("Найди в банке пример общей панели", "carousel", {"command": {
     "kind": "get", "scope": "library", "query": "панель"}}, "private_owner_reference_catalog")
@@ -156,6 +166,16 @@ job("После выбора картинки время уже истекло",
 job("Время слишком близко: не отправляй Telegram сразу вместо отложенного", "publish", {"to": ["pka_tg"], "content": TEXT, "delivery": AT}, "enforce_native_minimum_lead_before_submit")
 
 INVALID = [
+    ("vk_proposals", {"command": {"kind": "submit", "source_item_ref": "item_1",
+                 "target_group_id": "123456"}}, "submit_missing_stable_request_key"),
+    ("vk_proposals", {"command": {"kind": "preview", "source_item_ref": "item_1"}},
+     "preview_missing_target"),
+    ("vk_proposals", {"command": {"kind": "submit", "source_item_ref": "item_1",
+                 "target_group_id": "123456", "target_screen_name": "eto_koenig"},
+                 "request_key": "key"}, "target_selector_ambiguous"),
+    ("vk_proposals", {"command": {"kind": "submit", "source_item_ref": "item_1",
+                 "target_group_id": "-123456"}, "request_key": "key"},
+     "negative_target_id_disallowed"),
     ("publish", {"to": ["pka"]}, "empty_payload"),
     ("publish", {"to": ["pka"], "media": []}, "empty_media_only"),
     ("publish", {"to": [-100123], "content": TEXT}, "native_numeric_target"),

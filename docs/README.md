@@ -1,5 +1,8 @@
 # Documentation
 
+**VK proposals for Story Carousel (2026-11-10):** [Outgoing VK community proposals](features/social-operations/vk-community-proposals.md) — separate preview/submit/list, owner-only VK user token, community moderation status remains unknown after VK accepts. Offline code tests are not a production rollout.
+
+
 ## Story Carousel: full requirements and actual delivery — 2026-11-07
 
 Start with the [canonical feature](features/story-carousel/README.md) and the

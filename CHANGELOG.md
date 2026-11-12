@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- VK outbound community proposals: owner-only, separate `vibepublish_vk_proposals` preview/submit/list workflow for an already published bound VK photo carousel. A real VK user `wall` token, group-type/non-admin preflight, source-media order, fixed `guid`, durable no-resend on uncertain outcomes, and distinct provider acceptance versus unknown moderation. Numeric community ID or verified screen name (e.g. `eto_koenig`) supported; original publication preserved. Offline adapter/SQLite tests pass; target community submission, live auth, rollout and user acceptance not confirmed. [Canonical feature](docs/features/social-operations/vk-community-proposals.md).
+
 - Story Carousel: document the exact existing point/card shape and all four modality values in ordinary author steps; distinguish editorial roles/headings from JSON fields and complete new entities from partial patches. No schema/API change.
 
 - Story Carousel: make VK caption a useful standalone narrative that complements cards and preserves substantial source context; replace the fixed short-caption formula and mandatory CTA with readable, purpose-driven length and an appropriate ending. Route ordinary skill and export/review steps to the canonical guidance. Separate documented VK recommendation signals from unproven reach/length/timing benchmarks; preserve required attribution and avoid automatic comment-link moves or new analytics/publishing mechanisms. Live delivery and creative acceptance remain separate.

@@ -345,6 +345,10 @@ class Worker:
             if op['action'] == 'read':
                 await self.run_read(op, actor)
                 return True
+            if op['action'] == 'vk_proposals':
+                from .vk_proposals import process
+                await process(self, op, actor)
+                return True
             with self.store.connection() as db:
                 children = [dict(c) for c in db.execute('SELECT * FROM attempts WHERE operation_id=?', (op['id'],))]
             pending = [c for c in children if c['state'] not in TERMINAL]

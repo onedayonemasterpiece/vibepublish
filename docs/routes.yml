@@ -138,6 +138,7 @@ features:
     stories: docs/features/social-operations/stories.md
     native_video_publication: docs/features/social-operations/native-video-publication.md
     vk_photo_budgets: docs/features/social-operations/vk-photo-budgets.md
+    vk_community_proposals: docs/features/social-operations/vk-community-proposals.md
     vk_allocation_recovery: docs/features/social-operations/vk-allocation-recovery.md
     vk_staged_photo_reuse: docs/features/social-operations/vk-staged-photo-reuse.md
     vk_photo_upload_recovery: docs/features/social-operations/vk-photo-upload-recovery.md
