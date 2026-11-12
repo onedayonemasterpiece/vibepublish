@@ -98,6 +98,9 @@ class Application:
                 result = self.read(actor, arguments)
             elif short == 'media_store':
                 result = self.media_store(actor, arguments)
+            elif short == 'vk_proposals':
+                from .vk_proposals import command
+                result = command(self, actor, arguments)
             elif short == 'carousel':
                 command = arguments['command']
                 carousel_started = asyncio.get_running_loop().time()

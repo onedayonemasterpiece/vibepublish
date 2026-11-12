@@ -1,5 +1,10 @@
 # VibePublish Social Operations
 
+## Исходящие предложения каруселей в чужие паблики VK — 2026-11-10
+
+**Требования: Fixed. Код и offline-проверки: реализованы в отдельной ветке. Развёртывание и живой тест: Not done / Not confirmed by user.** Новый владелец-only MCP-путь `vibepublish_vk_proposals` создаёт *предложение на модерацию*, а не публикует пост от имени другого сообщества. Сведения о собственных отправках показываются командой `list`; административный inbox чужого сообщества не читается. Описание сценария, прав доступа, `wall.post` и отказов, нативных вложений, антидублей и приёмки: [VK community proposals](vk-community-proposals.md). Реальная карусель для проверки — [VK270](https://vk.com/wall-241261191_270), шесть фотографий подтверждены свежим read 10.11; отправка в чужую предложку ещё не подтверждена.
+
+
 ## MAX reliability repair — 2026-11-03
 
 Live release readback found the same scheduled native ID, text/entities, clock, correlation and attachment count across independent loads, with only signed CDN URLs rotating. Status: **Not done** until follow-up live verification. Cross-load queue comparison uses attachment count; native receipts bind the fresh references with the existing source attribution, without comparing stale CDN URLs. In-page pre-dispatch media guards are preserved.

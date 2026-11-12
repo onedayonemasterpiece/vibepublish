@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 
-VERSION = "1.13.0-runtime"
+VERSION = "1.14.0-runtime"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -223,6 +223,22 @@ DEFS["receipt"] = obj({"operation_id": ID, "resource_id": ID, "revision": REV,
     "review_token": string(512), "poll_after_seconds": {"type": "integer", "minimum": 1},
     "error": ref("error"), "dry_run": {"type": "boolean"}},
     ("operation_id", "action", "state", "message", "operation_complete", "progress", "next_action", "retry_safe", "receipt_ref", "deliveries"))
+# A provider-accepted outgoing VK proposal is not an administrator-approved post.
+DEFS["vk_proposal"] = obj({
+    "source_item_ref": ID, "source_url": URL,
+    "target_group_id": string(20, pattern=r"^[1-9][0-9]{0,18}$"),
+    "target_screen_name": string(64, pattern=r"^[A-Za-z][A-Za-z0-9_.]{2,63}$"),
+    "target_url": URL, "text": string(16000),
+    "attachments": array(string(128), 2, 10),
+    "moderation_status": {"const": "unverified"},
+    "status": enum("preview", "sending", "submitted", "failed", "outcome_unknown"),
+    "post_id": string(32, pattern=r"^[1-9][0-9]*$"),
+    "operation_id": ID, "attempted_at": DATE, "error_code": string(120),
+}, ("source_item_ref", "source_url", "target_url",
+    "text", "attachments", "moderation_status", "status"))
+DEFS["receipt"]["properties"]["vk_proposal"] = ref("vk_proposal")
+DEFS["receipt"]["properties"]["vk_proposals"] = array(ref("vk_proposal"), 0, 50)
+
 DEFS["receipt"]["properties"]["linked_story"] = obj({
     "id": ID, "state": enum("waiting", "queued", "verified", "blocked", "cancelled", "expired", "outcome_unknown"),
     "reason": {"type": ["string", "null"], "maxLength": 200},
@@ -280,7 +296,7 @@ def tool(name, description, inputs, outputs, scope, read_only=False):
 # Only lifecycle changes can delete or overwrite published posts.
 DESTRUCTIVE = {"publication_update"}
 # Tools that write to or read from social networks; private asset work is not open-world.
-OPEN_WORLD = {"publish", "media_store", "publication_update", "read", "engage", "destinations", "carousel"}
+OPEN_WORLD = {"publish", "media_store", "publication_update", "read", "engage", "destinations", "carousel", "vk_proposals"}
 
 
 tool("get_started", "Get the versioned skill, allowed aliases and current capabilities. Never grants access.",
@@ -312,6 +328,37 @@ tool("publish", "Create one publication now or in native provider queues; return
 TOOLS[-1]["inputSchema"]["anyOf"] = [
     {"required": ["content"]}, {"required": ["visual"]},
     {"required": ["media"], "properties": {"media": {"minItems": 1}}}]
+
+tool("vk_proposals",
+    "Owner-only outgoing VK suggestions for existing published photo carousels. "
+    "Preview does not send. Submit uses a real VK user wall token, a foreign public "
+    "page, a durable idempotency key and immutable ordered native attachments. "
+    "VK acceptance is NOT community approval; list shows only our own submissions.",
+    obj({"command": {"oneOf": [
+        arm("preview", {
+            "source_item_ref": ID,
+            "target_group_id": string(20, pattern=r"^[1-9][0-9]{0,18}$"),
+            "target_screen_name": string(64, pattern=r"^[A-Za-z][A-Za-z0-9_.]{2,63}$"),
+            "sender_alias": ALIAS,
+            "message": string(16000)}, ("source_item_ref",)),
+        arm("submit", {
+            "source_item_ref": ID,
+            "target_group_id": string(20, pattern=r"^[1-9][0-9]{0,18}$"),
+            "target_screen_name": string(64, pattern=r"^[A-Za-z][A-Za-z0-9_.]{2,63}$"),
+            "sender_alias": ALIAS,
+            "message": string(16000)}, ("source_item_ref",)),
+        arm("list")]},
+        "request_key": KEY, "limit": LIMIT}, ("command",)), ref("receipt"), "publish")
+TOOLS[-1]["inputSchema"]["allOf"] = [{
+    "if": {"properties": {"command": {"properties": {"kind": {"const": "submit"}}, "required": ["kind"]}}},
+    "then": {"required": ["request_key"]}
+}]
+for _branch in TOOLS[-1]["inputSchema"]["properties"]["command"]["oneOf"]:
+    if _branch["properties"]["kind"].get("const") in {"preview", "submit"}:
+        _branch["oneOf"] = [
+            {"required": ["target_group_id"], "not": {"required": ["target_screen_name"]}},
+            {"required": ["target_screen_name"], "not": {"required": ["target_group_id"]}},
+        ]
 
 tool("media_store", "Private Telegram DOCUMENT archive. Put verified assets, or import one PDF/DjVu from an allowlisted public source URL through the authenticated owner interface, without exposing service credentials. List/search/get retain existing scoped semantics.",
     obj({"command": {"oneOf": [
@@ -910,6 +957,8 @@ def project_catalog(scopes, *, publish_destinations=(), owner=False):
     for item in catalog()["tools"]:
         if item["required_scope"] not in effective:
             continue
+        if item["name"] == "vibepublish_vk_proposals" and not owner:
+            continue  # An unbound foreign wall must never be exposed to delegated publishers.
         if item["name"] == "vibepublish_carousel" and "visual" not in scopes:
             continue  # Publish-only identities receive image import, not private authoring.
         item.pop("required_scope")

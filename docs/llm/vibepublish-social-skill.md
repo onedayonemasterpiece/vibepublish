@@ -1,6 +1,6 @@
 # VibePublish social skill
 
-Version: `1.8.0`. Contract: [social_mcp_v1.py](../../contracts/social_mcp_v1.py).
+Version: `1.9.0`. Contract: [social_mcp_v1.py](../../contracts/social_mcp_v1.py).
 Normal publication is the default. Do not turn delivery into a manual investigation.
 
 ## Story Carousel — приватный рабочий путь
@@ -14,6 +14,12 @@ Normal publication is the default. Do not turn delivery into a manual investigat
 Для любого `render` передавай `carousel_id` и текущую числовую `revision` из `get(scope:"story")`; полный JSON-пример — в `get(scope:"guide",topic:"steps/s09")`. `view:"master",scale:0.5,cutlines:true` показывает полумасштабную композицию и линии нарезки; `render(view:"region")` или `render(card:N)` — детали. Показывай результат картинками из ответа MCP, без браузера и без голых локальных путей. Смотри результат и вопросы Q/V/R/K/ST из банка, затем исправляй замечания. `export` приватен и не разрешает публикацию. Публикуй только по явному поручению с точными сетью, текстом, ревизией и порядком карточек.
 F1 — генерация по фрагменту фона: `render(view:"region",region:[x,y,w,h],scale:1,layers:{only:[...]}/ {hide:[...]},save_asset:true)` → генератор → импорт → те же x,y,w,h; см. `get(scope:"guide",topic:"60-generation")`.
 Иконки: `get(scope:"icons",query,style:line|filled|illustrative)` → посмотри PNG-сетку → `get(scope:"icon",id)` → вставь SVG в холст или покажи генератору как ориентир; осмотри в `render`.
+
+## Отправить опубликованную VK-карусель в предложку другого паблика
+
+Это **отдельный** owner-only путь: `vibepublish_vk_proposals`; не используйте обычный `publish` / `forward` или редакторский VK group-token. Сначала выполните `vibepublish_read({query:{kind:"item",item_ref:"https://vk.com/wall-<own_group>_<post>"}})`, дождитесь `vibepublish_status` и возьмите полученную `items[0].ref`. `preview` принимает этот `source_item_ref`, `target_screen_name:"eto_koenig"` (либо `target_group_id`) и опциональный `sender_alias` для отдельной привязанной пользовательской VK-учётной записи. Покажите текст, исходную запись и **все** картинки из актуального read; команда preview не отправляет пост.
+
+После явного решения пользователя `submit` с тем же `source_item_ref`, подтверждённым адресатом и **одним устойчивым `request_key`**. Тот же ключ применяется после сетевой ошибки. Дождитесь `status(operation_id)`. `vk_proposal.status=submitted` означает только VK `post_id` — **предложено, ожидает решения администрации**; `moderation_status=unverified` не означает «опубликовано». `outcome_unknown` не повторять. Историю отправок и ошибок показывает `vibepublish_vk_proposals({command:{kind:"list"}})`; это наши исходящие записи, а не чужая очередь модерации. Если не подключён разрешённый личный VK `wall`-токен, сообщайте `vk_proposal_user_connection_required`; не обходите через group token. [Руководство по VK community proposals](../features/social-operations/vk-community-proposals.md).
 
 ## Обычная публикация — короткий рецепт
 
