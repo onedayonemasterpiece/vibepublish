@@ -2,6 +2,8 @@ import base64
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -13,6 +15,70 @@ spec = importlib.util.spec_from_file_location(
     'deploy/devcoveer/production_worker.py')
 production = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(production)
+
+
+@pytest.mark.parametrize('mode', ['sqlite_failure', 'normal'])
+def test_worker_sqlite_failure_exits_before_hanging_cleanup(tmp_path, mode):
+    root = Path(__file__).resolve().parents[2]
+    path = tmp_path / 'ledger.sqlite'
+    store = Store(path)
+    actor = store.authenticate(store.create_principal('test', 'owner', owner=True))
+    store.add_connection(actor, 'tg', 'telegram', account_type='mtproto_user',
+                         secret_ref=production.TG_REFERENCE)
+    script = r'''
+import asyncio
+import importlib.util
+from pathlib import Path
+import sqlite3
+import sys
+
+root, db, mode = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+sys.path.insert(0, str(root))
+spec = importlib.util.spec_from_file_location(
+    'production_worker_fixture', root / 'deploy/devcoveer/production_worker.py')
+production = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(production)
+
+class Client:
+    async def connect(self):
+        pass
+    async def is_user_authorized(self):
+        return True
+    async def disconnect(self):
+        print('cleanup_entered', flush=True)
+        if mode == 'sqlite_failure':
+            await asyncio.Event().wait()
+
+class Worker:
+    def __init__(self, *args, **kwargs):
+        pass
+    async def run_once(self):
+        if mode == 'sqlite_failure':
+            error = sqlite3.OperationalError('disk I/O error')
+            error.sqlite_errorcode = sqlite3.SQLITE_IOERR
+            error.sqlite_errorname = 'SQLITE_IOERR'
+            raise error
+        return False
+
+production.Worker = Worker
+production.telegram_factory = lambda *args, **kwargs: Client()
+production.telegram_credentials = lambda *args, **kwargs: {
+    'api_id': 1, 'api_hash': 'a' * 32, 'session': 'fixture'}
+asyncio.run(production.run(
+    db, Path('unused'), None, vk_token_key='',
+    providers=('telegram',), once=True))
+'''
+    result = subprocess.run(
+        [sys.executable, '-B', '-c', script, str(root), str(path), mode],
+        cwd=root, capture_output=True, text=True, timeout=10)
+    if mode == 'sqlite_failure':
+        assert result.returncode == 1, result.stderr
+        assert 'production_worker_sqlite_fatal' in result.stderr
+        assert 'SQLITE_IOERR' in result.stderr
+        assert 'cleanup_entered' not in result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert 'cleanup_entered' in result.stdout
 
 
 def test_explicit_existing_bundle_mapping(tmp_path):

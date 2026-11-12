@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Production worker: terminate on an unhandled SQLite failure before asynchronous cleanup can stall systemd recovery; preserve existing lock-contention handling, durable UNKNOWN and fencing semantics. Live verification remains separate.
+
 - Story Carousel: document the exact existing point/card shape and all four modality values in ordinary author steps; distinguish editorial roles/headings from JSON fields and complete new entities from partial patches. No schema/API change.
 
 - Story Carousel: make VK caption a useful standalone narrative that complements cards and preserves substantial source context; replace the fixed short-caption formula and mandatory CTA with readable, purpose-driven length and an appropriate ending. Route ordinary skill and export/review steps to the canonical guidance. Separate documented VK recommendation signals from unproven reach/length/timing benchmarks; preserve required attribution and avoid automatic comment-link moves or new analytics/publishing mechanisms. Live delivery and creative acceptance remain separate.
