@@ -30,7 +30,7 @@ def test_worker_unit_wires_existing_codex_task_imagegen_without_provider_drift()
         "--telegram-api-hash-key TELEGRAM_API_HASH",
         "--providers telegram vk",
         "--vk-env-file /home/dev/.env",
-        "--vk-token-key VK_USER_TOKEN3",
+        "--vk-token-key VK_USER_TOKEN1",
     ):
         assert required in text
     assert "OPENAI_API_KEY" not in text
@@ -38,6 +38,13 @@ def test_worker_unit_wires_existing_codex_task_imagegen_without_provider_drift()
     assert "NoNewPrivileges=true" in text
     assert "PrivateTmp=true" in text
     assert "UMask=0077" in text
+
+
+def test_installer_rejects_previous_vk_credential_mapping():
+    module = _installer_module()
+    data = UNIT.read_text().replace("VK_USER_TOKEN1", "VK_USER_TOKEN3")
+    with pytest.raises(SystemExit, match="approved production provider mapping"):
+        module._validate_unit(data.encode())
 
 
 def test_installer_uses_private_sibling_roots_and_validates_unit(tmp_path):

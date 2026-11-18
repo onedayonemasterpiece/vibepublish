@@ -47,9 +47,9 @@ fallback is performed. This capability is not evidence of VK connectivity:
 [VK recovery acceptance](../reports/incidents/INC-2026-09-19-vk-recovery.md)
 records the completed provider-backed read acceptance separately from publication
 acceptance. The current owner-selected production mapping uses
-`/home/dev/.env:VK_USER_TOKEN3`. This key name is part of the deployed
+`/home/dev/.env:VK_USER_TOKEN1` (selected after provider verification on 2026-11-18). This key name is part of the deployed
 configuration contract: recovery/install tooling must preserve it and must not
-silently fall back to `VK_USER_TOKEN1` or another credential. Changing the
+silently fall back to `VK_USER_TOKEN3` or another credential. Changing the
 selected credential requires an explicit owner decision and fresh provider
 verification.
 
@@ -64,7 +64,7 @@ with the following arguments (paths and variable names only, never secrets):
 --telegram-api-hash-key TELEGRAM_API_HASH
 --providers telegram vk
 --vk-env-file /home/dev/.env
---vk-token-key VK_USER_TOKEN3
+--vk-token-key VK_USER_TOKEN1
 --codex-task-artifacts /home/dev/.local/state/vibepublish/imagegen
 ```
 
@@ -98,7 +98,26 @@ MAX Web passive queue/history decoding in `adapters/max/wire.py` is a production
 
 After changing the permanent runtime, acceptance is read-only unless a write is explicitly required: verify the known Telegram topic, the bound VK destination and the bound MAX destination. MAX sanity checks must reuse the existing authorized profile and must not create a new authorization or rotate tokens.
 
-## VK credential rotation — 2026-10-29
+## VK credential mapping repair — 2026-11-18
+
+Status: `Not confirmed by user`; source checks and live activation are separate.
+The owner requested a permanent repair using updated credentials in the existing
+`.env`. The configured `VK_USER_TOKEN3` remained valid but had permission mask
+`65536` and could not post to the bound community. The file predates the worker
+start, so reloading the same selection does not fix this failure.
+`VK_USER_TOKEN1` resolves to the same authenticated user and returns administrator
+level 3 and `can_post=1` for the exact destination. The canonical unit, installer
+validation and regression test now select that key explicitly; no credential
+fallback, automatic key search, secret copy or hot-reload mechanism is added.
+
+An immutable production worker uses installed drop-ins, not this repository unit
+alone. Apply the same selected key in the effective ExecStart while preserving
+its release, interpreter, PYTHONPATH and other provider flags. Coordinate with
+any worker rollout and verify the effective key and provider-backed preflight.
+Do not run the full installer merely to change a live release's credential key.
+See [the incident](../reports/incidents/INC-2026-11-18-vk-credential-mapping.md).
+
+## VK credential rotation — 2026-10-29 (historical)
 
 The owner selected `VK_USER_TOKEN3` after the newly supplied token 2 returned
 `access_token was given to another ip address` on DevCoveer and RunCoveer.

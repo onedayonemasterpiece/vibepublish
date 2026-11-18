@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Production worker: align the canonical VK token selection and installer regression checks with the verified owner credential `VK_USER_TOKEN1`; preserve explicit selection without fallback. Live activation and the missed publication remain separate from source delivery.
+
 - Production worker: terminate on an unhandled SQLite failure before asynchronous cleanup can stall systemd recovery; preserve existing lock-contention handling, durable UNKNOWN and fencing semantics. Live verification remains separate.
 
 - Story Carousel: document the exact existing point/card shape and all four modality values in ordinary author steps; distinguish editorial roles/headings from JSON fields and complete new entities from partial patches. No schema/API change.
