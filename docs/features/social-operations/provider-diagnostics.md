@@ -42,3 +42,11 @@ masking; secret-sentinel exclusion and unchanged no-repeat behavior; rejected UR
 privacy, multipart byte/framing evidence, hostile response headers and final JSON
 budget. Missing metadata remains unknown, and a response header alone cannot
 prove which infrastructure component caused an HTTP 502/504.
+
+VK exact-photo reads also record each rendition download through the same ledger.
+The static phase (`dns`, `headers`, `body`) identifies where cancellation occurred;
+DNS/header durations and HTTP status are bounded metadata. Photo URLs, hostnames,
+bytes and exception messages are not recorded. These events distinguish one slow
+download from accumulated time across sequential photos; they do not change the
+existing total photo budget or authorize retries. Historical reads without these
+events cannot identify the stalled photo or network phase.

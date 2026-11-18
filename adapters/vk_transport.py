@@ -211,19 +211,32 @@ class VKHTTPTransport:
 
     async def download_photo(self, url: str) -> bytes:
         """Read a VK photo rendition without auth, cookies, redirects or URL logging."""
+        with provider_call('vk', 'photo_download') as diagnostic:
+            return await self._download_photo_observed(url, diagnostic)
+
+    async def _download_photo_observed(self, url, diagnostic):
         import aiohttp
         host = validated_url(url)
         if not any(host == root or host.endswith('.' + root)
                    for root in ('userapi.com', 'vk.com')):
             raise DomainError('vk_photo_host_invalid')
+        diagnostic['phase'] = 'dns'
+        started = time.monotonic()
+        addresses = await public_addresses(host)
+        diagnostic['dns_ms'] = (time.monotonic() - started) * 1000
         connector = aiohttp.TCPConnector(
-            resolver=PinnedResolver(host, await public_addresses(host)),
+            resolver=PinnedResolver(host, addresses),
             use_dns_cache=False, limit=1)
         async with aiohttp.ClientSession(
                 connector=connector, trust_env=False, cookie_jar=aiohttp.DummyCookieJar(),
                 auto_decompress=False, timeout=aiohttp.ClientTimeout(total=25),
                 headers={'Accept-Encoding': 'identity'}) as session:
+            diagnostic['phase'] = 'headers'
+            started = time.monotonic()
             async with session.get(url, allow_redirects=False) as response:
+                diagnostic['headers_wait_ms'] = (time.monotonic() - started) * 1000
+                diagnostic['http_status'] = response.status
+                diagnostic['phase'] = 'body'
                 if response.status != 200:
                     raise DomainError('vk_photo_http_failed')
                 if response.headers.get('Content-Encoding', '').lower() not in {'', 'identity'}:

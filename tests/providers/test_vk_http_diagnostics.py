@@ -55,3 +55,60 @@ def test_http_failure_has_only_status_and_static_phase(api, phase, status):
     assert events[-1]["retry_after_s"] == 13
     assert events[-1]["status"] == "failed"
     assert "secret" not in str(events)
+
+
+@pytest.mark.parametrize('phase', ['dns', 'headers', 'body', 'completed'])
+def test_photo_download_cancellation_phase_and_privacy(phase):
+    """An outer read timeout retains the interrupted boundary, never the URL."""
+    import json
+
+    async def addresses(_host):
+        if phase == 'dns':
+            raise asyncio.CancelledError('secret-dns')
+        return []
+
+    async def chunks(_size):
+        if phase == 'body':
+            raise asyncio.CancelledError('secret-body')
+        yield b'photo-bytes'
+
+    response = SimpleNamespace(status=200, headers={},
+                               content=SimpleNamespace(iter_chunked=chunks))
+
+    class PhotoResponse(Context):
+        async def __aenter__(self):
+            if phase == 'headers':
+                raise asyncio.CancelledError('secret-headers')
+            return await super().__aenter__()
+
+    session = SimpleNamespace(get=lambda *a, **kw: PhotoResponse(response))
+    aiohttp = SimpleNamespace(
+        TCPConnector=lambda **kwargs: None,
+        ClientSession=lambda **kwargs: Context(session),
+        DummyCookieJar=lambda: None,
+        ClientTimeout=lambda **kwargs: None,
+    )
+    events = []
+    transport = VKHTTPTransport(tokens={})
+    with patch.dict(sys.modules, {'aiohttp': aiohttp}), \
+            patch('adapters.vk_transport.public_addresses', new=addresses), \
+            diagnostic_scope(events.append):
+        call = transport.download_photo('https://sun9.userapi.com/secret?access_key=secret')
+        if phase == 'completed':
+            assert asyncio.run(call) == b'photo-bytes'
+        else:
+            with pytest.raises(asyncio.CancelledError):
+                asyncio.run(call)
+    assert len(events) == 2
+    start, end = events
+    assert start['operation'] == end['operation'] == 'photo_download'
+    assert end['phase'] == ('body' if phase == 'completed' else phase)
+    assert end['status'] == ('completed' if phase == 'completed' else 'failed')
+    assert end['duration_ms'] >= 0
+    if phase != 'dns':
+        assert end['dns_ms'] >= 0
+    if phase in ('body', 'completed'):
+        assert end['http_status'] == 200 and end['headers_wait_ms'] >= 0
+    serialized = json.dumps(events)
+    assert 'secret' not in serialized and 'userapi.com' not in serialized
+    assert 'photo-bytes' not in serialized
